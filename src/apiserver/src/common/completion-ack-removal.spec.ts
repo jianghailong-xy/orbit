@@ -57,6 +57,9 @@ export function sourceFiles(root: string = ROOT): string[] {
   // `--cached` prints one row per index stage, so an unmerged path would arrive three times.
   return [...new Set(listed)]
     .filter((file) => !file.startsWith('src/apiserver/prisma/migrations/'))
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    .filter((file) => !file.startsWith('docs/evidence/'))
     .filter((file) => existsSync(path.join(root, file)) && statSync(path.join(root, file)).isFile());
 }
 
@@ -419,7 +422,10 @@ test('(l) this is subtraction: no new service, no new resident process, fewer li
   const compose = read('docker-compose.yml');
   const services = [...(compose.match(/^services:\n([\s\S]*?)(?=^\S|\Z)/m)?.[1] ?? '')
     .matchAll(/^ {2}([a-z][a-z0-9_-]*):$/gm)].map((hit) => hit[1]).sort();
-  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web'],
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
+  // test/compose-topology.test.mjs (l) pins its whole definition.
+  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web', 'wiki-worker'],
     'the removal may not add a Compose service');
   // No new timer, poller or worker entry point: the removal deletes the only worker process the
   // protocol had and introduces none.
@@ -427,8 +433,8 @@ test('(l) this is subtraction: no new service, no new resident process, fewer li
   const apiScripts = JSON.parse(read('src/apiserver/package.json')).scripts as Record<string, string>;
   assert.deepEqual(
     Object.keys(apiScripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev'],
-    'the only launch alias left is the developer watch loop for the API itself',
+    ['start:dev', 'start:wiki-worker'],
+    'the only launch aliases left are the developer watch loop for the API itself and the wiki worker',
   );
 
   // The SQL arithmetic, stated rather than implied: 0201-0204 are 7,146 lines of installed schema

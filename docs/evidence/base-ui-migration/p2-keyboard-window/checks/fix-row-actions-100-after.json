@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/after3 && git log --oneline -1 && unshare -n bash -c 'ip link set lo up && npm run test:ui-choices -w @orbit/web -- --grep \"multiple choices in Dialog keep their owner\" --project chromium-light-phone --repeat-each 100'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_9e4527ceaca6",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "28405c86d",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T05:30:20.634118+00:00",
+ "exitCode": 0,
+ "outputSha256": "992c7de7823582e53555e163db34599f6be640790e3e9b61a91c14fca5d39ec8",
+ "outputBytes": 17960,
+ "note": "Fixed tree (scratch worktree at 28405c86d), the same 100 runs at the same time: 100 passed."
+}

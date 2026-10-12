@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/before2 && git log --oneline -1 && cd src/web && unshare -n bash -c 'ip link set lo up && P32_SNAPSHOTS=/var/tmp/p2kw-c2604b/pilot-before-shots P32_OUTPUT=/var/tmp/p2kw-c2604b/pilot-before P32_PORT=4291 NO_COLOR=1 nice -n -10 npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_9049ac72d97d",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T04:41:39.289885+00:00",
+ "exitCode": 0,
+ "outputSha256": "b5ba4a6d4430ee7cac77bd8c4d9f44e439118ec06828cb8b28780fd2d9300528",
+ "outputBytes": 46335,
+ "note": "P3.2 pilot suite (production TaskDetailPanel/ShareModal, whose More and Access menus are the Orbit Menu, and the account pickers) on the before-fix tree, its production build fix-pilot-build-before, P0 fixtures and environment, all eight projects, own network namespace, at the same time as fix-pilot-after on the same port: 72 passed. Screenshots written to /var/tmp/p2kw-c2604b/pilot-before-shots for the comparison (fix-pilot-compare.json)."
+}

@@ -1,0 +1,3 @@
+
+/* P4.1 accepted-layer negative control, never delivered: on the profile page, the "Name saved" pill 1px further right. */
+body:has(input[autocomplete="name"]) .toast--pill { position: relative; left: 1px; }

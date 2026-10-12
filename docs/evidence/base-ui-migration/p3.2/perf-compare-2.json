@@ -1,0 +1,425 @@
+{
+ "reference": {
+  "observedAt": "2026-10-06T20:11:27.958Z",
+  "browser": "153.0.8010.12",
+  "hostStart": {
+   "loadAverage": [
+    5.91,
+    7.31,
+    7.75
+   ],
+   "freeMemoryBytes": 8895782912,
+   "cpuCount": 24
+  },
+  "hostEnd": {
+   "loadAverage": [
+    5.72,
+    7.15,
+    7.68
+   ],
+   "freeMemoryBytes": 8630075392,
+   "cpuCount": 24
+  },
+  "methodology": "As p0.2 performance.browser.mjs: fresh contexts for loads (ready = pilot task title, its thumbnail and Suggested value visible, fonts ready, two frames); ten sequential samples per operation; intervals include Playwright transport, actionability, popups reaching opacity 1 and two frames."
+ },
+ "delivery": {
+  "observedAt": "2026-10-06T20:11:54.675Z",
+  "browser": "153.0.8010.12",
+  "hostStart": {
+   "loadAverage": [
+    5.72,
+    7.15,
+    7.68
+   ],
+   "freeMemoryBytes": 8917663744,
+   "cpuCount": 24
+  },
+  "hostEnd": {
+   "loadAverage": [
+    5.91,
+    7.15,
+    7.68
+   ],
+   "freeMemoryBytes": 8419655680,
+   "cpuCount": 24
+  }
+ },
+ "loads": {
+  "task": {
+   "hostReadyMs": {
+    "reference": {
+     "count": 5,
+     "min": 416.37544,
+     "median": 436.24826299999995,
+     "p95": 534.210719,
+     "max": 534.210719
+    },
+    "delivery": {
+     "count": 5,
+     "min": 416.69337399999995,
+     "median": 420.2563339999999,
+     "p95": 489.97197800000004,
+     "max": 489.97197800000004
+    },
+    "medianDifference": -15.992
+   },
+   "browserReadyMs": {
+    "reference": {
+     "count": 5,
+     "min": 415.69999998807907,
+     "median": 435.69999998807907,
+     "p95": 529.8999999761581,
+     "max": 529.8999999761581
+    },
+    "delivery": {
+     "count": 5,
+     "min": 416,
+     "median": 419.60000002384186,
+     "p95": 453.5,
+     "max": 453.5
+    },
+    "medianDifference": -16.1
+   }
+  }
+ },
+ "operations": {
+  "assignee-picker-close": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 312.30000001192093,
+     "median": 314.84999999403954,
+     "p95": 317.10000002384186,
+     "max": 317.10000002384186
+    },
+    "delivery": {
+     "count": 10,
+     "min": 44.80000001192093,
+     "median": 47,
+     "p95": 47.80000001192093,
+     "max": 47.80000001192093
+    },
+    "medianDifference": -267.85
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 312.2935099999995,
+     "median": 315.31758100000025,
+     "p95": 318.02528200000233,
+     "max": 318.02528200000233
+    },
+    "delivery": {
+     "count": 10,
+     "min": 44.793359999999666,
+     "median": 47.0266859999997,
+     "p95": 48.12626799999998,
+     "max": 48.12626799999998
+    },
+    "medianDifference": -268.291
+   }
+  },
+  "assignee-picker-open": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 409.39999997615814,
+     "median": 429,
+     "p95": 430.30000001192093,
+     "max": 430.30000001192093
+    },
+    "delivery": {
+     "count": 10,
+     "min": 77.89999997615814,
+     "median": 80.55000001192093,
+     "p95": 81.19999998807907,
+     "max": 81.19999998807907
+    },
+    "medianDifference": -348.45
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 409.39828000000125,
+     "median": 429.2556059999997,
+     "p95": 430.35600799999884,
+     "max": 430.35600799999884
+    },
+    "delivery": {
+     "count": 10,
+     "min": 77.69168499999978,
+     "median": 80.66272499999968,
+     "p95": 81.7345609999993,
+     "max": 81.7345609999993
+    },
+    "medianDifference": -348.593
+   }
+  },
+  "comment-fill": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 44,
+     "median": 47.24999997019768,
+     "p95": 48.30000001192093,
+     "max": 48.30000001192093
+    },
+    "delivery": {
+     "count": 10,
+     "min": 45.69999998807907,
+     "median": 47.55000001192093,
+     "p95": 48.5,
+     "max": 48.5
+    },
+    "medianDifference": 0.3
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 43.686900000000605,
+     "median": 47.34424249999984,
+     "p95": 48.31094099999973,
+     "max": 48.31094099999973
+    },
+    "delivery": {
+     "count": 10,
+     "min": 45.80193099999997,
+     "median": 47.57773249999991,
+     "p95": 48.75431899999967,
+     "max": 48.75431899999967
+    },
+    "medianDifference": 0.233
+   }
+  },
+  "dependency-view-toggle": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 77.30000001192093,
+     "median": 79.7000000178814,
+     "p95": 85.30000001192093,
+     "max": 85.30000001192093
+    },
+    "delivery": {
+     "count": 10,
+     "min": 80.20000004768372,
+     "median": 80.94999998807907,
+     "p95": 82.30000001192093,
+     "max": 82.30000001192093
+    },
+    "medianDifference": 1.25
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 77.22153499999695,
+     "median": 79.67982099999972,
+     "p95": 85.5691169999991,
+     "max": 85.5691169999991
+    },
+    "delivery": {
+     "count": 10,
+     "min": 80.15292500000032,
+     "median": 80.99914149999995,
+     "p95": 82.77432300000055,
+     "max": 82.77432300000055
+    },
+    "medianDifference": 1.319
+   }
+  },
+  "more-menu-open": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 428.60000002384186,
+     "median": 438.15000000596046,
+     "p95": 715.5,
+     "max": 715.5
+    },
+    "delivery": {
+     "count": 10,
+     "min": 96.90000003576279,
+     "median": 97.69999998807907,
+     "p95": 332.19999998807907,
+     "max": 332.19999998807907
+    },
+    "medianDifference": -340.45
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 427.2964839999986,
+     "median": 438.0222189999986,
+     "p95": 715.897708,
+     "max": 715.897708
+    },
+    "delivery": {
+     "count": 10,
+     "min": 96.8259879999996,
+     "median": 97.73183999999947,
+     "p95": 332.46853999999985,
+     "max": 332.46853999999985
+    },
+    "medianDifference": -340.29
+   }
+  },
+  "share-dialog-close": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 345.19999998807907,
+     "median": 348.5,
+     "p95": 350.4000000357628,
+     "max": 350.4000000357628
+    },
+    "delivery": {
+     "count": 10,
+     "min": 76.20000004768372,
+     "median": 81.59999999403954,
+     "p95": 98.60000002384186,
+     "max": 98.60000002384186
+    },
+    "medianDifference": -266.9
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 345.240049,
+     "median": 348.912816,
+     "p95": 350.96596099999806,
+     "max": 350.96596099999806
+    },
+    "delivery": {
+     "count": 10,
+     "min": 76.26376600000003,
+     "median": 81.80842849999954,
+     "p95": 98.92320800000016,
+     "max": 98.92320800000016
+    },
+    "medianDifference": -267.104
+   }
+  },
+  "share-dialog-open": {
+   "browserMs": {
+    "reference": {
+     "count": 10,
+     "min": 445.19999998807907,
+     "median": 455.5499999821186,
+     "p95": 466.9000000357628,
+     "max": 466.9000000357628
+    },
+    "delivery": {
+     "count": 10,
+     "min": 80.19999998807907,
+     "median": 97.65000000596046,
+     "p95": 117.69999998807907,
+     "max": 117.69999998807907
+    },
+    "medianDifference": -357.9
+   },
+   "hostMs": {
+    "reference": {
+     "count": 10,
+     "min": 445.14517799999885,
+     "median": 455.66847400000097,
+     "p95": 467.63136399999894,
+     "max": 467.63136399999894
+    },
+    "delivery": {
+     "count": 10,
+     "min": 80.25150800000029,
+     "median": 97.71748449999996,
+     "p95": 117.99777899999981,
+     "max": 117.99777899999981
+    },
+    "medianDifference": -357.951
+   }
+  }
+ },
+ "resources": {
+  "reference": {
+   "files": 9,
+   "decodedBytes": 3909945,
+   "list": [
+    {
+     "name": "/assets/index-CdtE5_gu.js",
+     "decodedBodySize": 1791358
+    },
+    {
+     "name": "/assets/rolldown-runtime-hePW80VL.js",
+     "decodedBodySize": 716
+    },
+    {
+     "name": "/assets/taskDependencyGraph-B91604km.js",
+     "decodedBodySize": 538242
+    },
+    {
+     "name": "/assets/projectDependencyGraph-C7Yj51jL.js",
+     "decodedBodySize": 164999
+    },
+    {
+     "name": "/assets/Transcript-Vzag2pKy.js",
+     "decodedBodySize": 817981
+    },
+    {
+     "name": "/assets/Transcript-BtITXXF3.css",
+     "decodedBodySize": 6360
+    },
+    {
+     "name": "/assets/index-CEnjz7lS.css",
+     "decodedBodySize": 386294
+    },
+    {
+     "name": "/assets/TaskDependencyGraph-lEeGEcR2.js",
+     "decodedBodySize": 188582
+    },
+    {
+     "name": "/assets/TaskDependencyGraph-DLioOiRN.css",
+     "decodedBodySize": 15413
+    }
+   ]
+  },
+  "delivery": {
+   "files": 9,
+   "decodedBytes": 4113832,
+   "list": [
+    {
+     "name": "/assets/index-DIh0iskc.js",
+     "decodedBodySize": 1946679
+    },
+    {
+     "name": "/assets/rolldown-runtime-hePW80VL.js",
+     "decodedBodySize": 716
+    },
+    {
+     "name": "/assets/projectDependencyGraph-DEwcr3kB.js",
+     "decodedBodySize": 164989
+    },
+    {
+     "name": "/assets/taskDependencyGraph-Bx_saetJ.js",
+     "decodedBodySize": 538224
+    },
+    {
+     "name": "/assets/Transcript-DRDTosy7.js",
+     "decodedBodySize": 831042
+    },
+    {
+     "name": "/assets/Transcript-BtITXXF3.css",
+     "decodedBodySize": 6360
+    },
+    {
+     "name": "/assets/index-CVcUO2xu.css",
+     "decodedBodySize": 421827
+    },
+    {
+     "name": "/assets/TaskDependencyGraph-BUQvfMAl.js",
+     "decodedBodySize": 188582
+    },
+    {
+     "name": "/assets/TaskDependencyGraph-DLioOiRN.css",
+     "decodedBodySize": 15413
+    }
+   ]
+  }
+ }
+}

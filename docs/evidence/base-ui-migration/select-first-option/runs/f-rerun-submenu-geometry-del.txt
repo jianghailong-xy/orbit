@@ -1,0 +1,19 @@
+argv: env P32_BASE_CONFIG=choices.config.mjs P32_PORT=4512 P32_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-rerun-submenu-geometry-del-out npx playwright test --config ui-migration/port.config.mjs ui-migration/choices-submenu-geometry.browser.mjs --project chromium-light-phone
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/del HEAD a755f816a1800280719ecabf060bd6b7ad271776
+uncommitted: 
+start: 2026-10-10T01:25:36Z load: 31.06 33.21 38.07
+mem: 4214M available, swap 21195M free
+disk: / 22287M available
+cgroup: 0::/system.slice/run-p2120259-i60803157.scope
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 4 tests using 1 worker
+
+  ✓  1 [chromium-light-phone] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the left of the page settles where the replaced submenu does (11.3s)
+  ✓  2 [chromium-light-phone] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the middle of the page settles where the replaced submenu does (11.7s)
+  ✓  3 [chromium-light-phone] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the right edge settles where the replaced submenu does (11.0s)
+  ✓  4 [chromium-light-phone] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the right edge of a dialog settles where the replaced submenu does (13.6s)
+
+  4 passed (1.3m)
+end: 2026-10-10T01:27:08Z load: 26.01 31.09 36.87
+exit=0

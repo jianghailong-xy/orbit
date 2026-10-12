@@ -524,12 +524,16 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         /// Whether the WORK serving this criterion has met it. Absent when the read declined to
         /// answer, which is a third state and never merged with "no".
         public let satisfied: Bool?
+        /// The criterion's `key`, which a gap names it by (`AcceptedGap.criterionKey`).
+        public let key: String?
 
-        public init(id: String, ordinal: Int, text: String, satisfied: Bool? = nil) {
+        public init(id: String, ordinal: Int, text: String, satisfied: Bool? = nil,
+                    key: String? = nil) {
             self.id = id
             self.ordinal = ordinal
             self.text = text
             self.satisfied = satisfied
+            self.key = key
         }
     }
 
@@ -554,6 +558,32 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     public let startedAtRead: Bool
     /// The endpoint's own `_count`, decoded under the name the other payloads give it.
     public let counts: ProjectTaskCounts?
+    /// The projection of the project's committed facts, and its done record — what the settlement
+    /// cards in a coordinator conversation are drawn from (`ProjectDone.swift`). Nil, nil, nil and
+    /// empty from a server that predates them.
+    public let derivedDone: ProjectDerivedDone?
+    public let doneBy: ProjectDoneBy?
+    public let doneAt: String?
+    public let acceptedGaps: [AcceptedGap]
+    /// The conversation that coordinates the project, if it has one — what the start card reads to
+    /// say a start with Automatic on opens one — and how long a problem waits on it before it reaches
+    /// the owner. Nil from a server that did not say.
+    public let coordinatorSessionId: String?
+    public let exceptionEscalationSeconds: Int?
+    /// The settings half of the project's integration line, for the main branch the done cards name
+    /// where its work landed. Nil from a server that did not say, and then they say main.
+    public let integration: ProjectIntegrationSettings?
+
+    /// What the done cards read off this document.
+    public var doneSubject: ProjectDoneSubject {
+        ProjectDoneSubject(title: title ?? id, status: status,
+                           criteria: (acceptanceCriteriaItems ?? []).map {
+                               ProjectDoneSubject.Criterion(id: $0.id, key: $0.key, ordinal: $0.ordinal,
+                                                            text: $0.text)
+                           },
+                           derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
+                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef)
+    }
     /// How many tasks the project holds — what the confirmation card's condition asks before it
     /// offers to start anything, because "Start the project" is a verb and this is its object.
     /// `_count.tasks` is everything filed under the project, settled work included: whether any of
@@ -577,7 +607,11 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     public init(id: String, acceptanceCriteriaItems: [Item]? = nil,
                 title: String? = nil, status: String? = nil,
                 coordinatorEnabled: Bool? = nil, counts: ProjectTaskCounts? = nil,
-                startedAt: String? = nil, startedAtRead: Bool = false) {
+                startedAt: String? = nil, startedAtRead: Bool = false,
+                derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
+                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
+                coordinatorSessionId: String? = nil, exceptionEscalationSeconds: Int? = nil,
+                integration: ProjectIntegrationSettings? = nil) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
@@ -586,6 +620,13 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         self.counts = counts
         self.startedAt = startedAt
         self.startedAtRead = startedAtRead || startedAt != nil
+        self.derivedDone = derivedDone
+        self.doneBy = doneBy
+        self.doneAt = doneAt
+        self.acceptedGaps = acceptedGaps
+        self.coordinatorSessionId = coordinatorSessionId
+        self.exceptionEscalationSeconds = exceptionEscalationSeconds
+        self.integration = integration
     }
 
     public init(from decoder: Decoder) throws {
@@ -598,6 +639,15 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         counts = try c.decodeIfPresent(ProjectTaskCounts.self, forKey: .counts)
         startedAtRead = c.contains(.startedAt)
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
+        // Read with `try?`: a projection or a record this build cannot read draws no done card,
+        // rather than failing the read the confirmation cards are drawn from too.
+        derivedDone = try? c.decodeIfPresent(ProjectDerivedDone.self, forKey: .derivedDone)
+        doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
+        doneAt = try? c.decodeIfPresent(String.self, forKey: .doneAt)
+        acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
+        coordinatorSessionId = try? c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
+        exceptionEscalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .exceptionEscalationSeconds)
+        integration = try? c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -609,10 +659,19 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         try c.encodeIfPresent(coordinatorEnabled, forKey: .coordinatorEnabled)
         try c.encodeIfPresent(counts, forKey: .counts)
         if startedAtRead { try c.encode(startedAt, forKey: .startedAt) }
+        try c.encodeIfPresent(derivedDone, forKey: .derivedDone)
+        try c.encodeIfPresent(doneBy, forKey: .doneBy)
+        try c.encodeIfPresent(doneAt, forKey: .doneAt)
+        if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
+        try c.encodeIfPresent(coordinatorSessionId, forKey: .coordinatorSessionId)
+        try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
+        try c.encodeIfPresent(integration, forKey: .integration)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, acceptanceCriteriaItems, title, status, coordinatorEnabled, startedAt
+        case derivedDone, doneBy, doneAt, acceptedGaps
+        case coordinatorSessionId, exceptionEscalationSeconds, integration
         case counts = "_count"
     }
 }

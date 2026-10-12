@@ -1,0 +1,38 @@
+{
+  "r2": "192ee6cf0fa45727096b0bf23d5a4f2ce3e5c96e",
+  "taskStart": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "beforeViewportSha256": "6f10cb9bee00ad3e8053538b279e07248cc1093a7de957848c37763150aec4c2",
+  "afterViewportSha256": "8c62f890a03d2d377380d787b06695cbff6b73070e1a449ce0962c523954c887",
+  "scriptUnchanged": true,
+  "rows": [
+    {
+      "browser": "chromium",
+      "variantLabel": "revision2",
+      "beforeRemainingAt6500ms": 0,
+      "afterRemainingAt6500ms": 1,
+      "noMouseMovement": true
+    },
+    {
+      "browser": "chromium",
+      "variantLabel": "reference",
+      "beforeRemainingAt6500ms": 1,
+      "afterRemainingAt6500ms": 1,
+      "noMouseMovement": true
+    },
+    {
+      "browser": "webkit",
+      "variantLabel": "revision2",
+      "beforeRemainingAt6500ms": 0,
+      "afterRemainingAt6500ms": 1,
+      "noMouseMovement": true
+    },
+    {
+      "browser": "webkit",
+      "variantLabel": "reference",
+      "beforeRemainingAt6500ms": 1,
+      "afterRemainingAt6500ms": 1,
+      "noMouseMovement": true
+    }
+  ],
+  "labelNote": "The coordinator script is unchanged: revision2 names the live port before and after the repair."
+}

@@ -1,0 +1,3 @@
+root free before overlay: 7037M
+root free after overlay: 6139M
+root free after merge check: 3896M

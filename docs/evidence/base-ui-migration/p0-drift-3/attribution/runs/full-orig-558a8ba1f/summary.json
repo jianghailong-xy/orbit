@@ -1,0 +1,96 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T11:45:32.284Z",
+  "duration": 246188.891,
+  "expected": 68,
+  "skipped": 4,
+  "unexpected": 8,
+  "flaky": 0
+ },
+ "passed": 68,
+ "expectedFailures": 0,
+ "skipped": 4,
+ "unexpected": [
+  {
+   "project": "chromium-light-desktop",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": null,
+   "error": "AssertionError: Every API call must have an explicit browser fixture",
+   "locator": null,
+   "differentPixels": null
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": null,
+   "error": "AssertionError: Every API call must have an explicit browser fixture",
+   "locator": null,
+   "differentPixels": null
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": null,
+   "error": "AssertionError: Every API call must have an explicit browser fixture",
+   "locator": null,
+   "differentPixels": null
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": null,
+   "error": "AssertionError: Every API call must have an explicit browser fixture",
+   "locator": null,
+   "differentPixels": null
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": null,
+   "error": "AssertionError: Every API call must have an explicit browser fixture",
+   "locator": null,
+   "differentPixels": null
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": null,
+   "error": "AssertionError: Every API call must have an explicit browser fixture",
+   "locator": null,
+   "differentPixels": null
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": null,
+   "error": "AssertionError: Every API call must have an explicit browser fixture",
+   "locator": null,
+   "differentPixels": null
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "profile",
+   "file": "pages.browser.mjs",
+   "screenshot": "profile-validation.png",
+   "expectedLayer": null,
+   "error": "AssertionError: Every API call must have an explicit browser fixture",
+   "locator": null,
+   "differentPixels": null
+  }
+ ],
+ "flaky": []
+}

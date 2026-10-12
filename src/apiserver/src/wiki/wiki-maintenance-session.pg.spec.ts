@@ -9,7 +9,8 @@
  *   2. a runner that does not declare wiki-maintenance-run/v1 is never handed one, on the claim or the reclaim;
  *   3. the pin holds and nothing falls back: a provider turned off, deleted, on another runtime or an account
  *      pool, a session that names another provider or sits in another workspace, and maintenance turned off —
- *      each is claimed with its refusal and with no other provider's endpoint, and no pool member is chosen;
+ *      each is claimed with its refusal and with no other provider's endpoint, and no pool member is chosen —
+ *      while an ordinary session on a provider that cannot dispatch still waits, PENDING, and says why;
  *   4. the settings door takes only a provider on the Claude Code runtime, and `dailyRunLimit` — 8 by
  *      default, 1 to 48 — is what `wikiMaintenanceRunsToday` counts the day's runs against.
  *
@@ -45,8 +46,9 @@ import type { PushService } from '../push/push.service';
 import { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { WikiController } from './wiki.controller';
-import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { wikiMaintenanceRunOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
@@ -388,6 +390,8 @@ test('the pin holds: a run its settings cannot carry is claimed with its refusal
     assert.ok(job.wikiMaintenance, `${name}: the run is a maintenance run`);
     assert.match(job.wikiMaintenance!.refusal ?? '', /^This Wiki maintenance run did not start: /u, `${name}: it carries no refusal`);
     assert.deepEqual(job.wikiMaintenance!.providerFallbacks, [], `${name}: a fallback was offered`);
+    const { model } = await h.prisma.session.findUniqueOrThrow({ where: { id: runId }, select: { model: true } });
+    assert.equal(model, null, `${name}: its row was given a model it never ran`);
     return { job, runId };
   }
   const settingsOf = (sql: Client, spaceId: string, maintenance: Record<string, unknown>) =>
@@ -443,6 +447,48 @@ test('the pin holds: a run its settings cannot carry is claimed with its refusal
   assert.equal(pooled.job.agent.env?.ANTHROPIC_AUTH_TOKEN, undefined, "no pool member's key was handed out");
   const pooledRow = await h.prisma.session.findUniqueOrThrow({ where: { id: pooled.runId }, select: { poolMemberProviderId: true } });
   assert.equal(pooledRow.poolMemberProviderId, null, 'no pool member was chosen for it');
+
+  // Claimed with its refusal is the maintenance run's alone. An ordinary session — or a task session of another
+  // list — on a provider turned off, deleted, or on a runtime no runner has is still not handed to this runner,
+  // which declares wiki-maintenance-run/v1, and says why: PENDING, with PROVIDER_UNAVAILABLE_ERROR.
+  const plain = await owner(h, 'ordinary');
+  const offRow = await provider(h, plain.id, { enabled: false });
+  const oddRuntime = await provider(h, plain.id, { runtime: 'unknown-runtime' });
+  const chores = await h.prisma.taskList.create({ data: { ownerId: plain.id, title: 'Chores' }, select: { id: true } });
+  for (const [slug, taskId] of [
+    [offRow.slug, null],
+    [offRow.slug, await task(h, plain, chores.id)],
+    [`local-vllm-${randomUUID().slice(0, 8)}`, null],
+    [oddRuntime.slug, null],
+  ] as const) {
+    const id = await queued(h, plain, { provider: slug, taskId });
+    const offered = await h.queue.claimSessionForRunner({ id: plain.runnerId }, 0, false, true, true);
+    assert.equal(offered, null, `an ordinary session on ${slug} was handed out`);
+    assert.deepEqual(await h.prisma.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } }),
+      { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR }, `an ordinary session on ${slug}`);
+  }
+});
+
+// The settings' key on another engine is not that run: a run's clean start and its disallowed tools hold
+// on Claude Code alone (docs/provider-engine-contract.md §3.5), whatever else the key runs.
+test('T3 a maintenance run on its pinned key starts only on Claude Code, whatever else that key runs', { skip }, async () => {
+  const h = await boot();
+  const who = await owner(h, 'other-engine');
+  const local = await provider(h, who.id);
+  const { listId } = await maintainedSpace(h, who, local.slug);
+  const runOf = async (id: string) =>
+    wikiMaintenanceRunOf(h.prisma as never, await h.prisma.session.findUniqueOrThrow({ where: { id } }));
+
+  // On Claude Code, recorded or from before engines were: it starts.
+  const onClaude = await queued(h, who, { provider: local.slug, taskId: await task(h, who, listId) });
+  assert.equal((await runOf(onClaude))?.refusal, undefined);
+  await h.prisma.session.update({ where: { id: onClaude }, data: { engine: 'claude' } });
+  assert.equal((await runOf(onClaude))?.refusal, undefined);
+  // The same key on OpenCode, which runs it too: refused, for the engine.
+  const onOpenCode = await queued(h, who, { provider: local.slug, taskId: await task(h, who, listId) });
+  await h.prisma.session.update({ where: { id: onOpenCode }, data: { engine: 'opencode' } });
+  assert.equal((await runOf(onOpenCode))?.refusal,
+    'This Wiki maintenance run did not start: it runs only on Claude Code, and this session runs on OpenCode.');
 });
 
 // ── 4. the settings door ────────────────────────────────────────────────────────────────────────

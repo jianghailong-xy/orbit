@@ -215,7 +215,7 @@ final class ExceptionCardsWiringTests: XCTestCase {
                        "the handoff must not take text: the composer does")
         XCTAssertEqual(card.components(separatedBy: "TextField").count - 1, 1,
                        "one field on this card, and it is the ending's reason (§4.7)")
-        XCTAssertFalse(card.contains("confirmationDialog"),
+        XCTAssertFalse(card.contains("confirmationDialog") || card.contains("orbitConfirmation"),
                        "and nothing to confirm: the ending asks for a reason, not for a yes")
     }
 

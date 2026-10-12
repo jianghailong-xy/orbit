@@ -1,0 +1,175 @@
+{
+ "base": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "command": "git show <base>:docs/evidence/base-ui-migration/<path>",
+ "samples": [
+  {
+   "label": "report.json (large, with bodies)",
+   "path": "p2-promotion-toast/final-notifications-raw/report.json",
+   "action": "report",
+   "bytes": 17896062,
+   "sha256": "d97f7aefd5c0abd61305720b468e72b7baa3900a7bd98e6e3b761a4e9d269ec9",
+   "blob": "c886acbd998bd2f46f10843a28c3e747898dbbaf",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "recordedInTree": [],
+   "matchesTreeRecords": null,
+   "summary": "p2-promotion-toast/final-notifications-raw/report.summary.json",
+   "summaryEqualsOriginalWithoutBodies": true,
+   "ok": true
+  },
+  {
+   "label": "report.json",
+   "path": "p2-promotion-toast/delivery-notifications-raw/report.json",
+   "action": "report",
+   "bytes": 17875191,
+   "sha256": "0c672758f87a759fd03d49a0976b5a8df86734dbe3a600df450951635a23d3f3",
+   "blob": "67ec25afd372c4f37b77af54886cc4f0b4e4ce49",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "recordedInTree": [],
+   "matchesTreeRecords": null,
+   "summary": "p2-promotion-toast/delivery-notifications-raw/report.summary.json",
+   "summaryEqualsOriginalWithoutBodies": true,
+   "ok": true
+  },
+  {
+   "label": "trace.zip",
+   "path": "p2-promotion-toast/exit-host-diagnostic-raw/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/trace.zip",
+   "action": "trace",
+   "bytes": 1085167,
+   "sha256": "cf351b55fe0484eac1f7f4571b73ccd9a20b24ec354fa1c4b81f8233ff93b1b9",
+   "blob": "cf731a4dc45993e93427a804f61d71c572181fa5",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "recordedInTree": [],
+   "matchesTreeRecords": null,
+   "ok": true
+  },
+  {
+   "label": "trace attachment",
+   "path": "p2-keyboard-window/regression-choices-full-delivered-second/chromium-dark-desktop--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--trace.zip",
+   "action": "trace",
+   "bytes": 25709,
+   "sha256": "dd9541ee72d0c43df0a8b3619bda1e2dc9ac85e3bed7412e5ecd7845715c408d",
+   "blob": "a8500032d7b5f3779ca2e63e6f6aad65dbce7710",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "recordedInTree": [
+    "dd9541ee72d0c43df0a8b3619bda1e2dc9ac85e3bed7412e5ecd7845715c408d"
+   ],
+   "matchesTreeRecords": true,
+   "ok": true
+  },
+  {
+   "label": "screenshot (duplicate copy)",
+   "path": "p2.2/revision-8/choices-full-first/webkit-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--orbit-tags-disabled.png",
+   "action": "duplicate",
+   "bytes": 2883,
+   "sha256": "da398dfad6b7949ed952dd5357e9b66e7c2629344626322fef4ed55955be7760",
+   "blob": "074971f5d0b0426fbec3c27c41fdcecd75fca85b",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "keptCopy": "p2.2/revision-8/choices-full-first/webkit-light-desktop--tags-chip-appearance-matches-current-labels-and-email-fields--antd-tags-disabled.png",
+   "matchesKeptCopy": true,
+   "recordedInTree": [
+    "da398dfad6b7949ed952dd5357e9b66e7c2629344626322fef4ed55955be7760"
+   ],
+   "matchesTreeRecords": true,
+   "ok": true
+  },
+  {
+   "label": "screenshot (superseded revision)",
+   "path": "p2.3/revision-2/static-raster-after/chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+   "action": "superseded",
+   "bytes": 9106,
+   "sha256": "4da7466a09258dcbea2708b962ef4efb6561ea968a33a3726735555474d7f2cd",
+   "blob": "4413920a8e740866974e184595dcaf62cd8bf751",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "recordedInTree": [
+    "4da7466a09258dcbea2708b962ef4efb6561ea968a33a3726735555474d7f2cd",
+    "574b497944e8ffd8cd096118e7981f10d3eff68e83894bbb3ac458fec122cd37"
+   ],
+   "matchesTreeRecords": true,
+   "ok": true
+  },
+  {
+   "label": "per-sample JSON (p2-keyboard-window)",
+   "path": "p2-keyboard-window/fix-select-after-down-end-enter/chromium-dark-desktop--orbit-sample-select-down-end-enter-burst-sample-17--keyboard-window.json",
+   "action": "case",
+   "bytes": 1193,
+   "sha256": "1a5f469db34cf799bd5ef4e954b6abfecbf7032006d7128462083aed1d20b40e",
+   "blob": "23e4115e05d7b92fdfb3237363bf959ced9cb552",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "summarySha256": "1a5f469db34cf799bd5ef4e954b6abfecbf7032006d7128462083aed1d20b40e",
+   "matchesSummary": true,
+   "recordedInTree": [
+    "1a5f469db34cf799bd5ef4e954b6abfecbf7032006d7128462083aed1d20b40e",
+    "6a70c4da48a534b1b27918b860587d5a9597fa6c4fe28a5791abe813366c9e37"
+   ],
+   "matchesTreeRecords": true,
+   "ok": true
+  },
+  {
+   "label": "per-test JSON",
+   "path": "p2-keyboard-window/regression-repeat-motion-flipped-attachment-desktop/webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-attachment--repeat-8--motion.json",
+   "action": "case",
+   "bytes": 22109,
+   "sha256": "f0a6b1e07e9d036ce464fc961b522b9309cf6406a7d8ca550f095af4f7e904a4",
+   "blob": "53086a00644f7b1fbf6013cd975614f3d58eff17",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "summarySha256": "f0a6b1e07e9d036ce464fc961b522b9309cf6406a7d8ca550f095af4f7e904a4",
+   "matchesSummary": true,
+   "recordedInTree": [
+    "f0a6b1e07e9d036ce464fc961b522b9309cf6406a7d8ca550f095af4f7e904a4"
+   ],
+   "matchesTreeRecords": true,
+   "ok": true
+  },
+  {
+   "label": "archive of per-test JSON",
+   "path": "p2-keyboard-window/fix-pilot-run-before/attachments.tar.gz",
+   "action": "case",
+   "bytes": 1724333,
+   "sha256": "0868603c915ffee4eff5df6216d16a940a41cbedabf321e4f5a1a550b88a7366",
+   "blob": "16ec9040705bac97b3d091e61a9f1f05cb25b3d7",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "summarySha256": "0868603c915ffee4eff5df6216d16a940a41cbedabf321e4f5a1a550b88a7366",
+   "matchesSummary": true,
+   "recordedInTree": [
+    "057b67d68421666d21aba0284b1c722cdee002aebe9ae80aed6a8e63c48f757d",
+    "0868603c915ffee4eff5df6216d16a940a41cbedabf321e4f5a1a550b88a7366",
+    "5d20636dd00ccb5e68fd9fcffb4e829c25844e5d25dd26181990882d5ff96435",
+    "f433d7758751ded0cbdf5645ffef910f258e03b0065e3360042c558465ff682a"
+   ],
+   "matchesTreeRecords": true,
+   "ok": true
+  },
+  {
+   "label": "per-test JSON (superseded revision)",
+   "path": "p2.2/revision-5/final-entry/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "action": "superseded",
+   "bytes": 2055,
+   "sha256": "fd161a6d37a02570823f8dce5cef87722f5b7094e2acb1236f98424b6b1d0786",
+   "blob": "5ed2e0106cafde8ee93b6a8aaa84955869fc769e",
+   "blobMatchesManifest": true,
+   "bytesMatchManifest": true,
+   "recordedInTree": [
+    "164eebbad0de91c66e764beba3dbc6e670a4f533154b8ab4c8ffd5df89b0c66f",
+    "3f09c9a1ec9058be36d633d0f49c0811746e1a997abb8c20ad36d0524d2b296b",
+    "464ade4e02955ca27a83d6f63a8acc6d980a7ab2a68889074cddf7cb3262ed77",
+    "a787fd3684f0b5bf370ed9914fe0a0eaa350b78c5c33309fd0154c5b0a69a0fe",
+    "a7f3f20ac81d6e7f52882e884dee2088f9a624fc59450064d36e02a2c185752c",
+    "a90ffd0e8944bda61b99abf8fddae8a72e076593df682ede607b7fef2f573a80",
+    "adb1d33196202e1924454ec6dc6103f4c9c35fdef9b6c6b8228623fa3e50958b",
+    "d025e342cd2ebae26770162ab05cf38a39c618f18c7bb292736305c0178fe58b",
+    "fd161a6d37a02570823f8dce5cef87722f5b7094e2acb1236f98424b6b1d0786"
+   ],
+   "matchesTreeRecords": true,
+   "ok": true
+  }
+ ]
+}

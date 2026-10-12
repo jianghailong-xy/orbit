@@ -154,6 +154,15 @@ var engineSpecs = []engineSpec{
 		apiKeyEnv:     "GEMINI_API_KEY",
 		loginHeadless: "set GEMINI_API_KEY in the runner's environment or give the session a Gemini API key — or, on a Linux runner, sign in to Google from Orbit",
 	},
+	{
+		name:          "DeepSeek Harness",
+		bin:           providerDsh,
+		installCmd:    dshInstallDescription,
+		updateCmd:     dshInstallDescription,
+		installAlt:    "install DeepSeek Harness from Orbit or run orbit doctor",
+		apiKeyEnv:     "ORBIT_DSH_API_KEY",
+		loginHeadless: "connect a DeepSeek API key in Orbit; only a real model request validates it",
+	},
 }
 
 // agyUpdateCmd is `agy update`, pointed at a Gemini directory of the runner's own.
@@ -180,6 +189,9 @@ type engineHealth struct {
 	authSource    string
 	planUsage     *PlanUsage
 	onServicePath bool // found on the background service's baked PATH (not just the shell's)
+	installError  string
+	// Kimi only: the site its own login is on (kimi_region.go), "" when there is none.
+	kimiRegion string
 }
 
 // serviceLoginPath reconstructs the PATH the background service runs with, the
@@ -213,6 +225,30 @@ func lookPathIn(bin, pathList string) (string, bool) {
 
 func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	h := engineHealth{spec: spec}
+	if spec.bin == providerDsh {
+		platformErr := dshPlatformError()
+		path, err := dshExecutableIn(dshVersionDir())
+		if err != nil {
+			if platformErr != nil {
+				err = platformErr
+			}
+			h.installError = err.Error()
+			return h
+		}
+		h.installed, h.path, h.onServicePath = true, path, true
+		if platformErr != nil {
+			h.installError = platformErr.Error()
+			return h
+		}
+		h.version, err = dshProbeVersion(path)
+		if err == nil && !dshVersionCompatible(h.version) {
+			err = fmt.Errorf("DSH_VERSION_INCOMPATIBLE: DeepSeek Harness version incompatible: supported version is exactly %s", dshSupportedVersion)
+		}
+		if err != nil {
+			h.installError = err.Error()
+		}
+		return h // Auth is unknown; neither an API key nor ACP authenticate proves login.
+	}
 	// Prefer the service PATH (what the runner uses; includes ~/.local/bin). Fall
 	// back to the doctor's own PATH so a binary in an unusual dir still registers as
 	// installed — just flagged as not on the service PATH.
@@ -240,6 +276,9 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	} else {
 		h.auth = probeAuth(spec.bin, abs)
 	}
+	if spec.bin == providerKimi {
+		h.kimiRegion = probeKimiLoginRegion(abs, nil)
+	}
 	return h
 }
 
@@ -253,6 +292,20 @@ func engineVersion(binPath string) string {
 		return ""
 	}
 	return strings.TrimSpace(firstLine(string(out)))
+}
+
+// engineStarts reports whether the CLI at binPath can be run at all — the question "installed"
+// never asks, and the one a damaged install needs answered.
+//
+// `<bin> --version` exits 0 on every engine Orbit supports and prints nothing a caller needs, so
+// it is the cheapest probe that separates a working CLI from a dead one. Anything else is the same
+// answer: a non-zero status, or a signal — which is what macOS gives a native install it refuses
+// to exec (exit 137, not a byte of output) — means this engine cannot run the session about to be
+// spawned on it. A probe that never returns counts as no answer either.
+func engineStarts(binPath string, timeout time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return exec.CommandContext(ctx, binPath, "--version").Run() == nil
 }
 
 // probeAuth reports whether the engine is signed in, using each CLI's own
@@ -341,7 +394,9 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		// directory arrives as a CODEX_HOME in env (codexSlotLoginStatus).
 		return codexLoginStatus(ctx, binPath, env)
 	case providerKimi:
-		return probeKimiACPAuth(ctx, binPath)
+		// Like Codex's: nil is this process's own home, Default; an account's arrives as a
+		// KIMI_CODE_HOME in env (kimiSlotLoginStatus).
+		return probeKimiACPAuth(ctx, binPath, env)
 	case providerOpenCode:
 		out, err := exec.CommandContext(ctx, binPath, "auth", "list").CombinedOutput()
 		if err != nil {
@@ -411,9 +466,11 @@ func readKimiACPResponse(dec *json.Decoder, wantID int) (kimiACPResponse, error)
 // validate the login already stored on disk. The initialize/authenticate pair is
 // the ACP-supported status check: authenticate returns -32000 only when login is
 // required. Protocol, process, and other errors stay authUnknown so doctor never
-// reports a false signed-out state.
-func probeKimiACPAuth(ctx context.Context, binPath string) authState {
+// reports a false signed-out state. env is the CLI's environment (nil: this process's
+// own), so one account's KIMI_CODE_HOME can be asked instead of the runner's.
+func probeKimiACPAuth(ctx context.Context, binPath string, env []string) authState {
 	cmd := exec.CommandContext(ctx, binPath, "acp")
+	cmd.Env = env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return authUnknown
@@ -486,6 +543,17 @@ func installEngine(spec engineSpec, proxyVars []envVar) bool {
 // Returns true only when the command exits 0.
 func runInstallCmd(spec engineSpec, proxyVars []envVar) bool {
 	fmt.Printf("  running: %s\n", spec.installCmd)
+	if spec.bin == providerDsh {
+		engineInstall.mu.Lock()
+		defer engineInstall.mu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
+		defer cancel()
+		if err := installDsh(ctx, proxyVars); err != nil {
+			fmt.Printf("  ✗ install failed (%s)\n", err)
+			return false
+		}
+		return true
+	}
 	cmd := exec.Command("sh", "-c", spec.installCmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -519,12 +587,17 @@ func remoteMachine() bool {
 // on an unknown argument. env is the CLI's environment (nil: this process's own):
 // even printing its help, codex writes helper binaries into its CODEX_HOME.
 func supportsLoginFlag(binPath string, spec engineSpec, env []string) bool {
+	return loginHelpMentions(binPath, spec, env, spec.loginRemoteFlag)
+}
+
+// loginHelpMentions is supportsLoginFlag for any flag of the sign-in — Kimi's `--region`.
+func loginHelpMentions(binPath string, spec engineSpec, env []string, flag string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binPath, append(append([]string{}, spec.loginArgs...), "--help")...)
 	cmd.Env = env
 	out, _ := cmd.CombinedOutput()
-	return strings.Contains(string(out), spec.loginRemoteFlag)
+	return strings.Contains(string(out), flag)
 }
 
 // signInEngine asks for consent, then runs the CLI's sign-in with the terminal
@@ -540,6 +613,13 @@ func signInEngine(spec engineSpec, binPath string) bool {
 	}
 	if !confirm(fmt.Sprintf("\nSign in to %s now? (%s)\n  %s\n  [Y/n] ", spec.name, note, cmdLine), true) {
 		return false
+	}
+	// Kimi's two sites keep separate accounts, and left to itself the CLI picks one (kimi_region.go).
+	if spec.bin == providerKimi && interactive() && loginHelpMentions(binPath, spec, nil, "--region") {
+		if region := askKimiRegion(); region != "" {
+			args = append(args, "--region", region)
+			cmdLine += " --region " + region
+		}
 	}
 	fmt.Printf("  running: %s\n", cmdLine)
 	cmd := exec.Command(binPath, args...)
@@ -603,6 +683,14 @@ func runDoctor(fix bool, proxyVars []envVar) []engineHealth {
 }
 
 func formatEngineLine(h engineHealth) string {
+	if h.spec.bin == providerDsh {
+		if h.installError != "" {
+			return fmt.Sprintf("✗ %s — %s", h.spec.name, h.installError)
+		}
+		if h.installed {
+			return fmt.Sprintf("✓ %s (%s) — request authentication unverified", h.spec.name, h.version)
+		}
+	}
 	if !h.installed {
 		return fmt.Sprintf("✗ %s — not installed", h.spec.name)
 	}

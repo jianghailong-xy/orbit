@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "/tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.config.mjs",
+    "--grep",
+    "native stationary arrival|layout moving"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "sourceCommitAtStart": "1b17eaf7d25674d220298c0141d5366324eb7ab8",
+  "sourceCommitAtEnd": "1b17eaf7d25674d220298c0141d5366324eb7ab8",
+  "finishedAt": "2026-10-04T09:18:15.612943+00:00",
+  "seconds": 145.40641719201813,
+  "exitCode": 1
+}

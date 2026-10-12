@@ -1006,7 +1006,7 @@ func TestCodexResetConsumeCallsTheProviderInOrderUnderThePersistedKey(t *testing
 		t.Fatalf("the probe cache holds %+v, want the refreshed block for the next heartbeat", cached)
 	}
 
-	heartbeat, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: p.relay.leaseOwner, PlanUsage: combinePlanUsage(nil, cached)})
+	heartbeat, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: p.relay.leaseOwner, PlanUsage: combinePlanUsage(nil, cached, nil)})
 	if err != nil {
 		t.Fatal(err)
 	}

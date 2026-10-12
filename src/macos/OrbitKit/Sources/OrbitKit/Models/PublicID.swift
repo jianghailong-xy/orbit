@@ -15,6 +15,7 @@ import Foundation
 /// unchanged across the migration.
 public enum PublicID {
     private static let alphabet = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+    private static let hexDigits = Array("0123456789abcdef")
 
     private static let value: [Character: UInt32] = {
         var map: [Character: UInt32] = [:]
@@ -43,10 +44,15 @@ public enum PublicID {
             if carry != 0 { return nil }
         }
 
-        let hex = bytes.map { String(format: "%02x", $0) }.joined()
-        let groups = [hex.prefix(8), hex.dropFirst(8).prefix(4), hex.dropFirst(12).prefix(4),
-                      hex.dropFirst(16).prefix(4), hex.dropFirst(20)]
-        return groups.map(String.init).joined(separator: "-")
+        // By table, not `String(format:)` per byte: rows look their watch up by this on every render.
+        var uuid = ""
+        uuid.reserveCapacity(36)
+        for (i, byte) in bytes.enumerated() {
+            if i == 4 || i == 6 || i == 8 || i == 10 { uuid.append("-") }
+            uuid.append(hexDigits[Int(byte >> 4)])
+            uuid.append(hexDigits[Int(byte & 0xF)])
+        }
+        return uuid
     }
 
     /// A fresh Base62 public id, drawn here rather than received.
@@ -105,7 +111,35 @@ public enum PublicID {
 
     /// Either spelling in, a stable key out. Total: an id that is neither is returned unchanged,
     /// because a cache miss is survivable and a crash on the load path is not.
-    public static func storageKey(_ id: String) -> String { toUUID(id) ?? id }
+    public static func storageKey(_ id: String) -> String {
+        if let hit = storageKeys.lookup(id) { return hit }
+        let key = toUUID(id) ?? id
+        storageKeys.store(key, for: id)
+        return key
+    }
+
+    // A session's row looks its watch up by this key on every render, for every session of a
+    // project the list groups. An id converts to one key forever, so the answer is kept; the bound
+    // only stops a long session from growing it without end. Locked: called off the main actor too.
+    private static let storageKeys = KeyCache()
+
+    private final class KeyCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var keys: [String: String] = [:]
+
+        func lookup(_ id: String) -> String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return keys[id]
+        }
+
+        func store(_ key: String, for id: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            if keys.count >= 16_384 { keys.removeAll(keepingCapacity: true) }
+            keys[id] = key
+        }
+    }
 
     private static func isUUID(_ id: String) -> Bool {
         let parts = id.split(separator: "-", omittingEmptySubsequences: false)

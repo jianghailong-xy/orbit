@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { AgentProvider, PermissionMode } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { encryptSecret } from '../providers/provider-crypto';
-import { execRuntime, resolveProviderExec } from '../providers/custom-provider';
+import { resolveProviderExec } from '../providers/custom-provider';
 import { SessionsService } from './sessions.service';
 import { sessionMoveVerdict, type SessionMoveFacts } from './session-move';
 
@@ -13,18 +13,20 @@ const ownerId = '22222222-2222-4222-8222-222222222222';
 const sessionId = '11111111-1111-4111-8111-111111111111';
 const historicalId = '55555555-5555-4555-8555-555555555555';
 
-const providerRow = (slug: string, runtime = 'claude') => ({
+const providerRow = (slug: string, runtime = 'claude', presetSlug = 'deepseek') => ({
   slug, runtime, ownerId, enabled: true, label: slug,
   baseUrl: 'https://api.deepseek.com/anthropic',
   apiKeyEnc: encryptSecret('legacy-deepseek-key'),
   models: [{ value: 'deepseek-flash', label: 'DeepSeek Flash' }],
-  defaultModel: 'deepseek-flash', presetSlug: 'deepseek', followsPreset: true,
+  defaultModel: 'deepseek-flash', presetSlug, followsPreset: true,
 });
 type ProviderRow = ReturnType<typeof providerRow>;
 type PoolRow = { slug: string; ownerId: string; engine?: string };
 
 function delegates(providers: ProviderRow[], pools: PoolRow[] = []) {
   return {
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: {
       findFirst: async ({ where }: { where: { slug: string; enabled?: boolean } }) =>
         providers.find((row) => row.slug === where.slug &&
@@ -34,6 +36,8 @@ function delegates(providers: ProviderRow[], pools: PoolRow[] = []) {
       findFirst: async ({ where }: { where: { slug: string; ownerId?: string } }) =>
         pools.find((row) => row.slug === where.slug && row.ownerId === where.ownerId) ?? null,
     },
+    // No retired provider names here (migration 0415).
+    providerSlugAlias: { findUnique: async () => null },
   };
 }
 
@@ -49,8 +53,10 @@ function createFixture(
       workspace_id: 'workspace-1', provider: options.seed ?? 'claude',
       provider_builtin: !options.seed || options.seed === 'claude',
     }],
-    runner: { findFirst: async () => ({ id: 'runner-1', capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date() }) },
-    user: { findUnique: async () => ({ preferences: options.preferences ?? {} }) },
+    // A runner that can start Harness: it declares dsh and its engine report shows the pinned CLI ready.
+    runner: { findFirst: async () => ({ id: 'runner-1', capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(),
+      engines: [{ engine: 'dsh', installed: true, version: '0.2.0-rc.2', auth: 'unknown', dsh: { versionCompatible: true } }] }) },
+    user: { findUnique: async () => ({ preferences: options.preferences ?? {}, role: 'ADMIN' }) },
     task: { findFirst: async () => ({
       id: 'task-1', projectId: null, verifiesTaskId: null, pinnedRevision: null,
       codeless: false, attemptGeneration: 1n, knownGoodSha: null,
@@ -187,7 +193,8 @@ test('dsh compatibility: existing dsh provider and pool slugs stay configured on
     assert.equal(created.provider, 'dsh', kind);
     assert.equal(created.providerBuiltin, false, kind);
     assert.match(created.runtimeSessionId as string, /^[0-9a-f-]{36}$/, kind);
-    assert.equal(execRuntime({ declaredProvider: 'dsh', declaredProviderBuiltin: false, customRow: rows[0] ?? null }), AgentProvider.CLAUDE);
+    // The configured row and the pool both run on Claude Code: neither is the built-in DeepSeek Harness.
+    assert.equal(created.engine, AgentProvider.CLAUDE, kind);
 
     const history = historyFixture(rows, {
       provider: 'claude', providerBuiltin: true, model: 'claude-opus-5', status: RunStatus.AWAITING_INPUT,
@@ -207,22 +214,53 @@ test('dsh compatibility: existing dsh provider and pool slugs stay configured on
   }
 });
 
-test('dsh compatibility: Claude and Harness histories refuse cross-runtime resume and config switches', async () => {
-  const harness = providerRow('deepseek-harness', 'dsh');
+test('dsh compatibility: Claude and Harness histories switch between DeepSeek keys on their own engine and refuse any other', async () => {
+  const harness = providerRow('deepseek-harness', 'dsh', 'deepseek-harness');
+  const glm = { ...providerRow('glm', 'claude', 'zhipu'), baseUrl: 'https://open.bigmodel.cn/api/anthropic' };
+  const codexKey = { ...providerRow('openai-key', 'codex', 'openai'), baseUrl: 'https://api.openai.com/v1' };
+  const dshReady = {
+    id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: new Date(), capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(),
+    engines: [{ engine: 'dsh', installed: true, version: '0.2.0-rc.2', auth: 'unknown', dsh: { versionCompatible: true } }],
+  };
+  // A switch moves the credential and never the engine (docs/provider-engine-contract.md §3.5): both DeepSeek
+  // keys run on Claude Code and on DeepSeek Harness, so either history may move between them, keeping its id.
   for (const direction of [
-    { provider: 'deepseek', providerBuiltin: false, target: 'deepseek-harness', from: 'claude', to: 'dsh' },
-    { provider: 'dsh', providerBuiltin: true, target: 'deepseek', from: 'dsh', to: 'claude' },
+    { provider: 'deepseek', providerBuiltin: false, target: 'deepseek-harness', engine: AgentProvider.CLAUDE },
+    { provider: 'dsh', providerBuiltin: true, target: 'deepseek', engine: AgentProvider.DSH },
   ]) {
     for (const operation of ['resume', 'config']) {
       const fixture = historyFixture([providerRow('deepseek'), harness], {
-        provider: direction.provider, providerBuiltin: direction.providerBuiltin,
+        provider: direction.provider, providerBuiltin: direction.providerBuiltin, assignedRunner: dshReady,
+        status: operation === 'resume' ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
+      });
+      if (operation === 'resume') await fixture.service.resume(ownerId, sessionId, { ...continuation, provider: direction.target });
+      else await fixture.service.updateConfig(ownerId, sessionId, { provider: direction.target });
+      const written = fixture.updates[0];
+      assert.equal(written.provider, direction.target, `${direction.target} ${operation}`);
+      assert.equal(written.providerBuiltin, false);
+      // Its engine recorded with the move, so nothing derives it from the key it moved to.
+      assert.equal(written.engine, direction.engine);
+      assert.equal(fixture.session.runtimeSessionId, historicalId);
+    }
+  }
+  // Onto a key its engine cannot run, it is refused, naming the engines that key runs on, and nothing is written:
+  // DeepSeek Harness runs on DeepSeek keys only, Claude Code on no OpenAI Responses key.
+  for (const direction of [
+    { provider: 'dsh', providerBuiltin: true, target: 'glm', engine: 'DeepSeek Harness', runsOn: 'Claude Code, OpenCode' },
+    { provider: 'deepseek', providerBuiltin: false, target: 'openai-key', engine: 'Claude Code', runsOn: 'Codex, OpenCode' },
+  ]) {
+    for (const operation of ['resume', 'config']) {
+      const fixture = historyFixture([providerRow('deepseek'), glm, codexKey], {
+        provider: direction.provider, providerBuiltin: direction.providerBuiltin, assignedRunner: dshReady,
         status: operation === 'resume' ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
       });
       await assert.rejects(
         () => operation === 'resume'
           ? fixture.service.resume(ownerId, sessionId, { ...continuation, provider: direction.target })
           : fixture.service.updateConfig(ownerId, sessionId, { provider: direction.target }),
-        new RegExp(`a ${direction.from} session cannot switch to a provider that runs on ${direction.to}`),
+        (error: { response?: { code?: string; message?: string } }) =>
+          error.response?.code === 'PROVIDER_ENGINE_INCOMPATIBLE'
+          && error.response.message === `provider "${direction.target}" cannot run on ${direction.engine}; it runs on ${direction.runsOn}`,
       );
       assert.deepEqual(fixture.updates, []);
       assert.equal(fixture.session.runtimeSessionId, historicalId);
@@ -248,12 +286,12 @@ test('dsh compatibility: a disabled existing dsh provider is unavailable instead
   assert.deepEqual(history.updates, []);
 });
 
-test('dsh admission: unverified permission policies reject explicit account and code defaults before creation', async () => {
+test('dsh admission: unverified permission policies reject explicit and account-default modes before creation', async () => {
   const row = providerRow('deepseek-harness', 'dsh');
   for (const choice of [
-    { permissionMode: PermissionMode.DEFAULT, preferences: {} },
-    { permissionMode: undefined, preferences: { defaultPermissionMode: PermissionMode.AUTO } },
-    { permissionMode: undefined, preferences: {} },
+    { permissionMode: PermissionMode.PLAN, preferences: {} },
+    { permissionMode: PermissionMode.ACCEPT_EDITS, preferences: {} },
+    { permissionMode: undefined, preferences: { defaultPermissionMode: PermissionMode.BYPASS } },
   ]) {
     const fixture = createFixture([row], { preferences: choice.preferences });
     await assert.rejects(
@@ -262,10 +300,14 @@ test('dsh admission: unverified permission policies reject explicit account and 
     );
     assert.deepEqual(fixture.creates, []);
   }
+  // The code default, Auto, is a mode dsh enforces (its workspace-write sandbox) and is admitted.
+  const admitted = createFixture([row], { preferences: {} });
+  await admitted.service.create(ownerId, { ...opening, provider: 'deepseek-harness' });
+  assert.equal(admitted.creates.length, 1);
 });
 
 test('dsh admission: terminal Harness resume refuses an unverified permission policy without rewriting its id', async () => {
-  const fixture = historyFixture([], { provider: 'dsh', providerBuiltin: true });
+  const fixture = historyFixture([], { provider: 'dsh', providerBuiltin: true, permissionMode: PermissionMode.PLAN });
   await assert.rejects(
     () => fixture.service.resume(ownerId, sessionId, continuation),
     /dsh|DeepSeek Harness/,
@@ -281,7 +323,7 @@ test('dsh compatibility: other built-in engine creation and runtime routes remai
     await fixture.service.create(ownerId, { ...opening, provider });
     const created = fixture.creates[0];
     assert.equal(created.providerBuiltin, true, provider);
-    assert.equal(execRuntime({ declaredProvider: provider, declaredProviderBuiltin: true, customRow: null }), provider);
+    assert.equal(created.engine, provider);
     assert.equal(typeof created.runtimeSessionId === 'string', provider === AgentProvider.CLAUDE, provider);
   }
 });

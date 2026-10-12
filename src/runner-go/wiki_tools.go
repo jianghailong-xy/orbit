@@ -75,6 +75,17 @@ const wikiProposeDescription = wikiProposePrecondition + " This is how what you 
 	"recording nothing. Search first with wiki_search: a near neighbour is answered under similar[], and " +
 	"reinforcing the entry that exists is better than adding a second one."
 
+// wikiSourceRefs is what each source kind takes as its ref (contracts/wiki.contract.json
+// `sourceInput.refs`), said where a source is filled in: a tool_use_id where a row's id goes is the
+// mistake it prevents, because task_evidence_submit takes exactly that id for a tool call.
+// wiki_tools_test.go holds it to naming every kind the contract lists.
+const wikiSourceRefs = "ref by kind: turn, event, task, task_comment, approval, merge_receipt and note take the " +
+	"record's id (its UUID, or the short id Orbit shows); owner_decision the id of the project blocker the owner " +
+	"resolved with a note; tool_call the tool call's id, or the tool_use_id its engine gave the call (toolu_…, " +
+	"call_…), this session's own call first and else the one session of the owner's that made it; commit the full " +
+	"sha. evidence, criterion and url cannot be cited yet. A turn of this session is {kind:\"turn\",session:\"self\"} " +
+	"and takes no ref. A ref that names nothing is refused, naming the source as ops[i].sources[j].ref."
+
 // ── The tool descriptors ────────────────────────────────────────────────────────────────────────
 
 // wikiToolDescriptors is the agent-facing contract of the wiki tools. Unlike the task tools these
@@ -217,7 +228,7 @@ func wikiToolDescriptors(obj func(map[string]interface{}, ...string) map[string]
 						"sources": map[string]interface{}{
 							"type":        "array",
 							"items":       map[string]interface{}{"type": "object"},
-							"description": "The records this came from: {kind, ref|session, quote}. Reinforce requires at least one, and a quote must be a substring of the record it cites.",
+							"description": "The records this came from: {kind, ref|session, quote}. Reinforce requires at least one, and a quote must be a substring of the record it cites. " + wikiSourceRefs,
 						},
 					}, "op"),
 					"description": "The batch, at most " + strconv.Itoa(wikiOpsPerTurn) + " ops per turn, each answered on its own by its position.",
@@ -503,6 +514,11 @@ type wikiProposeAnswer struct {
 	ChangesetID string                   `json:"changesetId"`
 	Replayed    bool                     `json:"replayed"`
 	Ops         []map[string]interface{} `json:"ops"`
+	// ServedBy is "server" where the deployment's own worker verifies the ops that wait for a verdict
+	// (contract `reviewModes.verification.servedBy`, jobs.kindRuns.verify): the session runs nothing, and
+	// nothing of it asks a model of this session's provider. Absent under the default runner mode, and the
+	// wording this side answers with is unchanged wherever it is absent.
+	ServedBy string `json:"servedBy"`
 }
 
 // wikiOpsArg reads ops: an array of objects, or that array sent as a JSON string, which models do.
@@ -646,6 +662,14 @@ func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) 
 		fmt.Fprintf(&out, "This request was already recorded under this idempotencyKey, and this is that answer; nothing was proposed twice. Changeset %s.\n", answer.ChangesetID)
 	case answer.ChangesetID == "":
 		out.WriteString("Nothing was recorded: every op was refused. The reasons below are the whole answer.\n")
+	case answer.ServedBy == "server" && wikiOpsWaitForVerification(answer.Ops):
+		// The server's own verification (contract `reviewModes.verification.servedBy`): the deployment's
+		// worker runs the pipeline with the System model, so the verdict arrives by itself — there is no
+		// command for this session to run, and no model of its provider is asked about any of this.
+		fmt.Fprintf(&out, "Recorded: changeset %s. It is not saved yet: in this automatic space the deployment's "+
+			"own worker verifies what waits for its verification, so the verdict arrives by itself — nothing for "+
+			"this session to run, and no model of this session's is asked. Everything else waits for the owner in "+
+			"Review; until then no other session reads it and nothing here is knowledge.\n", answer.ChangesetID)
 	case wikiOpsWaitForVerification(answer.Ops):
 		// An automatic space: what it took waits for a verdict, not for the owner (contract
 		// `reviewModes.verification`), and the command that asks for one is this session's to run.
@@ -657,7 +681,7 @@ func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) 
 			"decides in Review, and until they do, no other session reads it and nothing here is knowledge.\n", answer.ChangesetID)
 	}
 	for _, op := range answer.Ops {
-		out.WriteString("  " + describeWikiOp(op, names))
+		out.WriteString("  " + describeWikiOp(op, names, answer.ServedBy == "server"))
 		out.WriteString("\n")
 	}
 	if len(answer.Ops) > 0 {
@@ -666,7 +690,10 @@ func describeWikiPropose(answer wikiProposeAnswer, names []string, dryRun bool) 
 	return out.String()
 }
 
-func describeWikiOp(op map[string]interface{}, names []string) string {
+// describeWikiOp is one op's line. server says the deployment's own worker verifies what waits
+// (`reviewModes.verification.servedBy`), which is what a session waiting for a verdict is told: the
+// verdict arrives by itself, nothing is asked of this session's provider.
+func describeWikiOp(op map[string]interface{}, names []string, server bool) string {
 	seq := -1
 	if value, ok := op["seq"].(float64); ok {
 		seq = int(value)
@@ -684,7 +711,11 @@ func describeWikiOp(op map[string]interface{}, names []string) string {
 	switch status {
 	case "pending":
 		if waits, _ := op["waitsFor"].(string); waits == "verification" {
-			line += "pending — waiting for its verification (orbit wiki verify), not live yet"
+			if server {
+				line += "pending — the deployment's own worker verifies it, not live yet"
+			} else {
+				line += "pending — waiting for its verification (orbit wiki verify), not live yet"
+			}
 		} else {
 			line += "pending — waiting for the owner's review"
 		}
@@ -707,6 +738,13 @@ func describeWikiOp(op map[string]interface{}, names []string) string {
 			code, _ := reason["code"].(string)
 			message, _ := reason["message"].(string)
 			line += " " + strings.TrimSpace(code+": "+message)
+			// And each field it names, by path: which op's which source a refusal is about is in
+			// errors[], and a WIKI_SCHEMA's message alone does not say.
+			for _, field := range wikiMapSlice(reason["errors"]) {
+				path, _ := field["path"].(string)
+				detail, _ := field["message"].(string)
+				line += "; " + strings.TrimSpace(path+" "+detail)
+			}
 		}
 	default:
 		line += strings.TrimSpace(status)

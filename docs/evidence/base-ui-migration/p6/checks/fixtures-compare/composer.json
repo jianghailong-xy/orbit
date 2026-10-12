@@ -1,0 +1,4045 @@
+{
+ "tests": {
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › chromium-dark-desktop": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "keystroke-cost": {
+     "differences": 130,
+     "sample": [
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.max",
+       "before": 4.799999952316284,
+       "after": 9.600000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.median",
+       "before": 3.899999976158142,
+       "after": 4.200000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.p95",
+       "before": 4.600000023841858,
+       "after": 8.5
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[0]",
+       "before": 4.799999952316284,
+       "after": 4.899999976158142
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[1]",
+       "before": 4.5,
+       "after": 3.6999999284744263
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[2]",
+       "before": 4.5,
+       "after": 4
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[3]",
+       "before": 4.600000023841858,
+       "after": 3.700000047683716
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[4]",
+       "before": 4.400000095367432,
+       "after": 3.799999952316284
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[5]",
+       "before": 4.300000071525574,
+       "after": 3.600000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[6]",
+       "before": 4.599999904632568,
+       "after": 3.899999976158142
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[7]",
+       "before": 4,
+       "after": 5.800000071525574
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[8]",
+       "before": 3.799999952316284,
+       "after": 4.199999928474426
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[9]",
+       "before": 3.700000047683716,
+       "after": 8.5
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[10]",
+       "before": 3.9000000953674316,
+       "after": 4.799999952316284
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[11]",
+       "before": 4,
+       "after": 7.100000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[12]",
+       "before": 3.899999976158142,
+       "after": 9.600000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[13]",
+       "before": 3.899999976158142,
+       "after": 6.600000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[14]",
+       "before": 3.799999952316284,
+       "after": 5.600000023841858
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[15]",
+       "before": 4,
+       "after": 4.599999904632568
+      },
+      {
+       "path": "results.orbit.capped-200-lines.inputWork.samples[16]",
+       "before": 3.899999976158142,
+       "after": 4
+      }
+     ]
+    }
+   }
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › webkit-dark-desktop": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › webkit-light-desktop": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-cost.browser.mjs › records per-keystroke cost of the session field with short and long drafts › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment @-mention restores focus and the caret through the native ref › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › Orbit text fields stop transitioning › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › auto-size transitions: the height eases over 0.3s, except while typing focused in the composer › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       369,
+       87
+      ],
+      [
+       369,
+       91
+      ]
+     ]
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       369,
+       111
+      ],
+      [
+       369,
+       115
+      ]
+     ]
+    },
+    "session-width-360-states": {
+     "differences": 16,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 797,
+       "after": 793
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 810,
+       "after": 806
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 836,
+       "after": 832
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 103,
+       "after": 107
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 773,
+       "after": 769
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 786,
+       "after": 782
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 836,
+       "after": 832
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 599px › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       369,
+       87
+      ],
+      [
+       369,
+       91
+      ]
+     ]
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       369,
+       111
+      ],
+      [
+       369,
+       115
+      ]
+     ]
+    },
+    "session-width-360-states": {
+     "differences": 16,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 797,
+       "after": 793
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 810,
+       "after": 806
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 836,
+       "after": 832
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 103,
+       "after": 107
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 773,
+       "after": 769
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 786,
+       "after": 782
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 836,
+       "after": 832
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 599px › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       369,
+       87
+      ],
+      [
+       369,
+       91
+      ]
+     ]
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       369,
+       111
+      ],
+      [
+       369,
+       115
+      ]
+     ]
+    },
+    "session-width-360-states": {
+     "differences": 16,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 797,
+       "after": 793
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 810,
+       "after": 806
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 836,
+       "after": 832
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 103,
+       "after": 107
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 773,
+       "after": 769
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 786,
+       "after": 782
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 836,
+       "after": 832
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 599px › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 599px › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       369,
+       87
+      ],
+      [
+       369,
+       91
+      ]
+     ]
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       369,
+       111
+      ],
+      [
+       369,
+       115
+      ]
+     ]
+    },
+    "session-width-360-states": {
+     "differences": 16,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 797,
+       "after": 793
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 810,
+       "after": 806
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 798,
+       "after": 794
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 836,
+       "after": 832
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 103,
+       "after": 107
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 773,
+       "after": 769
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 786,
+       "after": 782
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 774,
+       "after": 770
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 836,
+       "after": 832
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 599px › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 601px › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 601px › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 601px › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 601px › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 601px › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 959px › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 959px › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 959px › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 959px › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 959px › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 961px › chromium-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 961px › chromium-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 961px › webkit-dark-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › fields at 961px › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › fields at 961px › webkit-light-phone": {
+   "before": "skipped",
+   "after": "skipped",
+   "attachments": {}
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-handle-shown-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-clamped-minimum-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-dragged-taller-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-reset-to-auto-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-handle-shown-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ]
+    },
+    "session-clamped-minimum-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       93
+      ],
+      [
+       370,
+       97
+      ]
+     ]
+    },
+    "session-dragged-taller-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       451
+      ],
+      [
+       370,
+       455
+      ]
+     ]
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       689
+      ],
+      [
+       370,
+       693
+      ]
+     ]
+    },
+    "session-reset-to-auto-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-states": {
+     "differences": 56,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 343,
+       "after": 347
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 477,
+       "after": 473
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 490,
+       "after": 486
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 443,
+       "after": 447
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 377,
+       "after": 373
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 390,
+       "after": 386
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[2].state.box.height",
+       "before": 85,
+       "after": 89
+      },
+      {
+       "path": "states.orbit[2].state.box.y",
+       "before": 735,
+       "after": 731
+      },
+      {
+       "path": "states.orbit[2].state.composerField.y",
+       "before": 736,
+       "after": 732
+      },
+      {
+       "path": "states.orbit[2].state.content.top",
+       "before": 748,
+       "after": 744
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-handle-shown-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-clamped-minimum-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-dragged-taller-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-reset-to-auto-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-handle-shown-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ]
+    },
+    "session-clamped-minimum-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       93
+      ],
+      [
+       370,
+       97
+      ]
+     ]
+    },
+    "session-dragged-taller-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       451
+      ],
+      [
+       370,
+       455
+      ]
+     ]
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       689
+      ],
+      [
+       370,
+       693
+      ]
+     ]
+    },
+    "session-reset-to-auto-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-states": {
+     "differences": 56,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 343,
+       "after": 347
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 477,
+       "after": 473
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 490,
+       "after": 486
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 443,
+       "after": 447
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 377,
+       "after": 373
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 390,
+       "after": 386
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[2].state.box.height",
+       "before": 85,
+       "after": 89
+      },
+      {
+       "path": "states.orbit[2].state.box.y",
+       "before": 735,
+       "after": 731
+      },
+      {
+       "path": "states.orbit[2].state.composerField.y",
+       "before": 736,
+       "after": 732
+      },
+      {
+       "path": "states.orbit[2].state.content.top",
+       "before": 748,
+       "after": 744
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-handle-shown-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-clamped-minimum-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-dragged-taller-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-reset-to-auto-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-handle-shown-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ]
+    },
+    "session-clamped-minimum-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       93
+      ],
+      [
+       370,
+       97
+      ]
+     ]
+    },
+    "session-dragged-taller-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       451
+      ],
+      [
+       370,
+       455
+      ]
+     ]
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       689
+      ],
+      [
+       370,
+       693
+      ]
+     ]
+    },
+    "session-reset-to-auto-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-states": {
+     "differences": 56,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 343,
+       "after": 347
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 477,
+       "after": 473
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 490,
+       "after": 486
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 443,
+       "after": 447
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 377,
+       "after": 373
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 390,
+       "after": 386
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[2].state.box.height",
+       "before": 85,
+       "after": 89
+      },
+      {
+       "path": "states.orbit[2].state.box.y",
+       "before": 735,
+       "after": 731
+      },
+      {
+       "path": "states.orbit[2].state.composerField.y",
+       "before": 736,
+       "after": 732
+      },
+      {
+       "path": "states.orbit[2].state.content.top",
+       "before": 748,
+       "after": 744
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-handle-shown-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-clamped-minimum-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-dragged-taller-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-reset-to-auto-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-handle-shown-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ]
+    },
+    "session-clamped-minimum-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       93
+      ],
+      [
+       370,
+       97
+      ]
+     ]
+    },
+    "session-dragged-taller-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       451
+      ],
+      [
+       370,
+       455
+      ]
+     ]
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       689
+      ],
+      [
+       370,
+       693
+      ]
+     ]
+    },
+    "session-reset-to-auto-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-states": {
+     "differences": 56,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 343,
+       "after": 347
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 477,
+       "after": 473
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 490,
+       "after": 486
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 478,
+       "after": 474
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 443,
+       "after": 447
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 377,
+       "after": 373
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 390,
+       "after": 386
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 378,
+       "after": 374
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[2].state.box.height",
+       "before": 85,
+       "after": 89
+      },
+      {
+       "path": "states.orbit[2].state.box.y",
+       "before": 735,
+       "after": 731
+      },
+      {
+       "path": "states.orbit[2].state.composerField.y",
+       "before": 736,
+       "after": 732
+      },
+      {
+       "path": "states.orbit[2].state.content.top",
+       "before": 748,
+       "after": 744
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-scrolled-to-end-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-cleared-orbit": {
+     "equal": false,
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "equal": false,
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "equal": false,
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    "session-one-line-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-shell-mode-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-scrolled-to-end-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ]
+    },
+    "session-cleared-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       135
+      ],
+      [
+       370,
+       139
+      ]
+     ]
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-one-line-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-shell-mode-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-states": {
+     "differences": 127,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[2].state.box.height",
+       "before": 103,
+       "after": 107
+      },
+      {
+       "path": "states.orbit[2].state.box.y",
+       "before": 717,
+       "after": 713
+      },
+      {
+       "path": "states.orbit[2].state.composerField.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[2].state.content.top",
+       "before": 730,
+       "after": 726
+      }
+     ]
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       111
+      ],
+      [
+       370,
+       115
+      ]
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-scrolled-to-end-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-cleared-orbit": {
+     "equal": false,
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "equal": false,
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "equal": false,
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    "session-one-line-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-shell-mode-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-scrolled-to-end-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ]
+    },
+    "session-cleared-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       135
+      ],
+      [
+       370,
+       139
+      ]
+     ]
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-one-line-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-shell-mode-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-states": {
+     "differences": 127,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[2].state.box.height",
+       "before": 103,
+       "after": 107
+      },
+      {
+       "path": "states.orbit[2].state.box.y",
+       "before": 717,
+       "after": 713
+      },
+      {
+       "path": "states.orbit[2].state.composerField.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[2].state.content.top",
+       "before": 730,
+       "after": 726
+      }
+     ]
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       111
+      ],
+      [
+       370,
+       115
+      ]
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-scrolled-to-end-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-cleared-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    "session-one-line-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-shell-mode-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 73
+    }
+   }
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-scrolled-to-end-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ]
+    },
+    "session-cleared-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       135
+      ],
+      [
+       370,
+       139
+      ]
+     ]
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-one-line-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-shell-mode-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-states": {
+     "differences": 127,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[2].state.box.height",
+       "before": 103,
+       "after": 107
+      },
+      {
+       "path": "states.orbit[2].state.box.y",
+       "before": 717,
+       "after": 713
+      },
+      {
+       "path": "states.orbit[2].state.composerField.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[2].state.content.top",
+       "before": 730,
+       "after": 726
+      }
+     ]
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       111
+      ],
+      [
+       370,
+       115
+      ]
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-scrolled-to-end-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-cleared-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    "session-idle-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    "session-one-line-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-shell-mode-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "pixels": 52,
+     "maxChannelDiff": 98
+    }
+   }
+  },
+  "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-capped-scrolled-to-end-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ]
+    },
+    "session-cleared-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       135
+      ],
+      [
+       370,
+       139
+      ]
+     ]
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-one-line-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-shell-mode-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-states": {
+     "differences": 127,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[1].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[2].state.box.height",
+       "before": 103,
+       "after": 107
+      },
+      {
+       "path": "states.orbit[2].state.box.y",
+       "before": 717,
+       "after": 713
+      },
+      {
+       "path": "states.orbit[2].state.composerField.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[2].state.content.top",
+       "before": 730,
+       "after": 726
+      }
+     ]
+    },
+    "session-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       111
+      ],
+      [
+       370,
+       115
+      ]
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-attachments-idle-orbit": {
+     "equal": false,
+     "pixels": 2334,
+     "maxChannelDiff": 105
+    },
+    "session-attachments-two-lines-orbit": {
+     "equal": false,
+     "pixels": 2334,
+     "maxChannelDiff": 105
+    },
+    "session-disabled-orbit": {
+     "equal": false,
+     "pixels": 899,
+     "maxChannelDiff": 109
+    }
+   }
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-attachments-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       147
+      ],
+      [
+       370,
+       151
+      ]
+     ]
+    },
+    "session-attachments-states": {
+     "differences": 22,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.attachments.y",
+       "before": 682,
+       "after": 678
+      },
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 139,
+       "after": 143
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 681,
+       "after": 677
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.thumbnails[0].y",
+       "before": 694,
+       "after": 690
+      },
+      {
+       "path": "states.orbit[0].state.thumbnails[1].y",
+       "before": 694,
+       "after": 690
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.attachments.y",
+       "before": 658,
+       "after": 654
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 163,
+       "after": 167
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 657,
+       "after": 653
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 730,
+       "after": 726
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.thumbnails[0].y",
+       "before": 670,
+       "after": 666
+      },
+      {
+       "path": "states.orbit[1].state.thumbnails[1].y",
+       "before": 670,
+       "after": 666
+      }
+     ]
+    },
+    "session-attachments-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       171
+      ],
+      [
+       370,
+       175
+      ]
+     ]
+    },
+    "session-disabled-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-disabled-text-Read-20only-20draft-states": {
+     "differences": 8,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-attachments-idle-orbit": {
+     "equal": false,
+     "pixels": 2334,
+     "maxChannelDiff": 127
+    },
+    "session-attachments-two-lines-orbit": {
+     "equal": false,
+     "pixels": 2334,
+     "maxChannelDiff": 127
+    },
+    "session-disabled-orbit": {
+     "equal": false,
+     "pixels": 902,
+     "maxChannelDiff": 149
+    }
+   }
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-attachments-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       147
+      ],
+      [
+       370,
+       151
+      ]
+     ]
+    },
+    "session-attachments-states": {
+     "differences": 22,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.attachments.y",
+       "before": 682,
+       "after": 678
+      },
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 139,
+       "after": 143
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 681,
+       "after": 677
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.thumbnails[0].y",
+       "before": 694,
+       "after": 690
+      },
+      {
+       "path": "states.orbit[0].state.thumbnails[1].y",
+       "before": 694,
+       "after": 690
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.attachments.y",
+       "before": 658,
+       "after": 654
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 163,
+       "after": 167
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 657,
+       "after": 653
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 730,
+       "after": 726
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.thumbnails[0].y",
+       "before": 670,
+       "after": 666
+      },
+      {
+       "path": "states.orbit[1].state.thumbnails[1].y",
+       "before": 670,
+       "after": 666
+      }
+     ]
+    },
+    "session-attachments-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       171
+      ],
+      [
+       370,
+       175
+      ]
+     ]
+    },
+    "session-disabled-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-disabled-text-Read-20only-20draft-states": {
+     "differences": 8,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-attachments-idle-orbit": {
+     "equal": false,
+     "pixels": 2334,
+     "maxChannelDiff": 105
+    },
+    "session-attachments-two-lines-orbit": {
+     "equal": false,
+     "pixels": 2334,
+     "maxChannelDiff": 105
+    },
+    "session-disabled-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 109
+    }
+   }
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-attachments-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       147
+      ],
+      [
+       370,
+       151
+      ]
+     ]
+    },
+    "session-attachments-states": {
+     "differences": 22,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.attachments.y",
+       "before": 682,
+       "after": 678
+      },
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 139,
+       "after": 143
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 681,
+       "after": 677
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.thumbnails[0].y",
+       "before": 694,
+       "after": 690
+      },
+      {
+       "path": "states.orbit[0].state.thumbnails[1].y",
+       "before": 694,
+       "after": 690
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.attachments.y",
+       "before": 658,
+       "after": 654
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 163,
+       "after": 167
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 657,
+       "after": 653
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 730,
+       "after": 726
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.thumbnails[0].y",
+       "before": 670,
+       "after": 666
+      },
+      {
+       "path": "states.orbit[1].state.thumbnails[1].y",
+       "before": 670,
+       "after": 666
+      }
+     ]
+    },
+    "session-attachments-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       171
+      ],
+      [
+       370,
+       175
+      ]
+     ]
+    },
+    "session-disabled-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-disabled-text-Read-20only-20draft-states": {
+     "differences": 8,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-attachments-idle-orbit": {
+     "equal": false,
+     "pixels": 2334,
+     "maxChannelDiff": 127
+    },
+    "session-attachments-two-lines-orbit": {
+     "equal": false,
+     "pixels": 2334,
+     "maxChannelDiff": 127
+    },
+    "session-disabled-orbit": {
+     "equal": false,
+     "pixels": 890,
+     "maxChannelDiff": 149
+    }
+   }
+  },
+  "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "session-attachments-idle-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       147
+      ],
+      [
+       370,
+       151
+      ]
+     ]
+    },
+    "session-attachments-states": {
+     "differences": 22,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.attachments.y",
+       "before": 682,
+       "after": 678
+      },
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 139,
+       "after": 143
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 681,
+       "after": 677
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.thumbnails[0].y",
+       "before": 694,
+       "after": 690
+      },
+      {
+       "path": "states.orbit[0].state.thumbnails[1].y",
+       "before": 694,
+       "after": 690
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      },
+      {
+       "path": "states.orbit[1].state.attachments.y",
+       "before": 658,
+       "after": 654
+      },
+      {
+       "path": "states.orbit[1].state.box.height",
+       "before": 163,
+       "after": 167
+      },
+      {
+       "path": "states.orbit[1].state.box.y",
+       "before": 657,
+       "after": 653
+      },
+      {
+       "path": "states.orbit[1].state.composerField.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.content.top",
+       "before": 730,
+       "after": 726
+      },
+      {
+       "path": "states.orbit[1].state.field.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.mirror.y",
+       "before": 718,
+       "after": 714
+      },
+      {
+       "path": "states.orbit[1].state.thumbnails[0].y",
+       "before": 670,
+       "after": 666
+      },
+      {
+       "path": "states.orbit[1].state.thumbnails[1].y",
+       "before": 670,
+       "after": 666
+      }
+     ]
+    },
+    "session-attachments-two-lines-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       171
+      ],
+      [
+       370,
+       175
+      ]
+     ]
+    },
+    "session-disabled-orbit": {
+     "equal": false,
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ]
+    },
+    "session-disabled-text-Read-20only-20draft-states": {
+     "differences": 8,
+     "sample": [
+      {
+       "path": "states.orbit[0].state.box.height",
+       "before": 79,
+       "after": 83
+      },
+      {
+       "path": "states.orbit[0].state.box.y",
+       "before": 741,
+       "after": 737
+      },
+      {
+       "path": "states.orbit[0].state.composerField.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.content.top",
+       "before": 754,
+       "after": 750
+      },
+      {
+       "path": "states.orbit[0].state.field.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.mirror.y",
+       "before": 742,
+       "after": 738
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.height",
+       "before": 39,
+       "after": 43
+      },
+      {
+       "path": "states.orbit[0].state.toolbar.y",
+       "before": 780,
+       "after": 776
+      }
+     ]
+    }
+   }
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › task comment field sizes from its placeholder, grows to four rows and keeps outlined states › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "plain-focus-and-hover-orbit": {
+     "equal": false,
+     "pixels": 18,
+     "maxChannelDiff": 2
+    }
+   }
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  }
+ },
+ "totals": {
+  "tests": 144,
+  "bothPassed": 121,
+  "statusDiffers": 0,
+  "onlyBefore": 0,
+  "onlyAfter": 0,
+  "jsonAttachments": 161,
+  "jsonDiffering": 21,
+  "pngAttachments": 324,
+  "pngEqual": 163,
+  "pngDiffering": 161,
+  "sameStatusNotPassed": 23
+ }
+}

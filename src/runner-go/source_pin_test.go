@@ -3,12 +3,16 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 // The runner half of the SOURCE handshake (docs/project-source-contract.md §6.3), against real git.
@@ -132,6 +136,232 @@ func TestSourcePinRefusesToTrustAStaleLocalRef(t *testing.T) {
 	}
 	if got := srv.requests[0].BaseSha; got != authoritative {
 		t.Errorf("pinned %s; want the authority's tip %s, not the local %s", got, authoritative, fabricated)
+	}
+}
+
+// originBranch gives origin a branch with a commit of its own, without touching origin's checkout.
+func originBranch(t *testing.T, origin, branch string) string {
+	t.Helper()
+	sha := mustGit(t, origin, "commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "tip of "+branch)
+	mustGit(t, origin, "update-ref", "refs/heads/"+branch, sha)
+	return sha
+}
+
+// gitRunningBetweenFetchAndRead puts a git first on PATH that runs the real one and, whenever that
+// was a fetch naming ref, runs the shell command `between` before it returns: the moment between a
+// resolution's fetch and its read of what it fetched, which nothing outside resolveSourceSha can
+// otherwise reach.
+func gitRunningBetweenFetchAndRead(t *testing.T, checkout, ref, between string) {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	script := "#!/bin/sh\n" +
+		"\"$ORBIT_TEST_REAL_GIT\" \"$@\"\n" +
+		"status=$?\n" +
+		"case \" $* \" in *\" fetch \"*\"$ORBIT_TEST_FETCHED_REF\"*) " + between + " ;; esac\n" +
+		"exit $status\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_TEST_REAL_GIT", realGit)
+	t.Setenv("ORBIT_TEST_CHECKOUT", checkout)
+	t.Setenv("ORBIT_TEST_FETCHED_REF", ref)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// THE RACE THIS PINS SHUT (2026-10-08, runner workstation-gpu, project 34bmzOkov3xN2yLPrnsCk, three
+// times in one day). The resolution runs in the workspace's main checkout, and so do the integration
+// jobs — landings, promotion checks — and other sessions' resolutions, each with a fetch of its own.
+// It used to read what it had fetched out of FETCH_HEAD: one file per checkout, which every one of
+// those fetches rewrites, emptying it when it starts and filling it when it ends. A fetch landing
+// between the resolution's fetch and its read either left the file empty, and a ref that existed
+// was refused BASE_REF_NOT_FOUND ("fatal: Needed a single revision"), or left its own answer in it,
+// and the session was pinned to another project's freshly pushed tip.
+//
+// The window is a few milliseconds wide, so the other fetch is put in it on purpose: right after the
+// resolution's fetch of its ref returns, before anything is read.
+func TestSourcePinIsNotTakenFromAnotherFetchesAnswer(t *testing.T) {
+	origin, clone, _ := originAndClone(t)
+	mine := originBranch(t, origin, "project/mine")
+	other := originBranch(t, origin, "project/other")
+
+	for _, tc := range []struct{ name, between string }{
+		// An integration job's `git fetch <remote> <ref>` (integrationFetch) of another project's
+		// line, over by the time the resolution reads.
+		{"another fetch finished in between",
+			`"$ORBIT_TEST_REAL_GIT" -C "$ORBIT_TEST_CHECKOUT" fetch --quiet origin refs/heads/project/other`},
+		// One still running: git empties FETCH_HEAD when a fetch starts and writes it when it ends.
+		{"another fetch still running", `: > "$ORBIT_TEST_CHECKOUT/.git/FETCH_HEAD"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gitRunningBetweenFetchAndRead(t, clone, "refs/heads/project/mine", tc.between)
+			job := selectedJob(clone)
+			job.Source.Ref = "refs/heads/project/mine"
+
+			sha, refusal := resolveSourceSha(job)
+			if refusal != nil {
+				t.Fatalf("refused %s (stderr %q), but refs/heads/project/mine exists at %s",
+					refusal.Code, refusal.Detail["stderr"], mine)
+			}
+			if sha == other {
+				t.Fatalf("pinned %s, the tip of refs/heads/project/other that another fetch had just fetched; "+
+					"want refs/heads/project/mine's %s", sha, mine)
+			}
+			if sha != mine {
+				t.Fatalf("pinned %s, want refs/heads/project/mine's tip %s", sha, mine)
+			}
+			if left := mustGit(t, clone, "for-each-ref", "refs/orbit-source-pin/"); left != "" {
+				t.Errorf("the resolution left its fetch's ref behind: %s", left)
+			}
+		})
+	}
+}
+
+// The same race left to happen by itself: sessions on two lines resolving in one checkout at the
+// same moment, again and again. Each must come out on its own line's tip, every time.
+func TestSourcePinConcurrentResolutionsKeepTheirOwnRefs(t *testing.T) {
+	origin, clone, _ := originAndClone(t)
+	lines := []struct{ ref, tip string }{
+		{"refs/heads/project/a", originBranch(t, origin, "project/a")},
+		{"refs/heads/project/b", originBranch(t, origin, "project/b")},
+	}
+	const rounds = 15
+	failures := make(chan string, len(lines)*rounds)
+	var wg sync.WaitGroup
+	for i, line := range lines {
+		job := selectedJob(clone)
+		job.SessionID = fmt.Sprintf("%08d-1111-4111-8111-111111111111", i)
+		job.Source.Ref = line.ref
+		wg.Add(1)
+		go func(job *ClaimedSession, want string) {
+			defer wg.Done()
+			for round := 0; round < rounds; round++ {
+				sha, refusal := resolveSourceSha(job)
+				switch {
+				case refusal != nil:
+					failures <- fmt.Sprintf("%s, round %d: refused %s (stderr %q)",
+						job.Source.Ref, round, refusal.Code, refusal.Detail["stderr"])
+				case sha != want:
+					failures <- fmt.Sprintf("%s, round %d: pinned %s, want %s", job.Source.Ref, round, sha, want)
+				}
+			}
+		}(job, line.tip)
+	}
+	wg.Wait()
+	close(failures)
+	for failure := range failures {
+		t.Error(failure)
+	}
+}
+
+// A fetch of a branch also moves this checkout's remote-tracking copy of it, which every other fetch
+// of that line here writes as well; two at once and git refuses the second with "cannot lock ref".
+// That is a statement about another process, not about the ref, and a refusal ends the session for
+// good — so it is retried the way an integration job's fetch is (integrationFetch).
+func TestSourcePinRetriesARefLockAnotherFetchHeld(t *testing.T) {
+	origin, clone, _ := originAndClone(t)
+	// origin/main has to move, or the fetch never takes its lock.
+	commitFile(t, origin, "later.txt", "later\n", "upstream advanced")
+	tip := mustGit(t, origin, "rev-parse", "HEAD")
+	lock := filepath.Join(clone, ".git", "refs", "remotes", "origin", "main.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	releaseRefLockOnFirstRetry(t, lock)
+
+	sha, refusal := resolveSourceSha(selectedJob(clone))
+	if refusal != nil {
+		t.Fatalf("refused %s over a lock another fetch held for a moment (stderr %q)", refusal.Code, refusal.Detail["stderr"])
+	}
+	if sha != tip {
+		t.Fatalf("pinned %s, want origin's tip %s", sha, tip)
+	}
+}
+
+// A lock held through every attempt is still not a missing ref: it is reported as the authority
+// being out of reach, with git's own words, never as BASE_REF_NOT_FOUND.
+func TestSourcePinRefLockThatOutlivesItsRetriesIsNotAMissingRef(t *testing.T) {
+	origin, clone, _ := originAndClone(t)
+	commitFile(t, origin, "later.txt", "later\n", "upstream advanced")
+	lock := filepath.Join(clone, ".git", "refs", "remotes", "origin", "main.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := integrationFetchLockPause
+	integrationFetchLockPause = func(time.Duration) {}
+	t.Cleanup(func() {
+		integrationFetchLockPause = restore
+		_ = os.Remove(lock)
+	})
+
+	_, refusal := resolveSourceSha(selectedJob(clone))
+	if refusal == nil {
+		t.Fatal("resolved through a ref lock that was never released")
+	}
+	if refusal.Code != sourceRefusalAuthorityUnreachable {
+		t.Fatalf("refusal code %q, want %q: a lock another process holds is not a missing ref",
+			refusal.Code, sourceRefusalAuthorityUnreachable)
+	}
+	if stderr, _ := refusal.Detail["stderr"].(string); !strings.Contains(stderr, "cannot lock ref") {
+		t.Fatalf("the refusal does not carry git's own words: %v", refusal.Detail)
+	}
+}
+
+// SR38 again, for the ref the fetch writes into: one left behind by an attempt that died between its
+// fetch and its cleanup is overwritten by the next fetch and never read in its place — not even when
+// that fetch fails.
+func TestSourcePinNeverReadsAPinRefLeftBehind(t *testing.T) {
+	origin, clone, _ := originAndClone(t)
+	commitFile(t, clone, "local.txt", "only here\n", "local-only commit")
+	fabricated := mustGit(t, clone, "rev-parse", "HEAD")
+	authoritative := mustGit(t, origin, "rev-parse", "HEAD")
+	job := selectedJob(clone)
+	leftover := "refs/orbit-source-pin/" + job.SessionID
+
+	mustGit(t, clone, "update-ref", leftover, fabricated)
+	if sha, refusal := resolveSourceSha(job); refusal != nil || sha != authoritative {
+		t.Fatalf("resolved %q (refusal %+v); want the authority's %s, not the leftover %s",
+			sha, refusal, authoritative, fabricated)
+	}
+
+	mustGit(t, clone, "update-ref", leftover, fabricated)
+	job.Source.Ref = "refs/heads/does-not-exist"
+	if sha, refusal := resolveSourceSha(job); refusal == nil || refusal.Code != sourceRefusalRefNotFound {
+		t.Fatalf("resolved %q (refusal %+v); a ref the authority does not have is %s, whatever was left behind",
+			sha, refusal, sourceRefusalRefNotFound)
+	}
+}
+
+// Gate G2 asks whether THIS MACHINE holds the repository, and an agent's workDir is allowed to carry
+// a leading ~ — sessionExecDir expands it before the engine chdirs in. Resolution has to expand it
+// too: as written, "~/orbit" is not a path that exists, so isGitRepo said no and every project task
+// on such an agent was refused SOURCE_AUTHORITY_UNREACHABLE by a checkout the machine has (live on
+// longdeMac-mini.local, 2026-10-07: the agent is configured "~/orbit" and no project task could
+// start until it was re-spelled).
+func TestSourcePinExpandsATildeWorkDir(t *testing.T) {
+	origin, _, tip := originAndClone(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	clone := filepath.Join(home, "orbit")
+	if out, err := git(t.TempDir(), "clone", origin, clone); err != nil {
+		t.Fatalf("clone: %v (%s)", err, out)
+	}
+	srv := newPinServer(t)
+	tr := NewTransport(srv.URL, "tok")
+
+	job := selectedJob("~/orbit")
+	if err := ensureSourcePinned(context.Background(), tr, job); err != nil {
+		t.Fatalf("ensureSourcePinned: %v", err)
+	}
+	if len(srv.requests) != 1 || srv.requests[0].Refusal != nil {
+		t.Fatalf("expected one resolved pin, got %+v", srv.requests)
+	}
+	if job.Source.State != sourceStatePinned || job.Source.BaseSha != tip {
+		t.Errorf("pin after a ~ workDir: state=%s baseSha=%s, want PINNED %s",
+			job.Source.State, job.Source.BaseSha, tip)
 	}
 }
 

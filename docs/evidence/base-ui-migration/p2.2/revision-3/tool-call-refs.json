@@ -1,0 +1,62 @@
+[
+  {
+    "ref": "exec-5fb195d3-6700-40d2-a3c4-9268142bb053",
+    "command": "git commit -m \"merge(web): preserve choices and toasts validation during P2.2 integration\"",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-3f772135-da8f-4443-b382-8afb11d9855d",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-dependencies bash scripts/worktree-overlay.sh",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-79e778b8-4868-4850-bf17-ee420f6ad87f",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-merge-audit python3 docs/evidence/base-ui-migration/p2.2/revision-3/audit-merge.py",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-66aea13f-5b43-4f45-9c82-441bea0680d7",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-list-choices node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/choices.config.mjs --list",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-6052b50f-8be3-4872-aaaa-415c8a11b206",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-list-toasts node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs --list",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-a7024ff0-406d-4295-862d-e8f19ed01577",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-list-p0 node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/playwright.config.mjs --list",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-f663677f-4010-4311-a0e1-1d42db0eaac4",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-build-and-test bash -lc 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-6ab4b76c-e493-4f88-ace3-508f97ee8175",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-fixture-types bash -lc 'node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/tsconfig.cards-check.json --noEmit'",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-b3adbdc3-9e79-4bd8-a24d-2ed3c0e96916",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-choices-entry npm run test:ui-choices -w @orbit/web -- --grep 'Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits'",
+    "exitCode": 1
+  },
+  {
+    "ref": "exec-7919405c-36ed-423f-b954-8740ab361b19",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-choices-scroll-repeat npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --grep 'reduce Dialog Popover Select exits restore one layer at a time' --repeat-each 5",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-985d518f-0caf-445e-bb26-a9d63802cd89",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-toasts-entry npm run test:ui-toasts -w @orbit/web -- --grep 'existing notifications remain accessible in Dialog|async confirmation keeps pending locks|stationary arrival stays paused across modal owners'",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-dd25614a-46f5-4470-9607-61be40b8ef2c",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r3-production-entry npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs",
+    "exitCode": 0
+  }
+]

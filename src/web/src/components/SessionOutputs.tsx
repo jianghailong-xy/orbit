@@ -1,6 +1,4 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';
-import type { MenuProps } from 'antd';
 import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
@@ -11,6 +9,11 @@ import { copyText } from '../lib/clipboard';
 import { commitFailureCopy } from '../lib/commitFailure';
 import { sessionDiffQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { Drawer } from './ui/Drawer';
+import { Input } from './ui/Input';
+import { Menu, type MenuItem } from './ui/Menu';
+import { Segmented } from './ui/Segmented';
+import { Tooltip } from './ui/Tooltip';
 import hljs from 'highlight.js/lib/core';
 import typescript from 'highlight.js/lib/languages/typescript';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -427,7 +430,7 @@ function AdoptButton({
   return (
     <span className="wt-diverged">
       <Tooltip
-        title={`This worktree is on "${worktreeBranch}", which Orbit isn't tracking — the session tracks "${trackedBranch}". Adopt it to merge and diff the work on this branch.`}
+        content={`This worktree is on "${worktreeBranch}", which Orbit isn't tracking — the session tracks "${trackedBranch}". Adopt it to merge and diff the work on this branch.`}
       >
         <span className="wt-diverged-label">⚠ On {worktreeBranch}</span>
       </Tooltip>
@@ -491,14 +494,12 @@ function MergeButton({
   onResolveInSession?: (target: string) => void;
   resolving?: boolean;
 }) {
-  // Local filter text for the merge-target dropdown; antd theme tokens style the custom popup panel
-  // so it tracks the app's light/dark surface. Declared before the early returns below to keep hook
-  // order stable across the different button states.
+  // Local filter text for the merge-target dropdown. Declared before the early returns below to keep
+  // hook order stable across the different button states.
   const [targetQuery, setTargetQuery] = useState('');
   // The branch the user picked in the caret dropdown — it only re-points the primary button's target;
   // the merge doesn't run until they click the primary button (picking no longer merges immediately).
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
-  const { token } = theme.useToken();
   if (status === 'merged') {
     // Annotate the target only when it's an unusual one — keep the common main/master merge clean.
     const elsewhere = mergeTarget && mergeTarget !== 'main' && mergeTarget !== 'master';
@@ -549,8 +550,8 @@ function MergeButton({
   if (status === 'conflict' && onResolveInSession) {
     return (
       <Tooltip
-        placement="top"
-        title={
+        side="top"
+        content={
           <>
             {failureHint}
             <br />
@@ -601,10 +602,10 @@ function MergeButton({
       {primaryLabel}
     </button>
   );
-  // On failure, hover surfaces the real reason via an antd Tooltip (native title cleared above);
-  // otherwise the plain button with its native title is enough.
+  // On failure, hover surfaces the real reason via a Tooltip (native title cleared above); otherwise
+  // the plain button with its native title is enough.
   const mainBtnEl = failed ? (
-    <Tooltip title={failureHint} placement="top">
+    <Tooltip content={failureHint} side="top">
       {mainBtn}
     </Tooltip>
   ) : (
@@ -619,7 +620,7 @@ function MergeButton({
   const showSearch = targets.length > 8;
   const q = targetQuery.trim().toLowerCase();
   const visible = q ? targets.filter((b) => b.toLowerCase().includes(q)) : targets;
-  const items: MenuProps['items'] = visible.map((b) => ({
+  const items: MenuItem[] = visible.map((b) => ({
     key: b,
     label: (
       <span className="wt-merge-target">
@@ -627,63 +628,56 @@ function MergeButton({
         {b === effectiveTarget && <span className="wt-merge-target-tag">selected</span>}
       </span>
     ),
+    textValue: b,
     // Picking only re-points the primary button (setSelectedTarget) — it no longer merges immediately.
-    onClick: () => setSelectedTarget(b),
+    onSelect: () => setSelectedTarget(b),
   }));
 
   return (
     <span className="wt-merge-split-wrap" onClick={(e) => e.stopPropagation()}>
       {mainBtnEl}
-      <Dropdown
-        trigger={['click']}
-        placement="topRight"
-        menu={{ items, className: 'wt-merge-menu-list' }}
+      <Menu
+        side="top"
+        align="end"
+        popupClassName="wt-merge-menu"
+        items={items}
         onOpenChange={(open) => {
           if (!open) setTargetQuery('');
         }}
-        dropdownRender={(menu) => (
-          <div
-            className="wt-merge-menu-panel"
-            style={{
-              background: token.colorBgElevated,
-              borderRadius: token.borderRadiusLG,
-              boxShadow: token.boxShadowSecondary,
-            }}
+        // Search sits at the BOTTOM of the panel: this dropdown opens upward from the worktree bar, so
+        // the bottom edge is the one nearest the caret the user just clicked.
+        footer={
+          visible.length > 0 && !showSearch ? undefined : (
+            <>
+              {visible.length === 0 && <div className="wt-merge-menu-empty">No matching branches</div>}
+              {showSearch && (
+                <div className="wt-merge-menu-search">
+                  <Input
+                    size="small"
+                    autoFocus
+                    allowClear
+                    onClear={() => setTargetQuery('')}
+                    placeholder="Search branches…"
+                    value={targetQuery}
+                    onChange={(e) => setTargetQuery(e.target.value)}
+                  />
+                </div>
+              )}
+            </>
+          )
+        }
+        trigger={
+          <button
+            type="button"
+            className={`wt-merge-caret${failed ? ' wt-merge-btn-failed' : ''}`}
+            aria-label="Choose a branch to merge into"
+            title="Merge into another branch"
+            onClick={(e) => e.stopPropagation()}
           >
-            {visible.length > 0 ? (
-              menu
-            ) : (
-              <div className="wt-merge-menu-empty" style={{ color: token.colorTextTertiary }}>
-                No matching branches
-              </div>
-            )}
-            {/* Search sits at the BOTTOM of the panel: this dropdown opens upward from the worktree
-                bar, so the bottom edge is the one nearest the caret the user just clicked. */}
-            {showSearch && (
-              <div className="wt-merge-menu-search" style={{ borderTop: `1px solid ${token.colorBorderSecondary}` }}>
-                <Input
-                  size="small"
-                  autoFocus
-                  allowClear
-                  placeholder="Search branches…"
-                  value={targetQuery}
-                  onChange={(e) => setTargetQuery(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-        )}
-      >
-        <button
-          type="button"
-          className={`wt-merge-caret${failed ? ' wt-merge-btn-failed' : ''}`}
-          aria-label="Choose a branch to merge into"
-          title="Merge into another branch"
-          onClick={(e) => e.stopPropagation()}
-        >
-          ▾
-        </button>
-      </Dropdown>
+            ▾
+          </button>
+        }
+      />
     </span>
   );
 }
@@ -1196,7 +1190,7 @@ function WorktreeDiffDrawer({
           <span className="wt-diff-head-sub">{committed ? 'committed' : 'working changes'}</span>
         </span>
       }
-      extra={
+      headerActions={
         <button
           type="button"
           className="wt-diff-max-btn"
@@ -1289,8 +1283,9 @@ function DiffPane({
             </span>
             <Segmented
               size="small"
+              aria-label="Diff view"
               value={viewMode}
-              onChange={(v) => onViewMode(v as 'unified' | 'split')}
+              onValueChange={onViewMode}
               options={[
                 { label: 'Unified', value: 'unified' },
                 { label: 'Split', value: 'split' },

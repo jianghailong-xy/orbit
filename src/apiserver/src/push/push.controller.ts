@@ -2,11 +2,13 @@ import { BadRequestException, Body, ConflictException, Controller, Logger, Post,
 import { Prisma } from '@prisma/client';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDeviceTokenDto, UnregisterDeviceTokenDto } from './dto';
 
 /** Authenticated APNs/FCM registration. Sending is independently configured in PushService. */
+@PatForbidden('ACCOUNT')
 @Controller('push')
 export class PushController {
   private readonly log = new Logger(PushController.name);

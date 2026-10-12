@@ -1,0 +1,168 @@
+<!doctype html>
+<!-- Design mock: a worked-for row at the head of each turn of the web session page — "Worked for 1m 6s" over the
+     turn's own output while it is done, "Working for 12s" while it runs (owner, 2026-10-10, 参考 Codex). Every frame
+     is a screenshot of the real session page (WorkspaceView + Transcript + index.css on vite, Chromium, 1280-wide
+     desktop / 390-wide phone, 3x, shown at 2x), fed by src/web/ui-migration's fixtures plus a conversation shaped like
+     the owner's screenshot (turn A: 11:53:00Z → 11:54:06Z = the 1m 6s of the reference; turn B open at 11:59:48Z, so a
+     page loaded at the fixtures' own 12:00Z clock counts it 12s in). 改前 is this worktree at main 5b5304839 with the
+     new row hidden for the frame; 改后 is the same tree with the row in it (Transcript.tsx + index.css). Dashed outlines
+     and numbers are drawn on top. Kit: /var/tmp/turn-head-mock (lib.mjs, capture.mjs inside run-ns-wt.sh, gen.py,
+     render.mjs). Only the web changes: both stamps are the turn's own stored events. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Web · 每轮回答上面加一行工作时间（参考 Codex）</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .head { display: grid; grid-template-columns: minmax(0, 1fr) 560px; gap: 30px; align-items: start; }
+  .ref { background: #f5f6f8; border-radius: 10px; padding: 12px 14px 10px; }
+  .ref img { display: block; width: 100%; border-radius: 6px; background: #fff; }
+  .cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .cols2-tight { display: grid; grid-template-columns: 660px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .cols3 { display: grid; grid-template-columns: 470px 470px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .ui { font-family: -apple-system, "Inter", sans-serif; font-size: 12px; padding: 0 5px; border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 7px; pointer-events: none; }
+  .mk > .m-n { position: absolute; top: -10px; right: -10px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .mk-l { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px; font-weight: 700;
+          color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 1px 7px; }
+  .mk-l-right { left: calc(100% + 16px); }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .cases { margin: 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.75; color: var(--text-2); }
+  .cases li + li { margin-top: 10px; }
+  .cases b { color: var(--text-1); }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 7px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules code, .m-cap code, .cases code { font-size: 11.5px; }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 4px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <div class="head">
+    <div>
+      <h1 class="m-h1 zh">Web · 每轮回答上面加一行「工作时间」（参考 Codex）</h1>
+      <p class="m-sub zh" style="line-height:1.8">你要在输出内容上方加一行工作时间，区分<b>工作中</b>和<b>已完成</b>，参考 Codex 的
+      <span class="ui">Worked for 1m 6s</span>；历史消息（只有 worked for xxx 的那种）也要有。下面每一张都是<b>真实页面</b>的截图
+      （vite + 仓库里 ui-migration 的 fixture，对话照你截图里那轮造的）：<b>改前</b>是这个工作树在 main <code>5b5304839</code> 上、
+      把新行藏掉拍的，<b>改后</b>是同一份代码加了这一行跑出来的，不是画的。虚线和编号是标注。
+      <b>只改 Web，服务器不用动</b>：两个时间点都是这一轮自己的事件——你那条消息的时间（<code>user</code>）到回合结束（<code>turn_end</code>），
+      都存在库里，所以刷新、换设备、翻历史读到的和当时屏幕上一样。</p>
+    </div>
+    <div class="ref">
+      <div class="m-stage-l zh" style="margin-bottom:8px"><span class="m-k">参考</span>你发的 Codex 截图</div>
+      <img src="01-codex-ref.png" alt="">
+      <p class="m-cap zh" style="margin-top:8px">你圈的 <span class="ui">Worked for 1m 6s</span>：一行灰字，完成的一轮才有；
+      正在跑的那一轮 Codex 显示的是 <span class="ui">Working</span> 状态。</p>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>一轮已经完成的回答</div>
+    <div class="cols2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">改前</span>① 现在：回答上方什么都没有</div>
+        <div class="fig"><img class="shot" src="02a-before.png" alt=""></div>
+        <p class="m-cap zh">这一轮做了什么、花多久，读完也不知道；要判断「刚才那个卡了没有」只能看下面的 <span class="ui">7:54 PM</span> 自己减。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>② 回答上方一行：<span class="ui">Worked for 1m 6s</span> <span class="m-k rec">推荐</span></div>
+        <div class="fig"><img class="shot" src="02b-after.png" alt=""><<span class="mk" style="left:3.514%;top:24.080%;width:18.400%;height:10.345%"><span class="m-n">1</span><span class="mk-l mk-l-right zh">新增一行</span></span></div>
+        <p class="m-cap zh">在你的消息下面、这一轮所有输出（思考、工具卡片、回答文字）上面，左边缘和回答文字对齐。灰色小字，和用户气泡下面的时间同一个样式；
+        <b>一直显示，不用悬停</b>。时长从你发消息到这一轮结束，格式和 <span class="ui">Thought for 12s</span> 一处来：<span class="ui">12s</span> / <span class="ui">1m 6s</span> / <span class="ui">2h 5m</span>。底部那行 copy · 时间<b>原样不动</b>。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>一轮正在跑</div>
+    <div class="cols2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">工作中</span>③ <span class="ui">Working for 12s</span>，一秒一秒走</div>
+        <div class="fig"><img class="shot" src="03a-live.png" alt=""><<span class="mk" style="left:3.221%;top:32.705%;width:17.453%;height:21.182%"><span class="m-n">2</span><span class="mk-l mk-l-right zh">进行中</span></span></div>
+        <p class="m-cap zh">正在跑的这一轮：同一行改成 <span class="ui">Working</span>，从你发消息开始跳秒，跑完的那一下变成 <span class="ui">Worked for …</span>，数字不跳变。
+        起头时间存在事件里，所以中途刷新、换设备打开也照样对得上；只有没有时间戳的极老事件才退化成 <span class="ui">Working…</span>，不猜一个数。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">备选</span>④ 只想区分状态：<span class="ui">Working…</span></div>
+        <div class="fig"><img class="shot" src="03b-live-static.png" alt=""><<span class="mk" style="left:3.221%;top:32.705%;width:12.509%;height:21.182%"><span class="m-n">3</span></span></div>
+        <p class="m-cap zh">同一条位置，不显示秒数。好处是安静、刷新前后完全一样；坏处是长任务看不出还在不在动（下面回答还在长，但一眼只看到三个点）。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">两种放法</span>你截图里 Codex 那一行在回合末尾；你说的是「输出内容上方」</div>
+    <div class="cols2-tight">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k alt">放法二</span>⑤ 和底部 copy · 时间并成一行：<span class="ui">⧉ Worked for 1m 6s　7:54 PM</span></div>
+        <div class="fig"><img class="shot" src="04-merged.png" alt=""><<span class="mk" style="left:3.660%;top:72.500%;width:28.443%;height:11.429%"><span class="m-n">4</span><span class="mk-l mk-l-right zh">第二种放法</span></span></div>
+        <p class="m-cap zh">就是你截图里的位置（回答末尾）。省一行高度，但<b>进行中的那一轮没有这一行可放</b>——回合没结束就没有底部那行，
+        所以「Working for 12s」要么另外显示在别处、要么结束时跳一下；而且读完才知道花了多久。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">规则</span>每一轮的状态</div>
+        <table class="rules">
+          <tr><th>这一轮</th><th>这一行</th></tr>
+          <tr><td>已完成</td><td><span class="ui">Worked for 1m 6s</span>（刷新、换设备、翻历史都一样）</td></tr>
+          <tr><td>进行中</td><td><span class="ui">Working for 12s</span>，每秒刷新；起头时间缺失时 <span class="ui">Working…</span></td></tr>
+          <tr><td>失败/中断</td><td>照写 <span class="ui">Worked for 3s</span>（上面是它自己的错误行）</td></tr>
+          <tr><td>中途崩了<br>（没有回合结束）</td><td>什么都不写——不知道花了多久，就不编一个</td></tr>
+          <tr><td>子 agent 的消息</td><td>没有这一行（那是工具卡片里的内容，不是一轮）</td></tr>
+          <tr><td>steer（插话）</td><td>不单独开一轮，跟着它加入的那一轮</td></tr>
+        </table>
+        <p class="m-cap zh">实现上还有一个细节：这一行不占 <code>data-seq</code>，⌘F 定位、深链接、读到哪里都还是落在你那条消息的气泡上，和现在一样。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">深色 / 手机</span>同一行</div>
+    <div class="cols3">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">深色</span>⑥</div>
+        <div class="fig"><img class="shot" src="05-dark.png" alt=""><<span class="mk" style="left:3.514%;top:24.469%;width:18.400%;height:10.512%"><span class="m-n">5</span></span></div>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">手机 Web</span>⑦</div>
+        <div class="fig"><img class="shot" src="06-phone.png" alt=""><<span class="mk" style="left:3.590%;top:20.599%;width:32.224%;height:9.049%"><span class="m-n">6</span></span></div>
+      </div>
+      <div>
+        <p class="m-cap zh">深色下用同一套 <code>--text-3</code> 灰，和底部时间一样；手机上这一行不换行、不挤压回答。
+        原生客户端（macOS / iOS / Android）这次不动——上一轮「copy · 时间」也只做了 Web。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">请你定</span>两个问题</div>
+    <div class="ask zh">
+      <b>① 放哪？</b>
+      <ol>
+        <li><span class="rec">放回答上方（②，推荐）</span>——你说的「输出内容上方」，开始读之前就知道花了多久，进行中的那一轮也放得下。</li>
+        <li>放回合末尾（⑤）——你截图里 Codex 的位置，和 copy · 时间并成一行，代价是进行中那一轮无处可放。</li>
+      </ol>
+      <b>② 进行中怎么写？</b>
+      <ol>
+        <li><span class="rec">Working for 12s（③，推荐）</span>——和完成态对称，长任务看得出还在动。</li>
+        <li>Working…（④）——更安静。</li>
+      </ol>
+      底部那行 copy · 时间目前不动；要挪要并也一起说。
+    </div>
+  </div>
+</section>
+</body>
+</html>

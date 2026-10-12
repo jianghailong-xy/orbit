@@ -1,0 +1,13 @@
+{
+ "command": "W=/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6; P=docs/evidence/base-ui-migration/p2-keyboard-window; for f in menu-held-frames.browser.mjs menu-held-frames.config.mjs; do git -C $W show 5a6ee008a:$P/$f > /var/tmp/p2kw-c2604b/before/$P/$f || exit 1; done; cd /var/tmp/p2kw-c2604b/before && git log --oneline -1 && git status --short && unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.config.mjs'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_cbc3b03c8f2c",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T05:20:49.027717+00:00",
+ "exitCode": 1,
+ "outputSha256": "c332c558452c05e3b832e43af821029d3dec265bee2fea4938359c6f1c58c974",
+ "outputBytes": 164327,
+ "note": "Before-fix tree (46a418fba plus the probe and its config copied from 5a6ee008a, the only untracked files), all eight projects, own network namespace, at the same time as fix-held-frames-after: 56 failed / 24 passed, the same 7 failures in every project. Every failure is the probe's product assertion after its window assertions passed: Action stays none where image (down-down-enter, enter-down-enter), file (down-enter, enter-enter), command (up-enter) or shell (up-up-enter) should run, and Row actions stays 0 instead of 1. The 3 wrap-around sequences pass, as in the burst probe before the fix. Archived with --diagnostic (traces and error contexts kept)."
+}

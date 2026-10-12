@@ -82,6 +82,22 @@ public enum WikiModeCopy {
     public static let save = "Save"                                               // WIKI_SAVE
     public static let noWorkspace = "Pick a workspace"                            // WIKI_NO_WORKSPACE
 
+    // MARK: maintenance while the server executes the account's wiki (mock 35 ①②, P9)
+
+    public static let repoFrom = "Reads the repository from"                      // WIKI_REPO_FROM
+    public static let repoFromNote = "The runner that checks out this codebase; the server reads the repository there."
+    public static let model = "Model"                                             // WIKI_MODEL
+    public static let modelNote = "Set by this deployment, the same for every space."   // WIKI_MODEL_NOTE
+    public static let maintenanceNoteServer = "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model."
+    public static let privacyNote = "The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model."
+    /// Automatic's sentence when the server's System model does the checking (`WIKI_MODE_NOTE_AUTOMATIC_SERVER`).
+    public static let modeNoteAutomaticServer = "The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
+
+    /// A mode's sentence as the server's execution has it said (`wikiModeNote`): Automatic's alone changes.
+    public static func modeNote(_ mode: WikiReviewMode, server: Bool) -> String {
+        server && mode == .automatic ? modeNoteAutomaticServer : modeNote(mode)
+    }
+
     /// `8 runs a day` (`wikiRunsADay`).
     public static func runsADay(_ runs: Int) -> String { runs == 1 ? "1 run a day" : "\(runs) \(runsADayUnit)" }
 

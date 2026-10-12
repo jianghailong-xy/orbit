@@ -1,0 +1,216 @@
+{
+ "beyond": [],
+ "missing": [],
+ "screenshots": {
+  "antialias": 19,
+  "beyond": 0,
+  "identical": 529,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "chromium-dark-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "chromium-dark-desktop :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "chromium-dark-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "chromium-dark-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "chromium-dark-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "chromium-dark-phone :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "chromium-dark-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "chromium-dark-phone :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "chromium-dark-phone :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "chromium-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "chromium-light-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "chromium-light-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "chromium-light-desktop :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "chromium-light-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "chromium-light-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "chromium-light-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "chromium-light-phone :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "chromium-light-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "chromium-light-phone :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "chromium-light-phone :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "chromium-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-dark-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "webkit-dark-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "webkit-dark-desktop :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "webkit-dark-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "webkit-dark-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "webkit-dark-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "webkit-dark-phone :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "webkit-dark-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "webkit-dark-phone :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "webkit-dark-phone :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "webkit-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-light-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "webkit-light-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "webkit-light-desktop :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "webkit-light-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "webkit-light-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "webkit-light-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "webkit-light-phone :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "webkit-light-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "webkit-light-phone :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "webkit-light-phone :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "webkit-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed"
+  ],
+  "notPassedRef": [
+   "chromium-dark-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "chromium-dark-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "chromium-dark-desktop :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "chromium-dark-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "chromium-dark-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "chromium-dark-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "chromium-dark-phone :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "chromium-dark-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "chromium-dark-phone :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "chromium-dark-phone :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "chromium-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "chromium-light-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "chromium-light-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "chromium-light-desktop :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "chromium-light-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "chromium-light-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "chromium-light-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "chromium-light-phone :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "chromium-light-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "chromium-light-phone :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "chromium-light-phone :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "chromium-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-dark-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "webkit-dark-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "webkit-dark-desktop :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "webkit-dark-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "webkit-dark-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "webkit-dark-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "webkit-dark-phone :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "webkit-dark-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "webkit-dark-phone :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "webkit-dark-phone :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "webkit-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-light-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "webkit-light-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "webkit-light-desktop :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "webkit-light-desktop :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "webkit-light-desktop :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "webkit-light-phone :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it",
+   "webkit-light-phone :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway",
+   "webkit-light-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save",
+   "webkit-light-phone :: P4.2 providers › keys: the table, its delete question, loading and empty",
+   "webkit-light-phone :: P4.2 runners › the list: loading, its menu, rename, token rotation and delete",
+   "webkit-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed"
+  ],
+  "total": 184
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-phone :: P4.2 users › adding a user: with a password, and Google only": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Add userGoogle sign-in onlyA one-time password is generated and shown once after creating.CancelCreate",
+       "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+      ],
+      "focus": {
+       "name": "OK",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "second@example.test"
+        },
+        "method": "POST",
+        "path": "/api/admin/users"
+       }
+      ],
+      "step": "created with a one-time password",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+      ],
+      "focus": {
+       "name": "OK",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "second@example.test"
+        },
+        "method": "POST",
+        "path": "/api/admin/users"
+       }
+      ],
+      "step": "created with a one-time password",
+      "url": "/admin"
+     },
+     "step": "created with a one-time password"
+    }
+   ],
+   "chromium-light-desktop :: P4.2 users › adding a user: with a password, and Google only": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Add userGoogle sign-in onlyA one-time password is generated and shown once after creating.CancelCreate",
+       "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+      ],
+      "focus": {
+       "name": "OK",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "second@example.test"
+        },
+        "method": "POST",
+        "path": "/api/admin/users"
+       }
+      ],
+      "step": "created with a one-time password",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+      ],
+      "focus": {
+       "name": "OK",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "second@example.test"
+        },
+        "method": "POST",
+        "path": "/api/admin/users"
+       }
+      ],
+      "step": "created with a one-time password",
+      "url": "/admin"
+     },
+     "step": "created with a one-time password"
+    }
+   ]
+  },
+  "equal": 138,
+  "total": 140
+ }
+}

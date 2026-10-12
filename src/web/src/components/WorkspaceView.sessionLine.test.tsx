@@ -93,6 +93,44 @@ describe('sessionLine', () => {
     }, true)).toEqual({ text: 'Escalated to you · Checks failed', tone: 'approval' });
   });
 
+  /** A merge approval asks to merge into the project's main branch, which the item names. */
+  it('names the branch a merge approval merges into, main as before', () => {
+    const waiting = {
+      status: 'AWAITING_INPUT',
+      engineTurnActive: false,
+      projectId: 'p_1',
+      waitingKind: 'OWNER_ITEM',
+      pendingApprovals: 1,
+    };
+    const approval = { itemId: 'i3', kind: 'PROMOTION_APPROVAL', title: 'Approve merge to main',
+                       since: '2026-09-22T00:19:41Z' };
+    expect(sessionLine({ ...waiting, ownerItems: [{ ...approval, mainBranch: 'master' }] }, true)).toEqual({
+      text: 'Approve merge to master',
+      tone: 'approval',
+    });
+    // Main by name, no repository bound (null) and an older server (absent) read as they always did.
+    for (const mainBranch of ['main', null, undefined]) {
+      expect(statusLabel({ ...waiting, ownerItems: [{ ...approval, mainBranch }] }), String(mainBranch))
+        .toBe('Approve merge to main');
+    }
+    // Only the merge names a branch.
+    const escalated = { itemId: 'i1', kind: 'ESCALATED', title: 'Task failed: 000_00022',
+                        since: '2026-09-22T00:19:41Z', mainBranch: 'master' };
+    expect(statusLabel({ ...waiting, ownerItems: [escalated] })).toBe('Escalated to you');
+  });
+
+  it('names the project closing signals in the session row', () => {
+    const parked = { status: 'AWAITING_INPUT', pendingApprovals: 1, projectId: 'p_1' };
+    expect(sessionLine({ ...parked, waitingKind: 'DONE_REQUEST' }, true)).toEqual({
+      text: 'Ready to close',
+      tone: 'approval',
+    });
+    expect(sessionLine({ ...parked, waitingKind: 'RECORD_AS_DONE' }, true)).toEqual({
+      text: 'Record as done…',
+      tone: 'approval',
+    });
+  });
+
   it('surfaces live state before any reply preview', () => {
     expect(sessionLine({ status: 'RUNNING', pendingApprovals: 2 }, true)).toEqual({
       text: 'Waiting for approval',
@@ -374,5 +412,109 @@ describe('sessionLine over a session parked on a watch', () => {
 
   it('stays a static preview in Trash', () => {
     expect(sessionLine(parked, false, watching)).toEqual({ text: 'Nothing for you to do until it lands.', tone: 'preview' });
+  });
+});
+
+/**
+ * The rolling recap (Session.recapText, 0418): the sentence the server wrote about the session
+ * takes the place of the raw last reply the row used to flatten — and only that place. A session
+ * still working, still waiting on you, or holding a message you just sent keeps its own line.
+ */
+describe('sessionLine over a session with a recap', () => {
+  const clock = (at: Date) => at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // Written now, so the label is a bare clock time: the date only joins it on another day.
+  const written = new Date();
+  const recapText = 'Moved the recap onto the list row; the three states are covered by tests.';
+  const parked = {
+    status: 'AWAITING_INPUT',
+    engineTurnActive: false,
+    pendingApprovals: 0,
+    recapText,
+    recapAt: written.toISOString(),
+    lastAssistantText: 'Committed the row change.',
+  };
+
+  it('shows the recap and when it was written, in place of the last reply', () => {
+    expect(sessionLine(parked, true)).toEqual({
+      label: `Recap · ${clock(written)}`,
+      text: recapText,
+      tone: 'preview',
+    });
+  });
+
+  it('dates the label once the recap is from another day', () => {
+    const old = new Date(2026, 7, 6, 17, 38); // Aug 6, local: a bare clock time would mislead
+    const day = old.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    expect(sessionLine({ ...parked, recapAt: old.toISOString() }, true)).toEqual({
+      label: `Recap · ${day}, ${clock(old)}`,
+      text: recapText,
+      tone: 'preview',
+    });
+  });
+
+  it('keeps the label and drops only the time when the payload carries no recapAt', () => {
+    expect(sessionLine({ ...parked, recapAt: null }, true)).toEqual({
+      label: 'Recap',
+      text: recapText,
+      tone: 'preview',
+    });
+  });
+
+  it('falls back to the reply when there is no recap', () => {
+    expect(sessionLine({ ...parked, recapText: null }, true)).toEqual({
+      text: 'Committed the row change.',
+      tone: 'preview',
+    });
+    // Blank is not a line: the server never stores one, and drawing it would leave an empty
+    // label over nothing.
+    expect(sessionLine({ ...parked, recapText: '   ' }, true)).toEqual({
+      text: 'Committed the row change.',
+      tone: 'preview',
+    });
+  });
+
+  // The account's Session recaps switch (Settings): off, the same row falls through to the reply
+  // it showed before the recap existed. The third argument is this session as an observer.
+  it('falls back to the reply when the account turned recaps off', () => {
+    expect(sessionLine(parked, true, null, false)).toEqual({
+      text: 'Committed the row change.',
+      tone: 'preview',
+    });
+  });
+
+  it('keeps its line in Trash, where no live state is left to outrank it', () => {
+    expect(sessionLine(parked, false)).toEqual({
+      label: `Recap · ${clock(written)}`,
+      text: recapText,
+      tone: 'preview',
+    });
+  });
+
+  it('never hides work that is still happening behind it', () => {
+    // Working: the tool in flight is what the row is about.
+    expect(
+      sessionLine(
+        { ...parked, status: 'RUNNING', engineStartedAt: '2026-10-02T05:00:00Z', lastToolUse: 'Bash' },
+        true,
+      ),
+    ).toEqual({ text: 'Running Bash…', tone: 'running' });
+
+    // Waiting on you, a background process the session left up, a watch that will resume it, and
+    // the message you sent that has no answer yet — each is newer than the recap.
+    expect(sessionLine({ ...parked, pendingApprovals: 1 }, true)).toEqual({
+      text: 'Waiting for approval',
+      tone: 'approval',
+    });
+    expect(sessionLine({ ...parked, runningBgCount: 1 }, true)).toEqual({
+      text: 'Background process running…',
+      tone: 'background',
+    });
+    expect(
+      sessionLine(parked, true, { word: 'Watching 1 target', line: 'Watching Fix the login redirect' }),
+    ).toEqual({ text: 'Watching Fix the login redirect', tone: 'watching' });
+    expect(sessionLine({ ...parked, lastUserText: 'and now the footer?' }, true)).toEqual({
+      text: 'You: and now the footer?',
+      tone: 'preview',
+    });
   });
 });

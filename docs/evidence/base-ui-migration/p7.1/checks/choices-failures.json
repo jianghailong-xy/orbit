@@ -1,0 +1,39 @@
+{
+ "stats": {
+  "startTime": "2026-10-10T23:54:29.415Z",
+  "duration": 1382580.949,
+  "expected": 757,
+  "skipped": 0,
+  "unexpected": 3,
+  "flaky": 0
+ },
+ "failures": [
+  {
+   "file": "choices-first-option.browser.mjs",
+   "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "project": "chromium-dark-phone",
+   "status": "unexpected",
+   "errors": [
+    "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('theme')\nExpected: \u001b[32m\"dark\"\u001b[39m\nTimeout: 15000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('theme') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('theme')\u001b[22m\n\n\n  39 |   page.on('pageerror', (error) => errors.push(error.message));\n  40 |   await page.goto(`${fixture}&${sample.query}`);\n> 41 |   await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);\n     |                                           ^\n  42 |   await page.evaluate(() => document.fonts.ready);\n  43 |   const region = page.getByRole('region', { name: 'Appearance sample' });\n  44 |   const choice = region.getByRole('combobox', { name: 'Sample choice' });\n    at /root/.orbit/worktrees/8c4849bc-8104-5198-b7bc-a9b80b8ffeb7/src/web/ui-migration/choices-first-option.browser.mjs:41:43"
+   ]
+  },
+  {
+   "file": "choices.browser.mjs",
+   "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+   "project": "webkit-light-phone",
+   "status": "unexpected",
+   "errors": [
+    "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /root/.orbit/worktrees/8c4849bc-8104-5198-b7bc-a9b80b8ffeb7/src/web/ui-migration/choices.browser.mjs:12:63"
+   ]
+  },
+  {
+   "file": "choices.browser.mjs",
+   "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+   "project": "webkit-dark-phone",
+   "status": "unexpected",
+   "errors": [
+    "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /root/.orbit/worktrees/8c4849bc-8104-5198-b7bc-a9b80b8ffeb7/src/web/ui-migration/choices.browser.mjs:12:63"
+   ]
+  }
+ ]
+}

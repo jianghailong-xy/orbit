@@ -1,0 +1,33 @@
+P0 expected screenshots: 88 P0.2 originals, 152 main drift references, 12 accepted migration differences.
+
+Running 4 tests using 1 worker
+
+  -  1 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-light-phone/task-share-dialog.png, writing actual.
+  ✓  2 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.7s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓  3 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (8.8s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/n-ref-2-shots/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  4 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.8s)
+
+  1 skipped
+  3 passed (15.6s)

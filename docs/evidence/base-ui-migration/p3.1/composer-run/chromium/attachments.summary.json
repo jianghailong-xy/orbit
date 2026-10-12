@@ -1,0 +1,572 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p3.1/composer-run/chromium/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+   "bytes": 9000,
+   "sha256": "f09fac53ceffeada876a00334f7757628db5eca82950ef83038281afd2d31852"
+  },
+  {
+   "name": "chromium-dark-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+   "bytes": 13284,
+   "sha256": "35d946c596340c342a3621ecd5ee6f3c0c991baca1f82f7be317fb0758d878b0"
+  },
+  {
+   "name": "chromium-dark-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+   "bytes": 8678,
+   "sha256": "fa56b03e2e0692dda93488ae678615385fc7e2ea9d9de4d1b35db8f8ec7afc21"
+  },
+  {
+   "name": "chromium-dark-desktop--fields-match-at-599px--comment-width-360-states.json",
+   "bytes": 15131,
+   "sha256": "d676b22b1fa4481f16e015155b0c9809b2d48b345c5575d5ae3ef850c7b97021",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--fields-match-at-599px--session-width-360-states.json",
+   "bytes": 18582,
+   "sha256": "d8a5374957670726dbf5327e8ab89b8f60376e757d16f10418cf1f5d59296d40",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--fields-match-at-601px--comment-width-360-states.json",
+   "bytes": 15131,
+   "sha256": "4c0f4e92e3b6370704130e57a499985402acc5e9d4e9a7f96d1be6e393048e71",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--fields-match-at-601px--session-width-360-states.json",
+   "bytes": 18582,
+   "sha256": "d1f3372b2b2011cddfa59052544222e19cc83600892ff497f88f74d18648238c",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--fields-match-at-959px--comment-width-360-states.json",
+   "bytes": 15131,
+   "sha256": "76e7f308dd2ccfd9f835d026e7dbd238996fef3159294cbad244ed215ab58056",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--fields-match-at-959px--session-width-360-states.json",
+   "bytes": 18582,
+   "sha256": "5e93e900022b5744c92c7ba254b6add8d1817c702f9da04769ad357968e71db2",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--fields-match-at-961px--comment-width-360-states.json",
+   "bytes": 15082,
+   "sha256": "3c93c702003cf1a169065d128866f0fd7f79955b08f60ec3100cc775501b8232",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--fields-match-at-961px--session-width-360-states.json",
+   "bytes": 18582,
+   "sha256": "b1f3a2284a51de7d9ac64cb5c4ef55db2872f48715e8e64139acd76e97294e49",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+   "bytes": 65334,
+   "sha256": "3a7d1dbf466f6bd31d71e5d224645a1cd7882d1b532ade5f5dd4ee47509e8887",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+   "bytes": 8688,
+   "sha256": "32e3e7a7590a5f621c8f3610aab377280f1e225176ebe61e990297f0d2cc2cf7"
+  },
+  {
+   "name": "chromium-dark-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+   "bytes": 36,
+   "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515",
+   "fields": {
+    "ant": "0.3s",
+    "orbit": "0s"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+   "bytes": 14152,
+   "sha256": "94b0f6605d7d458c26905d3dc281c8547f9d0733a0ef0353995b518ab923a86f"
+  },
+  {
+   "name": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+   "bytes": 148258,
+   "sha256": "727d696bd97ee3649828f01abe1d9748071d111cb384a3f1b95c9210ff3d87f9",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+   "bytes": 20288,
+   "sha256": "d44fc30799fc569f723446983bd25fd7a3cf087350621054cfe95608ab595e59",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+   "bytes": 9374,
+   "sha256": "cf0f8476d79691d338689699f25d849a0ccf116b88634f2608e2f955401c0dba",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+   "bytes": 21332,
+   "sha256": "7ce617b9d5d146903b84ea458fb344ac62c788a110affd3373930d112c7025b3"
+  },
+  {
+   "name": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+   "bytes": 7735,
+   "sha256": "0b99a3bdf11d5c62fa298fd81cf59a14eb031bf413a3c6381ff9ac50a73824dc",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+   "bytes": 67747,
+   "sha256": "51644fba897a4367b8ca2d6ee34083b44e9e41ff9799e9b66bdcec0575a32679",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+   "bytes": 7430,
+   "sha256": "5b9b2d22232ef49f0ae73c5fc46048d5ca7c846eebf1a4cf792d1098c5cffc3b",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+   "bytes": 29023,
+   "sha256": "8b9cf4ec5658ae1f626a16e50a9c6b1253cc9ba6216e32da3d334b2ece6302f9",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+   "bytes": 2594,
+   "sha256": "ff4dc47b6a23c0e6c24d866d9c83e42aa421b2af3c2bf50a6e376a7cdb1a0e71"
+  },
+  {
+   "name": "chromium-dark-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+   "bytes": 9012,
+   "sha256": "4353d41ae00c4154ca2af17db0bb286f2911b8302006d4ce3744b198413e085e"
+  },
+  {
+   "name": "chromium-dark-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+   "bytes": 13284,
+   "sha256": "293536317051ca9f4f3756a6013879fc11603aa986c3fd438ec3d4cd3dd1c4ed"
+  },
+  {
+   "name": "chromium-dark-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+   "bytes": 8678,
+   "sha256": "8d5998993069d0262436f8e9564fd7f12be9ce27c1a235c76ffd24f264ddc8a0"
+  },
+  {
+   "name": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+   "bytes": 65082,
+   "sha256": "e63e03ca33022165006ec2782c223bd2080027954003d7f15e8b68d42c48fc43",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+   "bytes": 8688,
+   "sha256": "32e3e7a7590a5f621c8f3610aab377280f1e225176ebe61e990297f0d2cc2cf7"
+  },
+  {
+   "name": "chromium-dark-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+   "bytes": 36,
+   "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515",
+   "fields": {
+    "ant": "0.3s",
+    "orbit": "0s"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+   "bytes": 14152,
+   "sha256": "94b0f6605d7d458c26905d3dc281c8547f9d0733a0ef0353995b518ab923a86f"
+  },
+  {
+   "name": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+   "bytes": 147718,
+   "sha256": "468e522cf9b0ff491507639925cbaadf95bc9a821fc7414b7e84b2f970f89e0f",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+   "bytes": 20180,
+   "sha256": "df6b7d7e2701566cbea282d9143bf46d2628b57fbc54952782c8ba8748135411",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+   "bytes": 9338,
+   "sha256": "0f72a7bb8f900deda1aede976bc3d7a4e51ea6c13862fa0d6526ecff5f6f0813",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+   "bytes": 21332,
+   "sha256": "82830cf0b1cc18ea3441fd6ac6df067376521f550b30668394262e5793387965"
+  },
+  {
+   "name": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+   "bytes": 7703,
+   "sha256": "1fe76d8fee21364a2165d6d931b58ecca2c0417ee28d8e0171c8f130aeff03f0",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+   "bytes": 60026,
+   "sha256": "a542e04e60f79bf84c8de3d7b454dd907f41dbe006e9211679d4711e63cd2a88",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+   "bytes": 7446,
+   "sha256": "328a2387c61282d1a8a5ac4a0d34993ef559a0af62e2be734dc497511e11e8ea",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+   "bytes": 29087,
+   "sha256": "d4d6750f7febb5b44fb2e9acfd26356f74fdd19f27bb29ad750e49ecd46a48ae",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+   "bytes": 2704,
+   "sha256": "c0277ed58baf356e3e6a6a95af6b5049e51879962a3bb94916a0e85eaee74929"
+  },
+  {
+   "name": "chromium-light-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+   "bytes": 8988,
+   "sha256": "33adaf9ba959fcd3e61d51bbd7ba86fda38186ff9f2d92edc70b2094121260eb"
+  },
+  {
+   "name": "chromium-light-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+   "bytes": 13284,
+   "sha256": "35d946c596340c342a3621ecd5ee6f3c0c991baca1f82f7be317fb0758d878b0"
+  },
+  {
+   "name": "chromium-light-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+   "bytes": 8678,
+   "sha256": "fa56b03e2e0692dda93488ae678615385fc7e2ea9d9de4d1b35db8f8ec7afc21"
+  },
+  {
+   "name": "chromium-light-desktop--fields-match-at-599px--comment-width-360-states.json",
+   "bytes": 15065,
+   "sha256": "45cb133f9bc7e033d30bce58202fe3e13f523a08eb3016cdc26ac31b449b915d",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--fields-match-at-599px--session-width-360-states.json",
+   "bytes": 18522,
+   "sha256": "b7bd16cb0c618955787009e9672bc1502fb875163dfa90d66db3d9418b291518",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--fields-match-at-601px--comment-width-360-states.json",
+   "bytes": 15065,
+   "sha256": "b17c70deb708af727e52472837baf91068eb931818677a0a18e0d31bf00ed7da",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--fields-match-at-601px--session-width-360-states.json",
+   "bytes": 18522,
+   "sha256": "8f8941cf5100611b891790221debc7eced0bfad0e136d95196ac6d68b335d7f1",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--fields-match-at-959px--comment-width-360-states.json",
+   "bytes": 15065,
+   "sha256": "efe00b2a3b686dcd88f42b78170cc8fc9af0ca4c599c99906152060207b2e653",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--fields-match-at-959px--session-width-360-states.json",
+   "bytes": 18522,
+   "sha256": "247c5f505b18ed39c267d574db1b195f27697dd81fbf650323145b18c7c8ffcd",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--fields-match-at-961px--comment-width-360-states.json",
+   "bytes": 15016,
+   "sha256": "84e91997f2adf26c7999d8584b7489ae913b4e56de873a0a17962c790eb88797",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--fields-match-at-961px--session-width-360-states.json",
+   "bytes": 18522,
+   "sha256": "c5f328f4a5ae8dd4d1994bae21c339ca1b78224bca4d51a6814e7bf79df50ace",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+   "bytes": 65124,
+   "sha256": "364d1080fffcca73413666fd963d42825c57cabf7e5558d443245335ee4604e1",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+   "bytes": 8688,
+   "sha256": "32e3e7a7590a5f621c8f3610aab377280f1e225176ebe61e990297f0d2cc2cf7"
+  },
+  {
+   "name": "chromium-light-desktop--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts--keystroke-cost.json",
+   "bytes": 8992,
+   "sha256": "b9087a7f69dee742b5ce13bba8b38b433e8be3d2df4ef8dcfd5436868843b7a4"
+  },
+  {
+   "name": "chromium-light-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+   "bytes": 36,
+   "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515",
+   "fields": {
+    "ant": "0.3s",
+    "orbit": "0s"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+   "bytes": 14152,
+   "sha256": "94b0f6605d7d458c26905d3dc281c8547f9d0733a0ef0353995b518ab923a86f"
+  },
+  {
+   "name": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+   "bytes": 147760,
+   "sha256": "787d0ebba72619d1b74a0867f7544c1b5d31542ec842ad8490ba0a26aef0a490",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+   "bytes": 20228,
+   "sha256": "a55cae51082689eefe7987655dc3adfc4fd68072e7aa994eeaaaa28b0208a7b2",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+   "bytes": 9344,
+   "sha256": "3e6b736df3170d85ebe2b7855d6fd1e41820580016da33af2db7773c66887045",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+   "bytes": 21332,
+   "sha256": "7ce617b9d5d146903b84ea458fb344ac62c788a110affd3373930d112c7025b3"
+  },
+  {
+   "name": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+   "bytes": 7659,
+   "sha256": "537ded55d0b9cfa718a523874fbe9361cac8ee20770c65314989869316ef3645",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+   "bytes": 67479,
+   "sha256": "eb89c0d984842748930b048e8823cfbe574184b68ad4d868cbfaf9a769f70ce6",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+   "bytes": 7334,
+   "sha256": "388e6abe7618722de71e4a9b57c9dd728080a8b3d2fb16b4d14d1a97faf7a3b7",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+   "bytes": 28807,
+   "sha256": "69bf9c0565e407e967143476ffafb1a60b32272daa8f1114b5298f76aca0151c",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+   "bytes": 2594,
+   "sha256": "7b4ddfc1517e258e150477684c468d56ad51f26aef7f0bd7ec03b4a1d16a6080"
+  },
+  {
+   "name": "chromium-light-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+   "bytes": 9000,
+   "sha256": "e2c86c5d58faefed8f13649b319e6cea9a9daf710f85407fa88c1355d2e332f4"
+  },
+  {
+   "name": "chromium-light-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+   "bytes": 13284,
+   "sha256": "293536317051ca9f4f3756a6013879fc11603aa986c3fd438ec3d4cd3dd1c4ed"
+  },
+  {
+   "name": "chromium-light-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+   "bytes": 8678,
+   "sha256": "8d5998993069d0262436f8e9564fd7f12be9ce27c1a235c76ffd24f264ddc8a0"
+  },
+  {
+   "name": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+   "bytes": 64872,
+   "sha256": "560573a3235732f938cc13fe735efc70221edbeeb8bd9aceab4f38c14dab2d4f",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+   "bytes": 8688,
+   "sha256": "32e3e7a7590a5f621c8f3610aab377280f1e225176ebe61e990297f0d2cc2cf7"
+  },
+  {
+   "name": "chromium-light-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+   "bytes": 36,
+   "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515",
+   "fields": {
+    "ant": "0.3s",
+    "orbit": "0s"
+   }
+  },
+  {
+   "name": "chromium-light-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+   "bytes": 14152,
+   "sha256": "94b0f6605d7d458c26905d3dc281c8547f9d0733a0ef0353995b518ab923a86f"
+  },
+  {
+   "name": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+   "bytes": 147220,
+   "sha256": "f176dffd0b966bf105a301bc140f13581719680ff7b46a208185b0b526ed91b9",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+   "bytes": 20120,
+   "sha256": "09c31f776a0c5640edb7c9c851b7f2d53affb871efc9bb0e9602b5c901bb75c0",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+   "bytes": 9308,
+   "sha256": "7ae0de9911bf77a50abf3b02680b5d73a40f725d83d5aa2132fcc228e1e2184c",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+   "bytes": 21332,
+   "sha256": "82830cf0b1cc18ea3441fd6ac6df067376521f550b30668394262e5793387965"
+  },
+  {
+   "name": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+   "bytes": 7627,
+   "sha256": "6904a80053509e6191573d899206ded903e2b45cf04b083b19476f89135b25c2",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+   "bytes": 59750,
+   "sha256": "c41e9286eb282d53131e3537e385d3868a23766c850ec90da338408b7132348a",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+   "bytes": 7350,
+   "sha256": "7dbf877ffbfb7d7a67689114e09dd148a1b8ba8cd4af710cb8c73443c51814eb",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+   "bytes": 28871,
+   "sha256": "f399452a40f253383970f252df7eef56da27091e1a838cc4d5a7745f46090027",
+   "fields": {
+    "differences": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+   "bytes": 2704,
+   "sha256": "bf731d93c841a3ba055310bb89757fdef0dfd38461315fbabe76b20d1cfa8e8b"
+  }
+ ]
+}

@@ -1,0 +1,91 @@
+diff --git a/src/web/src/components/TaskDetailPanel.tsx b/src/web/src/components/TaskDetailPanel.tsx
+index 62a3245be..c8c547050 100644
+--- a/src/web/src/components/TaskDetailPanel.tsx
++++ b/src/web/src/components/TaskDetailPanel.tsx
+@@ -16,7 +16,8 @@ import { TaskInputs } from './TaskInputs';
+ import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
+ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+ import type { RunnerModelCatalog } from '@orbit/shared';
+-import { Alert, Avatar, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
++import { Alert, Avatar, Button, Dropdown, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
++import { Textarea } from './ui/Textarea';
+ import { Fragment, lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+ import { Link, useNavigate } from 'react-router-dom';
+ import Markdown from 'react-markdown';
+@@ -1033,7 +1034,7 @@ export function TaskDetailPanel({
+   // Mirrors the composer's `/` command menu (WorkspaceView): while the caret sits right
+   // after an `@token`, show owned workspaces; picking one inserts `@<name> ` (the trailing
+   // space drops the token regex, so the menu auto-hides).
+-  const taRef = useRef<any>(null);
++  const taRef = useRef<HTMLTextAreaElement>(null);
+   const [caret, setCaret] = useState(0);
+   const [mentionIndex, setMentionIndex] = useState(0);
+   const [mentionDismissed, setMentionDismissed] = useState(false);
+@@ -1067,7 +1068,7 @@ export function TaskDetailPanel({
+     setDraft(next);
+     setMentionDismissed(false);
+     setTimeout(() => {
+-      const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
++      const ta = taRef.current;
+       if (ta) {
+         ta.focus();
+         ta.setSelectionRange(before.length, before.length);
+@@ -1906,7 +1907,7 @@ export function TaskDetailPanel({
+             ))}
+           </div>
+         )}
+-        <Input.TextArea
++        <Textarea
+           ref={taRef}
+           value={draft}
+           onChange={(e) => {
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 24123d513..284137ce7 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -67,7 +67,8 @@ import {
+ import { memoizeEventFull } from '../lib/eventFull';
+ import { plainPreview } from '../lib/plainPreview';
+ import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
+-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
++import { App as AntApp, Button, Dropdown, Image, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
++import { Textarea } from './ui/Textarea';
+ import {
+   type DragEvent as ReactDragEvent,
+   Fragment,
+@@ -6883,7 +6884,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+   // at the start of input or right after whitespace/newline, like the Claude Code TUI;
+   // picking one replaces just that token with `/<name> ` (the trailing space drops the
+   // regex match, so the menu auto-hides).
+-  const taRef = useRef<any>(null);
++  const taRef = useRef<HTMLTextAreaElement>(null);
+   const imageInputRef = useRef<HTMLInputElement>(null);
+   const fileInputRef = useRef<HTMLInputElement>(null);
+   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
+@@ -6893,7 +6894,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+   // clamped so it can't collapse away or swallow the transcript.
+   const startComposerResize = useCallback((e: ReactMouseEvent): void => {
+     e.preventDefault();
+-    const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
++    const ta = taRef.current;
+     const startY = e.clientY;
+     const startH = ta?.offsetHeight ?? composerHeight ?? 120;
+     const onMove = (ev: MouseEvent): void => {
+@@ -6914,7 +6915,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+   // manual height changes (a double-click reset drops us back to auto-grow).
+   const [composerCapped, setComposerCapped] = useState(false);
+   useEffect(() => {
+-    const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
++    const ta = taRef.current;
+     if (!ta) return;
+     // Measure on the next frame, after rc-textarea's autoSize pass settles this value's height.
+     const id = requestAnimationFrame(() => {
+@@ -10255,7 +10256,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
+           {/* Behind the input, drawing its chips. Same characters, same metrics — see the
+               `.composer-field` block in index.css for why that is not negotiable. */}
+           <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} />
+-          <Input.TextArea
++          <Textarea
+             ref={taRef}
+             onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
+             className={shellMode ? 'composer-shell' : undefined}

@@ -13,7 +13,6 @@ package main
 import (
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,9 +25,6 @@ import (
 // no GEMINI_API_KEY of its own, counting the re-probes a sign-out asks for.
 func newGoogleSessionContract(t *testing.T) (*agyContract, []byte, *atomic.Int32) {
 	t.Helper()
-	if _, err := exec.LookPath(agyExecutable); err != nil {
-		t.Fatal("real agy is required for the Google session contract tests:", err)
-	}
 	c := newAgyContract(t)
 	t.Setenv("GEMINI_API_KEY", "")
 	return c, saveGoogleSignIn(t), countEngineSignOuts(t)

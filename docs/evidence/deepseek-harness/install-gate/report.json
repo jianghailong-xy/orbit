@@ -1,0 +1,146 @@
+{
+  "report": [
+    {
+      "name": "IG-S1 an upgraded runner without the pinned dsh keeps declaring it and reports it not installed",
+      "status": "PASS",
+      "ms": 28127
+    },
+    {
+      "name": "IG-S2 creating a Harness session there through the API is refused with the not-installed notice and leaves no session",
+      "status": "PASS",
+      "ms": 11
+    },
+    {
+      "name": "IG-S3 a persisted Harness session's follow-up waits with the notice and is never claimed or failed while Claude work still runs",
+      "status": "PASS",
+      "ms": 57934
+    },
+    {
+      "name": "IG-S4 resuming an ended Harness session there is refused with the same notice and leaves it as it was",
+      "status": "PASS",
+      "ms": 12
+    },
+    {
+      "name": "IG-S5 after the install through Orbit the same session's waiting follow-up runs on its persisted dsh conversation",
+      "status": "PASS",
+      "ms": 45396
+    },
+    {
+      "name": "IG-S6 after the install the ended session resumes and a new Harness session runs",
+      "status": "PASS",
+      "ms": 2037
+    }
+  ],
+  "facts": {
+    "dshVersion": "0.2.0-rc.2",
+    "cliSha256": "1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f",
+    "phase0": {
+      "followUp": {
+        "runtimeSessionId": "e6f111d0-ff23-440c-8526-b20f20fe75e9"
+      },
+      "ended": {
+        "runtimeSessionId": "a405b3f3-e8ea-4049-8928-d758debe38a9"
+      },
+      "modelRequests": 2
+    },
+    "s1": {
+      "capabilities": [
+        "antigravity-google-login/v1",
+        "claude-account-login/v1",
+        "claude-account-move/v1",
+        "claude-account-remove/v1",
+        "codex-account-login/v1",
+        "codex-account-move/v1",
+        "codex-account-remove/v1",
+        "codex-rate-limit-reset-v1",
+        "integration-job/v1",
+        "promotion-automatic-land/v1",
+        "session-claude-coordinator-context-v1",
+        "session-codex-coordinator-context-v1",
+        "session-codex-steer-v1",
+        "session-current-work-routing-v1",
+        "session-merge-recovery-v1",
+        "session-move/v1",
+        "session-orchestration-credential-v1",
+        "session-terminal-handoff-v1",
+        "session-worktree-ops-v1",
+        "source-pin/v1",
+        "wiki-maintenance-run/v1",
+        "provider:claude",
+        "provider:codex",
+        "provider:opencode",
+        "provider:antigravity",
+        "provider:dsh",
+        "os:linux"
+      ],
+      "dsh": {
+        "dsh": {
+          "credentialPresent": false,
+          "requestValidation": "unknown",
+          "versionCompatible": false,
+          "sandboxEnforcement": "unknown",
+          "modelCatalogReadable": false
+        },
+        "auth": "unknown",
+        "engine": "dsh",
+        "installed": false,
+        "installationError": "DSH_NOT_INSTALLED"
+      }
+    },
+    "s2": {
+      "configured": {
+        "status": 409,
+        "message": "DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Providers, then try again"
+      },
+      "builtin": {
+        "status": 409,
+        "message": "DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Providers, then try again"
+      }
+    },
+    "s3": {
+      "waiting": {
+        "status": "PENDING",
+        "error": "DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Providers, then try again",
+        "numTurns": 1
+      },
+      "claudeLaunched": true
+    },
+    "s4": {
+      "status": 409,
+      "message": "DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; install it from Providers, then try again",
+      "session": "CANCELLED"
+    },
+    "s5": {
+      "installSeconds": 32,
+      "engines": {
+        "dsh": {
+          "credentialPresent": false,
+          "requestValidation": "unknown",
+          "versionCompatible": true,
+          "sandboxEnforcement": "unknown",
+          "modelCatalogReadable": false
+        },
+        "auth": "unknown",
+        "engine": "dsh",
+        "version": "0.2.0-rc.2",
+        "installed": true
+      },
+      "installReportedAt": "2026-10-06T05:09:04.481Z",
+      "followUpClaimedAt": "2026-10-06T05:09:17.119Z",
+      "status": "AWAITING_INPUT",
+      "numTurns": 2,
+      "runtimeSessionId": "e6f111d0-ff23-440c-8526-b20f20fe75e9",
+      "dshHome": "/tmp/dsh-install-gate.mN1osN/runner/orbit/dsh-sessions/01a10f9b-5d39-772e-b2cb-b5f565efe1ce"
+    },
+    "s6": {
+      "resumed": {
+        "status": "AWAITING_INPUT",
+        "numTurns": 2
+      },
+      "fresh": {
+        "status": "AWAITING_INPUT",
+        "numTurns": 1
+      }
+    }
+  }
+}

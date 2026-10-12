@@ -1,0 +1,48 @@
+/* What the replaced component library's App root gave everything rendered under it, now Orbit's own and in the
+   place the library's runtime styles had: ahead of every other stylesheet (they were injected before the bundle's),
+   so each tie with a page or component rule resolves as it did.
+   - div.orbit-app (AppRoot.tsx, main.tsx): 14px text in the body's colour and font; its unitless 22/14 line height
+     is AppRoot's, inline (the minifier would round it here).
+   - Links under it: Ant Design 6.6.5's link reset (MIT: the Ant Design licence file in this directory), at the
+     weight it had (:where adds none), in the link colours it resolved to (foundation.css).
+   Portals hang off <body> and take neither, as before. */
+.orbit-app {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+:where(.orbit-app) a {
+  color: var(--orbit-control-primary);
+  text-decoration: none;
+  background-color: transparent;
+  outline: none;
+  cursor: pointer;
+  transition: color 0.3s;
+  -webkit-text-decoration-skip: objects;
+}
+:where(.orbit-app) a:hover {
+  color: var(--orbit-control-link-hover);
+}
+:where(.orbit-app) a:active {
+  color: var(--orbit-control-primary-active);
+}
+:where(.orbit-app) a:active,
+:where(.orbit-app) a:hover {
+  text-decoration: none;
+  outline: 0;
+}
+:where(.orbit-app) a:focus {
+  text-decoration: none;
+  outline: 0;
+}
+:where(.orbit-app) a:focus-visible {
+  outline: var(--orbit-focus-width) solid var(--orbit-focus-color);
+  outline-offset: 1px;
+  transition: outline-offset 0s, outline 0s;
+}
+:where(.orbit-app) a[disabled] {
+  color: var(--orbit-control-disabled-text);
+  cursor: not-allowed;
+}

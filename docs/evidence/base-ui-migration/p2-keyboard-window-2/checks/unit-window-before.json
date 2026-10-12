@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && git log --oneline -1 && git rev-parse HEAD:src/web && cd src/web && NO_COLOR=1 npx vitest run src/components/ui/keyboardWindow.test.tsx src/components/ui/Menu.test.tsx",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_8bdc748fe951",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "0594f6d2c",
+ "webTree": "b12625256d13a586b91846f64d759f384a90d8ca",
+ "outputLastWritten": "2026-10-07T12:50:47.152593+00:00",
+ "exitCode": 1,
+ "outputSha256": "8aa27672f92f2c30aa9d4329f17496d52ae53513a8ea91ebd6a2aaea0385290c",
+ "outputBytes": 19721,
+ "note": "Unfixed components (0594f6d2c adds only the test): keyboardWindow.test.tsx 23 of 52 fail, each a window case (9 submenu: parent items group, default, delete run or the submenu is not acted on; 4 menu Tab/Shift+Tab; 3 select Tab/Shift+Tab; 3 Dialog Tab/Shift+Tab; 4 ConfirmDialog Enter/Space/Tab); all 26 references and the 3 window cases already equal (Dialog Enter Enter, Dialog Escape, ConfirmDialog Escape) pass. Menu.test.tsx 18/18."
+}

@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "npm",
+    "run",
+    "test:ui-toasts",
+    "-w",
+    "@orbit/web",
+    "--",
+    "--project",
+    "chromium-light-desktop",
+    "--project",
+    "webkit-dark-phone"
+  ],
+  "cwd": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0",
+  "sourceCommitAtStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+  "sourceCommitAtEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+  "finishedAt": "2026-10-04T11:52:37.623832+00:00",
+  "seconds": 141.24283029901562,
+  "exitCode": 0
+}

@@ -56,7 +56,7 @@ export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 S=5DC6920A-2A6D-45BA-84E4-EAAD1A637CD6      # iPhone 17 Pro / iOS 26.5
 
 cd src/ios && xcodegen generate
-xcodebuild -scheme Orbit -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+xcodebuild -scheme Orbit -destination "platform=iOS Simulator,id=$S" \
   -derivedDataPath /tmp/orbit-dd build
 xcrun simctl install "$S" /tmp/orbit-dd/Build/Products/Debug-iphonesimulator/Orbit.app
 ```
@@ -353,12 +353,12 @@ A.launch_app()                  # = xcrun simctl launch <UDID> io.orbitd.app
 | A5 | 同上,仍然不做任何操作 | **90s** |
 | A6 | `simctl terminate` + `launch`,联网状态 | 15s |
 
-**序列 B —— Settings → Runners,离线一次、恢复后一次**
+**序列 B —— Settings → Infrastructure(原 Runners 行),离线一次、恢复后一次**
 
 | # | 动作 | 时点 |
 | --- | --- | --- |
 | B1 | 离线冷启动后进 Settings(齿轮坐标 `(273, 810)`) | 20s |
-| B2 | 切到 Runners 行(坐标 `(100, 195)`) | — |
+| B2 | 切到 Infrastructure 行(`(100, 195)` 量的是改名前的 Runners 行,用前重新 dump) | — |
 | B3 | 代理进程起来,**不做任何操作** | **30s** |
 | B4 | 同上 | **60s** |
 

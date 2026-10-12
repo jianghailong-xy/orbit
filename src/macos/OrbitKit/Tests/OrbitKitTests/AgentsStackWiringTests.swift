@@ -72,6 +72,40 @@ final class AgentsStackWiringTests: XCTestCase {
                        "no boolean push left on the Agents stack")
     }
 
+    /// A surface this stack keeps mounted under another is not on screen then, so its rows' animated
+    /// cues — one 30Hz `TimelineView` per running row — are held back until it is the surface
+    /// showing again. Three surfaces get covered, and the shell answers for all three: the list at
+    /// the root (nothing pushed — `sectionAtRoot`), a page of its own (only while it is the top of
+    /// the stack: a conversation pushed over a project's or a folder's sessions covers it), and both
+    /// of them again under Settings' sheet. Every answer is read by the two glyphs themselves, so
+    /// every row that draws one — a session's, a project's, a folder's — follows without threading a
+    /// flag through each. The drawer's cues are held back the same way by its own `live:`.
+    func testTheCoveredListHoldsItsAnimatedRowCuesBack() throws {
+        let agents = code(try slice(try appSource("Views/CompactShell.swift"),
+                                    from: "case .agents:", to: "// RUNNERS"))
+        XCTAssertTrue(agents.contains(".environment(\\.liveRowCues, model.sectionAtRoot && !model.settingsPresented)"),
+                      "nothing pushed and no sheet is exactly when the list is the page showing")
+        XCTAssertTrue(agents.contains("AgentsStackPage(node: node)"),
+                      "a pushed page goes through the wrapper that asks whether it is the top")
+        let page = code(try slice(try appSource("Views/CompactShell.swift"),
+                                  from: "private struct AgentsStackPage<Content: View>: View {", to: "\n}\n"))
+        XCTAssertTrue(page.contains(
+            "content.environment(\\.liveRowCues, model.nav.path.last == node && !model.settingsPresented)"),
+                      "the top of the stack is the page showing; Settings' sheet covers it too")
+
+        let views = code(try appSource("Views/AgentsView.swift"))
+        let spinner = try slice(views, from: "struct SpinnerGlyph: View {", to: "\n}\n")
+        XCTAssertTrue(spinner.contains("@Environment(\\.liveRowCues) private var liveRowCues"),
+                      "the spinner reads the switch itself, so every row that draws one is covered")
+        XCTAssertTrue(spinner.contains("if liveRowCues {"),
+                      "a covered row draws the arc still, with no display link behind it")
+        let breathing = try slice(views, from: "struct BreathingGlyph: View {", to: "\n}\n")
+        XCTAssertTrue(breathing.contains("@Environment(\\.liveRowCues) private var liveRowCues"),
+                      "and so does the breathing glyph")
+        XCTAssertTrue(breathing.contains("if reduceMotion || !liveRowCues {"),
+                      "still, like reduced motion already drew it")
+    }
+
     /// One row, two containers. The row view is built once — what differs is who moves the screen:
     /// the three-column `List`'s selection, or the compact row's own destination value. Neither
     /// shape draws a highlight it cannot open, because both read the same stack.
@@ -148,20 +182,17 @@ final class AgentsStackWiringTests: XCTestCase {
         let model = code(app)
 
         XCTAssertTrue(model.contains("focusedConsoleSessionID: String? { nav.focusedConsoleSessionID }"))
-        XCTAssertTrue(model.contains("consoleFromRecents: Bool { nav.consoleFromRecents }"))
 
         let root = code(try slice(app, from: "var sectionAtRoot: Bool {",
                                   to: "/// ⌘D: complete the open"))
         XCTAssertTrue(root.contains("case .agents:  return nav.sectionAtRoot"),
                       "at root is an empty stack, not two fields that could disagree with it")
 
-        // The four ways into a console pick the frame they push, and how it was opened rides that
+        // The ways into a console pick the frame they push, and how it was opened rides that
         // frame instead of a shadow variable with an assignment-ordering convention. Each one hands
         // its frame to `show` now; that the entries write nothing else, and that `show` is the one
         // place the transition happens, is `NavigationEntrancesWiringTests`'.
         let entries = [
-            ("func openRecentSession(_ s: Session) {", "\n    }",
-             "show(.console(sessionID: s.id, origin: .drawer)"),
             ("func openNeedsYouSession(_ s: Session) {", "\n    }",
              "show(.console(sessionID: s.id, origin: .banner)"),
             ("func openAgent(_ id: String) {", "\n    }", "nav.popToRoot()"),
@@ -209,11 +240,10 @@ final class AgentsStackWiringTests: XCTestCase {
             .contains("nav.replaceTop(with: .console(sessionID: session.id, origin: .list))"),
                       "and it swaps the draft's frame for that session's console, in place")
 
-        // The Recents origin is what frees the compact left edge; it rides the frame, so the page
-        // reads it instead of a marker that had to be written before the selection.
+        // A console is never a drawer destination's own page: it keeps the system back-swipe.
         let console = code(try slice(raw, from: "private struct AgentConsolePage: View {",
                                      to: "/// Toggles the enclosing"))
-        XCTAssertTrue(console.contains("SwipeBackGestureToggle(enabled: !model.consoleFromRecents)"))
+        XCTAssertFalse(console.contains("SwipeBackGestureToggle"))
     }
 
     /// An iPad's detail column is always on screen, so the Agents stack's root needs a page of its own

@@ -1,0 +1,267 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      17,
+      46
+     ],
+     [
+      859,
+      875
+     ],
+     318,
+     30
+    ]
+   ],
+   "max": 30,
+   "pixels": 318,
+   "shot": "chromium-dark-desktop/p41-profile-photo.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 8,
+  "beyond": 1,
+  "identical": 263,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 96
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens"
+      ],
+      "focus": {
+       "name": "Access tokens",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "step": "escape closes the dialog"
+    }
+   ],
+   "chromium-light-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Manage",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "step": "manage access tokens"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "step": "approval refused"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "step": "escape closes the dialog"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "step": "approval refused"
+    }
+   ],
+   "webkit-light-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "step": "revoked"
+    }
+   ]
+  },
+  "equal": 90,
+  "total": 96
+ }
+}

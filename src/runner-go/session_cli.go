@@ -41,7 +41,14 @@ Session orchestration is available inside a live Orbit session while the account
 Session orchestration switch (Settings) is on. Outside any session — a launchd/cron process with no
 ORBIT_SESSION_ID — the runner credential alone allows get, list, send and import, scoped to
 the sessions this runner hosts; set ORBIT_SERVICE_TOKEN to a credential from
-'orbit token mint' to get exactly its scopes instead, including create.
+'orbit token mint' to get exactly its scopes instead, including create. Inside a
+session the session decides, and a service token beside it is not used.
+
+Logged in as yourself ('orbit login', or ORBIT_USER_TOKEN), the commands that read,
+message and close sessions call the REST API with your personal access token, across
+your account, and print what they print as the runner. create, import, await and
+reply are refused rather than sent with the runner's credential: 'orbit api' calls
+any user route, and 'orbit capabilities --json' marks which commands run as you.
 Run 'orbit session <command> --help' for options.
 `
 
@@ -98,8 +105,13 @@ Options:
   --agent-name NAME        Resolve an agent by name
   --title TITLE
   --model MODEL
-  --provider SLUG          Built-in engine (claude, codex, kimi, opencode) or a configured
-                           provider slug; defaults to where the agent's project last started
+  --engine ENGINE          The CLI that runs the session, and the session's for life: claude
+                           (Claude Code), codex (Codex), kimi (Kimi Code), antigravity
+                           (Antigravity CLI), opencode (OpenCode) or dsh (DeepSeek Harness)
+  --provider SLUG          Where its credential comes from: an engine's own sign-in on the
+                           runner (its name), opencode (OpenCode's own configuration), an
+                           account pool or an API key ('orbit provider list'). Named alone, it
+                           runs on the engine it always ran on — a key on its protocol's own CLI
   --permission-mode MODE   How much the session may do unattended: %s.
                            Defaults to the owner's account setting; the ask-me modes park
                            the session on an approval card until a human answers
@@ -111,6 +123,12 @@ Options:
                            instead and stderr says so in one line, and a watch the server
                            refuses ends the wait at once
   --json
+
+--engine and --provider together must be a pair that runs: a provider names the engines it
+can run, and any other is refused with PROVIDER_ENGINE_INCOMPATIBLE. --engine alone runs on
+that engine's own sign-in — OpenCode on its own configuration, DeepSeek Harness on the
+account's first enabled DeepSeek key (refused with DEEPSEEK_KEY_REQUIRED when there is none).
+With neither, the session starts where the agent's project last started.
 
 Outside a session this needs ORBIT_SERVICE_TOKEN to carry the session:create scope; the
 session starts the agent that token is pinned to, and --agent-id may only name that agent.
@@ -192,6 +210,9 @@ produced, and every conflicting path when it conflicted. The runner picks a queu
 its next heartbeat, which ticks every 30 seconds, so a wait shorter than that reports "no
 outcome yet" even for a merge that goes on to succeed; 60 is a sane floor. A wait that runs out
 says so and names the operation, so read it later with: orbit session merge-receipts SESSION_ID
+
+As yourself this is the Merge menu's door: a --target-branch you name becomes the workspace's
+default target, as a pick there does.
 `,
 	"end": `orbit session end — end and park a session
 
@@ -233,7 +254,7 @@ needs the session:create scope and may import only into its pinned workspace.
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
-	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", "--provider <claude|codex|kimi|opencode|configured slug>", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
+	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
 	// The one session verb a session cannot run: cliSessionImport refuses inside one, and the
 	// transcript it imports is on this machine's disk. A running agent is the reader that never
 	// gets it — the headless door below is where this command is advertised.
@@ -307,15 +328,28 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		_, err := fmt.Fprint(out, h)
 		return err
 	}
-	// §13.7's two receipt verbs are NOT orchestration and take no grant: they record and read a
-	// fact about work that already happened, inside the caller's own tenant. Gating them the way
-	// `merge` is gated would mean the deployments that most need the audit — the ordinary ones,
-	// with orchestration switched off — are exactly the ones that cannot write it.
-	ctx := cliOrchestrationContext{serviceToken: currentServiceToken()}
-	if action != "merge-receipt" && action != "merge-receipts" {
-		var err error
-		ctx, err = requireCLIOrchestrationContext(action)
-		if err != nil {
+	identity, err := userModeGate("session " + action)
+	if err != nil {
+		return err
+	}
+	var ctx cliOrchestrationContext
+	switch {
+	case identity.Kind == identityUser:
+		// The person: their own token on the user routes, which no orchestration grant stands in front of.
+		if ctx.user, err = userTransportFor(identity); err != nil {
+			return err
+		}
+	case action == "merge-receipt" || action == "merge-receipts":
+		// §13.7's two receipt verbs are NOT orchestration and take no grant: they record and read a
+		// fact about work that already happened, inside the caller's own tenant. Gating them the way
+		// `merge` is gated would mean the deployments that most need the audit — the ordinary ones,
+		// with orchestration switched off — are exactly the ones that cannot write it. A service token
+		// carries them when it is who this process is; inside a session the session's runner does.
+		if identity.Kind == identityService {
+			ctx.serviceToken = identity.token
+		}
+	default:
+		if ctx, err = requireCLIOrchestrationContext(action); err != nil {
 			return err
 		}
 	}
@@ -362,6 +396,9 @@ type cliOrchestrationContext struct {
 	// A minted service credential from the environment, used INSTEAD of the runner credential
 	// so the control plane authorizes exactly the scopes someone granted on purpose.
 	serviceToken string
+	// The person, acting with their personal access token on the user routes (user_mode.go): set when
+	// the CLI acts as them, and then neither of the credentials above is.
+	user *userTransport
 }
 
 // sessionActionScope maps a session subcommand to the service-token scope that authorizes it.
@@ -420,18 +457,37 @@ func headlessActionList(allowed map[string]bool) string {
 	return strings.Join(actions, ", ")
 }
 
-// requireCLIOrchestrationContext resolves how this process is allowed to reach the session API.
+// requireCLIOrchestrationContext resolves how this process is allowed to reach the session API, by
+// who it acts as — the order of docs/personal-access-token-design.md §7.2, the one `orbit whoami`
+// reports:
 //
-//   - ORBIT_SERVICE_TOKEN set: a headless process running on a credential someone minted for it.
-//     The token is the whole authorization; the control plane confines it to its scopes, its
-//     runner and its agent pin.
-//   - otherwise, ORBIT_SESSION_ID set: an agent, unchanged — its account's orchestration switch
-//     plus the signed session credential Transport attaches.
-//   - neither: headless on the runner credential, which reaches only this runner's own sessions
-//     and cannot spawn.
+//   - a session (ORBIT_SESSION_ID): an agent, unchanged — its account's orchestration switch plus
+//     the signed session credential Transport attaches. An ORBIT_SERVICE_TOKEN beside it is not
+//     used: inside a session the CLI acts as the session.
+//   - a service token (ORBIT_SERVICE_TOKEN, outside any session): a headless process running on a
+//     credential someone minted for it. The token is the whole authorization; the control plane
+//     confines it to its scopes, its runner and its agent pin.
+//   - the runner credential: headless, which reaches only this runner's own sessions and cannot
+//     spawn.
+//
+// The person (a personal access token) is cmdSessionCLI's to send to the user routes; anything else
+// that asks while the CLI acts as them is refused rather than handed the runner's credential.
 func requireCLIOrchestrationContext(action string) (cliOrchestrationContext, error) {
-	if service := currentServiceToken(); service != "" {
-		claims := decodeServiceTokenClaims(service)
+	identity := resolveCLIIdentity()
+	switch identity.Kind {
+	case identityUser:
+		return cliOrchestrationContext{}, refusedAsUser(identity, action, userModeUnported)
+	case identitySession:
+		if !mcpOrchestrationEnabled() {
+			return cliOrchestrationContext{}, fmt.Errorf(orchestrationOffMsg)
+		}
+		if err := validatePathSegmentID(identity.SessionID); err != nil {
+			return cliOrchestrationContext{}, fmt.Errorf("ORBIT_SESSION_ID %w", err)
+		}
+		token := strings.TrimSpace(os.Getenv(envOrchestrationToken))
+		return cliOrchestrationContext{sessionID: identity.SessionID, token: token}, nil
+	case identityService:
+		claims := decodeServiceTokenClaims(identity.token)
 		// Unreadable claims (a truncated paste, a token from a newer CLI) are not judged here:
 		// let the control plane reject it, so its error is the one the operator sees.
 		if claims != nil && !headlessAllowedActions(claims)[action] {
@@ -446,26 +502,15 @@ func requireCLIOrchestrationContext(action string) (cliOrchestrationContext, err
 				"%s needs the %s scope; this service token allows only: %s",
 				action, scope, headlessActionList(headlessAllowedActions(claims)))
 		}
-		return cliOrchestrationContext{serviceToken: service}, nil
+		return cliOrchestrationContext{serviceToken: identity.token}, nil
 	}
-	id := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
-	if id == "" {
-		allowed := headlessAllowedActions(nil)
-		if allowed[action] {
-			return cliOrchestrationContext{}, nil
-		}
-		return cliOrchestrationContext{}, fmt.Errorf(
-			"session orchestration requires ORBIT_SESSION_ID context; without a session the runner credential allows only: %s (mint a scoped credential with `orbit token mint` for the rest)",
-			headlessActionList(allowed))
+	allowed := headlessAllowedActions(nil)
+	if allowed[action] {
+		return cliOrchestrationContext{}, nil
 	}
-	if !mcpOrchestrationEnabled() {
-		return cliOrchestrationContext{}, fmt.Errorf(orchestrationOffMsg)
-	}
-	if err := validatePathSegmentID(id); err != nil {
-		return cliOrchestrationContext{}, fmt.Errorf("ORBIT_SESSION_ID %w", err)
-	}
-	token := strings.TrimSpace(os.Getenv(envOrchestrationToken))
-	return cliOrchestrationContext{sessionID: id, token: token}, nil
+	return cliOrchestrationContext{}, fmt.Errorf(
+		"session orchestration requires ORBIT_SESSION_ID context; without a session the runner credential allows only: %s (mint a scoped credential with `orbit token mint` for the rest)",
+		headlessActionList(allowed))
 }
 
 // cliSessionTransport authenticates session calls with the service credential when the process
@@ -522,7 +567,8 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	agentName := fs.String("agent-name", "", "target agent name")
 	title := fs.String("title", "", "session title")
 	model := fs.String("model", "", "session model")
-	provider := fs.String("provider", "", "session provider slug")
+	engine := fs.String("engine", "", "the CLI that runs the session")
+	provider := fs.String("provider", "", "where the session's credential comes from")
 	permissionMode := fs.String("permission-mode", "", "session permission mode")
 	wait := fs.Bool("wait", false, "wait until the first turn settles")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
@@ -575,6 +621,14 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 			return fmt.Errorf("--model cannot be empty")
 		}
 		body["model"] = *model
+	}
+	// Sent only when named, like --provider: a provider alone keeps the engine it always ran on, and
+	// which engines exist is the server's to say (ENGINE_UNKNOWN), as the modes below are.
+	if flagWasSet(fs, "engine") {
+		if strings.TrimSpace(*engine) == "" {
+			return fmt.Errorf("--engine cannot be empty")
+		}
+		body["engine"] = strings.TrimSpace(*engine)
 	}
 	if flagWasSet(fs, "provider") {
 		if strings.TrimSpace(*provider) == "" {
@@ -764,7 +818,7 @@ func cliSessionList(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	if *parentSessionID != "" {
 		queryArgs["parentSessionId"] = *parentSessionID
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -796,7 +850,7 @@ func cliSessionSearch(args []string, out io.Writer, ctx cliOrchestrationContext)
 	if *limit > 0 {
 		queryArgs["limit"] = *limit
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -818,7 +872,7 @@ func cliSessionGet(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if err != nil {
 		return err
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -852,7 +906,7 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if !messageSet || messageText == "" {
 		return fmt.Errorf("--message or --message-file - is required")
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -893,7 +947,7 @@ func cliSessionInterrupt(args []string, in io.Reader, out io.Writer, ctx cliOrch
 	if err != nil {
 		return err
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -940,7 +994,7 @@ func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) 
 		}
 		body["waitSeconds"] = *waitSeconds
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -1039,7 +1093,7 @@ func cliSessionMergeReceipt(args []string, out io.Writer, ctx cliOrchestrationCo
 	if strings.TrimSpace(*message) != "" {
 		body["detail"] = map[string]interface{}{"message": strings.TrimSpace(*message)}
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -1062,7 +1116,7 @@ func cliSessionMergeReceipts(args []string, out io.Writer, ctx cliOrchestrationC
 	if err != nil {
 		return err
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -1078,7 +1132,7 @@ func cliSessionEnd(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if err != nil {
 		return err
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -1094,7 +1148,7 @@ func cliSessionComplete(args []string, out io.Writer, ctx cliOrchestrationContex
 	if err != nil {
 		return err
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -1110,7 +1164,7 @@ func cliSessionDelete(args []string, out io.Writer, ctx cliOrchestrationContext)
 	if err != nil {
 		return err
 	}
-	t, err := cliSessionTransport(ctx)
+	t, err := sessionCommandTransport(ctx)
 	if err != nil {
 		return err
 	}

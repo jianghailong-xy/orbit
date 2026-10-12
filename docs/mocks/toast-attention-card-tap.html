@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>③ 需要处理卡：把「进入」从按钮挪到卡片本身</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --blue: #007AFF;
+    --red: #FF3B30;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+    /* web 的亮色 token，逐字取自 src/web/src/index.css */
+    --w-bg-raised: #ffffff;
+    --w-bg-hover: #f5f6f7;
+    --w-border-subtle: #eceef1;
+    --w-text-1: #1f2329;
+    --w-text-2: #646a73;
+    --w-text-3: #8f959e;
+    --w-brand: #3370ff;
+    --w-brand-tint: #eaf1ff;
+    --w-error-solid: #d4380d;
+    --w-error-bg: #fdeceb;
+    --w-error-border: #ffccc7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 32px 64px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Noto Sans CJK SC",
+          "PingFang SC", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  h2 { font-size: 17px; letter-spacing: -.01em; margin: 40px 0 14px; }
+  h2 .sub { font-size: 13.5px; font-weight: 400; color: #55555e; margin-left: 8px; }
+  .lede { color: #55555e; max-width: 1180px; margin: 0 0 26px; }
+  .lede code, figcaption code, .note code {
+    font: 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; width: 393px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption.wide { width: 660px; }
+  figcaption > b:first-child { display: block; font-size: 14.5px; color: #16161a; margin-bottom: 3px; }
+  .tag { display: inline-block; font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+         padding: 3px 7px; border-radius: 5px; vertical-align: 1px; margin-right: 5px; }
+  .tag.now  { background: #ffe4e0; color: #b3261e; }
+  .tag.done { background: #dce8ff; color: #0b57d0; }
+  .tag.keep { background: #e4e6ea; color: #4a4f57; }
+  .tag.picked { background: #d9f2e0; color: #14532d; }
+  .mark { outline: 1.5px dashed #0b57d0; outline-offset: 3px; border-radius: 12px; }
+  .note { margin-top: 40px; max-width: 1180px; padding: 18px 20px; border-radius: 14px;
+          background: #fff; border: 1px solid rgba(0,0,0,.07); }
+  .note h3 { margin: 0 0 8px; font-size: 15px; }
+  .note ul { margin: 0; padding-left: 20px; color: #3c3f45; }
+  .note li { margin: 5px 0; }
+
+  /* ── iPhone ───────────────────────────────────────────────── */
+  .phone {
+    width: 393px; height: 852px; border-radius: 48px; overflow: hidden; background: var(--surface);
+    color: var(--label); display: flex; flex-direction: column; position: relative;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18); border: 1px solid rgba(0,0,0,.08);
+  }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 30px 6px; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .nav { padding: 4px 16px 12px; display: flex; align-items: center; gap: 10px; }
+  .nav .back { width: 36px; height: 36px; border-radius: 50%; background: var(--fill);
+               display: grid; place-items: center; font-size: 17px; color: #000; flex: none; }
+  .nav .spacer-nav { flex: 1; }
+  .nav .more { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px 0 16px;
+               border-radius: 18px; background: var(--fill); font-size: 15px; font-weight: 500; }
+  .nav .more .dots { width: 22px; height: 22px; border-radius: 50%; border: 1.6px solid #000;
+                     display: grid; place-items: center; font-size: 13px; line-height: 0; }
+  /* the page the toast floats over — deliberately quiet, it is not what this mock is about */
+  .page { flex: 1; padding: 6px 16px 0; overflow: hidden; }
+  .page .h { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 4px; }
+  .page .s { font-size: 13px; color: var(--label-2); margin-bottom: 16px; }
+  .page .rowline { display: flex; align-items: center; gap: 10px; padding: 11px 0;
+                   border-top: 1px solid var(--sep); font-size: 14.5px; color: var(--label-2); }
+  .page .rowline .dot { width: 7px; height: 7px; border-radius: 4px; background: var(--orange); flex: none; }
+  .page .rowline .txt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .page .rowline .chev { color: var(--label-3); }
+
+  /* ── the toast (native: glass wash + hairline, radius 22) ──── */
+  /* top = safe area (54) + ToastHost.topInset (52) + 一点余量：卡片落在导航栏正下方 */
+  .toast {
+    position: absolute; left: 16px; right: 16px; top: 110px; padding: 14px; border-radius: 22px;
+    background: rgba(255, 149, 0, .12);
+    border: 1px solid rgba(255, 149, 0, .30);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 10px 28px rgba(0,0,0,.14);
+    display: flex; flex-direction: column; gap: 10px; z-index: 20;
+  }
+  /* 失败级是红的（ToastStyle.tint(for: .error)）——「不动的部分」那两张卡用它 */
+  .toast.err {
+    background: rgba(255, 59, 48, .10);
+    border-color: rgba(255, 59, 48, .30);
+  }
+  .toast .glyph svg { display: block; }
+  .toast .head { display: flex; align-items: flex-start; gap: 12px; }
+  .toast .glyph { font-size: 22px; line-height: 22px; flex: none; color: var(--orange); }
+  .toast .copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .toast .msg { font-size: 15px; font-weight: 600; }
+  .toast .sub { font-size: 13px; color: rgba(60,60,67,.72); white-space: nowrap;
+                overflow: hidden; text-overflow: ellipsis; }
+  .toast .x { width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,.08);
+              display: grid; place-items: center; color: rgba(60,60,67,.75); font-size: 13px;
+              font-weight: 700; flex: none; }
+  .toast .chev { color: var(--label-3); font-size: 15px; align-self: center; flex: none;
+                 margin-top: 2px; }
+  .toast .acts { display: flex; gap: 8px; padding-left: 34px; }
+  .toast .btn { height: 30px; padding: 0 13px; border-radius: 15px; display: inline-flex;
+                align-items: center; font-size: 13px; font-weight: 600; }
+  .toast .btn.pri { background: var(--blue); color: #fff; }
+  .toast .btn.sec { background: rgba(120,120,128,.16); color: var(--blue); }
+
+  /* ── web (light theme, tokens from index.css) ──────────────── */
+  .win { width: 620px; border-radius: 12px; overflow: hidden; background: #f7f8fa;
+         border: 1px solid rgba(0,0,0,.1); box-shadow: 0 12px 40px rgba(0,0,0,.14); }
+  .win .bar { height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 12px;
+              background: #e9eaee; border-bottom: 1px solid rgba(0,0,0,.07); }
+  .win .bar i { width: 10px; height: 10px; border-radius: 50%; background: #cfd2d8; }
+  .win .bar .url { margin-left: 10px; font-size: 11.5px; color: #71757c;
+                   background: #fff; border-radius: 6px; padding: 2px 10px; }
+  .win .body { padding: 14px 16px 0; height: 300px; position: relative;
+               background: #fff; }
+  .win .body .h { font-size: 15px; font-weight: 700; color: var(--w-text-1); }
+  .win .body .s { font-size: 12.5px; color: var(--w-text-3); margin-bottom: 12px; }
+  .win .body .ln { height: 9px; border-radius: 5px; background: #f1f1f4; margin: 10px 0; }
+  .win .body .ln.s1 { width: 68%; } .win .body .ln.s2 { width: 82%; } .win .body .ln.s3 { width: 54%; }
+
+  /* A toast slot: web pins it to the top-trailing corner of the viewport. */
+  .tslot { position: absolute; right: 16px; top: 12px; width: 360px; }
+  .wtoast {
+    display: flex; flex-direction: column; gap: 10px; width: 100%;
+    padding: 12px 12px 12px 14px; border-radius: 12px;
+    border: 1px solid var(--w-error-border);
+    background: linear-gradient(var(--w-error-bg), var(--w-error-bg)), var(--w-bg-raised);
+    box-shadow: 0 8px 22px rgba(15,23,42,.12);
+    color: var(--w-text-1); font-size: 14px; line-height: 20px; user-select: text;
+  }
+  .wtoast .row { display: flex; align-items: flex-start; gap: 12px; }
+  .wtoast .glyph { flex: none; font-size: 20px; line-height: 20px; color: var(--w-error-solid); }
+  .wtoast .copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .wtoast .head { font-weight: 600; overflow-wrap: anywhere; }
+  .wtoast .sub { color: var(--w-text-3); font-size: 13px; line-height: 18px;
+                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .link .head { color: var(--w-brand); }
+  .wtoast .x { flex: none; width: 22px; height: 20px; display: grid; place-items: center;
+               color: var(--w-text-3); font-size: 13px; }
+  .wtoast .reason { margin-left: 32px; max-height: 108px; overflow: auto; padding: 7px 10px;
+                    border: 1px solid var(--w-border-subtle); border-radius: 8px;
+                    background: var(--w-bg-raised); color: var(--w-text-2);
+                    font: 12px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+                    white-space: pre-wrap; }
+  .wtoast .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: 32px; }
+  .wtoast .act { flex: none; height: 28px; padding: 0 12px; border-radius: 7px;
+                 border: 1px solid var(--w-border-subtle); background: var(--w-bg-raised);
+                 color: var(--w-text-1); font-size: 13px; font-weight: 600;
+                 display: inline-flex; align-items: center; }
+  .wtoast .act.pri { border-color: var(--w-brand); background: var(--w-brand); color: #fff; }
+  .wtoast .act.undo { border-color: var(--w-brand-tint); background: var(--w-brand-tint);
+                      color: var(--w-brand); }
+
+  /* loose cards, for the "unchanged" row */
+  .loose { display: inline-block; width: 361px; }
+  .loose.web { width: 360px; }
+</style>
+</head>
+<body>
+<h1>③ 需要处理卡：把「进入」从按钮挪到卡片本身</h1>
+<p class="lede">
+  ③ 卡上那颗<b>只做跳转</b>的按钮拿掉，正文自己变成入口 —— 这正是 ② 结果卡和折叠胶囊已经在做的事
+  （<code>ToastHost.swift:250</code> 把 <code>ToastCopy</code> 包成 Button；web 的 <code>ResultCard</code> 用
+  <code>toast-copy--link</code>；<code>ToastPill</code> 行尾的 <code>›</code>）。
+  这一版 iOS、macOS、web 三端一起改：native 两端本来就共用同一份 SwiftUI，web 在自己那张
+
+  <code>AttentionCard</code> 上补同一件事，否则「一套规则三端共用」就断了。
+  <b>正文不带 <code>›</code></b>（方案 B，2026-10-06 定），和 ② 结果卡同一个手势。
+</p>
+<div class="note" style="margin:0 0 30px;max-width:1180px">
+  <h3>为什么值得改</h3>
+  <ul>
+    <li>今天的 <code>toast.awaitsApproval ? "Review" : "Open session"</code> 是<b>纯文案差别</b>，两个分支调用同一个
+      <code>openToastSession</code>（<code>AppModel.swift:1991</code>），只做 <code>dismiss + route(to: .session)</code>。</li>
+    <li>「Review」名不副实：它不打开任何审阅界面，审批卡本来就内联渲染在会话 transcript 末尾。</li>
+    <li>③ 卡要你处理，却把唯一的入口藏在一颗小按钮里；卡片本身的绝大部分面积点了没反应。</li>
+  </ul>
+</div>
+
+<h2>iPhone<span class="sub">同一张前景审批卡（就是你截图那张）</span></h2>
+<div class="row">
+
+  <!-- 1. today -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>9:42</span><span>▮▮▮ ⌾ ▰</span></div>
+      <div class="nav"><div class="back">‹</div><div class="spacer-nav"></div>
+        <div class="more">Open items <span class="dots">⋯</span></div></div>
+      <div class="page">
+        <div class="h">DeepSeek Harness P6</div>
+        <div class="s">Open items · 2 waiting on you</div>
+        <div class="rowline"><span class="dot"></span><span class="txt">P6：验收端到端行为、故障语义与降级路径</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="dot"></span><span class="txt">P7：把 harness 接进 CI 的冒烟矩阵</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P5：runner 侧的超时预算与重试</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P4：控制面事件回放与对账</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P3：pending 任务的重派与幂等键</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P2：验收命令的超时预算</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P1：派发器的并发上限</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P0：harness 骨架与假引擎</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">验收报告 · 2026-10-05</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">验收报告 · 2026-10-03</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">决策记录 · 派发器的退避策略</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">决策记录 · 为什么先不上分片</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">已完成 12 项</span><span class="chev">›</span></div>
+      </div>
+      <div class="toast">
+        <div class="head">
+          <span class="glyph"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2.5c-.9 0-1.6.7-1.6 1.6v.5a6.4 6.4 0 0 0-4.8 6.2v3.9l-1.2 1.8a1 1 0 0 0 .8 1.6h13.6a1 1 0 0 0 .8-1.6l-1.2-1.8v-3.9a6.4 6.4 0 0 0-4.8-6.2v-.5c0-.9-.7-1.6-1.6-1.6Z"/><path d="M9.9 19.5a2.1 2.1 0 0 0 4.2 0H9.9Z"/></svg></span>
+          <span class="copy">
+            <span class="msg">Needs your reply · AskUserQuestion</span>
+            <span class="sub">执行任务：P6：验收端到端行为、故障语义与降级路径</span>
+          </span>
+          <span class="x">✕</span>
+        </div>
+        <div class="acts"><span class="btn pri">Review</span></div>
+      </div>
+    </div>
+    <figcaption><b><span class="tag now">现状</span>iOS 今天的样子</b>
+      卡片落下来，唯一的出路是左下角那颗 <code>Review</code>。其他面积（标题、正文、留白）点了都没有反应 ——
+      而它做的只是一次 <code>route(to: .session)</code>。</figcaption>
+  </figure>
+
+  <!-- 2. A: with chevron -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>9:42</span><span>▮▮▮ ⌾ ▰</span></div>
+      <div class="nav"><div class="back">‹</div><div class="spacer-nav"></div>
+        <div class="more">Open items <span class="dots">⋯</span></div></div>
+      <div class="page">
+        <div class="h">DeepSeek Harness P6</div>
+        <div class="s">Open items · 2 waiting on you</div>
+        <div class="rowline"><span class="dot"></span><span class="txt">P6：验收端到端行为、故障语义与降级路径</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="dot"></span><span class="txt">P7：把 harness 接进 CI 的冒烟矩阵</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P5：runner 侧的超时预算与重试</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P4：控制面事件回放与对账</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P3：pending 任务的重派与幂等键</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P2：验收命令的超时预算</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P1：派发器的并发上限</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P0：harness 骨架与假引擎</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">验收报告 · 2026-10-05</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">验收报告 · 2026-10-03</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">决策记录 · 派发器的退避策略</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">决策记录 · 为什么先不上分片</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">已完成 12 项</span><span class="chev">›</span></div>
+      </div>
+      <div class="toast">
+        <div class="head">
+          <span class="glyph"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2.5c-.9 0-1.6.7-1.6 1.6v.5a6.4 6.4 0 0 0-4.8 6.2v3.9l-1.2 1.8a1 1 0 0 0 .8 1.6h13.6a1 1 0 0 0 .8-1.6l-1.2-1.8v-3.9a6.4 6.4 0 0 0-4.8-6.2v-.5c0-.9-.7-1.6-1.6-1.6Z"/><path d="M9.9 19.5a2.1 2.1 0 0 0 4.2 0H9.9Z"/></svg></span>
+          <span class="copy mark">
+            <span class="msg">Needs your reply · AskUserQuestion</span>
+            <span class="sub">执行任务：P6：验收端到端行为、故障语义与降级路径</span>
+          </span>
+          <span class="chev">›</span>
+          <span class="x">✕</span>
+        </div>
+      </div>
+    </div>
+    <figcaption><b><span class="tag done">改后 · A</span>正文即入口，行尾一个 ›</b>
+      虚线内是热区（<code>ToastCopy</code>，本来就已经 <code>frame(maxWidth:.infinity)</code> +
+      <code>contentShape(Rectangle())</code>）。<code>›</code> 用的是折叠胶囊那一个符号，语言统一：
+      点了就进会话，审批卡就在 transcript 末尾。<code>✕</code>、上滑关闭、按住暂停都原样不动。
+      卡片因此矮了一行 —— 少掉的那行正是按钮行的 <code>padding(.leading, 38)</code>。</figcaption>
+  </figure>
+
+  <!-- 3. B: no chevron -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>9:42</span><span>▮▮▮ ⌾ ▰</span></div>
+      <div class="nav"><div class="back">‹</div><div class="spacer-nav"></div>
+        <div class="more">Open items <span class="dots">⋯</span></div></div>
+      <div class="page">
+        <div class="h">DeepSeek Harness P6</div>
+        <div class="s">Open items · 2 waiting on you</div>
+        <div class="rowline"><span class="dot"></span><span class="txt">P6：验收端到端行为、故障语义与降级路径</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="dot"></span><span class="txt">P7：把 harness 接进 CI 的冒烟矩阵</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P5：runner 侧的超时预算与重试</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P4：控制面事件回放与对账</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P3：pending 任务的重派与幂等键</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P2：验收命令的超时预算</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P1：派发器的并发上限</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">P0：harness 骨架与假引擎</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">验收报告 · 2026-10-05</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">验收报告 · 2026-10-03</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">决策记录 · 派发器的退避策略</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">决策记录 · 为什么先不上分片</span><span class="chev">›</span></div>
+        <div class="rowline"><span class="txt">已完成 12 项</span><span class="chev">›</span></div>
+      </div>
+      <div class="toast">
+        <div class="head">
+          <span class="glyph"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 2.5c-.9 0-1.6.7-1.6 1.6v.5a6.4 6.4 0 0 0-4.8 6.2v3.9l-1.2 1.8a1 1 0 0 0 .8 1.6h13.6a1 1 0 0 0 .8-1.6l-1.2-1.8v-3.9a6.4 6.4 0 0 0-4.8-6.2v-.5c0-.9-.7-1.6-1.6-1.6Z"/><path d="M9.9 19.5a2.1 2.1 0 0 0 4.2 0H9.9Z"/></svg></span>
+          <span class="copy mark">
+            <span class="msg">Needs your reply · AskUserQuestion</span>
+            <span class="sub">执行任务：P6：验收端到端行为、故障语义与降级路径</span>
+          </span>
+          <span class="x">✕</span>
+        </div>
+      </div>
+    </div>
+    <figcaption><b><span class="tag picked">已选 · B</span>不带符号，和 ② 结果卡完全一致</b>
+      ② 结果卡今天就没有任何可点提示，只靠 <code>.accessibilityHint("Opens the session")</code>，
+      用起来没人抱怨。B 更安静；代价是「这张卡能点」这件事在 ③ 上更不容易被猜出来，
+      靠的是 ② 已经教会的手感。<b>owner 2026-10-06 定：B</b>，A 只作留档。</figcaption>
+  </figure>
+</div>
+
+<h2>web<span class="sub">同一张卡在浏览器里；宽度 360，钉在视口右上角</span></h2>
+<div class="row">
+
+  <!-- web today -->
+  <figure>
+    <div class="win">
+      <div class="bar"><i></i><i></i><i></i><span class="url">orbit.local/sessions/34azvXO0</span></div>
+      <div class="body">
+        <div class="h">Fix login redirect</div>
+        <div class="s">Waiting for approval · Open</div>
+        <div class="ln s1"></div><div class="ln s2"></div><div class="ln s3"></div><div class="ln s1"></div>
+        <div class="tslot">
+          <div class="wtoast">
+            <div class="row">
+              <span class="glyph">⊘</span>
+              <span class="copy">
+                <span class="head">Couldn't start resolving the conflict</span>
+                <span class="sub">Fix login redirect</span>
+              </span>
+              <span class="x">✕</span>
+            </div>
+            <div class="reason">index.lock: File exists.</div>
+            <div class="acts">
+              <span class="act pri">Open session</span>
+              <span class="act">Copy error</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption class="wide"><b><span class="tag now">现状</span>web 的 <code>AttentionCard</code></b>
+      正文是 <code>&lt;span&gt;</code>，跳转全靠动作行里的 <code>Open session</code>
+      （<code>ToastViewport.tsx:267</code>）。举的是真实的一条：
+      <code>message.sessionNotice({event:'resolve-conflict-error', tone:'error'})</code>
+      —— 它带 <code>sessionId</code>、不带 action，所以渲染出「Open session」。</figcaption>
+  </figure>
+
+  <!-- web after -->
+  <figure>
+    <div class="win">
+      <div class="bar"><i></i><i></i><i></i><span class="url">orbit.local/sessions/34azvXO0</span></div>
+      <div class="body">
+        <div class="h">Fix login redirect</div>
+        <div class="s">Waiting for approval · Open</div>
+        <div class="ln s1"></div><div class="ln s2"></div><div class="ln s3"></div><div class="ln s1"></div>
+        <div class="tslot">
+          <div class="wtoast">
+            <div class="row">
+              <span class="glyph">⊘</span>
+              <span class="copy link mark">
+                <span class="head">Couldn't start resolving the conflict</span>
+                <span class="sub">Fix login redirect</span>
+              </span>
+              <span class="x">✕</span>
+            </div>
+            <div class="reason">index.lock: File exists.</div>
+            <div class="acts">
+              <span class="act">Copy error</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption class="wide"><b><span class="tag done">改后</span>正文换成 <code>button.toast-copy--link</code></b>
+      照 web 自己 <code>ResultCard</code> 的现成写法（<code>:202</code>）：无边框无内边距、
+      <code>cursor:pointer</code>、hover 时标题转 <code>--brand</code>（图中就是 hover 态）。
+      <code>aria-label</code> 沿用 ② 那套 <code>Open {title}</code>。
+      原因块保持可选中 —— <code>.toast--attention</code> 的 <code>user-select:text</code> 不动，
+      选中文字不会误触跳转（和 ② 一样，那边已经这么跑）。</figcaption>
+  </figure>
+</div>
+
+<h2>不动的部分<span class="sub">这次只拿掉「纯跳转」那一颗，别的按钮一颗不少</span></h2>
+<div class="row">
+
+  <figure>
+    <div class="loose">
+      <div class="toast err" style="position:static;">
+        <div class="head">
+          <span class="glyph" style="color:var(--red)"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm3.6 12.1-1.5 1.5L12 13.5l-2.1 2.1-1.5-1.5L10.5 12 8.4 9.9l1.5-1.5L12 10.5l2.1-2.1 1.5 1.5L13.5 12l2.1 2.1Z"/></svg></span>
+          <span class="copy">
+            <span class="msg">Couldn't merge into main</span>
+            <span class="sub">orbit…9bab9 → main · 2 files</span>
+          </span>
+          <span class="chev">›</span>
+          <span class="x">✕</span>
+        </div>
+        <div style="font:12px/17px ui-monospace,Menlo,monospace;color:rgba(60,60,67,.75);
+                    background:rgba(120,120,128,.10);border-radius:10px;padding:7px 10px;margin-left:34px">
+          CONFLICT (content): Merge conflict in Views/ToastHost.swift — merge aborted, your branch is unchanged.
+        </div>
+        <div class="acts"><span class="btn pri">Resolve in session</span><span class="btn sec">Copy error</span></div>
+      </div>
+    </div>
+    <figcaption class="wide"><b><span class="tag keep">保留</span>合并冲突卡</b>
+      <code>Resolve in session</code> <b>不删</b>：它做的不只是跳转，还会把冲突交给会话处理
+      （<code>resolveToastConflict</code>）。<code>Copy error</code> 同理。正文同样可点，
+      但点它只是进会话 —— 和按钮并存没有歧义。</figcaption>
+  </figure>
+
+  <figure>
+    <div class="loose">
+      <div class="toast err" style="position:static;">
+        <div class="head">
+          <span class="glyph" style="color:var(--red)"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm3.6 12.1-1.5 1.5L12 13.5l-2.1 2.1-1.5-1.5L10.5 12 8.4 9.9l1.5-1.5L12 10.5l2.1-2.1 1.5 1.5L13.5 12l2.1 2.1Z"/></svg></span>
+          <span class="copy">
+            <span class="msg">Couldn't save the schedule</span>
+            <span class="sub">Fix login redirect</span>
+          </span>
+          <span class="x">✕</span>
+        </div>
+        <div style="font:12px/17px ui-monospace,Menlo,monospace;color:rgba(60,60,67,.75);
+                    background:rgba(120,120,128,.10);border-radius:10px;padding:7px 10px;margin-left:34px">
+          revision 12 is stale
+        </div>
+        <div class="acts"><span class="btn sec">Copy error</span></div>
+      </div>
+    </div>
+    <figcaption class="wide"><b><span class="tag keep">不变</span>没有会话的失败卡</b>
+      <code>opens == false</code> 时正文<b>不是</b>按钮、也没有 <code>›</code> —— 和今天完全一样，
+      只剩 <code>Copy error</code> 与 <code>✕</code>。三端都靠 <code>toast.sessionID</code> 判断。</figcaption>
+  </figure>
+</div>
+
+<div class="note">
+  <h3>落地清单（2026-10-06 已按 B 实现，会话分支 <code>orbit/review-review-f84e13</code>）</h3>
+  <ul>
+    <li><code>Sources/OrbitApp/Views/ToastHost.swift</code>：<code>attentionCard</code> 里
+      <code>mergeConflict</code> 分支保留，删掉 <code>openToastSession</code> 那颗按钮；
+      <code>ToastCopy</code> 按 <code>resultCard</code> 的做法包成 Button（<code>opens</code> 时才包）+
+      <code>.accessibilityHint</code>；动作行只在 <code>mergeConflict != nil || detail != nil</code> 时出现。</li>
+    <li><code>src/web/src/components/ToastViewport.tsx</code>：<code>AttentionCard</code> 的正文换
+      <code>button.toast-copy--link</code>，动作行去掉「Open session」，保留 action / Copy error。</li>
+    <li><code>docs/mocks/toast-system/04-rules.html:101</code>：规则原文把 <code>Review</code> 列为 ③ 主按钮的示例文案，
+      要改成「③ 的主按钮只写不跳转的动作（Resolve in session、Retry）；只是进会话的入口由正文承担」。</li>
+    <li>没有测试锁这条文案（<code>ToastFeedTests</code> 只测 feed 规则），删掉是安全的。</li>
+    <li>折叠胶囊的点击<b>仍然是「展开」不是「进入」</b>（<code>ToastFeed.unfold</code>），这一版不动；
+      手机上因此仍是「胶囊 → 卡片 → 进会话」两下。</li>
+  </ul>
+</div>
+</body>
+</html>

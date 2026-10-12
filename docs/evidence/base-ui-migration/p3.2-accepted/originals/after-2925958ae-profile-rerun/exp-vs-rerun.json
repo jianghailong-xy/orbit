@@ -1,0 +1,1036 @@
+{
+ "summary": {
+  "dirA": "/var/tmp/p32acc/expected-current",
+  "dirB": "/var/tmp/p32acc/runs/after-2925958ae-profile-rerun/snapshots",
+  "total": 252,
+  "missing": 250,
+  "same": 2,
+  "noise": 0,
+  "changed": [],
+  "p0ComparatorFails": []
+ },
+ "rows": [
+  {
+   "file": "chromium-dark-desktop/breakpoint-599-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-599-share.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-601-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-601-share.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-639-graph.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-639-projects.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-641-graph.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-641-projects.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-959-session.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-959-wiki.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-961-session.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-961-wiki.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/notification-error.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/profile-validation.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/profile.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/project-graph-fullscreen.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/project-graph.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/project-overview.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/projects-error.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/projects-list.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/projects-loading.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/projects-search-empty.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/session-attachment-menu.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/session-attachment-staged.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/session-composer-focus.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/session-idle.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/session-streaming.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/settings-saved.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/settings.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/task-action-focus.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/task-action-hover.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/task-action-menu.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/task-detail.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/task-public-share.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/task-share-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/wiki-home.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-desktop/wiki-new-entry.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/notification-error.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/profile-validation.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/profile.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/project-graph-fullscreen.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/project-graph.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/project-overview.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/projects-error.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/projects-list.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/projects-loading.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/projects-search-empty.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/session-attachment-menu.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/session-attachment-staged.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/session-composer-focus.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/session-idle.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/session-streaming.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/settings-saved.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/settings.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/task-action-focus.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/task-action-hover.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/task-action-menu.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/task-detail.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/task-public-share.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/task-share-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/wiki-contents.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/wiki-home.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-dark-phone/wiki-new-entry.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-599-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-599-share.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-601-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-601-share.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-639-graph.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-639-projects.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-641-graph.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-641-projects.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-959-session.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-959-wiki.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-961-session.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-961-wiki.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/notification-error.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/profile-validation.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/profile.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/project-graph-fullscreen.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/project-graph.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/project-overview.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/projects-error.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/projects-list.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/projects-loading.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/projects-search-empty.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/session-attachment-menu.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/session-attachment-staged.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/session-composer-focus.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/session-idle.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/session-streaming.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/settings-saved.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/settings.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/task-action-focus.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/task-action-hover.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/task-action-menu.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/task-detail.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/task-public-share.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/task-share-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/wiki-home.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-desktop/wiki-new-entry.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/notification-error.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/profile-validation.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/profile.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/project-graph-fullscreen.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/project-graph.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/project-overview.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/projects-error.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/projects-list.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/projects-loading.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/projects-search-empty.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/session-attachment-menu.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/session-attachment-staged.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/session-composer-focus.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/session-idle.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/session-streaming.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/settings-saved.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/settings.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/task-action-focus.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/task-action-hover.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/task-action-menu.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/task-detail.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/task-public-share.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/task-share-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/wiki-contents.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/wiki-home.png",
+   "missing": true
+  },
+  {
+   "file": "chromium-light-phone/wiki-new-entry.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-599-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-599-share.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-601-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-601-share.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-639-graph.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-639-projects.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-641-graph.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-641-projects.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-959-session.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-959-wiki.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-961-session.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-961-wiki.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/notification-error.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/profile-validation.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/profile.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/project-graph-fullscreen.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/project-graph.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/project-overview.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/projects-error.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/projects-list.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/projects-loading.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/projects-search-empty.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/session-attachment-menu.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/session-attachment-staged.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/session-composer-focus.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/session-idle.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/session-streaming.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/settings-saved.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/settings.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-focus.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-hover.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-menu.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/task-detail.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/task-public-share.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/task-share-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/wiki-home.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-desktop/wiki-new-entry.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/notification-error.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/profile-validation.png",
+   "sha256A": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498",
+   "sha256B": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/profile.png",
+   "sha256A": "c8a40a2b778c4dd00909bcbafc3230fc6e5847b9daeb032431774cb03ef68cb8",
+   "sha256B": "c8a40a2b778c4dd00909bcbafc3230fc6e5847b9daeb032431774cb03ef68cb8",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/project-graph-fullscreen.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/project-graph.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/project-overview.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/projects-error.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/projects-list.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/projects-loading.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/projects-search-empty.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/session-attachment-menu.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/session-attachment-staged.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/session-composer-focus.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/session-idle.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/session-streaming.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/settings-saved.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/settings.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/task-action-focus.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/task-action-hover.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/task-action-menu.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/task-detail.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/task-public-share.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/task-share-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/wiki-contents.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/wiki-home.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-dark-phone/wiki-new-entry.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-599-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-599-share.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-601-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-601-share.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-639-graph.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-639-projects.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-641-graph.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-641-projects.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-959-session.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-959-wiki.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-961-session.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-961-wiki.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/notification-error.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/profile-validation.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/profile.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/project-graph-fullscreen.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/project-graph.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/project-overview.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/projects-error.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/projects-list.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/projects-loading.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/projects-search-empty.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/session-attachment-menu.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/session-attachment-staged.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/session-composer-focus.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/session-idle.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/session-streaming.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/settings-saved.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/settings.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/task-action-focus.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/task-action-hover.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/task-action-menu.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/task-detail.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/task-public-share.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/task-share-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/wiki-home.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-desktop/wiki-new-entry.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/notification-error.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/profile-validation.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/profile.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/project-graph-fullscreen.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/project-graph.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/project-overview.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/projects-error.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/projects-list.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/projects-loading.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/projects-search-empty.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/session-attachment-menu.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/session-attachment-staged.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/session-composer-focus.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/session-idle.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/session-streaming.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/settings-saved.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/settings.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/task-action-focus.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/task-action-hover.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/task-action-menu.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/task-detail.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/task-public-share.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/task-share-dialog.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/wiki-contents.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/wiki-home.png",
+   "missing": true
+  },
+  {
+   "file": "webkit-light-phone/wiki-new-entry.png",
+   "missing": true
+  }
+ ]
+}

@@ -1,0 +1,4610 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/composer.config.mjs",
+   "--project=chromium-light-desktop",
+   "--project=chromium-light-phone",
+   "--project=chromium-dark-desktop",
+   "--project=chromium-dark-phone"
+  ],
+  "configFile": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "composer*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "composer*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "composer*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "composer*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "composer*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "composer*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "composer*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "composer*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/.composer-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4178 --strictPort",
+   "cwd": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/",
+   "url": "http://127.0.0.1:4178",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "composer-cost.browser.mjs",
+   "file": "composer-cost.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "records per-keystroke cost of the session field with short and long drafts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9279,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:57:24.127Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keystroke-cost",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "62251a107c9c000e35c1-042a2922b6eb98c303af",
+     "file": "composer-cost.browser.mjs",
+     "line": 10,
+     "column": 1
+    },
+    {
+     "title": "records per-keystroke cost of the session field with short and long drafts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Cost is sampled on the P0 reference project only.",
+         "location": {
+          "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer-cost.browser.mjs",
+          "line": 11,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 33,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:50.007Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Cost is sampled on the P0 reference project only.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer-cost.browser.mjs",
+            "line": 11,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "62251a107c9c000e35c1-9c4c9670ff2b89e9fe40",
+     "file": "composer-cost.browser.mjs",
+     "line": 10,
+     "column": 1
+    },
+    {
+     "title": "records per-keystroke cost of the session field with short and long drafts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Cost is sampled on the P0 reference project only.",
+         "location": {
+          "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer-cost.browser.mjs",
+          "line": 11,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 33,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:44.792Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Cost is sampled on the P0 reference project only.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer-cost.browser.mjs",
+            "line": 11,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "62251a107c9c000e35c1-39444a4c9f703f8efb96",
+     "file": "composer-cost.browser.mjs",
+     "line": 10,
+     "column": 1
+    },
+    {
+     "title": "records per-keystroke cost of the session field with short and long drafts",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "skip",
+         "description": "Cost is sampled on the P0 reference project only.",
+         "location": {
+          "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer-cost.browser.mjs",
+          "line": 11,
+          "column": 8
+         }
+        }
+       ],
+       "expectedStatus": "skipped",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "skipped",
+         "duration": 33,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:00.493Z",
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Cost is sampled on the P0 reference project only.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer-cost.browser.mjs",
+            "line": 11,
+            "column": 8
+           }
+          }
+         ],
+         "attachments": []
+        }
+       ],
+       "status": "skipped"
+      }
+     ],
+     "id": "62251a107c9c000e35c1-e556d135aaa9eca6b875",
+     "file": "composer-cost.browser.mjs",
+     "line": 10,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "composer-input.browser.mjs",
+   "file": "composer-input.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2767,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:57:33.554Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-keys-and-ime",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-76a81b07d9ebd31e738c",
+     "file": "composer-input.browser.mjs",
+     "line": 85,
+     "column": 1
+    },
+    {
+     "title": "comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2561,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:57:36.326Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-keys-and-ime",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-1de2813efb80fea2f86e",
+     "file": "composer-input.browser.mjs",
+     "line": 114,
+     "column": 1
+    },
+    {
+     "title": "session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4292,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:57:38.892Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-menus",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-d72b69eb2c19035e713b",
+     "file": "composer-input.browser.mjs",
+     "line": 133,
+     "column": 1
+    },
+    {
+     "title": "comment @-mention restores focus and the caret through the native ref",
+     "ok": true,
+     "tags": [
+      "-mention"
+     ],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2525,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:57:43.192Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-mention-caret",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-5ebffa2cec0ea386ee53",
+     "file": "composer-input.browser.mjs",
+     "line": 187,
+     "column": 1
+    },
+    {
+     "title": "paste text and files, the 50,000-character cap and history recall",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3047,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:57:45.722Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-paste-history",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-a350e47618eb1afe89ac",
+     "file": "composer-input.browser.mjs",
+     "line": 216,
+     "column": 1
+    },
+    {
+     "title": "session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2654,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:50.132Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-keys-and-ime",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-d51d77daed3e90214297",
+     "file": "composer-input.browser.mjs",
+     "line": 85,
+     "column": 1
+    },
+    {
+     "title": "comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2009,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:52.790Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-keys-and-ime",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-a22af9e4ac7297312d35",
+     "file": "composer-input.browser.mjs",
+     "line": 114,
+     "column": 1
+    },
+    {
+     "title": "session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3461,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:54.805Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-menus",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-f3a4705f47c47cf4bbc4",
+     "file": "composer-input.browser.mjs",
+     "line": 133,
+     "column": 1
+    },
+    {
+     "title": "comment @-mention restores focus and the caret through the native ref",
+     "ok": true,
+     "tags": [
+      "-mention"
+     ],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3108,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:58.273Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-mention-caret",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-3de2dab134ba84820dbf",
+     "file": "composer-input.browser.mjs",
+     "line": 187,
+     "column": 1
+    },
+    {
+     "title": "paste text and files, the 50,000-character cap and history recall",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3064,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:01.387Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-paste-history",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-e58b9adb7ff11a4a8dfb",
+     "file": "composer-input.browser.mjs",
+     "line": 216,
+     "column": 1
+    },
+    {
+     "title": "session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2757,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:44.893Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-keys-and-ime",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-9eb2eaab458e9a4d15ea",
+     "file": "composer-input.browser.mjs",
+     "line": 85,
+     "column": 1
+    },
+    {
+     "title": "comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2425,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:47.655Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-keys-and-ime",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-a1cb80c44b5c2a1dce3c",
+     "file": "composer-input.browser.mjs",
+     "line": 114,
+     "column": 1
+    },
+    {
+     "title": "session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3526,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:50.085Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-menus",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-d7adbdcdffb8fd03f166",
+     "file": "composer-input.browser.mjs",
+     "line": 133,
+     "column": 1
+    },
+    {
+     "title": "comment @-mention restores focus and the caret through the native ref",
+     "ok": true,
+     "tags": [
+      "-mention"
+     ],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2460,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:53.619Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-mention-caret",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-a08ba5eb0a4f58635058",
+     "file": "composer-input.browser.mjs",
+     "line": 187,
+     "column": 1
+    },
+    {
+     "title": "paste text and files, the 50,000-character cap and history recall",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3063,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:56.085Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-paste-history",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-45789aa43fe416f886c1",
+     "file": "composer-input.browser.mjs",
+     "line": 216,
+     "column": 1
+    },
+    {
+     "title": "session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2627,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:00.603Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-keys-and-ime",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-8314e2ca3fd8c861deca",
+     "file": "composer-input.browser.mjs",
+     "line": 85,
+     "column": 1
+    },
+    {
+     "title": "comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2125,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:03.235Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-keys-and-ime",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-e7388420146c2ff52594",
+     "file": "composer-input.browser.mjs",
+     "line": 114,
+     "column": 1
+    },
+    {
+     "title": "session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3578,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:05.366Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-menus",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-101a3e8a41c4abe5a064",
+     "file": "composer-input.browser.mjs",
+     "line": 133,
+     "column": 1
+    },
+    {
+     "title": "comment @-mention restores focus and the caret through the native ref",
+     "ok": true,
+     "tags": [
+      "-mention"
+     ],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3309,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:08.951Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-mention-caret",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-77b062ec05c6938a083b",
+     "file": "composer-input.browser.mjs",
+     "line": 187,
+     "column": 1
+    },
+    {
+     "title": "paste text and files, the 50,000-character cap and history recall",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3030,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:12.265Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-paste-history",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "2ac74594518b961fd2e9-581bef7e2d3543c098d7",
+     "file": "composer-input.browser.mjs",
+     "line": 216,
+     "column": 1
+    }
+   ]
+  },
+  {
+   "title": "composer.browser.mjs",
+   "file": "composer.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "session composer grows, caps, scrolls and draws exactly like the AntD field",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7546,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:57:48.783Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-one-line-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-one-line-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-scrolled-to-end-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-scrolled-to-end-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-shell-mode-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-shell-mode-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-cleared-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-cleared-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-before-edit-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-before-edit-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-after-edit-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-after-edit-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-60173b9f3de0c7c3318e",
+     "file": "composer.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "session composer with staged attachments and while disabled matches the AntD field",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4292,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:57:56.335Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-attachments-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "session-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-disabled-text-Read-20only-20draft-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-1a257db1bc0126c7a276",
+     "file": "composer.browser.mjs",
+     "line": 134,
+     "column": 1
+    },
+    {
+     "title": "task comment field sizes from its placeholder, grows to four rows and keeps outlined states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7860,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:00.633Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-hover-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-hover-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-focused-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-focused-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-one-line-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-one-line-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-capped-scrolled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-capped-scrolled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-cleared-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-cleared-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "comment-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-disabled-text-Read-20only-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-84ba9b48b6f9ee7c3179",
+     "file": "composer.browser.mjs",
+     "line": 153,
+     "column": 1
+    },
+    {
+     "title": "the borderless variant on its own matches AntD at rest, focused, hovered and disabled",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4709,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:08.499Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plain-rest-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-rest-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-keyboard-focus-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-keyboard-focus-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-focus-and-hover-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-focus-and-hover-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-typed-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-typed-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "plain-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-disabled-text-Disabled-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-bb019054e851e458baf7",
+     "file": "composer.browser.mjs",
+     "line": 184,
+     "column": 1
+    },
+    {
+     "title": "manual height: drag the handle, clamp it, and double-click back to auto-size",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5018,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:13.213Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-capped-handle-shown-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-handle-shown-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-dragged-taller-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-dragged-taller-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-clamped-minimum-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-clamped-minimum-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-manual-height-kept-for-short-text-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-manual-height-kept-for-short-text-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-reset-to-auto-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-reset-to-auto-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-921f13c76fcc052fcc0f",
+     "file": "composer.browser.mjs",
+     "line": 204,
+     "column": 1
+    },
+    {
+     "title": "the mirror paints its glyphs exactly where the field lays out its own text",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4607,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:58:18.236Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "probe-wrapping-ant-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-ant-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-ant-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-ant-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-orbit-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-orbit-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-orbit-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-orbit-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "mirror-probe",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-a0998e93fc4b3746f330",
+     "file": "composer.browser.mjs",
+     "line": 262,
+     "column": 1
+    },
+    {
+     "title": "session composer grows, caps, scrolls and draws exactly like the AntD field",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7479,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:04.465Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-one-line-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-one-line-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-scrolled-to-end-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-scrolled-to-end-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-shell-mode-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-shell-mode-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-cleared-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-cleared-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-before-edit-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-before-edit-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-after-edit-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-after-edit-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-70fb73f77e580c6b324b",
+     "file": "composer.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "session composer with staged attachments and while disabled matches the AntD field",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4446,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:11.949Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-attachments-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "session-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-disabled-text-Read-20only-20draft-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-c7547ce3cc993100e0e0",
+     "file": "composer.browser.mjs",
+     "line": 134,
+     "column": 1
+    },
+    {
+     "title": "task comment field sizes from its placeholder, grows to four rows and keeps outlined states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7391,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:16.400Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-focused-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-focused-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-one-line-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-one-line-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-capped-scrolled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-capped-scrolled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-cleared-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-cleared-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "comment-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-disabled-text-Read-20only-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-21b120b55f804dd1c9dd",
+     "file": "composer.browser.mjs",
+     "line": 153,
+     "column": 1
+    },
+    {
+     "title": "the borderless variant on its own matches AntD at rest, focused, hovered and disabled",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4926,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:23.796Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plain-rest-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-rest-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-keyboard-focus-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-keyboard-focus-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-focus-and-hover-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-focus-and-hover-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-typed-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-typed-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "plain-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-disabled-text-Disabled-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-dd13aa75363df364ed57",
+     "file": "composer.browser.mjs",
+     "line": 184,
+     "column": 1
+    },
+    {
+     "title": "manual height: drag the handle, clamp it, and double-click back to auto-size",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4995,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:28.726Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-capped-handle-shown-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-handle-shown-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-dragged-taller-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-dragged-taller-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-clamped-minimum-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-clamped-minimum-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-manual-height-kept-for-short-text-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-manual-height-kept-for-short-text-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-reset-to-auto-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-reset-to-auto-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-0629bad1a10e01671748",
+     "file": "composer.browser.mjs",
+     "line": 204,
+     "column": 1
+    },
+    {
+     "title": "the mirror paints its glyphs exactly where the field lays out its own text",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4515,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:33.726Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "probe-wrapping-ant-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-ant-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-ant-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-ant-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-orbit-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-orbit-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-orbit-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-orbit-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "mirror-probe",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-d55d9bf71ca471996f2d",
+     "file": "composer.browser.mjs",
+     "line": 262,
+     "column": 1
+    },
+    {
+     "title": "session composer grows, caps, scrolls and draws exactly like the AntD field",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7550,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T07:59:59.160Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-one-line-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-one-line-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-scrolled-to-end-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-scrolled-to-end-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-shell-mode-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-shell-mode-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-cleared-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-cleared-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-before-edit-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-before-edit-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-after-edit-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-after-edit-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-af82b3f8ad9e6e5c3fd4",
+     "file": "composer.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "session composer with staged attachments and while disabled matches the AntD field",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4623,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:00:06.716Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-attachments-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "session-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-disabled-text-Read-20only-20draft-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-1e870f6367b559a13336",
+     "file": "composer.browser.mjs",
+     "line": 134,
+     "column": 1
+    },
+    {
+     "title": "task comment field sizes from its placeholder, grows to four rows and keeps outlined states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8024,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:00:11.344Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-hover-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-hover-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-focused-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-focused-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-one-line-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-one-line-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-capped-scrolled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-capped-scrolled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-cleared-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-cleared-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "comment-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-disabled-text-Read-20only-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-c6f01566959a9ec26b50",
+     "file": "composer.browser.mjs",
+     "line": 153,
+     "column": 1
+    },
+    {
+     "title": "the borderless variant on its own matches AntD at rest, focused, hovered and disabled",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4676,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:00:19.374Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plain-rest-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-rest-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-keyboard-focus-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-keyboard-focus-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-focus-and-hover-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-focus-and-hover-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-typed-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-typed-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "plain-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-disabled-text-Disabled-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-052f1fde690b4465b11f",
+     "file": "composer.browser.mjs",
+     "line": 184,
+     "column": 1
+    },
+    {
+     "title": "manual height: drag the handle, clamp it, and double-click back to auto-size",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5305,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:00:24.057Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-capped-handle-shown-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-handle-shown-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-dragged-taller-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-dragged-taller-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-clamped-minimum-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-clamped-minimum-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-manual-height-kept-for-short-text-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-manual-height-kept-for-short-text-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-reset-to-auto-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-reset-to-auto-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-7012766f9aeff01b9e94",
+     "file": "composer.browser.mjs",
+     "line": 204,
+     "column": 1
+    },
+    {
+     "title": "the mirror paints its glyphs exactly where the field lays out its own text",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4726,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:00:29.366Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "probe-wrapping-ant-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-ant-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-ant-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-ant-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-orbit-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-orbit-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-orbit-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-orbit-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "mirror-probe",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-83b61a5be72b33b3c9ee",
+     "file": "composer.browser.mjs",
+     "line": 262,
+     "column": 1
+    },
+    {
+     "title": "session composer grows, caps, scrolls and draws exactly like the AntD field",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 8136,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:15.309Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-one-line-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-one-line-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-scrolled-to-end-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-scrolled-to-end-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-shell-mode-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-shell-mode-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-cleared-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-cleared-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-before-edit-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-before-edit-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-after-edit-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-long-placeholder-after-edit-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-69bd5b67f403d6aabd56",
+     "file": "composer.browser.mjs",
+     "line": 71,
+     "column": 1
+    },
+    {
+     "title": "session composer with staged attachments and while disabled matches the AntD field",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4589,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:23.450Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-attachments-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-attachments-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "session-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-disabled-text-Read-20only-20draft-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-abca6023537f10c814c9",
+     "file": "composer.browser.mjs",
+     "line": 134,
+     "column": 1
+    },
+    {
+     "title": "task comment field sizes from its placeholder, grows to four rows and keeps outlined states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 7458,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:28.044Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "comment-idle-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-idle-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-focused-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-focused-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-one-line-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-one-line-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-two-lines-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-two-lines-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-capped-scrolled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-capped-scrolled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-cleared-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-cleared-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "comment-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "comment-disabled-text-Read-20only-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-bafd2fa6cbd1dee9cd08",
+     "file": "composer.browser.mjs",
+     "line": 153,
+     "column": 1
+    },
+    {
+     "title": "the borderless variant on its own matches AntD at rest, focused, hovered and disabled",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4825,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:35.507Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "plain-rest-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-rest-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-keyboard-focus-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-keyboard-focus-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-focus-and-hover-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-focus-and-hover-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-typed-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-typed-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-states",
+           "contentType": "application/json"
+          },
+          {
+           "name": "plain-disabled-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-disabled-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plain-disabled-text-Disabled-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-ec8e9753a652248bfe31",
+     "file": "composer.browser.mjs",
+     "line": 184,
+     "column": 1
+    },
+    {
+     "title": "manual height: drag the handle, clamp it, and double-click back to auto-size",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4903,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:40.338Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "session-capped-handle-shown-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-capped-handle-shown-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-dragged-taller-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-dragged-taller-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-clamped-minimum-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-clamped-minimum-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-manual-height-kept-for-short-text-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-manual-height-kept-for-short-text-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-reset-to-auto-ant",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-reset-to-auto-orbit",
+           "contentType": "image/png"
+          },
+          {
+           "name": "session-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-66bf303b34e05207daab",
+     "file": "composer.browser.mjs",
+     "line": 204,
+     "column": 1
+    },
+    {
+     "title": "the mirror paints its glyphs exactly where the field lays out its own text",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4424,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-06T08:01:45.245Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "probe-wrapping-ant-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-ant-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-ant-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-ant-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-orbit-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-wrapping-orbit-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-orbit-field",
+           "contentType": "image/png"
+          },
+          {
+           "name": "probe-chips-orbit-mirror",
+           "contentType": "image/png"
+          },
+          {
+           "name": "mirror-probe",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "4627f4bf9443b89a6024-6b3ef70592eb7ed00920",
+     "file": "composer.browser.mjs",
+     "line": 262,
+     "column": 1
+    }
+   ],
+   "suites": [
+    {
+     "title": "existing breakpoints",
+     "file": "composer.browser.mjs",
+     "line": 318,
+     "column": 6,
+     "specs": [
+      {
+       "title": "fields match at 599px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5353,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:58:22.848Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "session-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-width-360-states",
+             "contentType": "application/json"
+            },
+            {
+             "name": "comment-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-width-360-states",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-ff31c88f9b95e0dfb01c",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 601px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5292,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:58:28.207Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "session-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-width-360-states",
+             "contentType": "application/json"
+            },
+            {
+             "name": "comment-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-width-360-states",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-de900885557b6e581ea7",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 959px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5229,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:58:33.505Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "session-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-width-360-states",
+             "contentType": "application/json"
+            },
+            {
+             "name": "comment-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-width-360-states",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-a8b97ebe339ee709b8b3",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 961px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4885,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:58:38.739Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "session-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-width-360-states",
+             "contentType": "application/json"
+            },
+            {
+             "name": "comment-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-width-360-states",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-56fa11c8d09beb0c7f9e",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 599px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+            "line": 319,
+            "column": 8
+           }
+          }
+         ],
+         "expectedStatus": "skipped",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "skipped",
+           "duration": 0,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:59:38.246Z",
+           "annotations": [
+            {
+             "type": "skip",
+             "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+             "location": {
+              "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+              "line": 319,
+              "column": 8
+             }
+            }
+           ],
+           "attachments": []
+          }
+         ],
+         "status": "skipped"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-609fa6bd5a436e8dc990",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 601px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+            "line": 319,
+            "column": 8
+           }
+          }
+         ],
+         "expectedStatus": "skipped",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "skipped",
+           "duration": 0,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:59:38.250Z",
+           "annotations": [
+            {
+             "type": "skip",
+             "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+             "location": {
+              "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+              "line": 319,
+              "column": 8
+             }
+            }
+           ],
+           "attachments": []
+          }
+         ],
+         "status": "skipped"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-55f8d38566d49ba544c4",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 959px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+            "line": 319,
+            "column": 8
+           }
+          }
+         ],
+         "expectedStatus": "skipped",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "skipped",
+           "duration": 0,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:59:38.255Z",
+           "annotations": [
+            {
+             "type": "skip",
+             "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+             "location": {
+              "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+              "line": 319,
+              "column": 8
+             }
+            }
+           ],
+           "attachments": []
+          }
+         ],
+         "status": "skipped"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-52e8eab0dbd8fb633ce0",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 961px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+            "line": 319,
+            "column": 8
+           }
+          }
+         ],
+         "expectedStatus": "skipped",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "skipped",
+           "duration": 0,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:59:38.258Z",
+           "annotations": [
+            {
+             "type": "skip",
+             "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+             "location": {
+              "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+              "line": 319,
+              "column": 8
+             }
+            }
+           ],
+           "attachments": []
+          }
+         ],
+         "status": "skipped"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-d8539e5eae7d0298c326",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 599px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5044,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:00:34.098Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "session-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-width-360-states",
+             "contentType": "application/json"
+            },
+            {
+             "name": "comment-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-width-360-states",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-83a744efdb56e61fe732",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 601px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4862,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:00:39.151Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "session-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-width-360-states",
+             "contentType": "application/json"
+            },
+            {
+             "name": "comment-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-width-360-states",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-4a500790f2970adb8d79",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 959px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5145,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:00:44.018Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "session-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-width-360-states",
+             "contentType": "application/json"
+            },
+            {
+             "name": "comment-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-width-360-states",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-ba30cfdf9135c5f2d6df",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 961px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4974,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:00:49.169Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "session-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "session-width-360-states",
+             "contentType": "application/json"
+            },
+            {
+             "name": "comment-idle-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-idle-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-ant",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-two-lines-orbit",
+             "contentType": "image/png"
+            },
+            {
+             "name": "comment-width-360-states",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-21f2f6a3ead5e37d0ca9",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 599px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+            "line": 319,
+            "column": 8
+           }
+          }
+         ],
+         "expectedStatus": "skipped",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "skipped",
+           "duration": 0,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:01:49.674Z",
+           "annotations": [
+            {
+             "type": "skip",
+             "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+             "location": {
+              "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+              "line": 319,
+              "column": 8
+             }
+            }
+           ],
+           "attachments": []
+          }
+         ],
+         "status": "skipped"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-8112b3dbfc8b4aa1fc08",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 601px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+            "line": 319,
+            "column": 8
+           }
+          }
+         ],
+         "expectedStatus": "skipped",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "skipped",
+           "duration": 0,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:01:49.679Z",
+           "annotations": [
+            {
+             "type": "skip",
+             "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+             "location": {
+              "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+              "line": 319,
+              "column": 8
+             }
+            }
+           ],
+           "attachments": []
+          }
+         ],
+         "status": "skipped"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-c7be355fd6520cc0ff79",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 959px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+            "line": 319,
+            "column": 8
+           }
+          }
+         ],
+         "expectedStatus": "skipped",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "skipped",
+           "duration": 0,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:01:49.685Z",
+           "annotations": [
+            {
+             "type": "skip",
+             "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+             "location": {
+              "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+              "line": 319,
+              "column": 8
+             }
+            }
+           ],
+           "attachments": []
+          }
+         ],
+         "status": "skipped"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-a4aa61e83fa1bc182b80",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      },
+      {
+       "title": "fields match at 961px",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [
+          {
+           "type": "skip",
+           "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+           "location": {
+            "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+            "line": 319,
+            "column": 8
+           }
+          }
+         ],
+         "expectedStatus": "skipped",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "skipped",
+           "duration": 0,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:01:49.690Z",
+           "annotations": [
+            {
+             "type": "skip",
+             "description": "Breakpoint widths use the desktop pointer, as P0 breakpoints.browser.mjs does.",
+             "location": {
+              "file": "/root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/composer.browser.mjs",
+              "line": 319,
+              "column": 8
+             }
+            }
+           ],
+           "attachments": []
+          }
+         ],
+         "status": "skipped"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-1ded84fd43893bdcf677",
+       "file": "composer.browser.mjs",
+       "line": 321,
+       "column": 5
+      }
+     ]
+    },
+    {
+     "title": "normal motion",
+     "file": "composer.browser.mjs",
+     "line": 337,
+     "column": 6,
+     "specs": [
+      {
+       "title": "auto-size transitions match AntD; reduced motion drops them as other Orbit controls do",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4646,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:58:43.629Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "normal-motion",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-9f1d506e3873f9adde2d",
+       "file": "composer.browser.mjs",
+       "line": 339,
+       "column": 3
+      },
+      {
+       "title": "auto-size transitions match AntD; reduced motion drops them as other Orbit controls do",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4822,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T07:59:38.261Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "normal-motion",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-f3f63f623717e82560e3",
+       "file": "composer.browser.mjs",
+       "line": 339,
+       "column": 3
+      },
+      {
+       "title": "auto-size transitions match AntD; reduced motion drops them as other Orbit controls do",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 4698,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:00:54.149Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "normal-motion",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-152d53bab2ed10841bc1",
+       "file": "composer.browser.mjs",
+       "line": 339,
+       "column": 3
+      },
+      {
+       "title": "auto-size transitions match AntD; reduced motion drops them as other Orbit controls do",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5066,
+           "errors": [],
+           "stdout": [],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-06T08:01:49.694Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "normal-motion",
+             "contentType": "application/json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "4627f4bf9443b89a6024-03a25a9f0f62cc97b467",
+       "file": "composer.browser.mjs",
+       "line": 339,
+       "column": 3
+      }
+     ],
+     "suites": [
+      {
+       "title": "reduced motion",
+       "file": "composer.browser.mjs",
+       "line": 377,
+       "column": 8,
+       "specs": [
+        {
+         "title": "records the one intended difference: Orbit text fields stop transitioning",
+         "ok": true,
+         "tags": [],
+         "tests": [
+          {
+           "timeout": 90000,
+           "annotations": [],
+           "expectedStatus": "passed",
+           "projectId": "chromium-light-desktop",
+           "projectName": "chromium-light-desktop",
+           "results": [
+            {
+             "workerIndex": 0,
+             "parallelIndex": 0,
+             "status": "passed",
+             "duration": 1387,
+             "errors": [],
+             "stdout": [],
+             "stderr": [],
+             "retry": 0,
+             "startTime": "2026-10-06T07:58:48.281Z",
+             "annotations": [],
+             "attachments": [
+              {
+               "name": "reduced-motion",
+               "contentType": "application/json"
+              }
+             ]
+            }
+           ],
+           "status": "expected"
+          }
+         ],
+         "id": "4627f4bf9443b89a6024-0349106550588b4bac3e",
+         "file": "composer.browser.mjs",
+         "line": 379,
+         "column": 5
+        },
+        {
+         "title": "records the one intended difference: Orbit text fields stop transitioning",
+         "ok": true,
+         "tags": [],
+         "tests": [
+          {
+           "timeout": 90000,
+           "annotations": [],
+           "expectedStatus": "passed",
+           "projectId": "chromium-light-phone",
+           "projectName": "chromium-light-phone",
+           "results": [
+            {
+             "workerIndex": 1,
+             "parallelIndex": 0,
+             "status": "passed",
+             "duration": 1417,
+             "errors": [],
+             "stdout": [],
+             "stderr": [],
+             "retry": 0,
+             "startTime": "2026-10-06T07:59:43.087Z",
+             "annotations": [],
+             "attachments": [
+              {
+               "name": "reduced-motion",
+               "contentType": "application/json"
+              }
+             ]
+            }
+           ],
+           "status": "expected"
+          }
+         ],
+         "id": "4627f4bf9443b89a6024-a58ac014e6e8e77eca90",
+         "file": "composer.browser.mjs",
+         "line": 379,
+         "column": 5
+        },
+        {
+         "title": "records the one intended difference: Orbit text fields stop transitioning",
+         "ok": true,
+         "tags": [],
+         "tests": [
+          {
+           "timeout": 90000,
+           "annotations": [],
+           "expectedStatus": "passed",
+           "projectId": "chromium-dark-desktop",
+           "projectName": "chromium-dark-desktop",
+           "results": [
+            {
+             "workerIndex": 2,
+             "parallelIndex": 0,
+             "status": "passed",
+             "duration": 1339,
+             "errors": [],
+             "stdout": [],
+             "stderr": [],
+             "retry": 0,
+             "startTime": "2026-10-06T08:00:58.852Z",
+             "annotations": [],
+             "attachments": [
+              {
+               "name": "reduced-motion",
+               "contentType": "application/json"
+              }
+             ]
+            }
+           ],
+           "status": "expected"
+          }
+         ],
+         "id": "4627f4bf9443b89a6024-46ff0f7bf3ce27408788",
+         "file": "composer.browser.mjs",
+         "line": 379,
+         "column": 5
+        },
+        {
+         "title": "records the one intended difference: Orbit text fields stop transitioning",
+         "ok": true,
+         "tags": [],
+         "tests": [
+          {
+           "timeout": 90000,
+           "annotations": [],
+           "expectedStatus": "passed",
+           "projectId": "chromium-dark-phone",
+           "projectName": "chromium-dark-phone",
+           "results": [
+            {
+             "workerIndex": 3,
+             "parallelIndex": 0,
+             "status": "passed",
+             "duration": 1435,
+             "errors": [],
+             "stdout": [],
+             "stderr": [],
+             "retry": 0,
+             "startTime": "2026-10-06T08:01:54.764Z",
+             "annotations": [],
+             "attachments": [
+              {
+               "name": "reduced-motion",
+               "contentType": "application/json"
+              }
+             ]
+            }
+           ],
+           "status": "expected"
+          }
+         ],
+         "id": "4627f4bf9443b89a6024-f31a53ce55b8e6244938",
+         "file": "composer.browser.mjs",
+         "line": 379,
+         "column": 5
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-06T07:57:22.994Z",
+  "duration": 273319.49,
+  "expected": 61,
+  "skipped": 11,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

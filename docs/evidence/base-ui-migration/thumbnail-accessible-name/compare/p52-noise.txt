@@ -1,0 +1,7 @@
+p52 ref|del: identical 237, antialias 1, beyond 2; largest chromium-light-phone/p52-diagram-focus.png {"pixels": 19334, "max": 255}
+p52 ref2|del2: identical 238, antialias 0, beyond 2; largest chromium-dark-phone/p52-streaming.png {"pixels": 201784, "max": 255}
+p52 ref|ref2: identical 237, antialias 0, beyond 3; largest chromium-dark-phone/p52-streaming.png {"pixels": 201784, "max": 255}
+p52 del|del2: identical 238, antialias 1, beyond 1; largest chromium-dark-phone/p52-diagram-focus.png {"pixels": 19286, "max": 255}
+p52 ref|del2: identical 239, antialias 0, beyond 1; largest chromium-light-phone/p52-diagram-focus.png {"pixels": 19334, "max": 255}
+p52 ref2|del: identical 236, antialias 1, beyond 3; largest chromium-dark-phone/p52-streaming.png {"pixels": 201784, "max": 255}
+p52: 240 names; names with more than one image in any run: 5; drawn only by ref 3, only by del 2

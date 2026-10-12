@@ -1,0 +1,78 @@
+{
+  "report": [
+    {
+      "name": "D3-S1 Harness EXECUTABLE task: a passing acceptance command runs on the runner in the worktree and derives DONE",
+      "status": "PASS",
+      "ms": 20699
+    },
+    {
+      "name": "D3-S2 Harness EXECUTABLE task: a failing acceptance command derives FAILED with its exit code and raw output recorded",
+      "status": "PASS",
+      "ms": 1041
+    },
+    {
+      "name": "D3-S3 a person's ! shell on a Harness session is still refused, and a forged acceptance key is rejected at the door",
+      "status": "PASS",
+      "ms": 3550
+    },
+    {
+      "name": "D3-S4 Claude EXECUTABLE tasks settle DONE and FAILED unchanged, in the same shape as Harness",
+      "status": "PASS",
+      "ms": 1076
+    }
+  ],
+  "facts": {
+    "dshVersion": "0.2.0-rc.2",
+    "cliSha256": "1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f",
+    "s1": {
+      "task": "01a10f63-e827-709e-90b7-ca2a370755c5",
+      "status": "DONE",
+      "sessionStatus": "AWAITING_INPUT",
+      "acceptanceTurn": "01a10f64-3860-707f-b212-a1c134e3c5fc",
+      "toolUseId": "shell-01a10f64-3860-707f-b212-a1c134e3c5fc",
+      "output": "d3-acceptance ppid=2032406 cwd=/tmp/dsh-executable-acceptance.v9b2rS/runner/work/harness\nd3 calc ok\n",
+      "ppid": 2032406,
+      "exitCode": 0,
+      "modelRequestsForTask": 1,
+      "taskComments": 0
+    },
+    "s2": {
+      "task": "01a10f64-38ff-7418-a424-52b4b19483c9",
+      "status": "FAILED",
+      "sessionError": "acceptance command exited 1; expected 0",
+      "acceptanceTurn": "01a10f64-3ba8-722b-aa22-eb68bee8d077",
+      "toolUseId": "shell-01a10f64-3ba8-722b-aa22-eb68bee8d077",
+      "output": "d3-acceptance ppid=2032406 cwd=/tmp/dsh-executable-acceptance.v9b2rS/runner/work/harness\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import calc; assert calc.divide(6, 3) == 3; print('d3 calc ok')\n                        ^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n",
+      "ppid": 2032406,
+      "exitCode": 1,
+      "modelRequestsForTask": 1,
+      "taskComments": 0
+    },
+    "s3": {
+      "userShell": {
+        "http": 201,
+        "turnStatus": "ANSWERED",
+        "sessionError": "DeepSeek Harness sessions do not run shell turns",
+        "event": null
+      },
+      "forged": {
+        "http": 400,
+        "message": "clientTurnId must not start with \"system:task-acceptance:v1:\" — that prefix is reserved for the EXECUTABLE acceptance rounds the server queues itself (docs/task-completion-criteria.md). Choose your own key, such as a UUID."
+      }
+    },
+    "s4": {
+      "pass": {
+        "status": "DONE",
+        "sessionStatus": "AWAITING_INPUT",
+        "taskComments": 0,
+        "ppid": 2032406
+      },
+      "fail": {
+        "status": "FAILED",
+        "sessionError": "acceptance command exited 1; expected 0",
+        "taskComments": 0,
+        "ppid": 2032406
+      }
+    }
+  }
+}

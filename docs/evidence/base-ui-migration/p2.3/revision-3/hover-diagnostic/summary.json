@@ -1,0 +1,135 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T09:10:34.961Z",
+    "duration": 52892.351,
+    "expected": 9,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "e5e6f5e22ddbc763f1ebab8f6976729b41c4315bb91985601992f7c2d3d59ff0"
+        },
+        {
+          "file": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "821b4a02a7772d5deb1babe9ba0365f977fb8337d8af5933a3f6fa1e5f55dfb1"
+        },
+        {
+          "file": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "7d5dde5208df2b3e62b998d553a418574d820d4daab895ececfe9e02e75a68b0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+          "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "1273ab1bfee4d5ba81078241121de9eb002de56ed49cc5cc1a25001b5a0afa26"
+        },
+        {
+          "file": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "7b3a1f3ba2558ac1ef4da226964ef344e41399255992abcb1ac0a238f1580a57"
+        },
+        {
+          "file": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "f9a75e2688875e7b3564c8ced86d3eeaac80243dd651eb01895ff0d6fc562e92"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+          "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+          "sha256": "bcc6b5139844b3b9c237365fe707f102249ab4b4b97298bcf39ff1bc6333cac8"
+        },
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+          "sha256": "489a861eb0bab4593cc3cc7ce2c7ffafab91e5dc5758aa9c2c74e8c1b8297f39"
+        },
+        {
+          "file": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+          "sha256": "7d5dde5208df2b3e62b998d553a418574d820d4daab895ececfe9e02e75a68b0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+          "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+          "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069"
+        }
+      ]
+    }
+  ]
+}

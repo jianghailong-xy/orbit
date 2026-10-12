@@ -1,0 +1,246 @@
+{
+ "executions": 690,
+ "strictModeFailures": 71,
+ "runs": {
+  "0860351de": {
+   "executions": 18,
+   "strictModeFailures": 2,
+   "otherFailures": 0
+  },
+  "297d33e97": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "31aa07c91": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "42e7e01f4": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "57f792135": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "5bea0a3f6": {
+   "executions": 17,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "6bbf3ecc3": {
+   "executions": 17,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "6d2156683": {
+   "executions": 19,
+   "strictModeFailures": 3,
+   "otherFailures": 0
+  },
+  "8d8c5bc5f": {
+   "executions": 17,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "8ef6b60d1": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "c500817e2": {
+   "executions": 18,
+   "strictModeFailures": 2,
+   "otherFailures": 0
+  },
+  "d66517339": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "df79e55f7": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "e361ee373": {
+   "executions": 18,
+   "strictModeFailures": 2,
+   "otherFailures": 0
+  },
+  "e5a470fe6": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "ed108d8c8": {
+   "executions": 17,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "exp-e1-no-will-change": {
+   "executions": 25,
+   "strictModeFailures": 10,
+   "otherFailures": 0
+  },
+  "exp-e2-no-width-override": {
+   "executions": 22,
+   "strictModeFailures": 6,
+   "otherFailures": 0
+  },
+  "full-14e64870f": {
+   "executions": 17,
+   "strictModeFailures": 4,
+   "otherFailures": 0
+  },
+  "full-293e12a85": {
+   "executions": 17,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "full-6e5ba7544": {
+   "executions": 21,
+   "strictModeFailures": 6,
+   "otherFailures": 0
+  },
+  "full-918034e72": {
+   "executions": 21,
+   "strictModeFailures": 5,
+   "otherFailures": 0
+  },
+  "full2-06400e8ea": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "full2-4088d37e6": {
+   "executions": 19,
+   "strictModeFailures": 3,
+   "otherFailures": 0
+  },
+  "full2-93d3ec580": {
+   "executions": 16,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "full2-f5bdd7fd3": {
+   "executions": 17,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "full3-14e64870f": {
+   "executions": 17,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "m4-14e64870f": {
+   "executions": 9,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "m4-4088d37e6": {
+   "executions": 10,
+   "strictModeFailures": 2,
+   "otherFailures": 0
+  },
+  "m4-53da29cc1": {
+   "executions": 10,
+   "strictModeFailures": 2,
+   "otherFailures": 0
+  },
+  "m4-6cdca5a03": {
+   "executions": 11,
+   "strictModeFailures": 3,
+   "otherFailures": 0
+  },
+  "m4-e6537fd24": {
+   "executions": 13,
+   "strictModeFailures": 5,
+   "otherFailures": 0
+  },
+  "m4-f526f5b3e": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "m4-f929ab1e4": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "p02-control-b": {
+   "executions": 18,
+   "strictModeFailures": 2,
+   "otherFailures": 0
+  },
+  "p02-control": {
+   "executions": 18,
+   "strictModeFailures": 2,
+   "otherFailures": 0
+  },
+  "p22-1a70fbb90": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "p22-38947755e": {
+   "executions": 9,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "p22-3f3a29737": {
+   "executions": 9,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "p22-8a29e3493": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "p22-954396bdb": {
+   "executions": 9,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  },
+  "p22-9ccb09e86": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "p22-baec95275": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "p22-e19053056": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "p22-e1eb1d379": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "p22-f096a2bc7": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "p22-f5fc726d4": {
+   "executions": 8,
+   "strictModeFailures": 0,
+   "otherFailures": 0
+  },
+  "tip-a": {
+   "executions": 17,
+   "strictModeFailures": 1,
+   "otherFailures": 0
+  }
+ }
+}

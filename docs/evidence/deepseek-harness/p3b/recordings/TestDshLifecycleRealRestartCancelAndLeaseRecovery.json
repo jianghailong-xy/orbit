@@ -1,0 +1,286 @@
+{
+  "controlPlaneTurns": [
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "P3B first answer",
+          "runtimeSessionId": "a1a0d87a-ee2c-4b73-b101-6d804c508fc6",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t1"
+    },
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "P3B partial",
+          "runtimeSessionId": "a1a0d87a-ee2c-4b73-b101-6d804c508fc6",
+          "status": "INTERRUPTED",
+          "subtype": "interrupted"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "INTERRUPTED",
+      "turnId": "t2"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "interrupt",
+      "status": "DELIVERED",
+      "turnId": "i1"
+    },
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "P3B third answer",
+          "runtimeSessionId": "a1a0d87a-ee2c-4b73-b101-6d804c508fc6",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t3"
+    },
+    {
+      "completions": [
+        {
+          "error": "DeepSeek Harness stopped during this turn; it was not replayed because its tools may already have run",
+          "result": "",
+          "runtimeSessionId": "a1a0d87a-ee2c-4b73-b101-6d804c508fc6",
+          "status": "INTERRUPTED",
+          "subtype": "interrupted"
+        }
+      ],
+      "deliveries": 2,
+      "kind": "message",
+      "status": "INTERRUPTED",
+      "turnId": "t4"
+    },
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "P3B final answer",
+          "runtimeSessionId": "a1a0d87a-ee2c-4b73-b101-6d804c508fc6",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t5"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "end",
+      "status": "DELIVERED",
+      "turnId": "end"
+    }
+  ],
+  "engineRequests": null,
+  "engineSessionLogs": {},
+  "orbitTranscript": [
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "Remember P3B-WORD and answer.",
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "text": "P3B first answer",
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "Hold this turn.",
+      "turn": "t2",
+      "type": "user"
+    },
+    {
+      "turn": "",
+      "type": "interrupt"
+    },
+    {
+      "text": "P3B partial",
+      "turn": "t2",
+      "type": "assistant"
+    },
+    {
+      "stopReason": "cancelled",
+      "subtype": "interrupted",
+      "turn": "t2",
+      "type": "turn_end"
+    },
+    {
+      "text": "What was the word?",
+      "turn": "t3",
+      "type": "user"
+    },
+    {
+      "text": "P3B third answer",
+      "turn": "t3",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t3",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t3",
+      "type": "turn_end"
+    },
+    {
+      "text": "Write the file.",
+      "turn": "t4",
+      "type": "user"
+    },
+    {
+      "subtype": "context",
+      "turn": "t4",
+      "type": "system"
+    },
+    {
+      "status": "in_progress",
+      "toolCallId": "call_p3b_write",
+      "turn": "t4",
+      "type": "tool_use"
+    },
+    {
+      "isError": false,
+      "status": "completed",
+      "toolCallId": "call_p3b_write",
+      "turn": "t4",
+      "type": "tool_result"
+    },
+    {
+      "stopReason": "cancelled",
+      "subtype": "interrupted",
+      "turn": "t4",
+      "type": "turn_end"
+    },
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "message": "DeepSeek Harness stopped during this turn; it was not replayed because its tools may already have run",
+      "turn": "t4",
+      "type": "error"
+    },
+    {
+      "subtype": "interrupted",
+      "turn": "t4",
+      "type": "turn_end"
+    },
+    {
+      "text": "Finish.",
+      "turn": "t5",
+      "type": "user"
+    },
+    {
+      "text": "P3B final answer",
+      "turn": "t5",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t5",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t5",
+      "type": "turn_end"
+    }
+  ],
+  "runnerTurnLedger": {
+    "runtimeSessionId": "a1a0d87a-ee2c-4b73-b101-6d804c508fc6",
+    "turns": {
+      "t1": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "P3B first answer"
+      },
+      "t2": {
+        "state": "settled",
+        "status": "INTERRUPTED",
+        "subtype": "interrupted",
+        "result": "P3B partial"
+      },
+      "t3": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "P3B third answer"
+      },
+      "t4": {
+        "state": "settled",
+        "status": "INTERRUPTED",
+        "subtype": "interrupted",
+        "error": "DeepSeek Harness stopped during this turn; it was not replayed because its tools may already have run"
+      },
+      "t5": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "P3B final answer"
+      }
+    }
+  },
+  "scenario": "TestDshLifecycleRealRestartCancelAndLeaseRecovery",
+  "sideEffects": null
+}

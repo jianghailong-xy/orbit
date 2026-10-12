@@ -1,0 +1,13 @@
+{
+ "command": "git -C /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 show 4fb7ee43f:src/web/src/components/ui/Menu.test.tsx > /var/tmp/p2kw-c2604b/before/src/web/src/components/ui/Menu.test.tsx && cd /var/tmp/p2kw-c2604b/before && git log --oneline -1 && git status --short && npm test -w @orbit/web -- src/components/ui/Menu.test.tsx",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_9cc6cee50147",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T04:13:31.554812+00:00",
+ "exitCode": 1,
+ "outputSha256": "f20b157931b17dce825b436f567a386cdcd01d012d86a15ad0389f13d13409d1",
+ "outputBytes": 7547,
+ "note": "Before-fix tree: a temporary detached worktree at 46a418fba (this branch before the fix), with the new Menu.test.tsx copied in byte for byte from the fix commit 4fb7ee43f (the only change, shown by git status as untracked). 6 failed / 12 passed: the 9 reference cases (frames run after every key) pass; of the 9 window cases (frames held, every key after the opener lands on the trigger) the 6 the burst probe found wrong fail (down-down-enter, down-enter, enter-down-enter, enter-enter, up-enter, up-up-enter: no item runs), and the 3 that wrap round the menu pass (down-up-enter, enter-up-enter, up-down-enter), as in the probe before the fix."
+}

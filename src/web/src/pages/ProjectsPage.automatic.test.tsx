@@ -295,8 +295,8 @@ async function mount(): Promise<void> {
 }
 
 /** The switch a reader would press, by the accessible name their screen reader announces. */
-const toggle = (): HTMLButtonElement | undefined =>
-  [...container.querySelectorAll<HTMLButtonElement>('button[role="switch"]')].find(
+const toggle = (): HTMLElement | undefined =>
+  [...container.querySelectorAll<HTMLElement>('[role="switch"]')].find(
     (button) => button.getAttribute('aria-label') === 'Automatic',
   );
 

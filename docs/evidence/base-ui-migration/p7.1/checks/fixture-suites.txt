@@ -1,0 +1,20 @@
+Round 1 (fixtures1) was killed by the engine recycle during its fourth suite (choices); its first
+three suites completed. Round 2 (fixtures2) re-ran choices in full, then toasts and composer.
+
+== fixtures1 exit codes (suite rc ms)
+foundation 0 61014
+controls 0 69890
+overlays 0 135267
+== fixtures2 exit codes (suite rc ms)
+choices 1 1383513
+toasts 0 535823
+composer 0 190662
+== fixtures1/choices.log: 
+== fixtures1/controls.log: 32 passed (1.2m)
+== fixtures1/foundation.log: 48 passed (1.0m)
+== fixtures1/overlays.log: 120 passed (2.2m)
+== fixtures1/steps.log: 02:52:59 up 8 days,  3:37,  1 user,  load average: 11.00, 10.79, 11.38 | 02:54:09 up 8 days,  3:38,  1 user,  load average: 14.24, 12.07, 11.79 | 02:56:24 up 8 days,  3:40,  1 user,  load average: 10.38, 11.26, 11.52
+== fixtures2/choices.log: 14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' })); | 15 | async function settle(locator) { | 3 failed | 757 passed (23.0m)
+== fixtures2/composer.log: 23 skipped | 121 passed (3.2m)
+== fixtures2/steps.log: 08:17:32 up 8 days,  9:01,  1 user,  load average: 16.02, 15.21, 12.65 | 08:26:28 up 8 days,  9:10,  1 user,  load average: 16.04, 16.99, 14.84 | 08:29:39 up 8 days,  9:13,  1 user,  load average: 14.98, 16.97, 15.29
+== fixtures2/toasts.log: 264 passed (8.9m)

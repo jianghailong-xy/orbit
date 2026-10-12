@@ -213,6 +213,33 @@ public enum ComposerLogic {
         return (session ?? stream) == .running
     }
 
+    /// The engine's guess at the next message (`TranscriptState.promptSuggestion`), if the composer
+    /// offers it: as the grey line of an empty box, with Use (docs/prompt-suggestions-design.md §4.4).
+    /// A port of web's `offeredPromptSuggestion` (src/web/src/lib/promptSuggestion.ts).
+    ///
+    /// Only into a box with nothing typed, staged or armed; with no card waiting on the reader (the
+    /// card is what to answer); in a conversation that can take a message; and while no turn is in
+    /// flight. That last one reads the AUTHORITATIVE record where it is loaded, as `showsInterrupt`
+    /// does — `generating` included, for a turn the engine started on its own while parked — and the
+    /// stream only until it is. Not after a run that failed either: its own card says what next.
+    public static func offeredPromptSuggestion(_ suggestion: String?, session: SessionRunState?,
+                                               generating: Bool, stream: RunStatus,
+                                               hasText: Bool, hasAttachments: Bool, replying: Bool,
+                                               waitingOnReader: Bool, sendable: Bool) -> String? {
+        guard let suggestion, !suggestion.isEmpty, !generating,
+              !hasText, !hasAttachments, !replying, !waitingOnReader, sendable else { return nil }
+        let parked: Bool
+        if let session {
+            switch session {
+            case .awaitingInput, .interrupted, .succeeded, .ended: parked = true
+            case .queued, .running, .failed, .unknown:              parked = false
+            }
+        } else {
+            parked = stream == .awaitingInput || stream == .interrupted
+        }
+        return parked ? suggestion : nil
+    }
+
     /// Whether to offer "Stop & send" beside Send. A 1:1 port of web's `offersInterruptAndSend`.
     ///
     /// While a turn generates, Send steers — the message joins the turn that is running. "Stop this
@@ -296,10 +323,12 @@ public enum ComposerLogic {
     }
 
     /// The human sentence out of a Nest error body (`{"message": "…"}`, or an array of them for a
-    /// validation failure); the raw body when it isn't one, nil when there's nothing to show.
+    /// validation failure); the raw body when it isn't one, nil when there's nothing to show. A page
+    /// of markup is nothing to show: what a proxy in front of the server answers a 502 with is a whole
+    /// HTML document, and the project's sessions page once drew every line of it.
     static func serverMessage(_ body: String?) -> String? {
         let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("<") else { return nil }
         guard let data = trimmed.data(using: .utf8),
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return trimmed
@@ -355,6 +384,9 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
     public let sessionTitle: String?
     public let sessionStatus: String?
     public let agentName: String?
+    /// The CLI the session runs on, by its name.
+    public let engine: String?
+    /// The credential it spends — a key on any of the engines that run it, an engine's own sign-in.
     public let provider: String?
     public let model: String?
     public let permissionMode: String?
@@ -369,7 +401,7 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
     public let planUsagePercent: Int?
 
     public init(surface: String, sessionTitle: String? = nil, sessionStatus: String? = nil,
-                agentName: String? = nil, provider: String? = nil, model: String? = nil,
+                agentName: String? = nil, engine: String? = nil, provider: String? = nil, model: String? = nil,
                 permissionMode: String? = nil, effort: String? = nil, fastMode: Bool? = nil,
                 contextTokens: Int? = nil, contextWindow: Int? = nil,
                 planUsageLabel: String? = nil, planUsagePercent: Int? = nil) {
@@ -377,6 +409,7 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
         self.sessionTitle = sessionTitle
         self.sessionStatus = sessionStatus
         self.agentName = agentName
+        self.engine = engine
         self.provider = provider
         self.model = model
         self.permissionMode = permissionMode
@@ -438,6 +471,9 @@ public enum ComposerHostCommand {
         }
         if let agent = s.agentName, !agent.isEmpty {
             rows.append(ComposerStatusRow(label: "Workspace", value: agent))
+        }
+        if let engine = s.engine, !engine.isEmpty {
+            rows.append(ComposerStatusRow(label: "Engine", value: engine))
         }
         if let provider = s.provider, !provider.isEmpty {
             rows.append(ComposerStatusRow(label: "Provider", value: provider))
@@ -507,16 +543,19 @@ public enum ComposerSlash {
         items.filter { ($0.agentId ?? "").isEmpty || $0.agentId == agentID }
     }
 
-    /// Restrict runtime-owned slash assets to the active runtime. Older runners omit `provider`
-    /// for Claude entries, so nil remains Claude-compatible. Codex, OpenCode and Antigravity take
-    /// slash-prefixed text as runtime input and have no slash registry (agy is started with
-    /// `--disable-slash-commands`, since its own command handler ends a stream-json session), so
-    /// they keep only Orbit's local commands; local commands are available under every provider.
-    public static func forProvider(items: [SlashCommandInfo], provider: String?) -> [SlashCommandInfo] {
+    /// Restrict runtime-owned slash assets to the session's engine — the item's `provider` is the
+    /// engine that owns it, as the runner reports it. Older runners omit it for Claude entries, so nil
+    /// remains Claude Code's. Codex, OpenCode, Antigravity and DeepSeek Harness take slash-prefixed text
+    /// as runtime input and have no slash registry (agy is started with `--disable-slash-commands`,
+    /// since its own command handler ends a stream-json session), so they keep only Orbit's local
+    /// commands; local commands are available on every engine. Asked of the session's engine, never of
+    /// its provider: a key on Codex's protocol runs on Codex, and a DeepSeek key on Claude Code has
+    /// Claude Code's commands (web `slashAssetMatchesEngine`).
+    public static func forEngine(items: [SlashCommandInfo], engine: String?) -> [SlashCommandInfo] {
         items.filter { item in
             if item.type == "local" { return true }
-            switch provider {
-            case "codex", "opencode", "antigravity": return false
+            switch engine {
+            case "codex", "opencode", "antigravity", "dsh": return false
             case "kimi":  return item.provider == "kimi"
             default:      return item.provider == nil || item.provider == "claude"
             }

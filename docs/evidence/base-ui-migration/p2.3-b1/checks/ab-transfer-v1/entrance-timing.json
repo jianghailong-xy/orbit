@@ -1,0 +1,472 @@
+{
+ "chromium-dark-desktop": {
+  "fixab": {
+   "n": 4,
+   "medianFirstOwnedMs": 93.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 103,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 97,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 86,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 90,
+     "opacity": 0.804,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 4,
+   "medianFirstOwnedMs": 91.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 84,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 92,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 91,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 100,
+     "opacity": 0.65,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "chromium-dark-phone": {
+  "fixab": {
+   "n": 4,
+   "medianFirstOwnedMs": 87.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 84,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 90,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 116,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 82,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 4,
+   "medianFirstOwnedMs": 88.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 85,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 220,
+     "opacity": 0,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 89,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 88,
+     "opacity": 0.65,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "chromium-light-desktop": {
+  "fixab": {
+   "n": 4,
+   "medianFirstOwnedMs": 94.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 99,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 101,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 84,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 89,
+     "opacity": 0.804,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 4,
+   "medianFirstOwnedMs": 102.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 118,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 106,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 90,
+     "opacity": 0.885,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 98,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "chromium-light-phone": {
+  "fixab": {
+   "n": 4,
+   "medianFirstOwnedMs": 87.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 84,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 95,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 91,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 80,
+     "opacity": 0.804,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 4,
+   "medianFirstOwnedMs": 96.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 99,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 108,
+     "opacity": 0.804,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 94,
+     "opacity": 0.803,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 78,
+     "opacity": 0.803,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-dark-desktop": {
+  "fixab": {
+   "n": 3,
+   "medianFirstOwnedMs": 121,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 117,
+     "opacity": 0.974,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 121,
+     "opacity": 0.981,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 141,
+     "opacity": 0.991,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 113.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 112,
+     "opacity": 0.973,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 115,
+     "opacity": 0.973,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-dark-phone": {
+  "fixab": {
+   "n": 2,
+   "medianFirstOwnedMs": 153.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 149,
+     "opacity": 0.995,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 158,
+     "opacity": 0.996,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 2,
+   "medianFirstOwnedMs": 120.5,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 123,
+     "opacity": 0.981,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 118,
+     "opacity": 0.977,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-light-desktop": {
+  "fixab": {
+   "n": 4,
+   "medianFirstOwnedMs": 156.0,
+   "failed": 0,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 127,
+     "opacity": 0.983,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 137,
+     "opacity": 0.989,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 175,
+     "opacity": 1.0,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 181,
+     "opacity": 1.0,
+     "status": "passed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 4,
+   "medianFirstOwnedMs": 134.0,
+   "failed": 1,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 130,
+     "opacity": 0.986,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 138,
+     "opacity": 0.991,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 194,
+     "opacity": 1,
+     "status": "failed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 119,
+     "opacity": 0.977,
+     "status": "passed"
+    }
+   ]
+  }
+ },
+ "webkit-light-phone": {
+  "fixab": {
+   "n": 4,
+   "medianFirstOwnedMs": 130.0,
+   "failed": 1,
+   "executions": [
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 127,
+     "opacity": 0.984,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-1",
+     "firstOwnedMs": 133,
+     "opacity": 0.987,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 118,
+     "opacity": 0.977,
+     "status": "passed"
+    },
+    {
+     "run": "fixab-2",
+     "firstOwnedMs": 200,
+     "opacity": 1,
+     "status": "failed"
+    }
+   ]
+  },
+  "tip": {
+   "n": 4,
+   "medianFirstOwnedMs": 129,
+   "failed": 2,
+   "executions": [
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 125,
+     "opacity": 0.982,
+     "status": "passed"
+    },
+    {
+     "run": "tip-1",
+     "firstOwnedMs": 129,
+     "opacity": 0.985,
+     "status": "passed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": 227,
+     "opacity": 1,
+     "status": "failed"
+    },
+    {
+     "run": "tip-2",
+     "firstOwnedMs": null,
+     "opacity": null,
+     "status": "failed"
+    }
+   ]
+  }
+ }
+}

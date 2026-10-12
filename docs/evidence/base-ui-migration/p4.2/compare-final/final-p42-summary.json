@@ -1,0 +1,401 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      1094,
+      1107
+     ],
+     [
+      379,
+      387
+     ],
+     38,
+     17
+    ]
+   ],
+   "max": 17,
+   "pixels": 38,
+   "shot": "chromium-dark-desktop/p42-connect-dialect-open.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      782,
+      792
+     ],
+     [
+      108,
+      117
+     ],
+     64,
+     21
+    ]
+   ],
+   "max": 21,
+   "pixels": 64,
+   "shot": "chromium-dark-desktop/p42-runners-loading.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      197,
+      207
+     ],
+     [
+      269,
+      278
+     ],
+     65,
+     20
+    ]
+   ],
+   "max": 20,
+   "pixels": 65,
+   "shot": "chromium-dark-phone/p42-users-loading.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      367,
+      372
+     ],
+     [
+      414,
+      420
+     ],
+     11,
+     3
+    ]
+   ],
+   "max": 3,
+   "pixels": 11,
+   "shot": "chromium-dark-phone/p42-workspace-menu.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      782,
+      791
+     ],
+     [
+      749,
+      758
+     ],
+     62,
+     20
+    ]
+   ],
+   "max": 20,
+   "pixels": 62,
+   "shot": "chromium-light-desktop/p42-keys-loading.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      767,
+      791
+     ],
+     [
+      108,
+      125
+     ],
+     157,
+     20
+    ],
+    [
+     [
+      783,
+      791
+     ],
+     [
+      108,
+      112
+     ],
+     28,
+     10
+    ]
+   ],
+   "max": 20,
+   "pixels": 185,
+   "shot": "chromium-light-desktop/p42-runners-loading.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      155,
+      159
+     ],
+     [
+      343,
+      345
+     ],
+     7,
+     9
+    ]
+   ],
+   "max": 9,
+   "pixels": 7,
+   "shot": "chromium-light-phone/p42-account-pause-custom.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      225,
+      241
+     ],
+     [
+      442,
+      459
+     ],
+     122,
+     20
+    ]
+   ],
+   "max": 20,
+   "pixels": 122,
+   "shot": "chromium-light-phone/p42-enroll-loading.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 34,
+  "beyond": 8,
+  "identical": 602,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "chromium-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed"
+  ],
+  "notPassedRef": [
+   "chromium-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "chromium-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-dark-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed",
+   "webkit-light-phone :: P4.2 the pages’ own button styles › at rest, under the pointer and pressed"
+  ],
+  "total": 184
+ },
+ "traces": {
+  "differing": {
+   "webkit-dark-desktop :: P4.2 connecting a provider › a vendor: the key, a failed probe and Save anyway": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "apiKey": "sk-ant-fixture-0123456789",
+         "baseUrl": "https://api.anthropic.com",
+         "enabled": true,
+         "followsPreset": true,
+         "label": "Anthropic (Claude) 2",
+         "presetSlug": "anthropic",
+         "runtime": "claude"
+        },
+        "method": "POST",
+        "path": "/api/providers/mine"
+       }
+      ],
+      "step": "saved anyway",
+      "url": "/providers"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Save anyway",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "apiKey": "sk-ant-fixture-0123456789",
+         "baseUrl": "https://api.anthropic.com",
+         "enabled": true,
+         "followsPreset": true,
+         "label": "Anthropic (Claude) 2",
+         "presetSlug": "anthropic",
+         "runtime": "claude"
+        },
+        "method": "POST",
+        "path": "/api/providers/mine"
+       }
+      ],
+      "step": "saved anyway",
+      "url": "/providers"
+     },
+     "step": "saved anyway"
+    }
+   ],
+   "webkit-dark-phone :: P4.2 connecting a provider › editing: the stored key shown, the switch, and Save": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Save",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "baseUrl": "https://api.openai.com/v1",
+         "enabled": false,
+         "followsPreset": true,
+         "label": "OpenAI (Codex)",
+         "runtime": "codex"
+        },
+        "method": "PATCH",
+        "path": "/api/providers/mine/2zwQZ2hd93IvLb59t6uLj"
+       }
+      ],
+      "step": "saved",
+      "url": "/providers"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "baseUrl": "https://api.openai.com/v1",
+         "enabled": false,
+         "followsPreset": true,
+         "label": "OpenAI (Codex)",
+         "runtime": "codex"
+        },
+        "method": "PATCH",
+        "path": "/api/providers/mine/2zwQZ2hd93IvLb59t6uLj"
+       }
+      ],
+      "step": "saved",
+      "url": "/providers"
+     },
+     "step": "saved"
+    }
+   ],
+   "webkit-light-desktop :: P4.2 a pool on its own page › a pool somebody added the reader to: leaving it": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/providers/shared-pools/2zwQZ2hd93IvLb59t6vPn/leave"
+       }
+      ],
+      "step": "left",
+      "url": "/providers"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Leave pool",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/providers/shared-pools/2zwQZ2hd93IvLb59t6vPn/leave"
+       }
+      ],
+      "step": "left",
+      "url": "/providers"
+     },
+     "step": "left"
+    }
+   ],
+   "webkit-light-desktop :: P4.2 users › the table: loading, reset password, a one-time password and delete": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reset password",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [],
+      "step": "password dismissed",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "requests": [],
+      "step": "password dismissed",
+      "url": "/admin"
+     },
+     "step": "password dismissed"
+    }
+   ],
+   "webkit-light-phone :: P4.2 users › the table: loading, reset password, a one-time password and delete": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "requests": [],
+      "step": "password dismissed",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reset password",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [],
+      "step": "password dismissed",
+      "url": "/admin"
+     },
+     "step": "password dismissed"
+    }
+   ]
+  },
+  "equal": 175,
+  "total": 180
+ }
+}

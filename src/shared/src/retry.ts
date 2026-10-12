@@ -65,6 +65,25 @@ export const API_ERROR_RETRY_BACKOFF_MS = [30_000, 2 * 60_000, 5 * 60_000];
 export const MAX_API_ERROR_RETRIES = API_ERROR_RETRY_BACKOFF_MS.length;
 
 /**
+ * What an armed continue sends: the turn that picks a session back up when there is nothing of the
+ * person's left to re-send.
+ *
+ * A quota or a provider error that kills a turn nobody sent — a background job's wake, a turn the
+ * runtime started for itself — leaves the chooser with no message to carry (auto-retry.service.ts
+ * `messageToResend`), and stepping past the wake to the message before it would re-ask a question
+ * already answered. There is still a way on, though: say "continue" and the session resumes with its
+ * whole conversation — the wake's result included, which the runtime hands back with the next message
+ * it is sent. This is that sentence, and it is one sentence on purpose: the card's Continue button
+ * sends it as the person's own message, the switch has the server send the same turn at the reset,
+ * and the two must not drift into two different asks.
+ *
+ * `CONTINUE` is the platform's own words about nobody's message, so it is only ever sent on an arm
+ * somebody owns — the switch is on the card, its wording says what will be sent, and turning it off
+ * is the whole opt-out. Nothing decides to continue behind a reader's back.
+ */
+export const CONTINUE_MESSAGE = 'Continue where you left off.';
+
+/**
  * How long a rate-limited pool session waits on the credential it is already on before moving to another
  * one is worth it.
  *

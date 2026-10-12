@@ -1,0 +1,7 @@
+  6 passed (2.3m)
+repeat 0 chromium-light-phone: popovers 0, dialogs 0, focus {"role": "button", "name": "Plan usage 92%"}
+repeat 1 chromium-light-phone: popovers 0, dialogs 0, focus {"role": "button", "name": "Plan usage 92%"}
+repeat 2 chromium-light-phone: popovers 0, dialogs 0, focus {"role": "button", "name": "Plan usage 92%"}
+repeat 3 chromium-light-phone: popovers 0, dialogs 0, focus {"role": "button", "name": "Plan usage 92%"}
+repeat 4 chromium-light-phone: popovers 0, dialogs 0, focus {"role": "button", "name": "Plan usage 92%"}
+repeat 5 chromium-light-phone: popovers 0, dialogs 0, focus {"role": "button", "name": "Plan usage 92%"}

@@ -1,0 +1,17 @@
+f5b73107006a889350f1fc431ff87ea71e218141
+start 2026-10-09T00:07:09Z
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+src/components/RunnerEngines.tsx(432,139): error TS2345: Argument of type 'Quota | { windows: never[]; stale: null; }' is not assignable to parameter of type 'Quota'.
+  Property 'noLimit' is missing in type '{ windows: never[]; stale: null; }' but required in type 'Quota'.
+src/components/RunnerEngines.tsx(438,9): error TS2741: Property 'noLimit' is missing in type '{ windows: PlanUsageDisplayRow[]; stale: string | null; }' but required in type 'Quota'.
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path /var/tmp/34cBi-merge/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /var/tmp/34cBi-merge/src/web
+npm error command failed
+npm error command sh -c tsc -b && vite build
+exit 1 end 2026-10-09T00:07:11Z

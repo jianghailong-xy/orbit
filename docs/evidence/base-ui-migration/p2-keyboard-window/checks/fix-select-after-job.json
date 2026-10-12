@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git -C /var/tmp/p2kw-c2604b/after2 log --oneline -1 && git -C /var/tmp/p2kw-c2604b/after2 status --short && python3 docs/evidence/base-ui-migration/p2-keyboard-window/run-chunks.py /var/tmp/p2kw-c2604b/after2 docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs src/web/.choices-results/p2-keyboard-window fix-select-after 'down= select-down ' 'down-enter= select-down-enter ' 'down-enter-from-7= select-down-enter-from-7 ' 'down-home-enter= select-down-home-enter ' 'down-end-enter= select-down-end-enter ' 'down-pageup-enter= select-down-pageup-enter ' 'down-pagedown-enter= select-down-pagedown-enter ' 'down-space= select-down-space ' 'down-space-from-null= select-down-space-from-null ' 'space-down-enter= select-space-down-enter ' 'enter-down-enter= select-enter-down-enter ' 'down-7-enter= select-down-7-enter ' 'down-n-enter= select-down-n-enter '",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_e79d2852e61e",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T06:41:39.804930+00:00",
+ "exitCode": 0,
+ "outputSha256": "3ef49b30b05fd8c76230719dbb5bfe67c5068b6941105a8afba83c4cbd056962",
+ "outputBytes": 3215,
+ "note": "The runner job that re-ran the 13 select sequences of the unchanged keyboard-window probe on the fixed tree (scratch worktree after2 at 0d0bd2c8a, web tree df7414507c6f...), one chunk per sequence (each chunk's command, output and exit code: checks/fix-select-after-<sequence>.*), after the single run was drained. All 13 chunks exit 0."
+}

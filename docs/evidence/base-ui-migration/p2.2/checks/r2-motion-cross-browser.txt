@@ -1,0 +1,97 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project=chromium-light-desktop --project=webkit-dark-phone --grep normal bottom|normal top|normal flipped|popover matches|tooltip matches|Dialog Popover Select|normal popover can reopen --max-failures=1
+
+[WebServer] (node:3152783) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 46 tests using 1 worker
+
+(node:3153081) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.9s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.2s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.5s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches attachment (2.4s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches attachment (2.5s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches attachment (2.4s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches expiry (2.3s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches expiry (2.5s)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches expiry (2.5s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches search (2.4s)
+  ✓  11 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches search (2.5s)
+  ✓  12 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches search (2.5s)
+  ✓  13 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches multiple (2.4s)
+  ✓  14 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches multiple (2.6s)
+  ✓  15 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches multiple (3.1s)
+  ✓  16 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches popover (3.2s)
+  ✓  17 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches popover (2.6s)
+  ✓  18 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches popover (2.5s)
+  ✓  19 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches tooltip (3.0s)
+  ✓  20 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches tooltip (2.4s)
+  ✓  21 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches tooltip (2.5s)
+  ✓  22 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (2.9s)
+  ✓  23 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (2.8s)
+(node:3159582) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  24 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓  25 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+  ✓  26 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.5s)
+  ✓  27 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches attachment (1.8s)
+  ✓  28 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches attachment (2.1s)
+  ✓  29 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches attachment (2.1s)
+  ✓  30 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches expiry (1.8s)
+  ✓  31 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches expiry (2.4s)
+  ✓  32 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches expiry (2.3s)
+  ✓  33 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches search (2.2s)
+  ✓  34 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal top entrance and exit motion matches search (2.7s)
+  ✘  35 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches search (1.5m)
+Testing stopped early after 1 maximum allowed failures.
+
+
+  1) [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches search 
+
+    Test timeout of 90000ms exceeded.
+
+    Error: page.waitForFunction: Test timeout of 90000ms exceeded.
+
+      49 |
+      50 | async function capture(page) {
+    > 51 |   await page.waitForFunction(() => window.choiceMotion.records.length > 0);
+         |              ^
+      52 |   return page.evaluate(async () => {
+      53 |     const state = window.choiceMotion;
+      54 |     await Promise.all([...state.animations].map((animation) => animation.finished.catch(() => {})));
+        at capture (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:51:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:90:40
+
+    Error Context: .choices-results/choices-motion.browser.mjs-42c29--exit-motion-matches-search-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-motion.browser.mjs-42c29--exit-motion-matches-search-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-motion.browser.mjs-42c29--exit-motion-matches-search-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:80:3 › normal flipped entrance and exit motion matches search 
+  11 did not run
+  34 passed (2.9m)
+  1 error was not a part of any test, see above for details
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project=chromium-light-desktop --project=webkit-dark-phone --grep 'normal bottom|normal top|normal flipped|popover matches|tooltip matches|Dialog Popover Select|normal popover can reopen' --max-failures=1

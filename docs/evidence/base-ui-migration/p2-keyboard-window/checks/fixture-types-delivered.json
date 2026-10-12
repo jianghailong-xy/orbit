@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_edbca4a03498",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "25309143fa5b571bb85c0f634cb04f339c9c3ccd",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T21:41:08.595780+00:00",
+ "exitCode": 0,
+ "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "outputBytes": 0,
+ "note": "Delivered tree (the branch after merging the project tip da13423d3). No output: tsc --noEmit prints nothing when all four projects type-check."
+}

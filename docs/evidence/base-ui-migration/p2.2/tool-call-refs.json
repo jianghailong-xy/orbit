@@ -1,0 +1,176 @@
+{
+  "initial-fixture-types": {
+    "ref": "exec-56f53b0a-cacc-4caa-8418-b6ac235e6eb4",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py initial-fixture-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "first-chromium": {
+    "ref": "exec-99b596c0-deef-4b00-bd87-2bf28c0035f1",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py first-chromium npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "chromium-diagnostic": {
+    "ref": "exec-a9a8fb13-8f7c-48aa-8a02-37daaa65f2c7",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py chromium-diagnostic npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "second-chromium": {
+    "ref": "exec-aad71df1-d669-4269-b56f-6b24a03d20e5",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py second-chromium npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "two-environments": {
+    "ref": "exec-91d29529-386c-49ed-8060-7648307f4f3a",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py two-environments npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "stable-sampling": {
+    "ref": "exec-42769e8e-b757-42e1-8807-5b9085e957b9",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py stable-sampling npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "tooltip-legacy": {
+    "ref": "exec-b5d6c0d2-76d9-48e8-b934-a2b977436880",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py tooltip-legacy npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone --grep 'owns|legacy host'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "choices-types-v2": {
+    "ref": "exec-c3010a89-156a-4a7a-8c62-2b8232af8bd3",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py choices-types-v2 node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "completed-states": {
+    "ref": "exec-1400cac7-40d8-4203-9b25-7e2a609b874a",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py completed-states npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "states-locators": {
+    "ref": "exec-eb64545c-2698-4eeb-9bf3-6485409f08b7",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py states-locators npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone --grep 'existing states|Dialog keeps'",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "states-settled": {
+    "ref": "exec-c39d5225-ae63-4573-af35-d985bdb981e1",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py states-settled npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone --grep 'existing states'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "internal-appearance": {
+    "ref": "exec-abf01b7d-575c-4d88-b0d1-6a23952c594a",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py internal-appearance npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone --grep 'matches the current|existing states'",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "final-choice-states": {
+    "ref": "exec-eb44fb81-297f-49fe-8366-e4c13dc3b255",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py final-choice-states npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone --grep 'existing states'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "choices-final-matrix": {
+    "ref": "exec-1ee32278-dde4-4a6c-a320-9cf8ca7f245f",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py choices-final-matrix npm run test:ui-choices -w @orbit/web",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "multi-types": {
+    "ref": "exec-31760fdf-605b-4515-b1d3-6a813e7529da",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py multi-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "multi-corrected": {
+    "ref": "exec-1e0b3c21-974c-4a77-9eb5-1b4cfae50732",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py multi-corrected npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone --grep 'chip appearance|multiple labels|email tags|multiple choices in Dialog'",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "multi-and-timing": {
+    "ref": "exec-44e77604-bf9d-4a13-b656-4d71c24d9f4b",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py multi-and-timing npm run test:ui-choices -w @orbit/web -- --project chromium-light-phone --project webkit-dark-phone --grep 'multiple labels|tooltip matches|touch or pointer' --repeat-each 2",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "final-appearance-and-edges": {
+    "ref": "exec-14d9f872-b8be-44fe-8f28-63f1b3aed87b",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py final-appearance-and-edges npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone --grep 'matches the current|existing states|chip appearance|disabled-button'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "full-final-matrix": {
+    "ref": "exec-4f44b197-6d31-4221-8e58-b6e894a97b3a",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py full-final-matrix npm run test:ui-choices -w @orbit/web",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "final-geometry-reproduction": {
+    "ref": "exec-4965dbed-12c0-470a-be30-f06b0e993ab5",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py final-geometry-reproduction npm run test:ui-choices -w @orbit/web -- --project=chromium-light-desktop --grep 'attachment matches|tooltip matches'",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "final-types-and-fixture": {
+    "ref": "exec-ad3a5c18-ced2-4e65-9cf9-15cf4bd4da41",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py final-types-and-fixture node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "focused-unit-regressions": {
+    "ref": "exec-314db57b-ae44-4e6b-ad16-2e95469a58b1",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py focused-unit-regressions npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts src/components/ShareModal.test.tsx src/components/WorkspaceView.composerMenu.test.tsx",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "production-build": {
+    "ref": "exec-0233d717-e896-4e72-bed5-fdd06e33cee7",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py production-build npm run build -w @orbit/web",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "final-geometry-matrix": {
+    "ref": "exec-27b60e2c-2794-435e-bcc4-4b0e40ce71af",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py final-geometry-matrix npm run test:ui-choices -w @orbit/web -- --grep 'attachment matches|access matches|tooltip matches|popover matches|popover owns|disabled-button|menu arrows|touch or pointer'",
+    "status": "failed",
+    "exitCode": 1
+  },
+  "submenu-focus-repeat": {
+    "ref": "exec-c6dfa311-a2b7-4326-a50c-79039ca69fa5",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py submenu-focus-repeat npm run test:ui-choices -w @orbit/web -- --project=webkit-dark-phone --grep 'menu arrows' --repeat-each=10",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "overlay-regressions": {
+    "ref": "exec-bd1b3627-1306-45b2-ba9e-069d9ec669dc",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py overlay-regressions npm run test:ui-overlays -w @orbit/web",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "final-surfaces-and-navigation": {
+    "ref": "exec-2b31303f-5357-432b-b56d-1a56c4a912f0",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py final-surfaces-and-navigation npm run test:ui-choices -w @orbit/web -- --grep 'attachment matches|access matches|tooltip matches|popover matches|popover owns|disabled-button|menu arrows|touch or pointer'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "implementation-commit": {
+    "ref": "exec-b25673f8-b594-49d9-9955-67a4c233e7bf",
+    "command": "git commit -m \"feat(web): add Orbit menus, popovers and choice controls\"",
+    "status": "completed",
+    "exitCode": 0
+  },
+  "evidence-integrity": {
+    "ref": "exec-03ffd9b7-b4dc-49e0-8924-bcc97bab956e",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py evidence-integrity python3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,subprocess\nroot=Path('docs/evidence/base-ui-migration/p2.2')\ncounts={'full-matrix':208,'final-surfaces':64,'submenu-repeat':10,'overlay-regressions':96}\nchecked=0\nfor directory,count in counts.items():\n    folder=root/directory\n    summary=json.loads((folder/'summary.json').read_text())\n    stats=summary['stats']\n    assert stats['expected']==count and stats['unexpected']==stats['skipped']==stats['flaky']==0\n    for test in summary['tests']:\n        for artifact in test['artifacts']:\n            assert hashlib.sha256((folder/artifact['file']).read_bytes()).hexdigest()==artifact['sha256']\n            checked+=1\nbaseline='67e62c0b4028eefe2c619dac80d3fac312cea601'\nassert not subprocess.check_output(['git','diff',baseline,'--','docs/evidence/base-ui-migration/p0.2'])\nsource_commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()\nassert source_commit=='1a70fbb902d6b24453a57994f782a40546d67c94'\nlatest=json.loads((root/'checks/final-surfaces-and-navigation.json').read_text())\nfiles=subprocess.check_output(['git','diff','--name-only',baseline,source_commit],text=True).splitlines()\nfor name in files:\n    if name in latest['sourceHashes']:\n        assert hashlib.sha256(Path(name).read_bytes()).hexdigest()==latest['sourceHashes'][name],name\nprint(json.dumps({'sourceCommit':source_commit,'passedRuns':counts,'artifactsVerified':checked,'finalSourceHashesMatch':True,'historicalP0Unchanged':True}))\nPY",
+    "status": "completed",
+    "exitCode": 0
+  }
+}

@@ -1,6 +1,15 @@
 # DeepSeek Harness ACP 运行时契约（P0）
 
-本契约供 P2 安装隔离、P3 基础驱动/恢复、P4 MCP/审批分别实现。**【约定】** 内部 runtime 采用 `dsh`，用户名称为 **DeepSeek Harness**；现有 `deepseek` provider 继续属于 Claude runtime。**【仓库核对】** 冻结基线 `src` 没有已有 `dsh` 符号；P1 仍须验证可配置 provider 名的实际保留字冲突。本任务没有注册引擎、修改产品路由、部署或完成整个接入。
+本契约供 P2 安装隔离、P3 基础驱动/恢复、P4 MCP/审批分别实现。**【约定】** 内部 engine 名为 `dsh`，用户名称为 **DeepSeek Harness**。
+
+**【约定，2026-10-09 起，取代原「现有 `deepseek` provider 继续属于 Claude runtime」】** provider 与 engine 已解耦，见 [provider-engine-contract.md](provider-engine-contract.md)：
+
+- `dsh` 只是 engine，不再是一类 provider，也不再是 key 的 runtime。
+- DeepSeek API key（preset `deepseek`，或自定义且主机为 `api.deepseek.com`；Anthropic 方言，不是 Claude 订阅 token）同一把同时用于 Claude Code、OpenCode 和 DeepSeek Harness。会话用哪个 engine 记录在 `Session.engine`，终身不变。
+- DeepSeek Harness 会话可以在多把 DeepSeek key 之间切换，切换后在原 ACP 会话上续聊。
+- 原来的 `deepseek-harness` 配置（runtime `dsh`）由存量迁移并入 DeepSeek key，旧 slug 仍解析为该 key + DeepSeek Harness。
+
+**【仓库核对】** 冻结基线 `src` 没有已有 `dsh` 符号；P1 仍须验证可配置 provider 名的实际保留字冲突。本任务没有注册引擎、修改产品路由、部署或完成整个接入。
 
 ## 1. 基线、方法与判据
 
@@ -41,9 +50,11 @@ node scripts/deepseek-harness-p0/reproduce.mjs /tmp/orbit-dsh-p0-evidence
 
 **【实测】** 没有 Key 仍能 initialize/new 和得到模型选项；第一轮 prompt 返回 `-32603`、`no API key`，mock 未收到请求。401 的 mock Key 验证错误也只在 prompt 出现。因此 P2 分开报告 `installed`、`credentialPresent`、`requestValidation=unknown/valid/invalid`，不能把 catalog 或 `authenticate` 当认证测试。
 
-**【约定】** Orbit 不继承不相关凭据或真实 Harness profile。P2 建立 0700 的持久会话目录、0600 patch/凭据；使用现有授权派发解密后的会话 Key，推荐专用引用名 `ORBIT_DSH_API_KEY` 并在 `llm-deepseek.config.apiKeyEnv` 明确选择。不要依赖项目 `.env`，Key 和 permission mode 在启动环境明确固定，baseURL 在 overlay 固定。专用引用名是安装接口约定；P0 实测的是默认引用的四级解析。
+**【约定】** Orbit 不继承不相关凭据或真实 Harness profile。P2 建立 0700 的持久会话目录、0600 patch/凭据；使用现有授权派发解密后的会话 Key（解耦后即会话所选的 DeepSeek key），推荐专用引用名 `ORBIT_DSH_API_KEY` 并在 `llm-deepseek.config.apiKeyEnv` 明确选择。不要依赖项目 `.env`，Key 和 permission mode 在启动环境明确固定，baseURL 在 overlay 固定。专用引用名是安装接口约定；P0 实测的是默认引用的四级解析。
 
 **【源码 S2】** 非空 `DSH_TELEMETRY_DISABLED=1` 禁用遥测 entry，acp bundle 禁用 HMR。**【实测】** 禁遥测仍会生成 `.anonymous-user-id`。**【待验】** 长时间运行、profile 插件变更及升级行为；不能推断所有后台联网或自更新行为已测尽。P2 将运行中进程钉在不可变版本目录，更新只给后续启动使用。
+
+**【实测 + 源码】** `DSH_TELEMETRY_DISABLED=1` 不关闭请求扩展字段。默认 bundle 挂载的 `session-log-deepseek` 和 `plugin-package-inventory-deepseek` 会给每个模型请求加上 `dsh_session_log`（会话规范日志的未确认增量，含消息、工具输入输出和 cwd）与 `dsh_plugin_packages`（启用插件的 name/version），发往配置的 baseURL。两者的官方开关是各自 row 的 `config.enabled`。Orbit overlay 将两者都设为 `false`；关闭后真 dsh 发出的请求不再带这两个字段，会话日志里也不写 `delivery-accepted`。详见[会话环境](deepseek-harness-runtime-environment.md#随模型请求上传的会话日志)和 `docs/evidence/deepseek-harness/session-log-upload/`。
 
 ## 3. 系统提示、AGENTS 与 MCP
 
@@ -51,7 +62,7 @@ node scripts/deepseek-harness-p0/reproduce.mjs /tmp/orbit-dsh-p0-evidence
 
 **【实测 + 源码 S4】** 固定、受控模板可以用 `system-prompt.config.personaSuffix`，必须重述要保留的 cwd suffix 和 personaPrefix。任意用户 `appendSystemPrompt` 推荐单独 additive section：[append-prompt.mjs](../scripts/deepseek-harness-p0/append-prompt.mjs)，通过 patch `insert` 加载绝对 `file:` URL，`inject=['systemPrompt']`，注册 `order:10201`、`interpolate:false`、独立 name。`literal-additive-system-prompt` 验证 `{{this_must_remain_literal}}` 原样进入模型 system，并保留默认 identity/工具指导。不要设置 `complete:true`。
 
-**【源码 S4】** 外部插件最近的 `package.json` 若声明 name，必须同时有非空 version，否则官方 `dsh_plugin_packages` request extension 准备失败。P4 把小插件与带版本的 manifest 一起置于专用会话配置目录，保留代码版本/哈希；不要直接将任意用户文本当作模板。
+**【源码 S4】** 外部插件最近的 `package.json` 若声明 name，必须同时有非空 version，否则官方 `dsh_plugin_packages` request extension 准备失败（Orbit overlay 已关闭该扩展，manifest 仍保留版本）。P4 把小插件与带版本的 manifest 一起置于专用会话配置目录，保留代码版本/哈希；不要直接将任意用户文本当作模板。
 
 **【源码 S4，待验】** user-global AGENTS 根跟随 `DSH_HOME`，workspace AGENTS 按目录发现。skills 的完整发现、子目录覆盖和用户 allowlist 未在 P0 穷尽验证，由 P4 验收；不能因此称全部 Agent 设置已生效。
 

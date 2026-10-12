@@ -41,6 +41,7 @@ import {
   uuidToBase62,
   WIKI_DOC_CHECKERS,
   WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_LEAD_RULES,
   WIKI_DOC_SENTENCE_STATUSES,
   WIKI_DOC_STATUSES,
   WIKI_DOC_VERDICTS,
@@ -1204,6 +1205,49 @@ test('the directory, a document and the index follow the confirmed plan: numbers
   assert.deepEqual([flow.kind, flow.docNumber, flow.sectionKey, flow.sectionNumber, flow.written], ['section', '1.1', 's2', 2, true]);
   const docItem = index.body.items.find((item: { title: string }) => item.title === '任务派发与领取');
   assert.deepEqual([docItem.kind, docItem.written], ['doc', false]);
+});
+
+test('a written document\'s lead on the directory: its first section\'s first two sentences, a withdrawn one skipped, a long one cut; none until it is written', { skip }, async () => {
+  const h = await boot();
+  const s = await scene(h, 'A space with leads');
+  const runbook: DocSpec = { slug: 'ops-runbook', category: 'dev', title: '回滚手册', question: '出了事怎么回滚？', sections: [['总览', 'overview'], ['怎么回滚', 'ops']] };
+  const version = await confirmPlan(h, s, [...DOCS, runbook]);
+  // session-runtime: the first sentence of its first section cites a file a later run finds deleted. Its
+  // second section is written too, and lends the lead nothing.
+  expectStatus(await writeDoc(h, s, 'session-runtime', writeBody(version, [
+    { key: 's2', markdown: 'inbox 最多 hold 25 秒。', footnotes: [] },
+    { key: 's1', markdown: 'Orbit 的会话跑在 runner 上[1]。turn 先落库再投递。它不用 WebSocket。', footnotes: [code('export function claimTask(', { path: 'src/gone.ts' })] },
+  ])), 200, 'session-runtime is written');
+  // task-dispatch: two English sentences, longer together than a lead holds.
+  const first = 'Dispatch hands a task to exactly one runner, which claims it atomically and opens a session for it; a runner that crashes mid-claim leaves the task to be claimed again.';
+  const second = 'The claim is one UPDATE guarded by the task status, so two runners racing for one task cannot both win it.';
+  expectStatus(await writeDoc(h, s, 'task-dispatch', writeBody(version, [{ key: 's1', markdown: `${first} ${second}`, footnotes: [] }])), 200, 'task-dispatch is written');
+  // ops-runbook: written, but not its first section.
+  expectStatus(await writeDoc(h, s, 'ops-runbook', writeBody(version, [{ key: 's2', markdown: '回滚前先停写入。', footnotes: [] }])), 200, 'ops-runbook is written');
+
+  const leads = async (): Promise<Map<string, [boolean, string | null]>> => {
+    const directory = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs`);
+    expectStatus(directory, 200, 'the directory');
+    const docs: Array<{ slug: string; written: boolean; lead: string | null }> = directory.body.categories.flatMap((c: { docs: unknown[] }) => c.docs);
+    return new Map(docs.map((doc) => [doc.slug, [doc.written, doc.lead]]));
+  };
+  let read = await leads();
+  assert.deepEqual(read.get('session-runtime'), [true, 'Orbit 的会话跑在 runner 上。turn 先落库再投递。'], 'its first section\'s first two sentences, as they read');
+  const both = `${first} ${second}`;
+  assert.ok(first.length < WIKI_DOC_LEAD_RULES.maxChars && both.length > WIKI_DOC_LEAD_RULES.maxChars, 'the cut falls in the second sentence');
+  assert.deepEqual(read.get('task-dispatch'), [true, `${both.slice(0, WIKI_DOC_LEAD_RULES.maxChars).trimEnd()}…`], 'a space after a full stop, and cut with an ellipsis');
+  assert.deepEqual(read.get('dev-testing'), [false, null], 'a document not written has none');
+  assert.deepEqual(read.get('ops-runbook'), [true, null], 'nor has one whose first section is not written');
+
+  // The file the first sentence cites is gone from origin/main: the sentence is withdrawn, and the lead reads past it.
+  const withdrawn = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: HEAD,
+    paths: [{ path: 'src/gone.ts', change: 'deleted' }],
+  });
+  expectStatus(withdrawn, 200, 'the run withdraws what cites the deleted file');
+  assert.equal(withdrawn.body.withdrawn, 1);
+  read = await leads();
+  assert.deepEqual(read.get('session-runtime'), [true, 'turn 先落库再投递。它不用 WebSocket。'], 'the withdrawn sentence is skipped');
 });
 
 // ── the schema ──────────────────────────────────────────────────────────────────────────────────

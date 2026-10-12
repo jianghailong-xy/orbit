@@ -1,0 +1,1328 @@
+diff --git a/src/web/src/components/ToastViewport.tsx b/src/web/src/components/ToastViewport.tsx
+index f3ff82b22..e80950ddb 100644
+--- a/src/web/src/components/ToastViewport.tsx
++++ b/src/web/src/components/ToastViewport.tsx
+@@ -11,13 +11,14 @@ import {
+   SyncOutlined,
+   UndoOutlined,
+ } from '@ant-design/icons';
+-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
++import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+ import { createPortal } from 'react-dom';
+ import { useNavigate } from 'react-router-dom';
+ import { encodeId } from '../lib/idCodec';
+ import { levelOf, type ToastGlyph, type ToastItem } from '../lib/toastFeed';
+ import { closeToast, holdToasts, openToast, releaseToasts, useToastFeed } from '../lib/toastStore';
+ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
++import { useFeedbackPortal } from './ui/feedbackPortal';
+ 
+ /**
+  * Every toast on screen (docs/mocks/toast-system): what waits for you, pinned, above what passes.
+@@ -33,6 +34,71 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+  */
+ export function ToastViewport() {
+   const feed = useToastFeed();
++  const portal = useFeedbackPortal();
++  // A stable React portal keeps notification DOM and hover state across modal
++  // ownership changes. The manual popover paints outside ancestor transforms.
++  const [host] = useState(() => {
++    const element = document.createElement('div');
++    element.className = 'toast-layer';
++    element.popover = 'manual';
++    return element;
++  });
++  useLayoutEffect(() => {
++    // Reparenting restarts CSS animations even when React keeps the same DOM.
++    // Carry the current entrance or exit time into its new parent.
++    for (const toast of host.querySelectorAll<HTMLElement>('[data-toast-animation-start]')) {
++      toast.style.animationDelay = `${Number(toast.dataset.toastAnimationStart) - Number(document.timeline.currentTime)}ms`;
++    }
++    (portal ?? document.body).appendChild(host);
++    host.showPopover?.();
++    return () => { host.remove(); };
++  }, [host, portal]);
++  const hovered = useRef<Element | null>(null);
++  const release = useCallback(() => {
++    if (!hovered.current) return;
++    hovered.current = null;
++    releaseToasts();
++  }, []);
++  useLayoutEffect(() => {
++    // A dismissed or replaced card may not send a mouse boundary event.
++    if (hovered.current && (!host.contains(hovered.current) || hovered.current.closest('.toast-slot--leaving'))) release();
++  });
++  useLayoutEffect(() => {
++    // WebKit can omit mouseleave when a hovered node changes modal owners.
++    // mouseover also covers a notification arriving or moving under a still
++    // pointer. Movement remains necessary when WebKit omits a boundary event.
++    const trackHover = (event: MouseEvent) => {
++      const target = event.target;
++      const next = target instanceof Element && host.contains(target) && !target.closest('.toast-slot--leaving')
++        ? target.closest('[data-toast-dwell]') : null;
++      // Reapply hold on entry: clearing the feed resets the store's hold state.
++      if (next) { hovered.current = next; holdToasts(); }
++      else release();
++    };
++    document.addEventListener('mouseover', trackHover, true);
++    document.addEventListener('mousemove', trackHover, true);
++    document.addEventListener('mouseleave', release);
++    return () => {
++      document.removeEventListener('mouseover', trackHover, true);
++      document.removeEventListener('mousemove', trackHover, true);
++      document.removeEventListener('mouseleave', release);
++      release();
++    };
++  }, [host, release]);
++  const [viewportWidth, setViewportWidth] = useState<number>();
++  useLayoutEffect(() => {
++    // WebKit top-layer descendants can retain a wider scroll viewport during
++    // modal transitions. Match a body-mounted notification even while closing.
++    const probe = document.createElement('div');
++    probe.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none';
++    probe.setAttribute('aria-hidden', 'true');
++    document.body.appendChild(probe);
++    const measure = () => setViewportWidth(probe.getBoundingClientRect().width);
++    measure();
++    const observer = new ResizeObserver(measure);
++    observer.observe(probe);
++    return () => { observer.disconnect(); probe.remove(); };
++  }, []);
+   const narrow = useMediaQuery(PHONE_QUERY);
+   const navigate = useNavigate();
+   const [allPinned, setAllPinned] = useState(false);
+@@ -70,7 +136,17 @@ export function ToastViewport() {
+   if (shown.length === 0) return null;
+ 
+   return createPortal(
+-    <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications">
++    <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications"
++      onAnimationStart={(event) => {
++        const toast = event.target;
++        if (!(toast instanceof HTMLElement) || !event.animationName.startsWith('orbit-toast-') || toast.dataset.toastAnimationStart) return;
++        const animation = toast.getAnimations().find((a) => a instanceof CSSAnimation && a.animationName === event.animationName);
++        if (animation) toast.dataset.toastAnimationStart = String(Number(document.timeline.currentTime) - Number(animation.currentTime));
++      }}
++      style={viewportWidth ? narrow
++        ? { width: `calc(${viewportWidth}px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))` }
++        : { left: `calc(${viewportWidth}px - max(16px, env(safe-area-inset-right, 0px)) - 360px)`, right: 'auto' }
++        : undefined}>
+       {shown.map(({ toast, folded, behind }) => (
+         <ToastPresence
+           key={identityOf(toast)}
+@@ -95,7 +171,7 @@ export function ToastViewport() {
+         </button>
+       )}
+     </section>,
+-    document.body,
++    host,
+   );
+ }
+ 
+@@ -111,13 +187,22 @@ function ToastPresence({ id, leaving, onExit, children }: {
+   onExit: (id: string) => void;
+   children: ReactNode;
+ }) {
++  const slot = useRef<HTMLDivElement>(null);
++  useLayoutEffect(() => {
++    // The next phase has its own clock; an entrance delay must not skip exit.
++    slot.current!.style.animationDelay = '';
++    delete slot.current!.dataset.toastAnimationStart;
++    // WebKit can keep the old activeElement after its ancestor becomes inert.
++    const focused = document.activeElement;
++    if (leaving && focused instanceof HTMLElement && slot.current!.contains(focused)) focused.blur();
++  }, [leaving]);
+   useEffect(() => {
+     if (!leaving) return;
+     const timer = setTimeout(() => onExit(id), 250);
+     return () => clearTimeout(timer);
+   }, [id, leaving, onExit]);
+   return (
+-    <div className={`toast-slot${leaving ? ' toast-slot--leaving' : ''}`} inert={leaving} aria-hidden={leaving || undefined}>
++    <div ref={slot} className={`toast-slot${leaving ? ' toast-slot--leaving' : ''}`} inert={leaving} aria-hidden={leaving || undefined}>
+       {children}
+     </div>
+   );
+@@ -181,8 +266,7 @@ function Pill({ toast, behind = 0, onClick }: { toast: ToastItem; behind?: numbe
+       type="button"
+       className={`toast toast--pill toast--live${tinted}`}
+       onClick={onClick}
+-      onMouseEnter={holdToasts}
+-      onMouseLeave={releaseToasts}
++      data-toast-dwell=""
+     >
+       {body}
+     </button>
+@@ -194,7 +278,7 @@ function Pill({ toast, behind = 0, onClick }: { toast: ToastItem; behind?: numbe
+ function ResultCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: ToastItem) => void }) {
+   const action = toast.action;
+   return (
+-    <div className="toast toast--card toast--live" onMouseEnter={holdToasts} onMouseLeave={releaseToasts}>
++    <div className="toast toast--card toast--live" data-toast-dwell="">
+       <Glyph toast={toast} />
+       {toast.sessionId ? (
+         <button
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index f36194933..3d7494519 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -239,7 +239,16 @@ body {
+    its top bar instead. The column takes no clicks, and neither does a pill that names nothing:
+    they float over the header band, whose controls stay live. Toasts that do something opt back in
+    (`.toast--live`). */
++.toast-layer {
++  position: fixed; inset: 0; margin: 0; padding: 0; border: 0;
++  width: auto; height: auto; overflow: visible; background: transparent; color: inherit;
++  pointer-events: none;
++}
++.toast-layer::backdrop { background: transparent; pointer-events: none; }
+ .toast-viewport {
++  /* A modal may own the portal; keep the body's typography for stack controls. */
++  font-size: 1rem;
++  line-height: 1.15;
+   position: fixed;
+   z-index: 2050;
+   top: calc(env(safe-area-inset-top, 0px) + 16px);
+@@ -284,6 +293,8 @@ body {
+   font-size: 14px;
+   line-height: 20px;
+   text-align: start;
++  /* Keep the original card's rasterization when its host enters the top layer. */
++  will-change: transform;
+ }
+ :root[data-theme='dark'] .toast {
+   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+diff --git a/src/web/src/lib/toast.test.tsx b/src/web/src/lib/toast.test.tsx
+index 23b47c24c..3a95db3e5 100644
+--- a/src/web/src/lib/toast.test.tsx
++++ b/src/web/src/lib/toast.test.tsx
+@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import { ToastViewport } from '../components/ToastViewport';
+ import { useToast } from './toast';
+-import { clearToasts, showToast } from './toastStore';
++import { clearToasts, closeToast, showToast } from './toastStore';
+ 
+ /**
+  * Every toast says what happened to what, and what it asks of you decides its shape
+@@ -22,6 +22,8 @@ let root: Root;
+ 
+ beforeEach(async () => {
+   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
++  // Layout is covered in real browsers; jsdom has no ResizeObserver.
++  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+   container = document.createElement('div');
+   document.body.appendChild(container);
+   root = createRoot(container);
+@@ -45,6 +47,7 @@ afterEach(async () => {
+   });
+   container.remove();
+   vi.useRealTimers();
++  vi.unstubAllGlobals();
+ });
+ 
+ const viewport = (): HTMLElement | null => document.querySelector('.toast-viewport');
+@@ -137,6 +140,36 @@ describe('a toast says what happened to what', () => {
+ });
+ 
+ describe('a session result', () => {
++  it('keeps failures from different events and entities independently dismissible', async () => {
++    await act(async () => {
++      for (const [sessionId, event, headline] of [
++        [SESSION, 'merge', 'First merge failed'],
++        ['0196b000-0000-7000-8000-000000000002', 'merge', 'Second merge failed'],
++        [SESSION, 'commit', 'Commit failed'],
++      ]) toast.sessionNotice({ sessionId, sessionTitle: 'Workspace', event, headline, tone: 'error' });
++    });
++    await act(async () => { document.querySelector<HTMLButtonElement>('.toast-more')!.click(); });
++    expect(toasts().map((one) => one.querySelector('.toast-head')?.textContent)).toEqual([
++      'Commit failed', 'Second merge failed', 'First merge failed',
++    ]);
++    await act(async () => { toasts()[1].querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click(); });
++    expect(toasts().map((one) => one.querySelector('.toast-head')?.textContent)).toEqual(['Commit failed', 'First merge failed']);
++  });
++
++  it('does not turn selecting diagnostic text into a session navigation', async () => {
++    await act(async () => {
++      toast.sessionNotice({ sessionId: SESSION, sessionTitle: 'Workspace', event: 'commit', headline: 'Changes committed', detail: '1 file changed' });
++    });
++    const detail = document.querySelector('.toast-detail')!;
++    const range = document.createRange();
++    range.selectNodeContents(detail);
++    window.getSelection()!.addRange(range);
++    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Open Workspace"]')!.click(); });
++    expect(document.querySelector('.where')?.textContent).toBe('home');
++    expect(detail.textContent).toBe('1 file changed');
++    window.getSelection()!.removeAllRanges();
++  });
++
+   it('carries Undo as a card, and opens its session from the copy', async () => {
+     const onUndo = vi.fn();
+     await act(async () => {
+@@ -186,6 +219,25 @@ describe('a session result', () => {
+ });
+ 
+ describe('a toast leaving', () => {
++  it('releases a dismissed hovered result even when no mouse boundary event arrives', async () => {
++    vi.useFakeTimers();
++    let id: string | null = null;
++    await act(async () => {
++      id = showToast({ message: 'Result', tone: 'success', detail: 'Details', sessionId: SESSION });
++    });
++    const card = toasts()[0];
++    card.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
++    await act(async () => { vi.advanceTimersByTime(10000); });
++    expect(toasts()).toHaveLength(1);
++    await act(async () => { closeToast(id!); });
++    expect(card.parentElement!.hasAttribute('inert')).toBe(true);
++    await act(async () => { toast.success('Unhovered successor'); });
++    await act(async () => { vi.advanceTimersByTime(2999); });
++    expect(toasts().map((one) => one.textContent)).toEqual(['Unhovered successor']);
++    await act(async () => { vi.advanceTimersByTime(1); });
++    expect(toasts()).toHaveLength(0);
++  });
++
+   it('keeps a dismissed card for the 250ms exit, with its actions inert, then removes it', async () => {
+     vi.useFakeTimers();
+     await act(async () => { toast.error("Couldn't save the schedule", 'revision 12 is stale'); });
+diff --git a/src/web/ui-migration/feedback-production.browser.mjs b/src/web/ui-migration/feedback-production.browser.mjs
+new file mode 100644
+index 000000000..44e67ff5b
+--- /dev/null
++++ b/src/web/ui-migration/feedback-production.browser.mjs
+@@ -0,0 +1,25 @@
++import { test, expect } from './harness.mjs';
++import { sessionScenarios } from './session-scenarios.mjs';
++
++// Replay the existing production scenario without changing any P0 screenshot
++// assertion. This focused run reaches the notification even when an unrelated
++// earlier P0 session screenshot differs; its full PNG is retained for comparison.
++test('P2.3 production notification compatibility', async ({ evidence }, info) => {
++  await sessionScenarios({ ...evidence, capture: async (name) => {
++    if (name !== 'notification-error') return;
++    const { page } = evidence;
++    const region = page.getByRole('region', { name: 'Notifications', exact: true });
++    await expect(region).toBeVisible();
++    const appearance = await region.evaluate((el) => {
++      const s = getComputedStyle(el), r = el.getBoundingClientRect();
++      return { region: r.toJSON(), viewport: { width: innerWidth, height: innerHeight },
++        style: { fontFamily: s.fontFamily, fontSize: s.fontSize, lineHeight: s.lineHeight, zIndex: s.zIndex },
++        card: [...el.querySelectorAll('.toast')].map((card) => {
++          const style = getComputedStyle(card);
++          return { rect: card.getBoundingClientRect().toJSON(), background: style.background, border: style.border, shadow: style.boxShadow, color: style.color };
++        }) };
++    });
++    await info.attach('notification-appearance', { body: JSON.stringify(appearance, null, 2), contentType: 'application/json' });
++    await info.attach('production-notification', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
++  } });
++});
+diff --git a/src/web/ui-migration/playwright.config.mjs b/src/web/ui-migration/playwright.config.mjs
+index 0ff876ecc..cca34b07e 100644
+--- a/src/web/ui-migration/playwright.config.mjs
++++ b/src/web/ui-migration/playwright.config.mjs
+@@ -7,7 +7,7 @@ export default defineConfig({
+   // Deliberately outside Vitest's *.test.* / *.spec.* discovery.
+   testMatch: '*.browser.mjs',
+   // The development-only foundation fixture has its own server/configuration.
+-  testIgnore: ['foundation*.browser.mjs', 'controls*.browser.mjs', 'overlays*.browser.mjs'],
++  testIgnore: ['foundation*.browser.mjs', 'controls*.browser.mjs', 'overlays*.browser.mjs', 'toasts*.browser.mjs'],
+   fullyParallel: false,
+   workers: 1,
+   retries: 0,
+diff --git a/src/web/ui-migration/toasts-checks.mjs b/src/web/ui-migration/toasts-checks.mjs
+new file mode 100644
+index 000000000..cbc695f97
+--- /dev/null
++++ b/src/web/ui-migration/toasts-checks.mjs
+@@ -0,0 +1,18 @@
++import { expect } from '@playwright/test';
++
++// Dwell still ends at the original deadline. main retains only an inert visual
++// for another 250ms; prove both boundaries instead of treating it as live DOM.
++export async function expectExpired(page, exitElapsed = 0) {
++  await expect(page.locator('.toast-slot:not(.toast-slot--leaving)')).toHaveCount(0);
++  const leaving = page.locator('.toast-slot--leaving');
++  const count = await leaving.count();
++  expect(count).toBeGreaterThan(0);
++  for (const slot of await leaving.all()) {
++    await expect(slot).toHaveAttribute('inert', '');
++    await expect(slot).toHaveAttribute('aria-hidden', 'true');
++  }
++  await page.clock.runFor(249 - exitElapsed);
++  await expect(leaving).toHaveCount(count);
++  await page.clock.runFor(1);
++  await expect(page.getByRole('region', { name: 'Notifications', exact: true })).toHaveCount(0);
++}
+diff --git a/src/web/ui-migration/toasts-hover.browser.mjs b/src/web/ui-migration/toasts-hover.browser.mjs
+new file mode 100644
+index 000000000..80549a357
+--- /dev/null
++++ b/src/web/ui-migration/toasts-hover.browser.mjs
+@@ -0,0 +1,117 @@
++import { test, expect } from '@playwright/test';
++import { expectExpired } from './toasts-checks.mjs';
++
++const button = (page, name) => page.getByRole('button', { name, exact: true });
++const region = (page) => page.getByRole('region', { name: 'Notifications', exact: true });
++const undo = (page) => page.getByRole('button', { name: 'Undo completing Fix login redirect', exact: true });
++const keyActivate = async (page, name) => { await button(page, name).focus(); await page.keyboard.press('Enter'); };
++const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
++
++test.beforeEach(async ({ page }) => {
++  await page.goto('/ui-migration/toasts.html');
++  await page.evaluate(() => document.fonts.ready);
++});
++
++// Measure with real notifications, clear them, then park in their future space.
++// No hover() or mouse movement is used after the notification arrives.
++async function parkBeforeArrival(page, pinned = false) {
++  await button(page, 'Complete session').click();
++  if (pinned) await keyActivate(page, 'Error notice');
++  const rect = await undo(page).boundingBox();
++  await page.mouse.move(0, 0);
++  await keyActivate(page, 'Clear notifications');
++  await expect(region(page)).toHaveCount(0);
++  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
++  await page.evaluate(() => {
++    window.hoverEvents = [];
++    for (const type of ['mousemove', 'mouseover', 'mouseout']) {
++      document.addEventListener(type, (event) => window.hoverEvents.push({ type, at: Date.now(),
++        target: event.target instanceof Element ? event.target.className : '',
++        inResult: event.target instanceof Element && !!event.target.closest('.toast--card:not(.toast--attention)'),
++      }), true);
++    }
++  });
++}
++
++async function enteredWithoutMoving(page) {
++  await expect.poll(() => page.evaluate(() => window.hoverEvents.filter((e) => e.type === 'mouseover' && e.inResult).length)).toBeGreaterThan(0);
++  expect(await page.evaluate(() => window.hoverEvents.filter((e) => e.type === 'mousemove'))).toEqual([]);
++}
++
++test('native stationary arrival pauses beyond six seconds and moving away resumes dismissal', async ({ page }, info) => {
++  await parkBeforeArrival(page);
++  await keyActivate(page, 'Complete session');
++  await enteredWithoutMoving(page);
++  const began = Date.now();
++  await page.waitForTimeout(6500);
++  const paused = { elapsedMs: Date.now() - began, remaining: await region(page).count(), events: await page.evaluate(() => window.hoverEvents) };
++  await attach(info, 'native-stationary-arrival', paused);
++  expect(paused.remaining).toBe(1);
++  await info.attach('stationary-arrival', { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
++  await page.mouse.move(0, 0);
++  const released = Date.now();
++  await expect(region(page)).toHaveCount(0, { timeout: 7500 });
++  await attach(info, 'native-stationary-release', { elapsedMs: Date.now() - released, remaining: await region(page).count() });
++});
++
++test('stationary arrival stays paused across modal owners and clearing then replacing the feed', async ({ page }, info) => {
++  await parkBeforeArrival(page);
++  await keyActivate(page, 'Complete session');
++  await enteredWithoutMoving(page);
++  // Install the clock after the native boundary event has paused the dwell.
++  await page.clock.install({ time: new Date('2026-10-04T00:00:00Z') });
++  await page.clock.pauseAt(new Date('2026-10-04T00:00:01Z'));
++  for (const name of ['Open Dialog', 'Nested dialog']) {
++    await keyActivate(page, name);
++    await page.clock.runFor(10200);
++    await expect(undo(page)).toBeVisible();
++  }
++  for (let i = 0; i < 2; i++) {
++    await page.keyboard.press('Escape');
++    await page.clock.runFor(10200);
++    await expect(undo(page)).toBeVisible();
++  }
++  await keyActivate(page, 'Clear notifications');
++  await expectExpired(page);
++  await page.evaluate(() => { window.hoverEvents = []; });
++  await keyActivate(page, 'Complete session');
++  await page.clock.runFor(50);
++  await enteredWithoutMoving(page);
++  await page.clock.runFor(10000);
++  await expect(undo(page)).toBeVisible();
++  await page.mouse.move(0, 0);
++  await page.clock.runFor(5999);
++  await expect(undo(page)).toBeVisible();
++  await page.clock.runFor(1);
++  await expectExpired(page);
++  await attach(info, 'stationary-replacement', { pausedAcrossFourTransfersMs: 40800, replacedFeedPausedMs: 10000, visibleAfterReleaseMs: 5999, expiredAfterReleaseMs: 6000 });
++});
++
++test('layout moving a result under and away from a stationary pointer pauses and resumes dwell', async ({ page }, info) => {
++  await parkBeforeArrival(page, true);
++  await page.clock.install({ time: new Date('2026-10-04T00:00:00Z') });
++  await page.clock.pauseAt(new Date('2026-10-04T00:00:01Z'));
++  await keyActivate(page, 'Complete session');
++  await page.clock.runFor(2000);
++  await keyActivate(page, 'Error notice');
++  await page.clock.runFor(50);
++  await enteredWithoutMoving(page);
++  // Past the result's original deadline, before the phone error's six-second fold.
++  await page.clock.runFor(4500);
++  await expect(undo(page)).toBeVisible();
++  const entered = await page.evaluate(() => window.hoverEvents);
++  await page.evaluate(() => { window.hoverEvents = []; });
++  await region(page).getByRole('button', { name: 'Dismiss', exact: true }).focus();
++  await page.keyboard.press('Enter');
++  // The pinned card occupies its slot until its 250ms visual exit finishes.
++  await page.clock.runFor(300);
++  await expect.poll(() => page.evaluate(() => window.hoverEvents.some((e) => e.type === 'mouseover' && !e.inResult))).toBe(true);
++  const left = await page.evaluate(() => window.hoverEvents);
++  expect(left.filter((e) => e.type === 'mousemove')).toEqual([]);
++  const releaseAt = left.find((e) => e.type === 'mouseover' && !e.inResult).at;
++  await page.clock.runFor(releaseAt + 5999 - await page.evaluate(() => Date.now()));
++  await expect(undo(page)).toBeVisible();
++  await page.clock.runFor(1);
++  await expectExpired(page);
++  await attach(info, 'stationary-layout', { entered, left, releaseAt, visibleAfterReleaseMs: 5999, expiredAfterReleaseMs: 6000 });
++});
+diff --git a/src/web/ui-migration/toasts-lifecycle.browser.mjs b/src/web/ui-migration/toasts-lifecycle.browser.mjs
+new file mode 100644
+index 000000000..89d78ea4f
+--- /dev/null
++++ b/src/web/ui-migration/toasts-lifecycle.browser.mjs
+@@ -0,0 +1,266 @@
++import { test, expect } from '@playwright/test';
++import { expectExpired } from './toasts-checks.mjs';
++
++const button = (page, name) => page.getByRole('button', { name, exact: true });
++test.beforeEach(async ({ page }) => {
++  await page.goto('/ui-migration/toasts.html');
++  await page.evaluate(() => document.fonts.ready);
++});
++
++for (const kind of ['Dialog', 'Drawer', 'Bottom drawer']) {
++  test(`existing notification stays at viewport origin during ${kind} entry`, async ({ page }, info) => {
++    await page.emulateMedia({ reducedMotion: 'no-preference' });
++    await button(page, 'Error notice').click();
++    await page.mouse.move(0, 0);
++    await page.evaluate(async () => {
++      await Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => {})));
++    });
++    const before = await page.locator('.toast-viewport').boundingBox();
++    await page.evaluate(() => {
++      window.motionSamples = [];
++      window.motionDone = false;
++      const start = performance.now();
++      const frame = () => {
++        const el = document.querySelector('.toast-viewport');
++        if (el) {
++          const r = el.getBoundingClientRect();
++          const card = el.querySelector('.toast')?.getBoundingClientRect();
++          const popup = el.closest('.orbit-overlay');
++          const style = popup ? getComputedStyle(popup) : null;
++          window.motionSamples.push({ t: performance.now() - start, x: r.x, y: r.y, width: r.width, height: r.height,
++            card: card?.toJSON(), scale: style?.scale, translate: style?.translate,
++            insideViewport: r.x >= 0 && r.right <= innerWidth && r.y >= 0 && r.bottom <= innerHeight });
++        }
++        if (performance.now() - start < 800) requestAnimationFrame(frame); else window.motionDone = true;
++      };
++      requestAnimationFrame(frame);
++    });
++    await button(page, `Open ${kind}`).click();
++    await page.waitForFunction(() => window.motionDone);
++    const samples = await page.evaluate(() => window.motionSamples);
++    const shifted = samples.filter(s => Math.abs(s.x - before.x) > 1 || Math.abs(s.y - before.y) > 1);
++    await info.attach('entry-geometry', { body: JSON.stringify({ kind, before, samples, shifted }, null, 2), contentType: 'application/json' });
++    expect(shifted, 'an existing notification should not move with the newly opening modal').toHaveLength(0);
++  });
++}
++
++test('hover pause releases after a keyboard opened and closed overlay changes portal', async ({ page }, info) => {
++  await page.clock.install({ time: new Date('2026-10-04T00:00:00Z') });
++  await page.clock.pauseAt(new Date('2026-10-04T00:00:01Z'));
++  await button(page, 'Complete session').click();
++  const region = page.locator('.toast-viewport');
++  await region.locator('button[aria-label="Undo completing Fix login redirect"]').hover();
++  await page.clock.runFor(10000);
++  await expect(region).toBeVisible();
++  await button(page, 'Open Dialog').focus();
++  await page.keyboard.press('Enter');
++  await page.clock.runFor(200);
++  await expect(page.getByRole('dialog', { name: 'Workspace editor', exact: true })).toBeVisible();
++  await page.keyboard.press('Escape');
++  await page.clock.runFor(200);
++  await expect(page.getByRole('dialog', { name: 'Workspace editor', exact: true })).not.toBeVisible();
++  await page.mouse.move(0, 0);
++  await page.clock.runFor(6001);
++  const after = await page.locator('.toast-slot:not(.toast-slot--leaving)').count();
++  await info.attach('timer-after-portal', { body: JSON.stringify({ after, releasedAfterMs: 6001 }), contentType: 'application/json' });
++  expect(after).toBe(0);
++  await expectExpired(page, 1);
++});
++
++
++test('native hover deadline resumes after portal changes', async ({ page }, info) => {
++  await button(page, 'Complete session').click();
++  const region = page.locator('.toast-viewport');
++  await region.locator('button[aria-label="Undo completing Fix login redirect"]').hover();
++  await button(page, 'Open Dialog').focus();
++  await page.keyboard.press('Enter');
++  await expect(page.getByRole('dialog', { name: 'Workspace editor', exact: true })).toBeVisible();
++  await page.keyboard.press('Escape');
++  await expect(page.getByRole('dialog', { name: 'Workspace editor', exact: true })).not.toBeVisible();
++  await page.mouse.move(0, 0);
++  const releasedAt = Date.now();
++  try { await expect(region).toHaveCount(0, { timeout: 7500 }); }
++  finally {
++    await info.attach('native-timer', {body: JSON.stringify({ elapsedMs:Date.now()-releasedAt, count:await region.count() }), contentType:'application/json'});
++  }
++});
++
++const region = (page) => page.getByRole('region', { name: 'Notifications', exact: true });
++const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
++const finishMotion = (page) => page.evaluate(async () => {
++  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
++  await Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {})));
++});
++
++for (const kind of ['Dialog', 'Drawer', 'Bottom drawer']) {
++  test(`notification card stays fixed through ${kind} entry, nested layers and exit`, async ({ page }, info) => {
++    await page.emulateMedia({ reducedMotion: 'no-preference' });
++    await button(page, 'Error notice').click();
++    await page.mouse.move(0, 0);
++    await finishMotion(page);
++    await page.evaluate(() => {
++      const card = document.querySelector('.toast');
++      window.cardMotion = { before: card.getBoundingClientRect().toJSON(), samples: [], phase: 'before', running: true };
++      const sample = () => {
++        const current = document.querySelector('.toast');
++        const r = current?.getBoundingClientRect();
++        window.cardMotion.samples.push({ phase: window.cardMotion.phase, t: performance.now(), sameNode: current === card,
++          card: r?.toJSON(), opacity: current ? getComputedStyle(current).opacity : null,
++          overlays: [...document.querySelectorAll('.orbit-overlay')].map((el) => {
++            const s = getComputedStyle(el);
++            return { scale: s.scale, translate: s.translate, opacity: s.opacity, ending: el.hasAttribute('data-ending-style') };
++          }) });
++        if (window.cardMotion.running) requestAnimationFrame(sample);
++      };
++      requestAnimationFrame(sample);
++    });
++    const phase = (name) => page.evaluate((value) => { window.cardMotion.phase = value; }, name);
++    await phase('open');
++    await button(page, `Open ${kind}`).click();
++    await finishMotion(page);
++    for (let depth = 1; depth <= 2; depth++) {
++      await phase(`nested-${depth}`);
++      await button(page, 'Nested dialog').click();
++      await finishMotion(page);
++      await expect(region(page)).toBeVisible();
++    }
++    for (let depth = 2; depth >= 0; depth--) {
++      await phase(`close-${depth}`);
++      await page.keyboard.press('Escape');
++      await finishMotion(page);
++      await expect(region(page)).toBeVisible();
++    }
++    const motion = await page.evaluate(() => { window.cardMotion.running = false; return window.cardMotion; });
++    await attach(info, 'continuous-card-motion', motion);
++    expect(motion.samples.length).toBeGreaterThan(20);
++    const shifted = motion.samples.filter((s) => !s.sameNode || !s.card || s.opacity !== '1' ||
++      ['x', 'y', 'width', 'height'].some((key) => Math.abs(s.card[key] - motion.before[key]) > 0.1));
++    expect(shifted, 'existing card DOM, opacity and geometry stay stable at every sampled frame').toEqual([]);
++    // These checks also prove the original popup transitions still run in both directions.
++    for (const name of ['open', 'nested-1', 'nested-2', 'close-2', 'close-1', 'close-0']) {
++      expect(motion.samples.some((s) => s.phase === name && s.overlays.some((o) =>
++        Number(o.opacity) < 1 || (o.translate !== 'none' && o.translate !== '0px') || (o.scale !== 'none' && o.scale !== '1'))), name).toBe(true);
++    }
++    await expect(button(page, `Open ${kind}`)).toBeFocused();
++  });
++}
++
++test('stationary hover stays paused across nested modal owners then resumes for exactly six seconds', async ({ page }, info) => {
++  await page.clock.install({ time: new Date('2026-10-04T00:00:00Z') });
++  await page.clock.pauseAt(new Date('2026-10-04T00:00:01Z'));
++  await button(page, 'Complete session').click();
++  await region(page).getByRole('button', { name: 'Undo completing Fix login redirect', exact: true }).hover();
++  await page.clock.runFor(10000);
++  await expect(region(page)).toBeVisible();
++  for (const name of ['Open Dialog', 'Nested dialog']) {
++    await button(page, name).focus();
++    await page.keyboard.press('Enter');
++    await page.clock.runFor(10200);
++    await expect(region(page)).toBeVisible();
++  }
++  for (let i = 0; i < 2; i++) {
++    await page.keyboard.press('Escape');
++    await page.clock.runFor(10200);
++    await expect(region(page)).toBeVisible();
++  }
++  await page.mouse.move(0, 0);
++  await page.clock.runFor(5999);
++  await expect(region(page)).toBeVisible();
++  await page.clock.runFor(1);
++  await expectExpired(page);
++  await attach(info, 'stationary-hover', { pausedAcrossFourTransfersMs: 40800, pausedBeforeTransfersMs: 10000, visibleAfterReleaseMs: 5999, expiredAfterReleaseMs: 6000 });
++});
++
++test('unhovered notifications retain their original deadline through modal owner changes', async ({ page }, info) => {
++  await page.clock.install({ time: new Date('2026-10-04T00:00:00Z') });
++  await page.clock.pauseAt(new Date('2026-10-04T00:00:01Z'));
++  await button(page, 'Complete session').click();
++  await page.mouse.move(0, 0);
++  await page.clock.runFor(2000);
++  await button(page, 'Open Drawer').focus();
++  await page.keyboard.press('Enter');
++  await page.clock.runFor(200);
++  await page.keyboard.press('Escape');
++  await page.clock.runFor(3799);
++  await expect(region(page)).toBeVisible();
++  await page.clock.runFor(1);
++  await expectExpired(page);
++  await attach(info, 'unchanged-deadline', { visibleAtTotalMs: 5999, expiredAtTotalMs: 6000 });
++});
++
++for (const [kind, trigger] of [['Dialog', 'Open Dialog'], ['Drawer', 'Open Drawer'], ['Bottom drawer', 'Open Bottom drawer'], ['Confirmation', 'Confirm save']]) {
++  test(`notification pixels stay intact through ${kind} opening and closing`, async ({ page }, info) => {
++    await page.emulateMedia({ reducedMotion: 'no-preference' });
++    await button(page, 'Error notice').click();
++    await page.mouse.move(0, 0);
++    await finishMotion(page);
++    await info.attach('before-motion', { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
++    await button(page, trigger).click();
++    for (const phase of ['opening', 'closing']) {
++      if (phase === 'closing') await page.keyboard.press('Escape');
++      const frozen = await page.evaluate(async () => {
++        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
++        const popup = [...document.querySelectorAll('.orbit-overlay')].find((el) => el.getClientRects().length);
++        const popupAnimationCount = popup?.getAnimations().length ?? 0;
++        window.frozenPopupAnimations = document.getAnimations().filter((a) =>
++          a.effect?.target?.matches?.('.orbit-overlay, .orbit-overlay-backdrop'));
++        for (const animation of window.frozenPopupAnimations) {
++          animation.pause();
++          animation.currentTime = Number(animation.effect.getTiming().duration) / 2;
++        }
++        const s = popup && getComputedStyle(popup);
++        return { count: popupAnimationCount, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
++      });
++      if (kind === 'Confirmation') {
++        // The original holder mounts already open, then unmounts on resolution:
++        // it has no popup entry/exit transition in either baseline browser.
++        await expect(page.locator('.orbit-confirm')).toHaveCount(phase === 'opening' ? 1 : 0);
++        expect(frozen.count).toBe(0);
++      } else {
++        expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
++      }
++      await page.mouse.move(0, 0);
++      // Only the popup/backdrop are frozen. Let button hover colors settle so
++      // screenshots compare the same moment instead of an unrelated hover fade.
++      await page.evaluate(async () => {
++        const frozen = new Set(window.frozenPopupAnimations);
++        await Promise.all(document.getAnimations().filter((a) => !frozen.has(a) &&
++          a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {})));
++      });
++      await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
++      await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
++      await attach(info, `${phase}-animation`, frozen);
++      await page.evaluate(() => window.frozenPopupAnimations.forEach((a) => a.play()));
++      await finishMotion(page);
++    }
++    await expect(region(page)).toBeVisible();
++  });
++}
++
++test('a newly posted notification still plays its original entrance animation once', async ({ page }, info) => {
++  await page.emulateMedia({ reducedMotion: 'no-preference' });
++  // Start on the first animation frame so an intermediate frame cannot be missed by an actionability wait.
++  await page.evaluate(() => {
++    window.freshToastFrames = [];
++    const start = performance.now();
++    let firstCardAt;
++    const frame = () => {
++      const card = document.querySelector('.toast-slot');
++      if (card) {
++        firstCardAt ??= performance.now();
++        const s = getComputedStyle(card);
++        window.freshToastFrames.push({ t: performance.now() - start, opacity: Number(s.opacity), transform: s.transform });
++      }
++      if (firstCardAt === undefined || performance.now() - firstCardAt < 700) requestAnimationFrame(frame);
++      else window.freshToastDone = true;
++    };
++    requestAnimationFrame(frame);
++  });
++  await button(page, 'Error notice').click();
++  await page.waitForFunction(() => window.freshToastDone);
++  const frames = await page.evaluate(() => window.freshToastFrames);
++  await attach(info, 'fresh-notification-animation', frames);
++  expect(frames.some((f) => f.opacity > 0 && f.opacity < 1 && f.transform !== 'none')).toBe(true);
++  expect(frames.at(-1).opacity).toBe(1);
++  expect(frames.at(-1).transform).toBe('none');
++});
+diff --git a/src/web/ui-migration/toasts-promotion.browser.mjs b/src/web/ui-migration/toasts-promotion.browser.mjs
+new file mode 100644
+index 000000000..fd7ef082f
+--- /dev/null
++++ b/src/web/ui-migration/toasts-promotion.browser.mjs
+@@ -0,0 +1,184 @@
++import { test, expect } from '@playwright/test';
++
++const button = (page, name) => page.getByRole('button', { name, exact: true });
++const region = (page) => page.getByRole('region', { name: 'Notifications', exact: true });
++const keyActivate = async (page, name) => { await button(page, name).focus(); await page.keyboard.press('Enter'); };
++const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
++const finishMotion = (page) => page.evaluate(async () => {
++  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
++  await Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {})));
++});
++
++test.beforeEach(async ({ page }) => {
++  await page.goto('/ui-migration/toasts.html');
++  await page.evaluate(() => document.fonts.ready);
++});
++
++for (const motion of ['no-preference', 'reduce']) {
++  test(`exit keeps its own native progress through modal transfers with ${motion} motion`, async ({ page }, info) => {
++    await page.emulateMedia({ reducedMotion: motion });
++    await button(page, 'Error notice').click();
++    await page.mouse.move(0, 0);
++    await finishMotion(page);
++    await button(page, 'Open Drawer').click();
++    await finishMotion(page);
++    await info.attach('before-exit', { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
++    // Schedule the nested modal inside the real 250ms exit, without replacing
++    // requestAnimationFrame, CSS animations or the native removal timer.
++    await page.evaluate(() => {
++      const slot = document.querySelector('.toast-slot');
++      const card = slot.querySelector('.toast');
++      const start = performance.now();
++      window.exitSamples = [];
++      window.exitDone = false;
++      let transferred = false;
++      const frame = () => {
++        const t = performance.now() - start;
++        if (!transferred && t >= 80) {
++          transferred = true;
++          [...document.querySelectorAll('.orbit-overlay button')].find((b) => b.textContent === 'Nested dialog' && b.getClientRects().length).click();
++        }
++        const style = getComputedStyle(slot);
++        const animation = slot.getAnimations().find((a) => a instanceof CSSAnimation);
++        window.exitSamples.push({ t, connected: slot.isConnected, sameCard: slot.querySelector('.toast') === card,
++          opacity: Number(style.opacity), animation: animation?.animationName, cssAnimation: style.animationName, inline: slot.getAttribute("style"), display: style.display, delay: style.animationDelay,
++          progress: animation?.effect.getComputedTiming().progress, inert: slot.inert, hidden: slot.getAttribute('aria-hidden'),
++          rect: slot.getBoundingClientRect().toJSON(),
++          owner: slot.closest('.orbit-overlay')?.getAttribute('aria-labelledby') });
++        if (t < 400) requestAnimationFrame(frame); else window.exitDone = true;
++      };
++      slot.querySelector('[aria-label="Dismiss"]').click();
++      requestAnimationFrame(frame);
++    });
++    await page.waitForFunction(() => window.exitDone);
++    const samples = await page.evaluate(() => window.exitSamples);
++    await attach(info, 'native-exit', { motion, samples });
++    const connected = samples.filter((s) => s.connected);
++    expect(connected.length).toBeGreaterThan(3);
++    expect(connected[0].t).toBeLessThan(80);
++    expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);
++    expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
++    expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
++    expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
++    for (let i = 1; i < connected.length; i++) {
++      // CSS serializes the visible opacity; raw effect progress can differ by
++      // sub-ULP rounding when a delay replaces elapsed animation time.
++      expect(connected[i].opacity, 'reparenting must not restart exit').toBeLessThanOrEqual(connected[i - 1].opacity);
++    }
++    expect(samples.at(-1).connected).toBe(false);
++    await expect(region(page)).toHaveCount(0);
++  });
++}
++
++test('clear retains the last shape for exactly 250ms but immediately blocks focus and actions', async ({ page }, info) => {
++  await button(page, 'Open Dialog').click();
++  await button(page, 'Nested dialog').click();
++  await button(page, 'Complete session').click();
++  await page.clock.install({ time: new Date('2026-10-04T00:00:00Z') });
++  await page.clock.pauseAt(new Date('2026-10-04T00:00:01Z'));
++  const undo = button(page, 'Undo completing Fix login redirect');
++  await undo.hover();
++  await undo.focus();
++  const rect = await undo.boundingBox();
++  await page.evaluate(async () => {
++    window.departingSlot = document.querySelector('.toast-slot');
++    window.departingAction = window.departingSlot.querySelector('.toast-action');
++    const { clearToasts } = await import('/src/lib/toastStore.ts');
++    clearToasts();
++  });
++  await expect(page.locator('.toast-slot--leaving')).toHaveCount(1);
++  await expect(undo).toHaveCount(0);
++  const snapshot = await page.evaluate(() => {
++    window.departingAction.focus();
++    return { inert: window.departingSlot.inert, hidden: window.departingSlot.getAttribute('aria-hidden'),
++      focused: window.departingSlot.contains(document.activeElement), shape: window.departingSlot.firstElementChild.className };
++  });
++  expect(snapshot).toMatchObject({ inert: true, hidden: 'true', focused: false });
++  expect(snapshot.shape).toContain('toast--card');
++  await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
++  await page.keyboard.press('Enter');
++  expect(await page.getByLabel('Undo count', { exact: true }).allTextContents()).not.toContain('1');
++  await page.clock.runFor(249);
++  expect(await page.evaluate(() => window.departingSlot.isConnected)).toBe(true);
++  await page.clock.runFor(1);
++  expect(await page.evaluate(() => window.departingSlot.isConnected)).toBe(false);
++  // A new non-interactive pill must not inherit the departing result's hold.
++  await page.evaluate(async () => (await import('/src/lib/toastStore.ts')).showToast({ message: 'After clear', tone: 'success' }));
++  await page.clock.runFor(2999);
++  await expect(region(page).getByText('After clear', { exact: true })).toBeVisible();
++  await page.clock.runFor(1);
++  await expect(page.locator('.toast-slot--leaving')).toHaveCount(1);
++  await attach(info, 'clear-lifecycle', { ...snapshot, retainedUntilMs: 249, removedAtMs: 250, successorDwellMs: 3000, undoCalls: 0 });
++});
++
++test('keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals', async ({ page }, info) => {
++  await page.emulateMedia({ reducedMotion: 'no-preference' });
++  await button(page, 'Open Bottom drawer').click();
++  await button(page, 'Nested dialog').click();
++  const post = (stage) => page.evaluate(async (stage) => {
++    const { showToast } = await import('/src/lib/toastStore.ts');
++    showToast({ key: 'promotion-merge', sessionId: '0196b000-0000-7000-8000-000000000001',
++      message: `Promotion ${stage}`, subtitle: 'Workspace', detail: stage === 'progress' ? undefined : 'Original diagnostic',
++      tone: stage === 'failure' ? 'error' : 'success', inProgress: stage === 'progress',
++      action: stage === 'failure' ? { label: 'Retry merge', onClick: () => { window.retryCalls = (window.retryCalls ?? 0) + 1; } } : undefined });
++  }, stage);
++  await post('progress');
++  await finishMotion(page);
++  await page.evaluate(() => { window.originalSlot = document.querySelector('.toast-slot'); });
++  const stages = [];
++  for (const stage of ['failure', 'result', 'failure']) {
++    await post(stage);
++    await expect(region(page).getByText(`Promotion ${stage}`, { exact: true })).toBeVisible();
++    const state = await page.evaluate(() => {
++      const slots = [...document.querySelectorAll('.toast-slot')];
++      return { count: slots.length, sameSlot: slots[0] === window.originalSlot,
++        leaving: slots[0].classList.contains('toast-slot--leaving'), opacity: getComputedStyle(slots[0]).opacity,
++        running: slots[0].getAnimations().filter((a) => a.playState === 'running').length };
++    });
++    expect(state).toEqual({ count: 1, sameSlot: true, leaving: false, opacity: '1', running: 0 });
++    stages.push({ stage, ...state });
++    if (stage === 'failure') {
++      await expect(region(page).getByRole('button', { name: 'Retry merge', exact: true })).toBeVisible();
++      await expect(region(page).getByRole('button', { name: 'Open session', exact: true })).toHaveCount(0);
++      await expect(region(page).getByRole('button', { name: 'Copy error', exact: true })).toBeVisible();
++    }
++  }
++  await info.attach('keyed-attention', { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
++  await keyActivate(page, 'Retry merge');
++  expect(await page.evaluate(() => window.retryCalls)).toBe(1);
++  await attach(info, 'keyed-stages', stages);
++});
++
++test('entrance progress survives a modal transfer before its first 180ms completes', async ({ page }, info) => {
++  await page.emulateMedia({ reducedMotion: 'no-preference' });
++  await page.evaluate(() => {
++    window.entryFrames = [];
++    window.entryDone = false;
++    let transferred = false;
++    const start = performance.now();
++    const frame = () => {
++      const slot = document.querySelector('.toast-slot');
++      const t = performance.now() - start;
++      if (slot) {
++        const animation = slot.getAnimations().find((a) => a instanceof CSSAnimation);
++        const style = getComputedStyle(slot);
++        window.entryFrames.push({ t, opacity: Number(style.opacity), progress: animation?.effect.getComputedTiming().progress,
++          owner: !!slot.closest('.orbit-overlay'), delay: style.animationDelay });
++        if (!transferred && t >= 50 && animation) {
++          transferred = true;
++          [...document.querySelectorAll('button')].find((b) => b.textContent === 'Open Dialog').click();
++        }
++      }
++      if (t < 400) requestAnimationFrame(frame); else window.entryDone = true;
++    };
++    [...document.querySelectorAll('button')].find((b) => b.textContent === 'Error notice').click();
++    requestAnimationFrame(frame);
++  });
++  await page.waitForFunction(() => window.entryDone);
++  const frames = await page.evaluate(() => window.entryFrames);
++  await attach(info, 'native-entrance-transfer', frames);
++  expect(frames.some((s) => s.opacity > 0 && s.opacity < 1)).toBe(true);
++  expect(frames.some((s) => s.owner && s.opacity > 0 && s.opacity < 1)).toBe(true);
++  for (let i = 1; i < frames.length; i++) expect(frames[i].opacity).toBeGreaterThanOrEqual(frames[i - 1].opacity);
++  expect(frames.at(-1).opacity).toBe(1);
++});
+diff --git a/src/web/ui-migration/toasts-tests.tsconfig.json b/src/web/ui-migration/toasts-tests.tsconfig.json
+new file mode 100644
+index 000000000..3b89d8064
+--- /dev/null
++++ b/src/web/ui-migration/toasts-tests.tsconfig.json
+@@ -0,0 +1,6 @@
++{
++  "extends": "../tsconfig.json",
++  "compilerOptions": { "types": ["vite/client", "node"] },
++  "include": ["../src/lib/toast.test.tsx", "../src/lib/toastFeed.test.ts", "../src/pages/ProjectsPage.newTask.test.tsx"],
++  "exclude": []
++}
+diff --git a/src/web/ui-migration/toasts.browser.mjs b/src/web/ui-migration/toasts.browser.mjs
+new file mode 100644
+index 000000000..48d07877d
+--- /dev/null
++++ b/src/web/ui-migration/toasts.browser.mjs
+@@ -0,0 +1,303 @@
++import { test, expect } from '@playwright/test';
++import { expectExpired } from './toasts-checks.mjs';
++import { installFixedDate } from './fixtures.mjs';
++
++const errors = new WeakMap();
++const notices = (page) => page.getByRole('region', { name: 'Notifications', exact: true });
++const button = (page, name) => page.getByRole('button', { name, exact: true });
++const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
++const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
++
++test.beforeEach(async ({ page }, info) => {
++  errors.set(page, []);
++  page.on('pageerror', (error) => errors.get(page).push(error.message));
++  await installFixedDate(page);
++  await page.goto('/ui-migration/toasts.html');
++  await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
++  await page.evaluate(() => document.fonts.ready);
++  expect(await page.evaluate(() => ({ width: innerWidth, dpr: devicePixelRatio, scale: visualViewport.scale })))
++    .toEqual({ width: info.project.use.viewport.width, dpr: 1, scale: 1 });
++});
++test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
++
++async function measure(region) {
++  return region.evaluate((el) => [el, ...el.querySelectorAll('.toast, .toast-row, .toast-head, .toast-reason, button')].map((node) => {
++    const r = node.getBoundingClientRect(), s = getComputedStyle(node);
++    const keys = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'color', 'background', 'border', 'borderRadius', 'boxShadow', 'padding', 'gap', 'pointerEvents'];
++    return { tag: node.tagName, text: node.textContent, x: r.x, y: r.y, width: r.width, height: r.height,
++      hovered: node.matches(':hover'), focused: node.matches(':focus'), focusVisible: node.matches(':focus-visible'),
++      ...Object.fromEntries(keys.map((key) => [key, s[key]])) };
++  }));
++}
++
++async function keyboardReach(page, target, dialog) {
++  for (let i = 0; i < 30; i++) {
++    await page.keyboard.press('Tab');
++    expect(await dialog.evaluate((el) => el.contains(document.activeElement)), 'focus stays with the active modal and its notifications').toBe(true);
++    if (await target.evaluate((el) => el === document.activeElement)) return;
++  }
++  await expect(target).toBeFocused();
++}
++
++for (const [kind, title] of [['Dialog', 'Workspace editor'], ['Drawer', 'Workspace drawer'], ['Bottom drawer', 'Workspace sheet']]) {
++  test(`existing notifications remain accessible in ${kind} with unchanged appearance`, async ({ page }, info) => {
++    await button(page, 'Error notice').click();
++    await page.mouse.move(0, 0);
++    const region = notices(page);
++    const before = await measure(region);
++    await shot(info, 'before-overlay', region);
++    const trigger = button(page, `Open ${kind}`);
++    await trigger.click();
++    const dialog = page.getByRole('dialog', { name: title, exact: true });
++    await expect(dialog).toBeVisible();
++    await page.mouse.move(0, 0);
++    await expect(region).toBeVisible();
++    const after = await measure(region);
++    await attach(info, 'appearance', { before, after });
++    expect(after).toEqual(before);
++    await shot(info, 'with-overlay', region);
++    await shot(info, 'notification-and-overlay', page);
++    const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });
++    await keyboardReach(page, dismiss, dialog);
++    await page.keyboard.press('Enter');
++    await expect(region).toHaveCount(0);
++    await expect(dialog).toBeVisible();
++    await page.keyboard.press('Escape');
++    await expect(dialog).not.toBeVisible();
++    await expect(trigger).toBeFocused();
++    await attach(info, 'keyboard', { dismissReachedByTab: true, enterDismissedOnlyNotification: true, escapeClosedOverlay: true, focusReturned: true });
++  });
++}
++
++test('mixed pinned and passing notifications stack without overlap and retain all pinned errors', async ({ page }, info) => {
++  await button(page, 'Warning notice').click();
++  await button(page, 'Error notice').click();
++  await button(page, 'Short notice').click();
++  await button(page, 'Complete session').click();
++  const region = notices(page);
++  await page.mouse.move(0, 0);
++  const cards = region.locator('.toast');
++  await expect(cards).toHaveCount(info.project.use.isMobile ? 2 : 3);
++  const geometry = await cards.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON()));
++  geometry.forEach((r, i) => {
++    expect(r.x).toBeGreaterThanOrEqual(16);
++    expect(r.right).toBeLessThanOrEqual(info.project.use.viewport.width - 16);
++    if (i) expect(r.y - geometry[i - 1].bottom).toBeGreaterThanOrEqual(8);
++  });
++  await shot(info, 'mixed-stack', page);
++  await attach(info, 'stack-geometry', geometry);
++  if (!info.project.use.isMobile) {
++    await region.getByRole('button', { name: '+1 more', exact: true }).click();
++    await expect(region.getByText('Waiting for your approval', { exact: true })).toBeVisible();
++    await shot(info, 'expanded-pinned-stack', page);
++    await region.getByRole('button', { name: 'Show less', exact: true }).click();
++  }
++  await region.getByRole('button', { name: 'Dismiss', exact: true }).click();
++  await expect(region.getByText('Waiting for your approval', { exact: true })).toBeVisible();
++});
++
++test('short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules', async ({ page }, info) => {
++  // This test measures timer contracts, not native browser performance.
++  await page.clock.install({ time: new Date('2026-09-28T12:00:00Z') });
++  await page.clock.pauseAt(new Date('2026-09-28T12:00:01Z'));
++  await button(page, 'Short notice').click();
++  await page.clock.runFor(2999);
++  await expect(notices(page).getByText('Link copied', { exact: true })).toBeVisible();
++  await page.clock.runFor(1);
++  await expectExpired(page);
++  await button(page, 'Complete session').click();
++  await page.clock.runFor(5999);
++  await expect(notices(page).getByText('Session completed', { exact: true })).toBeVisible();
++  await page.clock.runFor(1);
++  await expectExpired(page);
++  await button(page, 'Complete session').click();
++  await notices(page).getByRole('button', { name: 'Undo completing Fix login redirect', exact: true }).hover();
++  await page.clock.runFor(10000);
++  await expect(notices(page).getByText('Session completed', { exact: true })).toBeVisible();
++  await page.mouse.move(0, 0);
++  await page.clock.runFor(5999);
++  await expect(notices(page).getByText('Session completed', { exact: true })).toBeVisible();
++  await page.clock.runFor(1);
++  await expectExpired(page);
++  await button(page, 'Warning notice').click();
++  await page.clock.runFor(6000);
++  if (info.project.use.isMobile) {
++    await expect(notices(page).getByRole('button', { name: 'Dismiss', exact: true })).toHaveCount(0);
++    await shot(info, 'folded-warning', page);
++    await notices(page).getByRole('button', { name: 'Waiting for your approval', exact: true }).click();
++    await expect(notices(page).getByRole('button', { name: 'Dismiss', exact: true })).toBeVisible();
++  }
++  await page.clock.runFor(60000);
++  await expect(notices(page).getByText('Waiting for your approval', { exact: true })).toBeVisible();
++  await attach(info, 'timers', { shortMs: 3000, actionMs: 6000, hoverHeldMs: 10000, fullDwellRestarted: true, warningStillPresentAfterMs: 66000, phoneFolds: !!info.project.use.isMobile });
++});
++
++test('event and entity deduplication, Undo and session navigation retain the business boundary', async ({ page }, info) => {
++  await button(page, 'Short notice').dblclick();
++  await expect(notices(page).getByText('Link copied', { exact: true })).toHaveCount(1);
++  await button(page, 'Clear notifications').click();
++  await button(page, 'Session failure').click();
++  await button(page, 'Session failure').click();
++  await expect(notices(page).getByText("Couldn't merge into main", { exact: true })).toHaveCount(1);
++  await button(page, 'Session result').click();
++  await expect(notices(page).getByText("Couldn't merge into main", { exact: true })).toHaveCount(0);
++  await expect(notices(page).getByText('Merged into main', { exact: true })).toHaveCount(1);
++  await button(page, 'Clear notifications').click();
++  const trigger = button(page, 'Open Dialog');
++  await trigger.click();
++  const dialog = page.getByRole('dialog', { name: 'Workspace editor', exact: true });
++  await dialog.getByRole('button', { name: 'Complete session', exact: true }).click();
++  const undo = notices(page).getByRole('button', { name: 'Undo completing Fix login redirect', exact: true });
++  await keyboardReach(page, undo, dialog);
++  await page.keyboard.press('Enter');
++  await expect(dialog.getByLabel('Undo count', { exact: true })).toHaveText('1');
++  await expect(notices(page)).toHaveCount(0);
++  await expect(dialog).toBeVisible();
++  await dialog.getByRole('button', { name: 'Session result', exact: true }).click();
++  const jump = notices(page).getByRole('button', { name: 'Merged into main Fix login redirect', exact: true });
++  if (info.project.use.hasTouch) await jump.tap(); else await jump.click();
++  await expect(page).toHaveURL(/\/sessions\/[^/]+$/);
++  await expect(notices(page)).toHaveCount(0);
++  await expect(dialog).toBeVisible();
++  await attach(info, 'actions', { duplicateSuppressed: true, eventFailureReplacedBySuccess: true, undoCount: 1, sessionPath: new URL(page.url()).pathname, pointer: info.project.use.hasTouch ? 'touch' : 'mouse' });
++});
++
++test('copyable diagnostics and live announcements survive nested overlays and theme changes', async ({ page }, info) => {
++  // Clipboard writes are intercepted; selection and the user's Copy error click are real.
++  await page.evaluate(() => {
++    window.copiedDiagnostic = '';
++    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text) => { window.copiedDiagnostic = text; } } });
++  });
++  await button(page, 'Open Drawer').click();
++  const parent = page.getByRole('dialog', { name: 'Workspace drawer', exact: true });
++  await parent.getByRole('button', { name: 'Error notice', exact: true }).click();
++  const live = page.locator('[aria-live="assertive"]');
++  await expect(live).toHaveText("Couldn't save the schedule. revision 12 is stale");
++  expect(await live.evaluate((el) => el.closest('[aria-hidden="true"], [inert]') === null)).toBe(true);
++  await parent.getByRole('button', { name: 'Nested dialog', exact: true }).click();
++  const child = page.getByRole('dialog', { name: 'Nested editor', exact: true });
++  await expect(notices(page)).toBeVisible();
++  const copy = notices(page).getByRole('button', { name: 'Copy error', exact: true });
++  await keyboardReach(page, copy, child);
++  await page.keyboard.press('Enter');
++  expect(await page.evaluate(() => window.copiedDiagnostic)).toBe('revision 12 is stale');
++  await notices(page).getByText('revision 12 is stale', { exact: true }).evaluate((el) => {
++    const range = document.createRange(); range.selectNodeContents(el);
++    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
++  });
++  expect(await page.evaluate(() => window.getSelection().toString())).toBe('revision 12 is stale');
++  const original = await notices(page).locator('.toast').evaluate((el) => getComputedStyle(el).background);
++  await child.getByRole('button', { name: 'Switch theme', exact: true }).click();
++  await expect.poll(() => notices(page).locator('.toast').evaluate((el) => getComputedStyle(el).background)).not.toBe(original);
++  await page.mouse.move(0, 0);
++  await child.focus();
++  await page.evaluate(() => window.getSelection().removeAllRanges());
++  await shot(info, 'nested-toast-opposite-theme', page);
++  await page.keyboard.press('Escape');
++  await expect(child).not.toBeVisible();
++  await expect(parent).toBeVisible();
++  await expect(notices(page)).toBeVisible();
++  await parent.getByRole('button', { name: 'Clear notifications', exact: true }).click();
++  await parent.getByRole('button', { name: 'Short notice', exact: true }).click();
++  await expect(page.locator('[aria-live="polite"]')).toHaveText('Link copied');
++  await page.keyboard.press('Escape');
++  await expect(parent).not.toBeVisible();
++  await expect(notices(page).getByText('Link copied', { exact: true })).toBeVisible();
++  await attach(info, 'accessibility', { assertiveErrorAndDetail: true, liveRegionNotHidden: true, politeSuccess: true, copyText: 'revision 12 is stale', selectedDiagnostic: true, notificationSurvivesEachOverlayClose: true, themeChangedWhileOpen: true });
++});
++
++test('async confirmation keeps pending locks, accessible failure feedback and successful retry', async ({ page }, info) => {
++  let requests = 0;
++  let complete;
++  const pending = new Promise((resolve) => { complete = resolve; });
++  await page.route('**/__toast-confirm', async (route) => {
++    requests++;
++    if (requests === 1) { await pending; await route.fulfill({ status: 409, body: '{}' }); }
++    else await route.fulfill({ status: 200, body: '{}' });
++  });
++  await button(page, 'Confirm save').click();
++  const confirmation = page.getByRole('alertdialog', { name: 'Save schedule?', exact: true });
++  await confirmation.getByRole('button', { name: 'Save', exact: true }).dblclick();
++  await expect(confirmation).toHaveAttribute('aria-busy', 'true');
++  await expect(confirmation.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
++  await page.keyboard.press('Escape');
++  expect(requests).toBe(1);
++  await shot(info, 'confirm-pending', page);
++  complete();
++  await expect(confirmation.getByRole('alert')).toHaveText('revision 12 is stale');
++  await expect(notices(page)).toBeVisible();
++  await shot(info, 'confirm-failure-notification', page);
++  const dismiss = notices(page).getByRole('button', { name: 'Dismiss', exact: true });
++  await keyboardReach(page, dismiss, confirmation);
++  await page.keyboard.press('Enter');
++  await expect(confirmation).toBeVisible();
++  await confirmation.getByRole('button', { name: 'Save', exact: true }).click();
++  await expect(confirmation).not.toBeVisible();
++  await expect(notices(page).getByText('Schedule saved', { exact: true })).toBeVisible();
++  await expect(button(page, 'Confirm save')).toBeFocused();
++  expect(requests).toBe(2);
++  await attach(info, 'confirmation', { requests, pendingCancelDisabled: true, pendingEscapeIgnored: true, failureRetained: true, toastDismissDidNotCancel: true, retrySucceeded: true, focusReturned: true });
++});
++
++test('legacy AntApp confirmation still works with the same notification service', async ({ page }, info) => {
++  await button(page, 'Legacy confirm').click();
++  const legacy = page.getByRole('dialog', { name: 'Legacy confirmation', exact: true });
++  await expect(legacy).toBeVisible();
++  await legacy.getByRole('button', { name: 'OK', exact: true }).click();
++  await expect(legacy).not.toBeVisible();
++  await expect(notices(page).getByText('Legacy confirmed', { exact: true })).toBeVisible();
++  await shot(info, 'legacy-confirmed', page);
++});
++
++test('retained closed overlays release notifications and normal motion settles at the original origin', async ({ page }, info) => {
++  await page.emulateMedia({ reducedMotion: 'no-preference' });
++  const finishAnimations = () => page.evaluate(async () => {
++    await Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {})));
++  });
++  await button(page, 'Error notice').click();
++  await finishAnimations();
++  await page.mouse.move(0, 0);
++  const before = await measure(notices(page));
++  const trigger = button(page, 'Open Retained dialog');
++  await trigger.click();
++  const dialog = page.getByRole('dialog', { name: 'Retained editor', exact: true });
++  await expect(dialog).toBeFocused();
++  await page.mouse.move(0, 0);
++  await finishAnimations();
++  expect(await measure(notices(page))).toEqual(before);
++  await page.keyboard.press('Escape');
++  await expect(dialog).not.toBeVisible();
++  await expect(trigger).toBeFocused();
++  await finishAnimations();
++  await expect(notices(page)).toBeVisible();
++  expect(await measure(notices(page))).toEqual(before);
++  await notices(page).getByRole('button', { name: 'Dismiss', exact: true }).click();
++  await expect(notices(page)).toHaveCount(0);
++  await trigger.click();
++  await expect(dialog).toBeVisible();
++  await finishAnimations();
++  await dialog.getByRole('button', { name: 'Warning notice', exact: true }).click();
++  await finishAnimations();
++  await expect(notices(page)).toBeVisible();
++  await shot(info, 'retained-reopened-with-motion', page);
++  await attach(info, 'retained-and-motion', { visibleAfterClose: true, sameSettledGeometry: true, reopenedAcceptsNewNotifications: true });
++});
++
++test('notification origin follows viewport resize across the phone breakpoint', async ({ page }, info) => {
++  await button(page, 'Error notice').click();
++  const measurements = [];
++  for (const width of [599, 601]) {
++    await page.setViewportSize({ width, height: 900 });
++    await page.mouse.move(0, 0);
++    const before = await measure(notices(page));
++    await button(page, 'Open Drawer').click();
++    const drawer = page.getByRole('dialog', { name: 'Workspace drawer', exact: true });
++    await expect(drawer).toBeVisible();
++    await page.mouse.move(0, 0);
++    await expect.poll(() => measure(notices(page))).toEqual(before);
++    measurements.push({ width, before, after: await measure(notices(page)) });
++    await page.keyboard.press('Escape');
++    await expect(drawer).not.toBeVisible();
++  }
++  await attach(info, 'responsive-origin', measurements);
++});
+diff --git a/src/web/ui-migration/toasts.config.mjs b/src/web/ui-migration/toasts.config.mjs
+new file mode 100644
+index 000000000..42d9eeb8b
+--- /dev/null
++++ b/src/web/ui-migration/toasts.config.mjs
+@@ -0,0 +1,17 @@
++import { defineConfig } from '@playwright/test';
++import { fileURLToPath } from 'node:url';
++import baseline from './playwright.config.mjs';
++
++export default defineConfig({
++  ...baseline,
++  testMatch: 'toasts*.browser.mjs',
++  testIgnore: [],
++  outputDir: '../.toasts-results',
++  reporter: [['list'], ['json', { outputFile: fileURLToPath(new URL('../.toasts-results/report.json', import.meta.url)) }]],
++  use: { ...baseline.use, baseURL: 'http://127.0.0.1:14377' },
++  webServer: {
++    ...baseline.webServer,
++    command: 'npm run dev -- --host 127.0.0.1 --port 14377 --strictPort',
++    url: 'http://127.0.0.1:14377',
++  },
++});
+diff --git a/src/web/ui-migration/toasts.html b/src/web/ui-migration/toasts.html
+new file mode 100644
+index 000000000..a70c9bb9e
+--- /dev/null
++++ b/src/web/ui-migration/toasts.html
+@@ -0,0 +1,13 @@
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <meta id="theme-color" name="theme-color" content="#ffffff" />
++    <title>Orbit notification fixture</title>
++  </head>
++  <body>
++    <div id="root"></div>
++    <script type="module" src="./toasts.tsx"></script>
++  </body>
++</html>
+diff --git a/src/web/ui-migration/toasts.tsconfig.json b/src/web/ui-migration/toasts.tsconfig.json
+new file mode 100644
+index 000000000..4c5dff75d
+--- /dev/null
++++ b/src/web/ui-migration/toasts.tsconfig.json
+@@ -0,0 +1,6 @@
++{
++  "extends": "../tsconfig.json",
++  "compilerOptions": { "types": ["vite/client", "node"] },
++  "include": ["toasts.tsx"],
++  "exclude": []
++}
+diff --git a/src/web/ui-migration/toasts.tsx b/src/web/ui-migration/toasts.tsx
+new file mode 100644
+index 000000000..95d9f0ea6
+--- /dev/null
++++ b/src/web/ui-migration/toasts.tsx
+@@ -0,0 +1,8 @@
++import 'antd/dist/reset.css';
++import '../src/index.css';
++import '../src/components/ui/foundation.css';
++import { StrictMode } from 'react';
++import { createRoot } from 'react-dom/client';
++import { ToastsFixture } from '../src/components/ui/__fixtures__/ToastsFixture';
++
++createRoot(document.getElementById('root')!).render(<StrictMode><ToastsFixture /></StrictMode>);

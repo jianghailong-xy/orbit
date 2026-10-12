@@ -141,8 +141,9 @@ describe('smart model selection, one switch for the whole account', () => {
   it('sits in Session defaults under Default permission mode, saying what it does', async () => {
     await mount({});
     expect(label().nextElementSibling?.textContent).toBe(HINT);
-    const card = label().closest<HTMLElement>('.ant-card')!;
-    expect(card.querySelector('.ant-card-head-title')?.textContent).toBe('Session defaults');
+    // The card it sits in is a region named by its title.
+    const card = label().closest<HTMLElement>('section[aria-labelledby]')!;
+    expect(document.getElementById(card.getAttribute('aria-labelledby')!)?.textContent).toBe('Session defaults');
     const text = card.textContent ?? '';
     expect(text.indexOf('Default permission mode')).toBeGreaterThanOrEqual(0);
     expect(text.indexOf(LABEL)).toBeGreaterThan(text.indexOf('Default permission mode'));

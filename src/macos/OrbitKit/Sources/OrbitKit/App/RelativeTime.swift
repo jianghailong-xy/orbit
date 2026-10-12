@@ -88,6 +88,34 @@ public enum RelativeTime {
     /// Shared (not private) so recency sorting (`RecentsLogic`) and the app-side models that read a
     /// timestamp off a DTO (the auto-retry card's `retryAt`) parse them all the same way.
     public static func parse(_ iso: String) -> Date? {
-        iso8601Fractional.date(from: iso) ?? iso8601Whole.date(from: iso)
+        if let hit = parsed.lookup(iso) { return hit }
+        let date = iso8601Fractional.date(from: iso) ?? iso8601Whole.date(from: iso)
+        parsed.store(date, for: iso)
+        return date
+    }
+
+    // The same few thousand timestamps come back on every snapshot, and the list's grouping, its
+    // rows and the drawer each read them again per render — an ICU parse every time. A string
+    // parses to one instant forever, so the answer is kept; the bound only stops a long session
+    // from growing it without end. Locked: `parse` is called off the main actor too.
+    private static let parsed = ParseCache()
+
+    private final class ParseCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var dates: [String: Date?] = [:]
+
+        /// `.some(nil)` is a string already known not to parse.
+        func lookup(_ iso: String) -> Date?? {
+            lock.lock()
+            defer { lock.unlock() }
+            return dates[iso]
+        }
+
+        func store(_ date: Date?, for iso: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            if dates.count >= 16_384 { dates.removeAll(keepingCapacity: true) }
+            dates[iso] = .some(date)
+        }
     }
 }

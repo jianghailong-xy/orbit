@@ -1,0 +1,8 @@
+run environment.json sha256: fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf
+P0.2 recorded environment.json sha256: fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf
+byte-identical: True
+os: "PRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"13\"\nVERSION=\"13 (trixie)\"\nVERSION_CODENAME=trixie\nDEBIAN_VERSION_FULL=13.7\nID=debian\nHOME_URL=\"https://www.debian.org/\"\nSUPPORT_URL=\"https://www.debian.org/support\"\nBUG_REPORT_URL=\"https://bugs.debian.org/\"\n"
+playwright: "1.63.0"
+browsers: [{"name": "chromium", "revision": "1243", "installByDefault": true, "browserVersion": "153.0.8010.12", "title": "Chrome for Testing"}, {"name": "chromium-headless-shell", "revision": "1243", "installByDefault": true, "browserVersion": "153.0.8010.12", "title": "Chrome Headless Shell"}, {"name": "firefox", "revision": "1543", "installByDefault": true, "browserVersion": "155.0", "title": "Firefox"},
+fonts: [{"path": "/usr/share/fonts/X11/Type1/c0419bt_.pfb", "sha256": "0e15626ca60d95e49ac15352f5c7f1837eb6dc9b6a353357012ce54a5b37015c"}, {"path": "/usr/share/fonts/X11/Type1/c0582bt_.pfb", "sha256": "9ecc1d370c5ee96c8b58d144d92a9fbeb416e2a33746f4ef86ed4e7490389dc6"}, {"path": "/usr/share/fonts/X11/Type1/c0583bt_.pfb", "sha256": "708bbc1a259fbdf4f8c0fde683dd604f1e0677a72078567d70328f9a428248b7"}, {"path
+top-level keys: ['arch', 'browsers', 'fonts', 'os', 'platform', 'playwright']

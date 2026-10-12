@@ -75,6 +75,15 @@ const cases = [
   }),
   ['an unapproved FCM env', 'nothing beyond the approved configuration was added',
     replace('      FCM_PROJECT_ID:', '      FCM_UNAPPROVED: "1"\n      FCM_PROJECT_ID:')],
+  // The wiki worker the owner added on 2026-10-07: pinned whole, and the only holder of the model's key.
+  ['a port on the wiki worker', 'the wiki worker is exactly the service the owner approved',
+    replace('    command: node src/apiserver/dist/wiki-worker/main.js\n',
+      '    command: node src/apiserver/dist/wiki-worker/main.js\n    ports:\n      - "3001:3001"\n')],
+  ['a mount on the wiki worker', 'the wiki worker is exactly the service the owner approved',
+    replace('    command: node src/apiserver/dist/wiki-worker/main.js\n',
+      '    command: node src/apiserver/dist/wiki-worker/main.js\n    volumes:\n      - ./data:/data\n')],
+  ['the System model key given to the apiserver', 'are given to the wiki worker and to no other service',
+    replace('      PORT: "3000"', '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"\n      PORT: "3000"')],
 ];
 
 test('the topology checks accept the control and reject deployment counterexamples', async (t) => {

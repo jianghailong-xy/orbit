@@ -1,0 +1,127 @@
+{
+ "tests": 72,
+ "steps": 368,
+ "semantic": [],
+ "presentation": {
+  "focus": 10,
+  "dialogs": 2
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-dark-desktop :: task detail pilot › dependencies, inputs and comments",
+    "step": "input removed",
+    "ref": {
+     "role": "button",
+     "name": "Remove"
+    },
+    "del": {
+     "role": "button",
+     "name": "Remove input"
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: task detail pilot › fields, pickers and the panel header",
+    "step": "suggested pick L",
+    "ref": {
+     "role": "combobox",
+     "name": "L · Opus 5.5 · high"
+    },
+    "del": "body"
+   },
+   {
+    "test": "chromium-dark-phone :: task detail pilot › fields, pickers and the panel header",
+    "step": "model pick Sonnet",
+    "ref": "body",
+    "del": {
+     "role": "combobox",
+     "name": ""
+    }
+   },
+   {
+    "test": "chromium-light-phone :: task detail pilot › dependencies, inputs and comments",
+    "step": "input removed",
+    "ref": {
+     "role": "button",
+     "name": "Remove"
+    },
+    "del": {
+     "role": "button",
+     "name": "Remove input"
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: share dialog pilot › from Only you to a public link and back",
+    "step": "turned off",
+    "ref": {
+     "role": "button",
+     "name": "Access"
+    },
+    "del": "body"
+   },
+   {
+    "test": "webkit-dark-desktop :: task detail pilot › fields, pickers and the panel header",
+    "step": "list pick Later",
+    "ref": "body",
+    "del": {
+     "role": "combobox",
+     "name": ""
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: task detail pilot › fields, pickers and the panel header",
+    "step": "model pick Sonnet",
+    "ref": "body",
+    "del": {
+     "role": "combobox",
+     "name": ""
+    }
+   },
+   {
+    "test": "webkit-dark-phone :: share dialog pilot › from Only you to a public link and back",
+    "step": "turned off",
+    "ref": {
+     "role": "button",
+     "name": "Access"
+    },
+    "del": "body"
+   },
+   {
+    "test": "webkit-dark-phone :: task detail pilot › fields, pickers and the panel header",
+    "step": "list pick Later",
+    "ref": "body",
+    "del": {
+     "role": "combobox",
+     "name": ""
+    }
+   },
+   {
+    "test": "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back",
+    "step": "turned off",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Access"
+    }
+   }
+  ],
+  "dialogs": [
+   {
+    "test": "chromium-dark-desktop :: task detail pilot › dependencies, inputs and comments",
+    "step": "input removed",
+    "ref": [
+     "Remove this input?"
+    ],
+    "del": []
+   },
+   {
+    "test": "chromium-light-phone :: task detail pilot › dependencies, inputs and comments",
+    "step": "input removed",
+    "ref": [
+     "Remove this input?"
+    ],
+    "del": []
+   }
+  ]
+ }
+}

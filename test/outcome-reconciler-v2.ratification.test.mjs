@@ -872,15 +872,17 @@ test('(q) this change adds no compose service and no resident process', () => {
   // removed from Compose after this migration landed. The list shrank; this assertion still says
   // the same thing it always did — that nothing here ADDS a service. ('pg-socket' is the volume,
   // which the two-space regex above cannot tell apart from a service.)
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this change.
   assert.deepEqual(services.sort(), [
-    'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web',
+    'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker',
   ], 'the deployment is exactly the services it already had');
 
   // A resident process would arrive as a new long-running start script or a new scheduled job.
   const packageJson = JSON.parse(read('package.json'));
   const apiserver = JSON.parse(read('src/apiserver/package.json'));
   assert.deepEqual(Object.keys(apiserver.scripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev'],
+    ['start:dev', 'start:wiki-worker'],
     'no new long-running entry point');
   assert.equal(Object.keys(packageJson.scripts).some((name) => /daemon|worker|cron/i.test(name)),
     false, 'no new scheduled or resident runner');
@@ -1128,13 +1130,15 @@ test('(v) this is subtraction: nothing new runs, and less SQL is in force than b
   // The same list (q) asserts, and for the same reason: watchdog, outcome-coordinator,
   // outcome-coordinator-secondary and executable-dead-man were removed from Compose after 0218
   // landed. The list shrank; the claim is still that nothing here ADDS a service.
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this change.
   assert.deepEqual(services.sort(), [
-    'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web',
+    'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker',
   ], 'the deployment is exactly the services it already had');
   const packageJson = JSON.parse(read('package.json'));
   const apiserver = JSON.parse(read('src/apiserver/package.json'));
   assert.deepEqual(Object.keys(apiserver.scripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev'], 'no new long-running entry point');
+    ['start:dev', 'start:wiki-worker'], 'no new long-running entry point');
   assert.equal(Object.keys(packageJson.scripts).some((name) => /daemon|worker|cron/i.test(name)),
     false, 'no new scheduled or resident runner');
   assert.doesNotMatch(ENVELOPE_REMOVAL_MIGRATION, /pg_cron|CREATE EXTENSION|LISTEN |NOTIFY /,

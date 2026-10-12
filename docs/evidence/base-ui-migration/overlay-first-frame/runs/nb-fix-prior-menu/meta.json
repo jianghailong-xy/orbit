@@ -1,0 +1,16 @@
+{
+ "label": "nb-fix-prior-menu",
+ "step": "prior-menu",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "KW2_RESULTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/nb-fix-prior-menu/results node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames.config.mjs",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T15:31:00Z",
+ "endedAt": "2026-10-08T15:32:10+00:00",
+ "loadAverage": {
+  "start": "6.02 9.03 15.46",
+  "end": "6.25 8.49 14.81"
+ },
+ "exitCode": 0
+}

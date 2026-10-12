@@ -1,0 +1,50 @@
+[
+  {
+    "project": "chromium-dark-desktop",
+    "notificationAndShadow": 0,
+    "pageAgainstTaskStart": 0,
+    "pageAgainstP0": 638
+  },
+  {
+    "project": "chromium-dark-phone",
+    "notificationAndShadow": 0,
+    "pageAgainstTaskStart": 0,
+    "pageAgainstP0": 0
+  },
+  {
+    "project": "chromium-light-desktop",
+    "notificationAndShadow": 0,
+    "pageAgainstTaskStart": 0,
+    "pageAgainstP0": 633
+  },
+  {
+    "project": "chromium-light-phone",
+    "notificationAndShadow": 0,
+    "pageAgainstTaskStart": 0,
+    "pageAgainstP0": 0
+  },
+  {
+    "project": "webkit-dark-desktop",
+    "notificationAndShadow": 0,
+    "pageAgainstTaskStart": 0,
+    "pageAgainstP0": 642
+  },
+  {
+    "project": "webkit-dark-phone",
+    "notificationAndShadow": 0,
+    "pageAgainstTaskStart": 0,
+    "pageAgainstP0": 0
+  },
+  {
+    "project": "webkit-light-desktop",
+    "notificationAndShadow": 0,
+    "pageAgainstTaskStart": 0,
+    "pageAgainstP0": 648
+  },
+  {
+    "project": "webkit-light-phone",
+    "notificationAndShadow": 0,
+    "pageAgainstTaskStart": 0,
+    "pageAgainstP0": 0
+  }
+]

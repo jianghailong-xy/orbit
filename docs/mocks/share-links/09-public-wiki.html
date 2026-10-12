@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>09 public wiki</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+  /* The public shell (PublicShell): the real classes, laid out as a block on the sheet. */
+  .share-page { height: auto; border: 1px solid #dde0e6; border-radius: 10px; overflow: hidden; position: relative; }
+  .share-scroll { overflow: visible; }
+  .share-inner { padding-bottom: 26px; }
+  .mk { position: relative; }
+  .mk > .m-n { position: absolute; left: -28px; top: 2px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .mkr > .m-n { position: absolute; right: -28px; left: auto; top: 2px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .wk-title-row { display: flex; align-items: center; gap: 10px; }
+  .wk-title-row .page-title { margin: 0; }
+  .pop { position: absolute; z-index: 3; background: var(--bg-raised); border-radius: 8px; padding: 12px 14px;
+         box-shadow: 0 6px 16px rgba(0,0,0,.08), 0 3px 6px -4px rgba(0,0,0,.12), 0 9px 28px 8px rgba(0,0,0,.05); }
+  .pop::before { content: ""; position: absolute; top: -6px; left: 22px; width: 12px; height: 12px; background: var(--bg-raised); transform: rotate(45deg); box-shadow: -2px -2px 3px rgba(0,0,0,.04); }
+  .phones { display: flex; gap: 34px; justify-content: center; zoom: .9; padding: 14px 0 6px; }
+  .capr { display: flex; gap: 34px; justify-content: center; zoom: .9; margin-top: 22px; }
+  .capr div { width: 393px; font-size: 13px; color: var(--text-2); text-align: center; }
+  .phone .share-page { border: 0; border-radius: 0; }
+  .phone .share-header { padding: 10px 14px; gap: 10px; }
+  .phone .share-inner { padding: 14px 14px 20px; }
+  .phone .wk-art-page .t-title { font-size: 24px; }
+  .phone .wk-dc-scope { grid-template-columns: minmax(0, 1fr); }
+  .addr { position: absolute; left: 14px; right: 14px; bottom: 26px; height: 46px; border-radius: 23px; background: rgba(246,246,248,.96);
+          box-shadow: 0 4px 18px rgba(0,0,0,.14); display: flex; align-items: center; justify-content: center; font-size: 15px; color: #333; }
+  .ic16 { width: 13px; height: 13px; vertical-align: -2px; }
+  /* share.css's `.phone` is the mock's phone frame; the app's document rows are `.wk-pl-doc.phone`. */
+  .wk-pl-doc.phone { width: auto; height: auto; border-radius: 0; background: transparent; box-shadow: none; position: static;
+                     overflow: visible; flex: initial; font-family: inherit; color: inherit; text-decoration: none; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet" id="sheet">
+  <h1 class="m-h1">9 · 公开 wiki：访客看到的首页和文档页</h1>
+  <p class="m-sub"><code>/s/&lt;token&gt;</code> 是首页，<code>/s/&lt;token&gt;/d/&lt;文档&gt;</code> 是一篇文档。外壳和项目、任务的公开页同一个；内容区直接用 app 的 wiki 组件和样式，只做减法。桌面宽 1280（内容列 1040），手机是 iPhone Safari。</p>
+
+  <!-- ① home -->
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">新</span> 首页 · 只列已经写好的文档，按大类</div>
+    <div class="share-page">
+      <header class="share-header mk" style="position:relative">
+        <div class="share-brand">Orbit</div>
+        <nav class="share-crumbs"><span class="share-crumb is-here">orbit · Wiki</span></nav>
+        <div class="share-right"><span class="share-live"><i></i>Live</span><span class="share-badge">Read-only</span></div>
+      </header>
+      <main class="share-scroll"><div class="share-inner is-wide">
+        <div class="wk-title-row mk"><span class="m-n">1</span><h1 class="page-title">Wiki</h1><span class="wk-space-tag">orbit</span></div>
+        <div class="wk-home-state">12 documents</div>
+        <div class="wk-home" style="margin-top:16px">
+          <section class="wk-pl-cat mk"><span class="m-n">2</span>
+            <div class="wk-pl-cat-h"><span class="no">1</span><b>产品概览与架构</b></div>
+            <a class="wk-pl-doc phone"><span class="no">1.1</span><span class="main"><span class="t"><span class="tt">产品定位与核心能力</span></span><span class="q lead">Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。</span></span><span class="chev">›</span></a>
+            <a class="wk-pl-doc phone"><span class="no">1.2</span><span class="main"><span class="t"><span class="tt">系统架构与数据流</span></span><span class="q lead">Orbit 把协调和执行分开：服务器保存意图与历史，注册的 runner 在本来就有仓库、凭据和网络权限的机器上跑 agent 进程。</span></span><span class="chev">›</span></a>
+          </section>
+          <section class="wk-pl-cat">
+            <div class="wk-pl-cat-h"><span class="no">2</span><b>任务与项目</b></div>
+            <a class="wk-pl-doc phone"><span class="no">2.1</span><span class="main"><span class="t"><span class="tt">任务生命周期与依赖</span></span><span class="q lead">任务是持久的排队工作单元：可以归进清单、依赖别的任务；合格的 runner 原子地领取它，开一个会话，再回报结果。</span></span><span class="chev">›</span></a>
+          </section>
+          <section class="wk-pl-cat">
+            <div class="wk-pl-cat-h"><span class="no">3</span><b>会话与交互</b></div>
+            <a class="wk-pl-doc phone"><span class="no">3.1</span><span class="main"><span class="t"><span class="tt">Session 运行与恢复</span></span><span class="q lead">session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。</span></span><span class="chev">›</span></a>
+            <a class="wk-pl-doc phone"><span class="no">3.2</span><span class="main"><span class="t"><span class="tt">实时流与推送</span></span><span class="q lead">客户端从每个会话的 SSE 流拿转录事件；用户级控制面流把各处的变化推给所有在线的客户端。</span></span><span class="chev">›</span></a>
+          </section>
+          <section class="wk-pl-cat"><div class="wk-pl-cat-h"><span class="no">8</span><b>安全与信任</b></div>
+            <a class="wk-pl-doc phone"><span class="no">8.3</span><span class="main"><span class="t"><span class="tt">分享链接</span></span><span class="q lead">一个公开链接就是一个根对象加上勾选的层：只读、免登录，token 本身就是凭据。</span></span><span class="chev">›</span></a>
+          </section>
+        </div>
+      </div></main>
+      <footer class="share-footer">Shared from Orbit · read-only</footer>
+    </div>
+  </div>
+
+  <!-- ② a document, Footnotes on -->
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l"><span class="m-k state">Footnotes 开</span> 文档页 · 角标点开是脚注卡：原话、代码、路径和行号，不链回任何地方</div>
+    <div class="share-page">
+      <header class="share-header">
+        <div class="share-brand">Orbit</div>
+        <nav class="share-crumbs mk" style="position:relative"><a class="share-crumb">orbit · Wiki</a><span class="share-crumb-sep">›</span><span class="share-crumb is-here">Session 运行与恢复</span></nav>
+        <div class="share-right"><span class="share-live"><i></i>Live</span><span class="share-badge">Read-only</span></div>
+      </header>
+      <main class="share-scroll"><div class="share-inner" style="max-width:880px">
+        <article class="wk-art-page wk-dc-page">
+          <h1 class="t-title wk-art-title mk"><span class="m-n">3</span>Session 运行与恢复</h1>
+          <div class="wk-tags"><span class="wk-tag cat">会话与交互</span><span class="wk-tag">6 sections</span><span class="wk-tag">41 footnotes</span></div>
+          <div class="t-meta wk-art-updated"><svg class="ic16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> <span>Updated Oct 2 · written by Wiki maintenance</span></div>
+          <div class="wk-dc-scope mk"><span class="m-n">4</span>
+            <div class="k">Question</div><div class="v q">一个 session 从创建到结束是怎么跑的，断了以后怎么恢复？</div>
+            <div class="k">Written for</div><div class="v"><ul><li>第一次读 runner 代码的人</li><li>排查会话卡住、重复执行的人</li></ul></div>
+            <div class="k">Covers</div><div class="v"><ul><li>turn 的投递与领取</li><li>心跳、超时与恢复</li></ul></div>
+            <div class="k">Not covered</div><div class="v"><ul><li>事件怎么推到客户端 <a class="see">→ 3.2</a></li><li>消息在会话之间怎么路由 <span style="color:var(--text-3)">→ 3.3</span></li></ul></div>
+          </div>
+          <div class="wk-art wk-dc-body" style="position:relative">
+            <section class="wk-dc-sec">
+              <h2><span class="no">1</span>总览</h2>
+              <p><span>Orbit 中的 session 是一个 agent runtime 与 runner 绑定的可恢复多轮会话。</span><sup class="wk-fn"><button class="wk-fn-n">[1]</button></sup> <span>所有交互遵循「先存后投」：用户的 turn 先落库，runner 再通过出站 long-poll 领取。</span><sup class="wk-fn"><button class="wk-fn-n">[2]</button></sup> <span>runner 不需要任何入站端口。</span></p>
+            </section>
+            <section class="wk-dc-sec">
+              <h2><span class="no">2</span>turn 投递与 inbox 领取</h2>
+              <p><span class="hl">Runner 每次只领取一条 turn，并在同一个事务里把它标成已领取。</span><sup class="wk-fn"><button class="wk-fn-n on">[3]</button></sup> <span>领取失败的 turn 留在队列里，下一次长轮询会再拿到它。</span><sup class="wk-fn"><button class="wk-fn-n">[4]</button></sup></p>
+              <pre class="wk-dc-code"><code>GET /api/runner/runs/:id/inbox?wait=25</code></pre>
+              <p><span>心跳每 15 秒一次；连续 3 次没有心跳，服务器把会话标成可恢复，交给下一个领取它的 runner。</span><sup class="wk-fn"><button class="wk-fn-n">[5]</button></sup></p>
+            </section>
+            <div class="pop mkr" style="left:96px;top:250px"><span class="m-n">5</span>
+              <div class="wk-fn2">
+                <div class="k"><span class="num">[3]</span><span class="ic"><svg class="ic16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg></span><span>Code</span><span class="ver">quote verified ✓</span></div>
+                <div class="code">
+                  <div class="ln"><span class="i">120</span><span class="c">func (l *RunLoop) claim(ctx context.Context) (*Turn, error) {</span></div>
+                  <div class="ln"><span class="i">121</span><span class="c">	tx, err := l.db.BeginTx(ctx, nil)</span></div>
+                  <div class="ln q"><span class="i">122</span><span class="c">	turn, err := claimNextTurn(tx, l.sessionID) // one turn, claimed in the same tx</span></div>
+                  <div class="ln"><span class="i">123</span><span class="c">	if err != nil {</span></div>
+                  <div class="ln"><span class="i">124</span><span class="c">		return nil, err</span></div>
+                  <div class="ln cut"><span class="i"></span><span class="c">… 7 more lines</span></div>
+                </div>
+                <div class="loc"><span class="ic"><svg class="ic16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg></span><span class="tx"><span class="mono">src/runner-go/runloop.go · RunLoop.claim · L120–131</span></span></div>
+              </div>
+            </div>
+            <div style="height:120px"></div>
+          </div>
+          <section class="wk-fn2-list mk"><span class="m-n">6</span>
+            <h3>Footnotes <small>41 · 9 session quotes · 30 code &amp; doc quotes · 2 comments</small></h3>
+            <div class="wk-fn2-row"><span class="no">1.</span><div class="main"><div class="l1"><span class="kd">Design doc</span><span class="loc mono">docs/session-lifecycle-design.md § 状态机</span><span class="ver">✓</span></div><div class="q">“session 是一个 agent runtime 与 runner 绑定的可恢复多轮会话”</div></div></div>
+            <div class="wk-fn2-row"><span class="no">2.</span><div class="main"><div class="l1"><span class="kd s">Session</span><span class="loc">turn #4 · Sep 15, 07:37</span><span class="ver">✓</span></div><div class="q">“先存后投，runner 自己来拿，别往 runner 推”</div></div></div>
+            <div class="wk-fn2-row on"><span class="no">3.</span><div class="main"><div class="l1"><span class="kd">Code</span><span class="loc mono">src/runner-go/runloop.go · RunLoop.claim</span><span class="ver">✓</span></div><div class="q">“claimNextTurn(tx, l.sessionID)”</div></div></div>
+            <div class="wk-fn2-row"><span class="no">4.</span><div class="main"><div class="l1"><span class="kd">Task comment</span><span class="loc">Sep 18, 10:02</span><span class="ver">✓</span></div><div class="q">“领取失败的 turn 不删除，下次长轮询还会拿到”</div></div></div>
+            <div class="wk-fn2-row"><span class="no">5.</span><div class="main"><div class="l1"><span class="kd">Contract</span><span class="loc mono">contracts/runner.contract.json</span><span class="ver">✓</span></div><div class="q">“heartbeatIntervalSeconds: 15, missedBeforeRecoverable: 3”</div></div></div>
+            <button class="wk-more">Show 36 more</button>
+          </section>
+        </article>
+      </div></main>
+      <footer class="share-footer">Shared from Orbit · read-only</footer>
+    </div>
+  </div>
+
+  <!-- ③ phone -->
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l"><span class="m-k">手机</span> iPhone Safari · 首页，和 Footnotes 关时的同一篇文档</div>
+    <div class="phones">
+      <div class="phone web"><div class="ph-status"><span>9:41</span><span style="font-size:13px">●●● ▮</span></div>
+        <div class="share-page">
+          <header class="share-header"><div class="share-brand">Orbit</div><nav class="share-crumbs"><span class="share-crumb is-here">orbit · Wiki</span></nav><div class="share-right"><span class="share-live"><i></i>Live</span></div></header>
+          <main class="share-scroll"><div class="share-inner">
+            <div class="wk-title-row"><h1 class="page-title" style="font-size:22px">Wiki</h1><span class="wk-space-tag">orbit</span></div>
+            <div class="wk-home-state">12 documents</div>
+            <section class="wk-pl-cat"><div class="wk-pl-cat-h"><span class="no">1</span><b>产品概览与架构</b></div>
+              <a class="wk-pl-doc phone"><span class="no">1.1</span><span class="main"><span class="t"><span class="tt">产品定位与核心能力</span></span><span class="q lead">Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上……</span></span><span class="chev">›</span></a>
+              <a class="wk-pl-doc phone"><span class="no">1.2</span><span class="main"><span class="t"><span class="tt">系统架构与数据流</span></span><span class="q lead">Orbit 把协调和执行分开：服务器保存意图与历史……</span></span><span class="chev">›</span></a>
+            </section>
+            <section class="wk-pl-cat"><div class="wk-pl-cat-h"><span class="no">3</span><b>会话与交互</b></div>
+              <a class="wk-pl-doc phone"><span class="no">3.1</span><span class="main"><span class="t"><span class="tt">Session 运行与恢复</span></span><span class="q lead">session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话……</span></span><span class="chev">›</span></a>
+              <a class="wk-pl-doc phone"><span class="no">3.2</span><span class="main"><span class="t"><span class="tt">实时流与推送</span></span><span class="q lead">客户端从每个会话的 SSE 流拿转录事件……</span></span><span class="chev">›</span></a>
+            </section>
+          </div></main>
+        </div>
+        <div class="addr">orbitd.io</div>
+      </div>
+      <div class="phone web"><div class="ph-status"><span>9:41</span><span style="font-size:13px">●●● ▮</span></div>
+        <div class="share-page">
+          <header class="share-header"><div class="share-brand">Orbit</div><nav class="share-crumbs"><a class="share-crumb">orbit · Wiki</a><span class="share-crumb-sep">›</span><span class="share-crumb is-here">Session 运行与恢复</span></nav></header>
+          <main class="share-scroll"><div class="share-inner">
+            <article class="wk-art-page wk-dc-page">
+              <h1 class="t-title wk-art-title">Session 运行与恢复</h1>
+              <div class="wk-tags"><span class="wk-tag cat">会话与交互</span><span class="wk-tag">6 sections</span></div>
+              <div class="t-meta wk-art-updated"><span>Updated Oct 2 · written by Wiki maintenance</span></div>
+              <div class="wk-art wk-dc-body">
+                <section class="wk-dc-sec"><h2><span class="no">1</span>总览</h2>
+                  <p>Orbit 中的 session 是一个 agent runtime 与 runner 绑定的可恢复多轮会话。所有交互遵循「先存后投」：用户的 turn 先落库，runner 再通过出站 long-poll 领取。runner 不需要任何入站端口。</p></section>
+                <section class="wk-dc-sec"><h2><span class="no">2</span>turn 投递与 inbox 领取</h2>
+                  <p>Runner 每次只领取一条 turn，并在同一个事务里把它标成已领取。领取失败的 turn 留在队列里，下一次长轮询会再拿到它。</p></section>
+              </div>
+            </article>
+          </div></main>
+        </div>
+        <div class="addr">orbitd.io</div>
+      </div>
+    </div>
+    <div class="capr"><div>首页：一类一组，和 app 手机首页同一种行</div><div>Footnotes 关（见 ⑦）：只有正文，没有角标，也没有脚注表</div></div>
+  </div>
+
+  <ul class="m-notes">
+    <li><span class="m-n">1</span><span><b>外壳和项目、任务的公开页同一个</b>：品牌 · 面包屑 · Live · Read-only，底部 Shared from Orbit · read-only。标题写 space 名（仓库的最后一段），不写仓库地址；数字只写已经写好的篇数，不写计划里一共多少篇。</span></li>
+    <li><span class="m-n">2</span><span><b>首页只列已写的文档</b>，按大类，每篇一行：编号、标题、两行导语（和 app 首页同一种行）。没写的文档、原则组、Browse / A–Z、Activity、Review、Settings、Plan 都不出现。</span></li>
+    <li><span class="m-n">3</span><span><b>文档页是 app 文档页做减法。</b>去掉：目录栏和 Contents、Needs review 横幅、逐句标记（No source / Not verified）、已撤回的句子、Rewrite pending、还没写的小节、Entries 区和 Via entry。更新时间只写日期，不写 commit 和 plan 版本。</span></li>
+    <li><span class="m-n">4</span><span><b>Not covered 指向别的文档时</b>，那篇已经写好就能点开它的公开页；还没写就只显示编号。</span></li>
+    <li><span class="m-n">5</span><span><b>脚注卡只有原话和位置。</b>代码 / 设计文档写路径、符号和行号，引用的那一行高亮；会话、任务记录只写类型、编号和时间。没有「Open on GitHub」「Open at this turn」，不写会话、任务、项目的标题，不出现 SHA 和任何 id。</span></li>
+    <li><span class="m-n">6</span><span><b>脚注表</b>和 app 同样排版。编号在公开页上从 1 重新排：去掉的脚注（撤回句里的、Merge receipt、Owner decision）不留空号。</span></li>
+    <li><span class="m-n">7</span><span><b>Footnotes 关着</b>（默认）：只有正文，没有角标，没有脚注表，标签里也不写脚注数。</span></li>
+  </ul>
+</div>
+</body>
+</html>

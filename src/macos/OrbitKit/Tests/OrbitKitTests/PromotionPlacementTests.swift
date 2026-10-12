@@ -384,25 +384,36 @@ final class PromotionPlacementTests: XCTestCase {
             + "conversation reads it: \(written)")
     }
 
-    /// The row reaches the screen: the switch dispatches it, the card draws that merge's own commit
-    /// and state, and the record is never counted as an open question — nothing on it is pressable.
+    /// The row reaches the screen: the switch dispatches it, as one line where the card used to be
+    /// (owner decision 2026-10-06), and the record behind it is that merge's own commit and state.
+    /// Its one press opens the record; nothing on it decides anything, and it is never counted as an
+    /// open question.
     func testTheRecordIsDrawnAsAReceiptAndNeverCountedAsAQuestion() throws {
         let card = try source(Self.cardPath)
         let dispatch = try section(card, from: "case .promotionApproval(let promotionID):",
                                    to: "// A card re-derives itself when it comes into view")
         XCTAssertTrue(dispatch.contains("case .promotionReceipt(let promotion):"),
                       "the delivered-card switch draws nothing for a merge's record")
-        XCTAssertTrue(dispatch.contains("PromotionReceiptCard(promotion: promotion)"),
+        XCTAssertTrue(dispatch.contains("PromotionReceiptLine(promotion: promotion)"),
                       "and what it draws must be handed the merge it is about")
 
-        let view = try section(card, from: "private struct PromotionReceiptCard: View",
-                               to: "private struct CardRow: View")
-        XCTAssertTrue(view.contains("PromotionCards.title(promotion)"),
+        let line = try section(card, from: "private struct PromotionReceiptLine: View",
+                               to: "struct PromotionReceiptSheet: View")
+        XCTAssertTrue(line.contains("PromotionCards.receiptLine(promotion)"),
+                      "the line draws OrbitKit's words rather than ones composed here")
+        XCTAssertTrue(line.contains("openReceipt(promotion)"), "its one press opens the record")
+        for door in ["confirmMergeToMain", "declineMergeToMain", "cancelMergeToMain"] {
+            XCTAssertFalse(line.contains(door), "a record is not a question: nothing on it decides anything")
+        }
+        let sheet = try section(card, from: "struct PromotionReceiptSheet: View",
+                                to: "private struct PromotionTasksRow: View")
+        XCTAssertTrue(sheet.contains("PromotionCards.title(promotion)"),
                       "the record draws OrbitKit's heading rather than one composed here")
-        XCTAssertTrue(view.contains("PromotionCards.mergedLine(promotion)"),
+        XCTAssertTrue(sheet.contains("PromotionCards.mergedLine(promotion)"),
                       "and OrbitKit's line, which is the one naming the commit that landed")
-        XCTAssertFalse(view.contains("Button"),
-                       "a record is not a question: nothing on it is pressable")
+        XCTAssertTrue(sheet.contains("PromotionCards.nowOnMainLine(promotion)"),
+                      "and what is on main now, by the tasks' names")
+        XCTAssertFalse(sheet.contains("MergeToMain"), "nothing on the record decides anything")
 
         let console = try source(Self.consolePath)
         let counted = try section(console, from: "var openBelowRows: [BelowRow] {",

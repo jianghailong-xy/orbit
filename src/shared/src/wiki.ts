@@ -8,6 +8,8 @@
  * agent's slice are views of entries; nothing here describes a page.
  */
 
+import { toUuid } from './codec';
+
 export const WIKI_CONTRACT_VERSION = 1;
 
 // ── Closed sets. Each is a CHECK constraint in 0307, admitting exactly these values. ─────────────
@@ -61,6 +63,48 @@ export const WIKI_SOURCE_KINDS = [
   'url',
 ] as const;
 export type WikiSourceKind = (typeof WIKI_SOURCE_KINDS)[number];
+
+/**
+ * What each kind's `ref` is (contract `sourceInput.refs`): what a proposer fills in, and what the refusal of a
+ * ref that names nothing tells it to fill in instead. An id is either spelling of one: the UUID, or the short
+ * public id Orbit shows for it.
+ */
+export const WIKI_SOURCE_REFS: Readonly<Record<WikiSourceKind, string>> = {
+  turn: "the turn's id; a turn of the calling session takes no ref, and is { kind: 'turn', session: 'self' }",
+  event: "the run event's id",
+  tool_call:
+    "the tool call's id, or the tool_use_id its engine gave the call (toolu_…, call_…), which is the id a session "
+    + "reads in its own transcript and the one task_evidence_submit takes: the calling session's own call, or else "
+    + "the call of the one session of this owner's that made it",
+  task: "the task's id",
+  task_comment: "the task comment's id",
+  approval: "the approval's id",
+  evidence: 'nothing yet: no door resolves an evidence source',
+  owner_decision: 'the id of the project blocker the owner resolved with a note',
+  merge_receipt: "the merge receipt's id",
+  criterion: 'nothing yet: no door resolves a criterion source',
+  commit: "the commit's full sha, as a merge receipt of this owner's carries it",
+  note: "the note's id, as orbit wiki import registered it",
+  url: 'nothing yet: only an assumption cites a url, and assumptions are phase 3',
+};
+
+/**
+ * The kinds whose ref can only be a row's id (contract `sourceInput.rowIdKinds`). Such a ref that is neither
+ * spelling of an id is refused WIKI_SCHEMA at its path before anything is looked up: it would be compared with a
+ * uuid column, and the database answers a value that is not a uuid with an error, not with "no such row". A
+ * `tool_call` is not one — it takes a tool_use_id too, which only the lookup can tell from a ref that names
+ * nothing — and neither is a `commit`, which is a sha.
+ */
+export const WIKI_SOURCE_ROW_ID_KINDS: readonly WikiSourceKind[] = [
+  'turn',
+  'event',
+  'task',
+  'task_comment',
+  'approval',
+  'owner_decision',
+  'merge_receipt',
+  'note',
+];
 
 /** live → trashed → live | deleted; live → deleted. A deleted source has lost its quote. */
 export const WIKI_SOURCE_STATES = ['live', 'trashed', 'deleted'] as const;
@@ -147,6 +191,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_CURSOR_BEHIND',
   'WIKI_CURSOR_INVALID',
   'WIKI_ARTICLE_STALE',
+  'WIKI_SERVER_EXECUTES',
   'WIKI_PLAN_GATE',
   'WIKI_PLAN_STALE',
   'WIKI_PLAN_UNCONFIRMED',
@@ -751,8 +796,9 @@ export interface WikiProposeRequest {
 export interface WikiRefusal {
   code: WikiRefusalCode;
   message: string;
-  /** `WIKI_SCHEMA`: every field that failed; `WIKI_PLAN_GATE`: everything the plan's gate found, each
-   *  also naming its check (`WikiPlanGateError`); `WIKI_DOC_INVALID`: everything wrong with a document write. */
+  /** `WIKI_SCHEMA`: every field that failed; `WIKI_SOURCE_UNRESOLVED`: the source that resolved to nothing;
+   *  `WIKI_PLAN_GATE`: everything the plan's gate found, each also naming its check (`WikiPlanGateError`);
+   *  `WIKI_DOC_INVALID`: everything wrong with a document write. */
   errors?: WikiFieldError[];
 }
 
@@ -1220,13 +1266,22 @@ export interface WikiAnchorList {
   next: string | null;
 }
 
-/** One anchor's check, as the runner reports it. */
+/**
+ * One anchor's check, as the runner reports it. `path` / `symbol` / `sha` are the identity of the
+ * anchor the reporter says it checked — the fields its type names. A report may leave them out (the
+ * runner's own CLI does), and then the server checks the type at the index alone; when they are
+ * there, the server applies the check only to the anchor they name (`anchorRules.verify.identity`).
+ */
 export interface WikiAnchorCheckInput {
   index: number;
   type: WikiGitAnchorType;
   state: 'verified' | 'changed' | 'missing';
   /** A symbol found: the sha256 of its region on the checked ref. */
   regionSha256?: string;
+  /** The identity a check may carry, per its type: a path anchor's path; a symbol's path and symbol; a commit's sha. */
+  path?: string;
+  symbol?: string;
+  sha?: string;
 }
 
 /** `POST /api/runner/wiki/spaces/:id/anchor-checks`. */
@@ -1265,6 +1320,14 @@ export interface WikiSpace {
   settings: WikiSpaceSettings;
   createdAt: string;
   updatedAt: string;
+  // The list read's (`GET /wiki/spaces`, contract `space.list`), absent from the one-space read and from a
+  // server older than them.
+  /** The things of its plan that wait on the owner, counted as the plan's own amber count beside Plan counts them. */
+  planWaiting?: number;
+  /** The workspaces bound to it, in the order they were bound. */
+  workspaceIds?: string[];
+  /** Its confirmed plan's documents, written of how many: null while it has no confirmed plan. */
+  docs?: { written: number; total: number } | null;
 }
 
 export interface WikiTopic {
@@ -1361,6 +1424,9 @@ export interface WikiChangesetOp {
   /** The trail of every earlier verdict of an op that was reopened, oldest first; empty for every
    *  other op (contract `reviewModes.verification.reopen`). */
   verificationHistory?: WikiOpVerificationHistory[];
+  /** The current title of the entry `entryId` names, null when it names none — added by Review's
+   *  read (`GET /api/wiki/review`) so a card can name an entry no other read of the page holds. */
+  entryTitle?: string | null;
 }
 
 /** One op's verification trail, as the op reads it back. */
@@ -1439,6 +1505,15 @@ export interface WikiVerificationList {
   items: WikiVerificationItem[];
   /** Pass as `after` for the next page; null when this page is the last. */
   next: string | null;
+  /**
+   * Who verifies the ops this list would carry (contract `reviewModes.verification.servedBy`): `server`
+   * where the executor switch says the server runs for this account, in which case `items` is empty
+   * because the server's own job (`jobs.kindRuns.verify`) is the verifier and a session must not ask a
+   * model of its provider about them. Absent under the default `runner` mode, where the caller verifies.
+   */
+  servedBy?: 'server';
+  /** With `servedBy`: how many of the caller's ops are waiting, so a caller can wait for it to reach zero. */
+  waiting?: number;
 }
 
 /** One verdict, as `POST /api/runner/wiki/spaces/:id/verifications` takes it. */
@@ -1695,7 +1770,15 @@ function checkSource(source: unknown, path: string, errors: WikiFieldError[]): v
       errors.push({ path: join(path, 'ref'), message: "a turn of the calling session is named by session 'self', not by ref" });
     }
   } else {
+    const before = errors.length;
     checkText(source.ref, join(path, 'ref'), errors, { required: true, maxChars: WIKI_LIMITS.fieldTextMaxChars });
+    if (errors.length === before && (WIKI_SOURCE_ROW_ID_KINDS as readonly unknown[]).includes(kind) && !isRowId(source.ref as string)) {
+      errors.push({
+        path: join(path, 'ref'),
+        message: `names no ${String(kind)}: a ${String(kind)} source's ref is ${WIKI_SOURCE_REFS[kind as WikiSourceKind]} `
+          + '(an id is the UUID, or the short public id Orbit shows)',
+      });
+    }
   }
   if (!absent(source.seq)) {
     if (!self) errors.push({ path: join(path, 'seq'), message: "only sits beside session 'self'" });
@@ -1833,6 +1916,16 @@ function absent(value: unknown): boolean {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Either spelling of a row's id, and nothing else. */
+function isRowId(value: string): boolean {
+  try {
+    toUuid(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function join(path: string, key: string): string {

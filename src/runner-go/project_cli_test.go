@@ -164,7 +164,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"crossings", "merge-evidence", "resolve-blocker", "request-start", "request-done",
+		"crossings", "merge-evidence", "resolve-blocker", "request-start", "request-done", "skip-merge-check",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -212,7 +212,12 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// a request and starts nothing, so it needs no grant beyond being the project's coordinator.
 	// The eleventh is `request-done`, the same coordinator asking the owner to record the project
 	// done: a request again, which records nothing, for the same reason.
-	if len(specs) != 11 {
+	// The twelfth is `skip-merge-check`, the door for the red that is about the CHECK rather than
+	// the delivery — a command that cannot pass where the runner runs it. It is the owner's: it
+	// queues ONE landing with the check not run, after a card naming the check and the task, and
+	// writes the reason and the approval onto the generation it queues. Mutating for that reason
+	// alone — the project does not change, and one landing does.
+	if len(specs) != 12 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -334,7 +339,7 @@ func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
 	// readers can see them.
 	// TestEveryAdvertisedCapabilityIsPreApproved walks the specs themselves and reddens the moment
 	// this list and that one fall out of step, which is how the three came to be added here.
-	for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done"} {
+	for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done", "skip-merge-check"} {
 		if !strings.Contains(rules, "Bash(/usr/local/bin/orbit project "+action+" *)") {
 			t.Fatalf("project %s is not pre-approved: %q", action, rules)
 		}

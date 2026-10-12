@@ -46,6 +46,11 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         self.pulse = pulse
     }
 
+    /// What a run the machine stopped reporting under is called, in web's own word for it
+    /// (`WorkspaceView.tsx`'s failed-title). The reaper ends such a run with the server's bare
+    /// `runner offline`, so this is the label every surface reads it into.
+    public static let offlineLabel = "Disconnected — runner went offline"
+
     /// The glyph for a session. Lifecycle location never overrides the run's actual state.
     /// `watching` is the session as an observer (see `SessionHeader.statusWord`).
     public static func make(for s: Session, watching: WatchSessionSummary? = nil,
@@ -171,7 +176,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             let err = (error ?? "").lowercased()
             if err.contains("offline") {
                 return .init(shape: .symbol("wifi.slash"), tone: .neutral,
-                             label: "Disconnected — runner went offline")
+                             label: SessionStatusGlyph.offlineLabel)
             }
             let detail = (error?.isEmpty == false) ? error! : "Failed"
             return .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: detail)

@@ -23,6 +23,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
     private static let inputs = "src/web/src/components/TaskInputs.tsx"
     private static let attributionCard = "src/web/src/components/TaskAttributionCard.tsx"
     private static let attribution = "src/web/src/lib/attribution.ts"
+    private static let crossingsCard = "src/web/src/components/ProjectCrossingsCard.tsx"
     private static let followedBy = "src/web/src/components/WatchRelations.tsx"
     private static let watchEditor = "src/web/src/components/WatchEditor.tsx"
     private static let dependencyList = "src/web/src/components/TaskDependencyList.tsx"
@@ -53,6 +54,12 @@ final class TaskDetailCopyParityTests: XCTestCase {
         throw Missing(file: relative)
     }
 
+    /// The native task page, read the same way (whitespace folded), for the pieces it draws the web's
+    /// words with.
+    private func nativeTasksView() throws -> String {
+        try source("src/macos/OrbitApp/Sources/OrbitApp/Views/TasksView.swift")
+    }
+
     private func assertSays(_ web: String, _ anchored: String, in file: String, line: UInt = #line) {
         XCTAssertTrue(web.contains(anchored), "\(file) no longer says: \(anchored)", line: line)
     }
@@ -77,6 +84,37 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(web, ": '\(TaskDetailCopy.runNow)'", in: Self.panel)
         assertSays(web, "<div className=\"tdp-muted\">\(TaskDetailCopy.noRuns)</div>", in: Self.panel)
         assertSays(web, "<div className=\"tdp-muted\">\(TaskDetailCopy.noComments)</div>", in: Self.panel)
+    }
+
+    /// The run pins, engine first (board 6): the Engine field's label and its unpinned choice, the
+    /// Provider field's "Engine default" and what it stands for on each engine, and the groups of
+    /// credentials under it — the web panel's words.
+    func testTheEnginePinSaysWhatTheWebsSays() throws {
+        let web = try source(Self.panel)
+        assertSays(web, "<span className=\"tdp-field-label\">\(TaskDetailCopy.engineLabel)</span>", in: Self.panel)
+        assertSays(web, "{ value: '', label: \"\(TaskDetailCopy.assigneesEngine)\" },", in: Self.panel)
+        assertSays(web, ": `\(TaskDetailCopy.assigneesEngine) · ${ENGINE_CLI_NAMES[assigneeEngine]}`}", in: Self.panel)
+        assertSays(web, "{ value: '', label: '\(TaskDetailCopy.engineDefault)' },", in: Self.panel)
+        assertSays(web, "placeholder={`\(TaskDetailCopy.engineDefault) · ${engineDefaultLabel}`}", in: Self.panel)
+        // What "Engine default" stands for: the first DeepSeek key, OpenCode's own sign-in, the runner's.
+        XCTAssertEqual(TaskRunPin.engineDefaultLabel(engine: "dsh", firstDeepSeekKey: nil, runnerName: nil), "first DeepSeek key")
+        XCTAssertEqual(TaskRunPin.engineDefaultLabel(engine: "dsh", firstDeepSeekKey: "DeepSeek 2", runnerName: nil), "DeepSeek 2")
+        XCTAssertEqual(TaskRunPin.engineDefaultLabel(engine: "opencode", firstDeepSeekKey: nil, runnerName: "hpc"),
+                       "OpenCode's own sign-in")
+        XCTAssertEqual(TaskRunPin.engineDefaultLabel(engine: "claude", firstDeepSeekKey: nil, runnerName: "hpc"), "sign-in on hpc")
+        XCTAssertEqual(TaskRunPin.engineDefaultLabel(engine: "codex", firstDeepSeekKey: nil, runnerName: nil), "runner sign-in")
+        assertSays(web, "? (engineDefaultKey?.label ?? 'first DeepSeek key')", in: Self.panel)
+        assertSays(web, "? \"OpenCode's own sign-in\"", in: Self.panel)
+        assertSays(web, "? `sign-in on ${assigneeRunnerName}`", in: Self.panel)
+        assertSays(web, ": 'runner sign-in';", in: Self.panel)
+        assertSays(web, "{ label: 'Account pools', rows: pinCredentials.filter((c) => c.kind === 'pool') },", in: Self.panel)
+        assertSays(web, "{ label: runEngine === AgentProvider.DSH ? 'Your DeepSeek keys' : 'Your keys', rows:", in: Self.panel)
+        let native = try nativeTasksView()
+        for piece in ["Section(\"Account pools\")", "Section(pin.runEngine == \"dsh\" ? \"Your DeepSeek keys\" : \"Your keys\")",
+                      "Text(\"\\(TaskDetailCopy.engineDefault) · \\(engineDefault)\")",
+                      "ForEach(ProviderEngines.all, id: \\.self) { engine in"] {
+            XCTAssertTrue(native.contains(piece), "the task's pins lost `\(piece)`")
+        }
     }
 
     func testTheDependenciesWords() throws {
@@ -109,7 +147,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(list, "'\(TaskDetailCopy.noAdjacentRelationships)'", in: Self.dependencyList)
         assertSays(list, "title=\"\(TaskDetailCopy.removePrerequisiteTitle)\"", in: Self.dependencyList)
         assertSays(list, "description=\"\(TaskDetailCopy.removePrerequisiteDetail)\"", in: Self.dependencyList)
-        assertSays(list, "okText=\"\(TaskDetailCopy.remove)\"", in: Self.dependencyList)
+        assertSays(list, "confirmText=\"\(TaskDetailCopy.remove)\"", in: Self.dependencyList)
         // The relationship line (`TaskDetailLogic.dependencyRows`).
         assertSays(list, "prerequisites ? `Depends on ${prerequisites}` : ''", in: Self.dependencyList)
         assertSays(list, "targets ? `Required by ${targets}` : ''", in: Self.dependencyList)
@@ -181,7 +219,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(web, "> \(TaskDetailCopy.addFile) </Button>", in: Self.inputs)
         assertSays(web, "title=\"\(TaskDetailCopy.removeInputTitle)\"", in: Self.inputs)
         assertSays(web, "description=\"\(TaskDetailCopy.removeInputDetail)\"", in: Self.inputs)
-        assertSays(web, "okText=\"\(TaskDetailCopy.remove)\"", in: Self.inputs)
+        assertSays(web, "confirmText=\"\(TaskDetailCopy.remove)\"", in: Self.inputs)
     }
 
     // MARK: attribution
@@ -195,8 +233,8 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(card, "<Card title=\"\(TaskDetailCopy.attributionHeading)\"", in: Self.attributionCard)
         assertSays(card, "'\(TaskDetailCopy.notReported)'", in: Self.attributionCard)
         assertSays(card, "'\(TaskDetailCopy.evidenceOnly)'", in: Self.attributionCard)
-        assertSays(card, "\(TaskDetailCopy.trigger) </Typography.Text>", in: Self.attributionCard)
-        assertSays(card, "message=\"\(TaskDetailCopy.attributionUnavailable)\"", in: Self.attributionCard)
+        assertSays(card, "<span className=\"orbit-typography orbit-typography-secondary\">\(TaskDetailCopy.trigger) </span>", in: Self.attributionCard)
+        assertSays(card, "title=\"\(TaskDetailCopy.attributionUnavailable)\"", in: Self.attributionCard)
         // The lines `TaskDetailLogic.noticedIn` and `blockedBy` build.
         assertSays(card, "<div>Task: {view.discovery.task.title}</div>", in: Self.attributionCard)
         assertSays(card, "<div>Session: {view.discovery.session.title ?? 'untitled'}</div>", in: Self.attributionCard)
@@ -215,6 +253,22 @@ final class TaskDetailCopyParityTests: XCTestCase {
         }
         XCTAssertEqual(TaskDetailCopy.absentReason.count, 4)
         XCTAssertEqual(Set(TaskDetailCopy.crossingStateLabel.keys), ["PENDING", "APPROVED", "DENIED", "APPLIED"])
+
+        // A request to move the task: the card picks the crossings card's `MOVE_TASK_STATE_MEANING`
+        // for it, as `TaskDetailLogic.crossing` picks `moveTaskStateMeaning`, and each sentence is
+        // read out of that declaration alone.
+        assertSays(card, "import { MOVE_TASK_STATE_MEANING } from './ProjectCrossingsCard';", in: Self.attributionCard)
+        assertSays(card, "view.crossing.kind === 'MOVE_TASK' ? MOVE_TASK_STATE_MEANING : CROSSING_STATE_MEANING",
+                   in: Self.attributionCard)
+        let crossings = try source(Self.crossingsCard)
+        let declaration = "export const MOVE_TASK_STATE_MEANING: Readonly<Record<CrossingState, string>> = {"
+        assertSays(crossings, declaration, in: Self.crossingsCard)
+        let moveMeanings = crossings.components(separatedBy: declaration).dropFirst().first?
+            .components(separatedBy: "};").first ?? ""
+        for (state, text) in TaskDetailCopy.moveTaskStateMeaning {
+            assertSays(moveMeanings, "\(state): '\(text)',", in: Self.crossingsCard)
+        }
+        XCTAssertEqual(Set(TaskDetailCopy.moveTaskStateMeaning.keys), ["PENDING", "APPROVED", "DENIED", "APPLIED"])
     }
 
     // MARK: followed by
@@ -230,7 +284,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(web, "{ended.length} ended {ended.length === 1 ? 'watch' : 'watches'}", in: Self.followedBy)
 
         let editor = try source(Self.watchEditor)
-        assertSays(editor, "okText={editing ? 'Save' : '\(TaskDetailCopy.follow)'}", in: Self.watchEditor)
+        assertSays(editor, "{editing ? 'Save' : '\(TaskDetailCopy.follow)'}", in: Self.watchEditor)
         XCTAssertEqual(TaskDetailCopy.followTask, "\(TaskDetailCopy.follow) task", "the sheet's title for one task")
         assertSays(editor, "`Follow ${several ? `${targets.length} ${noun}s` : noun}`", in: Self.watchEditor)
         assertSays(editor, "<div className=\"watch-editor-label\">\(TaskDetailCopy.watchingLabel)</div>", in: Self.watchEditor)

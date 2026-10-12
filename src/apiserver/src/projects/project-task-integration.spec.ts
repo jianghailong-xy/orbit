@@ -18,9 +18,23 @@ function row(changes: Partial<Row> = {}): Row {
     blockingJobId: null, blockingJobKind: null, blockingTaskTitle: null, blockingOpenItemId: null,
     itemId: 'failure', itemKind: 'INTEGRATION_CHECK_FAILED', itemAssignee: 'COORDINATOR',
     itemCreatedAt: new Date('2026-10-04T11:59:00Z'), itemHandlingJobId: 'retry',
-    landedAt: null, ...changes,
+    landedAt: null, mainBranch: 'main', ...changes,
   };
 }
+
+test('every answer names the project’s main branch the row read, and null with no repository', () => {
+  for (const changes of [
+    { landing: 'ON_UPSTREAM', landedAt: startedAt },
+    { landing: 'ON_INTEGRATION_LINE', landedAt: startedAt },
+    { isCode: false },
+    {},
+    { itemHandlingJobId: null },
+    { jobId: null, jobState: null, jobGeneration: null, jobCreatedAt: null, itemId: null, itemKind: null },
+  ] satisfies Partial<Row>[]) {
+    assert.equal(taskIntegrationOf(row({ ...changes, mainBranch: 'master' }), now).mainBranch, 'master');
+    assert.equal(taskIntegrationOf(row({ ...changes, mainBranch: null }), now).mainBranch, null);
+  }
+});
 
 test('an open failure being retried reads the linked queued or running job', () => {
   for (const state of ['QUEUED', 'RUNNING']) {

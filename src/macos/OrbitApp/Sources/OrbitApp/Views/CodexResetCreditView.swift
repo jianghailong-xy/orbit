@@ -106,7 +106,7 @@ struct CodexResetCreditCard: View {
             .tint(.blue)
             .disabled(!console.codexResetEligible || console.codexResetBusy)
             .accessibilityLabel("Use reset credit")
-            .confirmationDialog("Use reset credit?", isPresented: $confirmationPresented) {
+            .orbitConfirmation("Use reset credit?", isPresented: $confirmationPresented) {
                 Button("Use reset") {
                     Task { await console.useCodexReset() }
                 }

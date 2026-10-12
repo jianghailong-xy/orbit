@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { WikiArticleDirectory, WikiArticleIndex, WikiEntry } from '@orbit/shared';
-import { WIKI_ACTION_OPEN, WIKI_AGENTS_USED, WIKI_PRINCIPLES, WIKI_RECENT_DECISIONS, WIKI_RECENTLY_CHANGED } from './wiki';
+import { WIKI_ACTION_OPEN, WIKI_PRINCIPLES } from './wiki';
 import {
   WIKI_ARTICLE_ENTRIES,
   WIKI_ARTICLE_SECTIONS,
@@ -178,12 +178,7 @@ describe('the orders both ends draw', () => {
     expect([...WIKI_ARTICLE_SECTIONS]).toEqual(orders.articleSections);
     expect([...WIKI_INDEX_LETTERS]).toEqual(orders.indexLetters);
     expect([WIKI_DIRECTORY_HOME, WIKI_BROWSE, WIKI_AZ_INDEX]).toEqual(orders.directoryHead);
-    expect(orders.homeBandTitles.filter(Boolean)).toEqual([
-      WIKI_PRINCIPLES,
-      WIKI_RECENT_DECISIONS,
-      WIKI_RECENTLY_CHANGED,
-      WIKI_AGENTS_USED,
-    ]);
+    expect(orders.homeBandTitles.filter(Boolean)).toEqual([WIKI_PRINCIPLES]);
     expect(WIKI_BROWSE_SHOWN).toBe(fixture().browse.shown);
     expect(WIKI_BROWSE_SHOWN_PHONE).toBe(fixture().browse.shownPhone);
   });

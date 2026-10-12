@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -169,11 +168,9 @@ describe('a Codex pool shared with people before it has an API key', () => {
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[PAGE]}>
-            <AntApp>
-              <Routes>
-                <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
-              </Routes>
-            </AntApp>
+            <Routes>
+              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -188,9 +185,12 @@ describe('a Codex pool shared with people before it has an API key', () => {
     Array.from(scope.querySelectorAll<HTMLButtonElement>('button')).find((el) => el.textContent?.trim() === words) ??
     null;
   const dialog = () => {
-    const dialogs = document.body.querySelectorAll<HTMLElement>('.ant-modal');
+    const dialogs = document.body.querySelectorAll<HTMLElement>('[role="dialog"]');
     return dialogs[dialogs.length - 1] ?? null;
   };
+  /** A dialog's name, as assistive technology reads it. */
+  const nameOf = (el: Element | null | undefined) =>
+    el ? text(document.getElementById(el.getAttribute('aria-labelledby') ?? '')) : null;
   const click = async (el: Element | null | undefined) => {
     if (!el) throw new Error('nothing to click');
     await act(async () => {
@@ -263,7 +263,7 @@ describe('a Codex pool shared with people before it has an API key', () => {
       'Lin Wei can’t start a session here yet. Orbit Codex has no API key and no ChatGPT account signed in.',
     );
     await click(button('Add an API key', warn));
-    expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add a key to Orbit Codex');
+    expect(nameOf(dialog())).toBe('Add a key to Orbit Codex');
     expect(sent).toEqual([]);
 
     // The same state on the boards' own pool — its owner, Zhang Min and Lin Wei, and no account signed in
@@ -299,7 +299,7 @@ describe('a Codex pool shared with people before it has an API key', () => {
 
     asOwner([]);
     await mount();
-    expect(text(who().querySelector('.ant-segmented-item-selected'))).toBe('Just me');
+    expect(text(who().querySelector('[role="radio"][aria-checked="true"]'))).toBe('Just me');
     expect(warning()).toBeNull();
     expect(button('Add an API key')).toBeNull();
   });

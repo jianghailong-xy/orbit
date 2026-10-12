@@ -8,7 +8,7 @@ import Foundation
 ///
 /// A pool of this kind is drawn the way every pool is: each of its accounts is one of the pool's members
 /// (`CodexLoginPool.drawn`), attached as `PoolMember.login` the way a shared pool's key is attached as
-/// `PoolMember.key` — so the Providers list, the picker and the composer take it as they take any pool.
+/// `PoolMember.key` — so Infrastructure's pool list, the picker and the composer take it as they take any pool.
 public struct CodexLogin: Codable, Equatable, Sendable {
     /// ACTIVE, or SIGNED_OUT once OpenAI refused it — which only its owner's sign-in again undoes.
     public let state: String

@@ -55,6 +55,7 @@ function harness({
   const strandedQueries: unknown[] = [];
   const queryCalls: unknown[][] = [];
   const executeCalls: unknown[][] = [];
+  const statements: string[] = [];
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
       queryCalls.push(args);
@@ -82,18 +83,22 @@ function harness({
       return [];
     },
     $executeRaw: async (...args: unknown[]) => {
-      executeCalls.push(args);
+      statements.push(sql(args));
+      // The writes alone, which is what the cases below count; the transaction-local declarations
+      // are in `statements`, in order with them.
+      if (!sql(args).includes('set_config(')) executeCalls.push(args);
       return 1;
     },
   };
   const prisma = {
-    // The unlocked idempotency preflight. It reads the same row the transaction locks,
-    // so it mirrors the harness state unless a test overrides it to simulate a race.
+    // The unlocked idempotency preflight. It reads the same row the transaction locks, on the
+    // same scope — this runner's sessions — so it mirrors the harness state unless a test
+    // overrides it to simulate a race.
     session: {
-      findUnique: async (args: unknown) => {
+      findFirst: async (args: unknown) => {
         preflightCalls.push(args);
         if (preflight !== undefined) return preflight;
-        return { inboxLeaseOwner: LEASE_OWNER, inboxLeaseGeneration: current, status };
+        return owned ? { inboxLeaseOwner: LEASE_OWNER, inboxLeaseGeneration: current, status } : null;
       },
     },
     // Read outside the transaction, on every path including the preflight: a steer stranded by
@@ -119,6 +124,7 @@ function harness({
       { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
     ),
     executeCalls,
+    statements,
     preflightCalls,
     queryCalls,
     strandedQueries,
@@ -142,6 +148,9 @@ test('activate-leases registers and installs a generation under the owned Sessio
   assert.match(sql(h.executeCalls[1]), /SET "inbox_lease_generation" = \?::uuid/);
   assert.deepEqual(h.executeCalls[1].slice(1), [GENERATION, SESSION_ID]);
   assert.match(sql(h.executeCalls[2]), /"lease_generation" IS DISTINCT FROM \?::uuid/);
+  // Installed by a transaction that has said it reads the session's recorded engine (migration 0414).
+  const install = h.statements.findIndex((statement) => /SET "inbox_lease_generation" = \?::uuid/.test(statement));
+  assert.equal(h.statements[install - 1], "SELECT set_config('orbit.claim_reads_session_engine', '1', true)");
 });
 
 test('an already-installed generation returns without taking the Session row lock', async () => {
@@ -156,6 +165,23 @@ test('an already-installed generation returns without taking the Session row loc
   assert.equal(h.preflightCalls.length, 1);
   assert.equal(h.queryCalls.length, 0);
   assert.equal(h.executeCalls.length, 0);
+});
+
+test("another runner's session is refused, not answered from its row, even with this exact generation installed", async () => {
+  // The preflight reads on the lock's scope. Read by id alone, it answered another account's
+  // machine naming this session, lease owner and generation from the row — 200 and the steers
+  // the process left stranded — where an id that names nothing is 403.
+  const h = harness({ current: GENERATION, owned: false });
+
+  await assert.rejects(
+    h.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, request),
+    ForbiddenException,
+  );
+  assert.deepEqual(
+    h.preflightCalls.map((call) => (call as { where: unknown }).where),
+    [{ id: SESSION_ID, assignedRunnerId: RUNNER_ID }],
+  );
+  assert.deepEqual(h.strandedQueries, [], 'nothing of the session is read for a runner it is not on');
 });
 
 test('a terminal session is not short-circuited by an installed generation', async () => {

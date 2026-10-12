@@ -12,12 +12,17 @@ test('the guard rows are the OpenCode and Antigravity compatibility fences, and 
 test('provider catalogs hide the OpenCode and Antigravity rolling-compatibility rows', async () => {
   const whereClauses: unknown[] = [];
   const prisma = {
+    // An admin, whose picker lists the shared rows too (usableProviderScope) — the guard rows among them.
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: {
       findMany: async ({ where }: { where: unknown }) => {
         whereClauses.push(where);
         return [];
       },
     },
+    // listMine's last-used read (provider-last-used.ts) over an owner with no keys and no sessions.
+    session: { groupBy: async () => [] },
+    providerPool: { findMany: async () => [] },
   } as never;
   const service = new ProvidersService(prisma, {} as never, {} as never);
 

@@ -1,0 +1,53 @@
+# tree /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1
+# commit fcb53ab8510cad9b64d38c17e4f40661f273c7ad
+# branch orbit/s1b-add-user-google-sign-in-only-4ae978
+# merge: origin/project/34b9KDmnRzopeuF1enIN6 (359876433) merged here
+# argv: bash scripts/run-pg-spec.sh src/apiserver/src/auth/google-sign-in-config.pg.spec.ts
+# started 2026-10-07T11:39:27Z
+# filtered: the stages, the spec's subtests and the witness line; output-full.txt.gz carries every line.
+# note: the rotation case (a ciphertext the key in force did not write) is asserted inside subtest (3).
+commit: fcb53ab8510cad9b64d38c17e4f40661f273c7ad
+branch: orbit/s1b-add-user-google-sign-in-only-4ae978
+started: 2026-10-07T11:39:27Z
+command: bash scripts/run-pg-spec.sh src/apiserver/src/auth/google-sign-in-config.pg.spec.ts
+==> reusing this worktree's lockfile-compatible installation
+==> tsc /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1/node_modules/.bin/tsc (Version 7.0.2)
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/d7cea808-8de1-5a4c-95f8-a005b1014ee1 is ready to build and test
+==> building the test tree (rm -rf build first)
+==> provisioning pccspec-pg-2133617-1042 (postgres:16-alpine, PGDATA on tmpfs)
+==> PostgreSQL 16.15 on 127.0.0.1:33296, system_identifier=7693889190278565929
+==> prisma migrate deploy (template pccspec_tpl)
+==> 392 migrations applied
+########## google-sign-in-config.pg.spec.ts ##########
+# Subtest: Google sign-in configuration: off until an administrator turns it on, the password doors unchanged either way, the secret stored encrypted and never answered
+    # Subtest: (1) 0390 made the table it describes, writes no row, and runs again
+    ok 1 - (1) 0390 made the table it describes, writes no row, and runs again
+    # Subtest: (2) not configured: the first-run bootstrap, the password alone in /auth/methods, /start refused back to each client, login and refresh as before
+    ok 2 - (2) not configured: the first-run bootstrap, the password alone in /auth/methods, /start refused back to each client, login and refresh as before
+    # Subtest: (3) the admin setting saves and reads back, the secret encrypted, a save without one keeping it, one statement per save
+    ok 3 - (3) the admin setting saves and reads back, the secret encrypted, a save without one keeping it, one statement per save
+    # Subtest: (4) switched off, or on without a client ID or a secret, it answers as not configured; on with both it offers Google; off again, not
+    ok 4 - (4) switched off, or on without a client ID or a secret, it answers as not configured; on with both it offers Google; off again, not
+    # Subtest: (5) only a signed-in ADMIN reaches the setting; nobody, a MEMBER and an access token change nothing in it
+    ok 5 - (5) only a signed-in ADMIN reaches the setting; nobody, a MEMBER and an access token change nothing in it
+    # Subtest: (6) no answer in this run, nor the apiserver's log, carries the secret or what is stored for it
+    ok 6 - (6) no answer in this run, nor the apiserver's log, carries the secret or what is stored for it
+    1..6
+ok 1 - Google sign-in configuration: off until an administrator turns it on, the password doors unchanged either way, the secret stored encrypted and never answered
+1..1
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 21667.922918
+SPEC_EXIT=0
+==> OK: 1 spec(s) witnessed against PostgreSQL 16.15, no skips
+==> removing pccspec-pg-2133617-1042
+PG_SPEC_EXIT=0
+# finished 2026-10-07T11:39:58Z exit 0

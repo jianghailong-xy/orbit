@@ -1,0 +1,978 @@
+{
+ "antd": {
+  "del": {
+   "classes": [],
+   "first": [],
+   "steps": 0,
+   "tests": 0
+  },
+  "ref": {
+   "classes": [
+    "ant-image",
+    "ant-image-cover",
+    "ant-image-cover-center",
+    "ant-image-css-var",
+    "ant-image-img",
+    "ant-image-preview",
+    "ant-image-preview-actions",
+    "ant-image-preview-actions-action",
+    "ant-image-preview-actions-action-disabled",
+    "ant-image-preview-actions-action-flipX",
+    "ant-image-preview-actions-action-flipY",
+    "ant-image-preview-actions-action-rotateLeft",
+    "ant-image-preview-actions-action-rotateRight",
+    "ant-image-preview-actions-action-zoomIn",
+    "ant-image-preview-actions-action-zoomOut",
+    "ant-image-preview-body",
+    "ant-image-preview-close",
+    "ant-image-preview-footer",
+    "ant-image-preview-img",
+    "ant-image-preview-mask",
+    "ant-image-preview-movable",
+    "ant-image-preview-moving",
+    "ant-image-preview-progress",
+    "ant-image-preview-switch",
+    "ant-image-preview-switch-disabled",
+    "ant-image-preview-switch-next",
+    "ant-image-preview-switch-prev"
+   ],
+   "first": [
+    {
+     "classes": [
+      "ant-image",
+      "ant-image-cover",
+      "ant-image-cover-center",
+      "ant-image-css-var",
+      "ant-image-img"
+     ],
+     "step": "drawn",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes"
+    },
+    {
+     "classes": [
+      "ant-image",
+      "ant-image-cover",
+      "ant-image-cover-center",
+      "ant-image-css-var",
+      "ant-image-img"
+     ],
+     "step": "drawn",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included"
+    },
+    {
+     "classes": [
+      "ant-image",
+      "ant-image-cover",
+      "ant-image-cover-center",
+      "ant-image-css-var",
+      "ant-image-img"
+     ],
+     "step": "opened at the tail, pictures on their way",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in"
+    }
+   ],
+   "steps": 460,
+   "tests": 56
+  }
+ },
+ "missing": [],
+ "presentation": {
+  "viewerName": {
+   "differing": 232,
+   "examples": [
+    {
+     "del": "Image sent by user",
+     "ref": null,
+     "step": "viewer open",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes"
+    },
+    {
+     "del": "Image sent by user",
+     "ref": null,
+     "step": "→",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › are drawn and open the same on the shared conversation, through the public routes"
+    },
+    {
+     "del": "Image sent by user",
+     "ref": null,
+     "step": "viewer open",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › give their object URLs back with the conversation, Back with the viewer open included"
+    },
+    {
+     "del": "Image sent by user",
+     "ref": null,
+     "step": "the newest picture in the viewer",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › keep the conversation on its tail while they land, and in order while a turn streams in"
+    },
+    {
+     "del": "Image sent by user",
+     "ref": null,
+     "step": "opened at the pressed picture",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+    },
+    {
+     "del": "Image sent by user",
+     "ref": null,
+     "step": "→",
+     "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+    }
+   ]
+  }
+ },
+ "semantic": [
+  {
+   "fields": {
+    "order": [
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      "body",
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      }
+     ],
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      }
+     ]
+    ]
+   },
+   "index": 23,
+   "step": "keyboard order",
+   "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Flip vertically",
+      "role": "button"
+     },
+     {
+      "name": "Flip horizontally",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 24,
+   "step": "wheel over the mask",
+   "test": "chromium-dark-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "order": [
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      "body",
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      }
+     ],
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      }
+     ]
+    ]
+   },
+   "index": 20,
+   "step": "keyboard order",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "order": [
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      "body",
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      }
+     ],
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      }
+     ]
+    ]
+   },
+   "index": 23,
+   "step": "keyboard order",
+   "test": "chromium-light-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Flip vertically",
+      "role": "button"
+     },
+     {
+      "name": "Flip horizontally",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 24,
+   "step": "wheel over the mask",
+   "test": "chromium-light-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "order": [
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      "body",
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      }
+     ],
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      }
+     ]
+    ]
+   },
+   "index": 20,
+   "step": "keyboard order",
+   "test": "chromium-light-phone :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "order": [
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      "body",
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      }
+     ],
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      }
+     ]
+    ]
+   },
+   "index": 23,
+   "step": "keyboard order",
+   "test": "webkit-dark-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Flip vertically",
+      "role": "button"
+     },
+     {
+      "name": "Flip horizontally",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 24,
+   "step": "wheel over the mask",
+   "test": "webkit-dark-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "order": [
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      "body",
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      }
+     ],
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      }
+     ]
+    ]
+   },
+   "index": 20,
+   "step": "keyboard order",
+   "test": "webkit-dark-phone :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "order": [
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      "body",
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      }
+     ],
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      }
+     ]
+    ]
+   },
+   "index": 23,
+   "step": "keyboard order",
+   "test": "webkit-light-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Flip vertically",
+      "role": "button"
+     },
+     {
+      "name": "Flip horizontally",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 24,
+   "step": "wheel over the mask",
+   "test": "webkit-light-desktop :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  },
+  {
+   "fields": {
+    "order": [
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      "body",
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      }
+     ],
+     [
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Rotate right",
+       "role": "button"
+      },
+      {
+       "name": "Zoom in",
+       "role": "button"
+      },
+      {
+       "name": "Close",
+       "role": "button"
+      },
+      {
+       "name": "Previous image",
+       "role": "button"
+      },
+      {
+       "name": "Next image",
+       "role": "button"
+      },
+      {
+       "name": "Flip vertically",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      },
+      {
+       "name": "Rotate left",
+       "role": "button"
+      },
+      {
+       "name": "Flip horizontally",
+       "role": "button"
+      }
+     ]
+    ]
+   },
+   "index": 20,
+   "step": "keyboard order",
+   "test": "webkit-light-phone :: P5.2 the transcript’s pictures › open in the viewer, which pages through them, zooms, turns, flips, moves and closes"
+  }
+ ],
+ "steps": 516,
+ "tests": 56
+}

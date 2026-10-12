@@ -29,12 +29,11 @@ const (
 // call it best-effort. The runner authenticates through the machine's local Claude
 // Code login, so no API key is involved here.
 func setupService(orbitHome string, proxyVars []envVar) error {
-	exe, err := os.Executable()
+	// The symlink-resolved path, the file a self-update replaces: with install.sh's layout,
+	// ~/.orbit/bin/orbit rather than the /usr/local/bin/orbit link to it.
+	exe, err := resolvedExecutable()
 	if err != nil {
 		return fmt.Errorf("cannot locate executable: %w", err)
-	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
 	}
 
 	switch runtime.GOOS {
@@ -146,32 +145,6 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 	// private bin dirs the official Claude/Kimi/OpenCode installers write to.
 	pathEnv := runnerEnginePath(u.HomeDir, userLoginPath(u, os.Getenv("PATH")))
 
-	unit := fmt.Sprintf(`[Unit]
-Description=Orbit runner (%s)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=%s
-Group=%s
-ExecStart=%s run
-Restart=always
-RestartSec=5
-# Send SIGTERM to the runner only (not the claude children), so on stop/restart the
-# runner can drain — finish in-flight turns and detach — before claude is torn down.
-# The runner's complete shutdown envelope stays below this legacy-compatible value:
-# provider drain + lease release + event flush + a racing finalization + margin.
-KillMode=mixed
-TimeoutStopSec=180
-Environment=HOME=%s
-Environment=ORBIT_HOME=%s
-Environment=PATH=%s
-%s
-[Install]
-WantedBy=multi-user.target
-`, u.Username, u.Username, grp, exe, u.HomeDir, orbitHome, pathEnv, systemdProxyEnv(proxyVars))
-
 	// Writing the unit + enabling it needs root. When we aren't root, run the install
 	// step and every systemctl call via sudo (prompts once) so `orbit register` ends
 	// with a live service without a separate command.
@@ -192,6 +165,11 @@ WantedBy=multi-user.target
 		}
 		return run(sudo, append([]string{"systemctl"}, args...)...)
 	}
+
+	// The unit runs the copy in the user's ~/.orbit/bin — moved there first if it still sits
+	// in root's /usr/local/bin — so the runner can replace it when it updates itself.
+	exe = adoptUserBin(exe, u, systemdServicesRunning(systemdUnitDir, exe), root, sudo)
+	unit := renderSystemdUnit(u.Username, grp, exe, u.HomeDir, orbitHome, pathEnv, proxyVars)
 
 	// Write the unit file (root writes it directly; non-root installs it via sudo).
 	if root {
@@ -246,6 +224,36 @@ WantedBy=multi-user.target
 		"  Status:  systemctl status %s\n"+
 		"  Logs:    journalctl -u %s -f\n", svc, u.Username, svc, svc)
 	return nil
+}
+
+// renderSystemdUnit is the per-user runner unit installSystemd writes: exe run as username,
+// with the account's home, the runner's state dir and its login PATH baked in.
+func renderSystemdUnit(username, group, exe, home, orbitHome, pathEnv string, proxyVars []envVar) string {
+	return fmt.Sprintf(`[Unit]
+Description=Orbit runner (%s)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%s
+Group=%s
+ExecStart=%s run
+Restart=always
+RestartSec=5
+# Send SIGTERM to the runner only (not the claude children), so on stop/restart the
+# runner can drain — finish in-flight turns and detach — before claude is torn down.
+# The runner's complete shutdown envelope stays below this legacy-compatible value:
+# provider drain + lease release + event flush + a racing finalization + margin.
+KillMode=mixed
+TimeoutStopSec=180
+Environment=HOME=%s
+Environment=ORBIT_HOME=%s
+Environment=PATH=%s
+%s
+[Install]
+WantedBy=multi-user.target
+`, username, username, group, exe, home, orbitHome, pathEnv, systemdProxyEnv(proxyVars))
 }
 
 // systemdServiceFor returns the per-OS-user runner unit name (e.g. "orbit-runner-alice"),
@@ -434,6 +442,16 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) error {
 	// the agent runs as the user, so root-owned debris from a past `sudo orbit`
 	// run would make it unreadable/unwritable.
 	ensureOwnedByUser(orbitHome)
+
+	// The agent runs the copy in the user's ~/.orbit/bin — moved there first if it still sits
+	// in root's /usr/local/bin — so the runner can replace it when it updates itself.
+	if u, err := registeringUser(); err == nil {
+		sudo := ""
+		if s, err := exec.LookPath("sudo"); err == nil && interactive() {
+			sudo = s
+		}
+		exe = adoptUserBin(exe, u, nil, os.Geteuid() == 0, sudo)
+	}
 
 	// launchd starts agents with a minimal PATH and no HOME, so the `claude` CLI
 	// the runner shells out to isn't found (and couldn't locate ~/.claude even if

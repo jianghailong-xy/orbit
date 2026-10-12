@@ -1,0 +1,31 @@
+{
+  "command": "node scripts/deepseek-harness-session-log/record.mjs docs/evidence/deepseek-harness/session-log-upload",
+  "cliVersion": "0.2.0-rc.2",
+  "cliSha256": "1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f",
+  "npmIntegrity": "sha512-EAJ3gPNcVt/uv8X19PMm9NkVhWgT7xXNMk0UKCVm+IQ5rpSQOcsMUa0HWlnYYVybKMsccjcRB21vVVsaXQ6IdA==",
+  "canonicalP0LockSha256": "dbec679507e76e3591fe875b7b8e7c59f24f275f9af88058797891fbe0d10c85",
+  "sourceTag": "dsh-v0.2.0-rc.2",
+  "sourceCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "node": "v26.10.0",
+  "platform": "linux/x64",
+  "scenarios": [
+    "TestDshSessionLogUploadDisabledByDefault",
+    "TestDshRealSessionLogUpload",
+    "TestDshRealSessionLogUpload/upstream-default",
+    "TestDshRealSessionLogUpload/orbit-default"
+  ],
+  "variants": {
+    "upstream-default": {
+      "modelRequests": 6,
+      "requestsCarryingUploadFields": 6,
+      "deliveryAcceptedMarksInDshHome": 6,
+      "bashToolSawApiKey": false
+    },
+    "orbit-default": {
+      "modelRequests": 6,
+      "requestsCarryingUploadFields": 0,
+      "deliveryAcceptedMarksInDshHome": 0,
+      "bashToolSawApiKey": false
+    }
+  }
+}

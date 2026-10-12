@@ -104,11 +104,16 @@ async function open(): Promise<void> {
 }
 
 const dialog = (): HTMLElement => {
-  const found = document.body.querySelector<HTMLElement>('.ant-modal.share-dialog');
+  const found = document.body.querySelector<HTMLElement>('[role="dialog"].share-dialog');
   if (!found) throw new Error('the Share dialog is not open');
   return found;
 };
 const text = (): string => dialog().textContent ?? '';
+/** A dialog's name and description, as assistive technology reads them. */
+const nameOf = (el: Element): string | undefined =>
+  document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent ?? undefined;
+const descriptionOf = (el: Element): string | undefined =>
+  document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent ?? undefined;
 
 async function click(element: Element | null | undefined, what: string): Promise<void> {
   expect(element, `${what} is on screen`).toBeTruthy();
@@ -118,10 +123,25 @@ async function click(element: Element | null | undefined, what: string): Promise
   await settle();
 }
 
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which
+ *  a list option needs before it takes a click as a choice rather than a keyboard activation. */
+async function press(element: Element | null | undefined, what: string): Promise<void> {
+  expect(element, `${what} is on screen`).toBeTruthy();
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    element!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mousedown', init));
+    element!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    element!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+}
+
 /** Access, opened as a press opens it, and the one choice asked for. */
 async function chooseAccess(choice: 'Only you' | 'Anyone with the link'): Promise<void> {
   await click(dialog().querySelector('.share-access-select'), 'the Access control');
-  const option = [...document.body.querySelectorAll('.share-access-menu .ant-dropdown-menu-item')].find(
+  const option = [...document.body.querySelectorAll('.share-access-menu [role="menuitem"]')].find(
     (item) => item.querySelector('.share-access-option-title')?.textContent === choice,
   );
   await click(option, `the "${choice}" choice`);
@@ -131,15 +151,17 @@ async function chooseAccess(choice: 'Only you' | 'Anyone with the link'): Promis
 const layers = () =>
   [...dialog().querySelectorAll<HTMLElement>('.share-layer')].map((row) => ({
     name: row.querySelector('.share-layer-name')?.textContent,
-    on: row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked,
-    locked: row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled,
+    on: row.querySelector('[role="checkbox"]')!.getAttribute('aria-checked') === 'true',
+    locked: row.querySelector('[role="checkbox"]')!.getAttribute('aria-disabled') === 'true',
     count: row.querySelector('.share-layer-count')?.textContent,
   }));
 
 const footButtons = () =>
-  [...dialog().querySelectorAll<HTMLElement>('.share-dialog-foot .ant-btn')].map((b) => b.textContent?.trim());
+  [...dialog().querySelectorAll<HTMLElement>('.share-dialog-foot :is(button, a)')].map((b) => b.textContent?.trim());
 
-const popconfirm = () => document.body.querySelector<HTMLElement>('.ant-popconfirm');
+/** The question asked before a link is turned off: the one dialog named for it. */
+const popconfirm = () =>
+  [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find((el) => nameOf(el) === 'Turn off this link?') ?? null;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -178,7 +200,7 @@ describe('the Share dialog on a session', { timeout: 60_000 }, () => {
     await open();
 
     expect(getShareLink).toHaveBeenCalledWith('SESSION', SESSION);
-    expect(dialog().querySelector('.ant-modal-title')?.textContent).toBe('Share session');
+    expect(nameOf(dialog())).toBe('Share session');
     expect(dialog().querySelector('.share-access-select')?.textContent?.trim()).toBe('Only you');
     expect(text()).toContain('Only you can open it, signed in. Choose “Anyone with the link” to make a public link.');
     // Nothing public exists, so nothing public is shown or offered.
@@ -218,7 +240,7 @@ describe('the Share dialog on a session', { timeout: 60_000 }, () => {
     expect(text()).toContain('Anyone with the link can view — no sign-in. They can’t reply or change anything.');
     const url = dialog().querySelector<HTMLInputElement>('input[aria-label="Public link"]');
     expect(url?.value).toBe(`${window.location.origin}/s/${TOKEN}`);
-    expect(dialog().querySelector('.share-dialog-url .ant-btn')?.textContent?.trim()).toBe('Copy');
+    expect(dialog().querySelector('.share-dialog-url button')?.textContent?.trim()).toBe('Copy');
     expect(dialog().querySelector('.share-dialog-label')?.textContent).toBe('Includes');
     expect(layers()).toEqual([
       { name: 'Messages', on: true, locked: true, count: '77 messages' },
@@ -248,7 +270,7 @@ describe('the Share dialog on a session', { timeout: 60_000 }, () => {
     serve({ link: link() });
     await open();
 
-    const tools = dialog().querySelector<HTMLInputElement>('.share-layer[data-layer="toolOutput"] input[type="checkbox"]');
+    const tools = dialog().querySelector('.share-layer[data-layer="toolOutput"] [role="checkbox"]');
     await click(tools, 'the Tool calls and output switch');
 
     expect(putShareLink).toHaveBeenCalledWith('SESSION', SESSION, { include: { toolOutput: false } });
@@ -265,15 +287,13 @@ describe('the Share dialog on a session', { timeout: 60_000 }, () => {
 
     const asked = popconfirm();
     expect(asked, 'no question before turning the link off').not.toBeNull();
-    expect(asked!.querySelector('.ant-popconfirm-title')?.textContent).toBe('Turn off this link?');
-    expect(asked!.querySelector('.ant-popconfirm-description')?.textContent).toBe(
-      'Anyone who has it loses access right away.',
-    );
+    expect(nameOf(asked!)).toBe('Turn off this link?');
+    expect(descriptionOf(asked!)).toBe('Anyone who has it loses access right away.');
     expect(turnOffShareLink, 'the link was turned off before anyone confirmed').not.toHaveBeenCalled();
     // Still public while the question is open.
     expect(dialog().querySelector('input[aria-label="Public link"]')).not.toBeNull();
 
-    const confirm = [...asked!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Turn off');
+    const confirm = [...asked!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Turn off');
     await click(confirm, 'Turn off');
 
     expect(turnOffShareLink).toHaveBeenCalledWith('SESSION', SESSION);
@@ -286,7 +306,7 @@ describe('the Share dialog on a session', { timeout: 60_000 }, () => {
     await open();
 
     await chooseAccess('Only you');
-    const cancel = [...popconfirm()!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Cancel');
+    const cancel = [...popconfirm()!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Cancel');
     await click(cancel, 'Cancel');
 
     expect(turnOffShareLink).not.toHaveBeenCalled();
@@ -298,14 +318,10 @@ describe('the Share dialog on a session', { timeout: 60_000 }, () => {
     serve({ link: link() });
     await open();
 
-    await act(async () => {
-      dialog().querySelector('.share-dialog-expiry .ant-select-content')
-        ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    });
-    await settle();
-    const options = [...document.body.querySelectorAll('.ant-select-item-option')];
+    await click(dialog().querySelector('.share-dialog-expiry [role="combobox"]'), 'Expires');
+    const options = [...document.body.querySelectorAll('[role="listbox"] [role="option"]')];
     expect(options.map((o) => o.textContent)).toEqual(['Never', '1 day', '7 days', '30 days']);
-    await click(options.find((o) => o.textContent === '7 days'), 'the 7 days choice');
+    await press(options.find((o) => o.textContent === '7 days'), 'the 7 days choice');
 
     expect(putShareLink).toHaveBeenCalledTimes(1);
     const [, , body] = vi.mocked(putShareLink).mock.calls[0];

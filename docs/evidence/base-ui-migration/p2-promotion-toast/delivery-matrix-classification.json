@@ -1,0 +1,21 @@
+{
+  "sourceCommit": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+  "rawReport": "delivery-notifications-raw/report.json",
+  "extractedSummary": "latest-toasts-run/summary.json",
+  "original232": {
+    "expected": 232
+  },
+  "combination40": {
+    "expected": 40
+  },
+  "allHistoricalCaseNamesRetained": true,
+  "stats": {
+    "startTime": "2026-10-04T12:33:43.617Z",
+    "duration": 584369.399,
+    "expected": 272,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "artifacts": 648
+}

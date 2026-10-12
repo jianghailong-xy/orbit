@@ -1,0 +1,1737 @@
+{
+ "labels": [
+  "0860351de",
+  "p22-1a70fbb90",
+  "p22-e19053056",
+  "p22-954396bdb",
+  "p22-3f3a29737",
+  "p22-e1eb1d379",
+  "p22-f5fc726d4",
+  "p22-baec95275",
+  "p22-f096a2bc7",
+  "p22-9ccb09e86",
+  "p22-38947755e",
+  "p22-8a29e3493",
+  "8ef6b60d1"
+ ],
+ "noiseEnvelope": {
+  "maxChannelDelta": 4,
+  "pixels": 200
+ },
+ "screenshots": {
+  "chromium-dark-desktop/settings-saved.png": [
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "pixels": 97,
+    "maxChannelDelta": 49,
+    "box": [
+     1195,
+     31,
+     36,
+     11
+    ],
+    "p0Comparator": "match",
+    "kind": "change"
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 101925,
+    "maxChannelDelta": 223,
+    "box": [
+     500,
+     249,
+     560,
+     651
+    ],
+    "p0Comparator": "15638 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-desktop/settings.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 101924,
+    "maxChannelDelta": 223,
+    "box": [
+     500,
+     249,
+     560,
+     651
+    ],
+    "p0Comparator": "15551 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-desktop/task-action-focus.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45358,
+    "maxChannelDelta": 212,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "10805 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-desktop/task-action-hover.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45358,
+    "maxChannelDelta": 212,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "10805 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-desktop/task-action-menu.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45358,
+    "maxChannelDelta": 212,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "10805 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-desktop/task-detail.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45358,
+    "maxChannelDelta": 212,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "10805 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-desktop/task-public-share.png": [
+   {
+    "from": "0860351de",
+    "at": "p22-1a70fbb90",
+    "missing": true
+   },
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "missing": true
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "missing": true
+   },
+   {
+    "from": "p22-954396bdb",
+    "at": "p22-3f3a29737",
+    "missing": true
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "missing": true
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "missing": true
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "missing": true
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "missing": true
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "missing": true
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "missing": true
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "missing": true
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "missing": true
+   }
+  ],
+  "chromium-dark-desktop/task-share-dialog.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 27463,
+    "maxChannelDelta": 117,
+    "box": [
+     615,
+     291,
+     665,
+     552
+    ],
+    "p0Comparator": "3850 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-phone/settings-saved.png": [
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "pixels": 1300,
+    "maxChannelDelta": 90,
+    "box": [
+     159,
+     39,
+     132,
+     86
+    ],
+    "p0Comparator": "95 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "pixels": 9,
+    "maxChannelDelta": 1,
+    "box": [
+     305,
+     640,
+     5,
+     18
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "pixels": 9,
+    "maxChannelDelta": 1,
+    "box": [
+     305,
+     640,
+     5,
+     18
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "pixels": 9,
+    "maxChannelDelta": 1,
+    "box": [
+     305,
+     640,
+     5,
+     18
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 36854,
+    "maxChannelDelta": 212,
+    "box": [
+     16,
+     484,
+     358,
+     360
+    ],
+    "p0Comparator": "7799 pixels (ratio 0.03 of all image pixels) are different.",
+    "kind": "change"
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "pixels": 16,
+    "maxChannelDelta": 1,
+    "box": [
+     16,
+     627,
+     358,
+     8
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   }
+  ],
+  "chromium-dark-phone/settings.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 36853,
+    "maxChannelDelta": 212,
+    "box": [
+     16,
+     484,
+     358,
+     360
+    ],
+    "p0Comparator": "7684 pixels (ratio 0.03 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-phone/task-action-focus.png": [
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "pixels": 1,
+    "maxChannelDelta": 1,
+    "box": [
+     286,
+     23,
+     1,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "pixels": 1,
+    "maxChannelDelta": 1,
+    "box": [
+     286,
+     23,
+     1,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "pixels": 1,
+    "maxChannelDelta": 1,
+    "box": [
+     286,
+     23,
+     1,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "pixels": 1,
+    "maxChannelDelta": 1,
+    "box": [
+     286,
+     23,
+     1,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 23064,
+    "maxChannelDelta": 212,
+    "box": [
+     0,
+     278,
+     390,
+     453
+    ],
+    "p0Comparator": "4816 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "pixels": 1,
+    "maxChannelDelta": 1,
+    "box": [
+     286,
+     23,
+     1,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "pixels": 1,
+    "maxChannelDelta": 1,
+    "box": [
+     286,
+     23,
+     1,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   }
+  ],
+  "chromium-dark-phone/task-action-hover.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 23064,
+    "maxChannelDelta": 212,
+    "box": [
+     0,
+     278,
+     390,
+     453
+    ],
+    "p0Comparator": "4816 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-phone/task-action-menu.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 23064,
+    "maxChannelDelta": 212,
+    "box": [
+     0,
+     278,
+     390,
+     453
+    ],
+    "p0Comparator": "4816 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-phone/task-detail.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 23064,
+    "maxChannelDelta": 212,
+    "box": [
+     0,
+     278,
+     390,
+     453
+    ],
+    "p0Comparator": "4816 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-dark-phone/task-public-share.png": [
+   {
+    "from": "0860351de",
+    "at": "p22-1a70fbb90",
+    "missing": true
+   },
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "missing": true
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "missing": true
+   },
+   {
+    "from": "p22-954396bdb",
+    "at": "p22-3f3a29737",
+    "missing": true
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "missing": true
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "missing": true
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "missing": true
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "missing": true
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "missing": true
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "missing": true
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "missing": true
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "missing": true
+   }
+  ],
+  "chromium-dark-phone/task-share-dialog.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 2542,
+    "maxChannelDelta": 75,
+    "box": [
+     0,
+     544,
+     390,
+     187
+    ],
+    "p0Comparator": "488 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-desktop/settings-saved.png": [
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "pixels": 97,
+    "maxChannelDelta": 59,
+    "box": [
+     1195,
+     31,
+     36,
+     11
+    ],
+    "p0Comparator": "10 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 50714,
+    "maxChannelDelta": 224,
+    "box": [
+     500,
+     249,
+     560,
+     651
+    ],
+    "p0Comparator": "14851 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-desktop/settings.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 50712,
+    "maxChannelDelta": 224,
+    "box": [
+     500,
+     249,
+     560,
+     651
+    ],
+    "p0Comparator": "14827 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-desktop/task-action-focus.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45612,
+    "maxChannelDelta": 255,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "11650 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-desktop/task-action-hover.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45612,
+    "maxChannelDelta": 255,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "11650 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-desktop/task-action-menu.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45612,
+    "maxChannelDelta": 255,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "11650 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-desktop/task-detail.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45612,
+    "maxChannelDelta": 255,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "11650 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-desktop/task-public-share.png": [
+   {
+    "from": "0860351de",
+    "at": "p22-1a70fbb90",
+    "missing": true
+   },
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "missing": true
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "missing": true
+   },
+   {
+    "from": "p22-954396bdb",
+    "at": "p22-3f3a29737",
+    "missing": true
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "missing": true
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "missing": true
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "missing": true
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "missing": true
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "missing": true
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "missing": true
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "missing": true
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "missing": true
+   }
+  ],
+  "chromium-light-desktop/task-share-dialog.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 27669,
+    "maxChannelDelta": 140,
+    "box": [
+     615,
+     291,
+     665,
+     552
+    ],
+    "p0Comparator": "5031 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-phone/settings-saved.png": [
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "pixels": 8,
+    "maxChannelDelta": 1,
+    "box": [
+     305,
+     640,
+     4,
+     18
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "pixels": 8,
+    "maxChannelDelta": 1,
+    "box": [
+     305,
+     640,
+     4,
+     18
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "pixels": 1418,
+    "maxChannelDelta": 113,
+    "box": [
+     159,
+     44,
+     126,
+     76
+    ],
+    "p0Comparator": "135 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "pixels": 8,
+    "maxChannelDelta": 1,
+    "box": [
+     305,
+     640,
+     4,
+     18
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "pixels": 8,
+    "maxChannelDelta": 1,
+    "box": [
+     305,
+     640,
+     4,
+     18
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 20887,
+    "maxChannelDelta": 224,
+    "box": [
+     16,
+     484,
+     358,
+     360
+    ],
+    "p0Comparator": "7358 pixels (ratio 0.03 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-phone/settings.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 20885,
+    "maxChannelDelta": 224,
+    "box": [
+     16,
+     484,
+     358,
+     360
+    ],
+    "p0Comparator": "7358 pixels (ratio 0.03 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-phone/task-action-focus.png": [
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "pixels": 2,
+    "maxChannelDelta": 3,
+    "box": [
+     286,
+     23,
+     4,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "pixels": 2,
+    "maxChannelDelta": 3,
+    "box": [
+     286,
+     23,
+     4,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "pixels": 2,
+    "maxChannelDelta": 3,
+    "box": [
+     286,
+     23,
+     4,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "pixels": 2,
+    "maxChannelDelta": 3,
+    "box": [
+     286,
+     23,
+     4,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 23150,
+    "maxChannelDelta": 255,
+    "box": [
+     0,
+     23,
+     390,
+     708
+    ],
+    "p0Comparator": "5255 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "pixels": 2,
+    "maxChannelDelta": 3,
+    "box": [
+     286,
+     23,
+     4,
+     1
+    ],
+    "p0Comparator": "match",
+    "kind": "noise"
+   }
+  ],
+  "chromium-light-phone/task-action-hover.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 23148,
+    "maxChannelDelta": 255,
+    "box": [
+     0,
+     278,
+     390,
+     453
+    ],
+    "p0Comparator": "5255 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-phone/task-action-menu.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 23148,
+    "maxChannelDelta": 255,
+    "box": [
+     0,
+     278,
+     390,
+     453
+    ],
+    "p0Comparator": "5255 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-phone/task-detail.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 23148,
+    "maxChannelDelta": 255,
+    "box": [
+     0,
+     278,
+     390,
+     453
+    ],
+    "p0Comparator": "5255 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "chromium-light-phone/task-public-share.png": [
+   {
+    "from": "0860351de",
+    "at": "p22-1a70fbb90",
+    "missing": true
+   },
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "missing": true
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "missing": true
+   },
+   {
+    "from": "p22-954396bdb",
+    "at": "p22-3f3a29737",
+    "missing": true
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "missing": true
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "missing": true
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "missing": true
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "missing": true
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "missing": true
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "missing": true
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "missing": true
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "missing": true
+   }
+  ],
+  "chromium-light-phone/task-share-dialog.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 2554,
+    "maxChannelDelta": 85,
+    "box": [
+     0,
+     544,
+     390,
+     187
+    ],
+    "p0Comparator": "643 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-desktop/settings-saved.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 102958,
+    "maxChannelDelta": 223,
+    "box": [
+     492,
+     249,
+     780,
+     651
+    ],
+    "p0Comparator": "15705 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-desktop/settings.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 102958,
+    "maxChannelDelta": 223,
+    "box": [
+     496,
+     249,
+     784,
+     651
+    ],
+    "p0Comparator": "15611 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-desktop/task-action-focus.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45130,
+    "maxChannelDelta": 167,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "10444 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-desktop/task-action-hover.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45130,
+    "maxChannelDelta": 167,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "10444 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-desktop/task-action-menu.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45130,
+    "maxChannelDelta": 167,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "10444 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-desktop/task-detail.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45130,
+    "maxChannelDelta": 167,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "10444 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-desktop/task-public-share.png": [
+   {
+    "from": "0860351de",
+    "at": "p22-1a70fbb90",
+    "missing": true
+   },
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "missing": true
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "missing": true
+   },
+   {
+    "from": "p22-954396bdb",
+    "at": "p22-3f3a29737",
+    "missing": true
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "missing": true
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "missing": true
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "missing": true
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "missing": true
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "missing": true
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "missing": true
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "missing": true
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "missing": true
+   }
+  ],
+  "webkit-dark-desktop/task-share-dialog.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 27604,
+    "maxChannelDelta": 92,
+    "box": [
+     615,
+     291,
+     665,
+     552
+    ],
+    "p0Comparator": "3518 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-phone/settings-saved.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 36713,
+    "maxChannelDelta": 212,
+    "box": [
+     16,
+     484,
+     350,
+     360
+    ],
+    "p0Comparator": "7795 pixels (ratio 0.03 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-phone/settings.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 36973,
+    "maxChannelDelta": 212,
+    "box": [
+     16,
+     442,
+     374,
+     402
+    ],
+    "p0Comparator": "7679 pixels (ratio 0.03 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-phone/task-action-focus.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 22249,
+    "maxChannelDelta": 167,
+    "box": [
+     0,
+     278,
+     390,
+     454
+    ],
+    "p0Comparator": "4319 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-phone/task-action-hover.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 22249,
+    "maxChannelDelta": 167,
+    "box": [
+     0,
+     278,
+     390,
+     454
+    ],
+    "p0Comparator": "4319 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-phone/task-action-menu.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 22249,
+    "maxChannelDelta": 167,
+    "box": [
+     0,
+     278,
+     390,
+     454
+    ],
+    "p0Comparator": "4319 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-phone/task-detail.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 22249,
+    "maxChannelDelta": 167,
+    "box": [
+     0,
+     278,
+     390,
+     454
+    ],
+    "p0Comparator": "4319 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-dark-phone/task-public-share.png": [
+   {
+    "from": "0860351de",
+    "at": "p22-1a70fbb90",
+    "missing": true
+   },
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "missing": true
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "missing": true
+   },
+   {
+    "from": "p22-954396bdb",
+    "at": "p22-3f3a29737",
+    "missing": true
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "missing": true
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "missing": true
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "missing": true
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "missing": true
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "missing": true
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "missing": true
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "missing": true
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "missing": true
+   }
+  ],
+  "webkit-dark-phone/task-share-dialog.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 2588,
+    "maxChannelDelta": 75,
+    "box": [
+     0,
+     375,
+     390,
+     357
+    ],
+    "p0Comparator": "480 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-desktop/settings-saved.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 52100,
+    "maxChannelDelta": 224,
+    "box": [
+     492,
+     249,
+     780,
+     651
+    ],
+    "p0Comparator": "15035 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-desktop/settings.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 52098,
+    "maxChannelDelta": 224,
+    "box": [
+     496,
+     249,
+     784,
+     651
+    ],
+    "p0Comparator": "15008 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-desktop/task-action-focus.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45445,
+    "maxChannelDelta": 224,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "11248 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-desktop/task-action-hover.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45445,
+    "maxChannelDelta": 224,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "11248 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-desktop/task-action-menu.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45445,
+    "maxChannelDelta": 224,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "11248 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-desktop/task-detail.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 45445,
+    "maxChannelDelta": 224,
+    "box": [
+     615,
+     199,
+     665,
+     644
+    ],
+    "p0Comparator": "11248 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-desktop/task-public-share.png": [
+   {
+    "from": "0860351de",
+    "at": "p22-1a70fbb90",
+    "missing": true
+   },
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "missing": true
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "missing": true
+   },
+   {
+    "from": "p22-954396bdb",
+    "at": "p22-3f3a29737",
+    "missing": true
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "missing": true
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "missing": true
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "missing": true
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "missing": true
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "missing": true
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "missing": true
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "missing": true
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "missing": true
+   }
+  ],
+  "webkit-light-desktop/task-share-dialog.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 27813,
+    "maxChannelDelta": 123,
+    "box": [
+     615,
+     291,
+     665,
+     552
+    ],
+    "p0Comparator": "4631 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-phone/settings-saved.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 21268,
+    "maxChannelDelta": 224,
+    "box": [
+     16,
+     484,
+     350,
+     360
+    ],
+    "p0Comparator": "7409 pixels (ratio 0.03 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-phone/settings.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 21526,
+    "maxChannelDelta": 224,
+    "box": [
+     16,
+     442,
+     374,
+     402
+    ],
+    "p0Comparator": "7406 pixels (ratio 0.03 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-phone/task-action-focus.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 22405,
+    "maxChannelDelta": 224,
+    "box": [
+     0,
+     278,
+     390,
+     454
+    ],
+    "p0Comparator": "4793 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-phone/task-action-hover.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 22405,
+    "maxChannelDelta": 224,
+    "box": [
+     0,
+     278,
+     390,
+     454
+    ],
+    "p0Comparator": "4793 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-phone/task-action-menu.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 22405,
+    "maxChannelDelta": 224,
+    "box": [
+     0,
+     278,
+     390,
+     454
+    ],
+    "p0Comparator": "4793 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-phone/task-detail.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 22405,
+    "maxChannelDelta": 224,
+    "box": [
+     0,
+     278,
+     390,
+     454
+    ],
+    "p0Comparator": "4793 pixels (ratio 0.02 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ],
+  "webkit-light-phone/task-public-share.png": [
+   {
+    "from": "0860351de",
+    "at": "p22-1a70fbb90",
+    "missing": true
+   },
+   {
+    "from": "p22-1a70fbb90",
+    "at": "p22-e19053056",
+    "missing": true
+   },
+   {
+    "from": "p22-e19053056",
+    "at": "p22-954396bdb",
+    "missing": true
+   },
+   {
+    "from": "p22-954396bdb",
+    "at": "p22-3f3a29737",
+    "missing": true
+   },
+   {
+    "from": "p22-3f3a29737",
+    "at": "p22-e1eb1d379",
+    "missing": true
+   },
+   {
+    "from": "p22-e1eb1d379",
+    "at": "p22-f5fc726d4",
+    "missing": true
+   },
+   {
+    "from": "p22-f5fc726d4",
+    "at": "p22-baec95275",
+    "missing": true
+   },
+   {
+    "from": "p22-baec95275",
+    "at": "p22-f096a2bc7",
+    "missing": true
+   },
+   {
+    "from": "p22-f096a2bc7",
+    "at": "p22-9ccb09e86",
+    "missing": true
+   },
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "missing": true
+   },
+   {
+    "from": "p22-38947755e",
+    "at": "p22-8a29e3493",
+    "missing": true
+   },
+   {
+    "from": "p22-8a29e3493",
+    "at": "8ef6b60d1",
+    "missing": true
+   }
+  ],
+  "webkit-light-phone/task-share-dialog.png": [
+   {
+    "from": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "pixels": 2603,
+    "maxChannelDelta": 84,
+    "box": [
+     0,
+     376,
+     390,
+     356
+    ],
+    "p0Comparator": "577 pixels (ratio 0.01 of all image pixels) are different.",
+    "kind": "change"
+   }
+  ]
+ }
+}

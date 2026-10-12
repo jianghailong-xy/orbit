@@ -109,7 +109,7 @@ func TestProjectRequestStartIsABaseToolThatSaysWhenToCallIt(t *testing.T) {
 	tools := toolDescriptors(false, false)
 	props := mcpToolProps(tools, "project_request_start")
 	for _, want := range []string{
-		"projectId", "line", "projectBranchName", "automatic", "maxConcurrentTasks",
+		"projectId", "line", "projectBranchName", "upstreamRef", "automatic", "maxConcurrentTasks",
 		"mergeCheckCommand", "why",
 	} {
 		if _, ok := props[want]; !ok {
@@ -122,7 +122,7 @@ func TestProjectRequestStartIsABaseToolThatSaysWhenToCallIt(t *testing.T) {
 		}
 		schema, _ := tool["inputSchema"].(map[string]interface{})
 		required, _ := schema["required"].([]string)
-		if strings.Join(required, ",") != "projectId,line,automatic,maxConcurrentTasks,why" {
+		if strings.Join(required, ",") != "projectId,line,maxConcurrentTasks,why" {
 			t.Fatalf("project_request_start requires %v", required)
 		}
 	}
@@ -195,8 +195,9 @@ func TestProjectRequestStartPostsTheSettingsAsTheCallingSession(t *testing.T) {
 		"34XstartReq0000000001", // the request, by the id the start door takes
 		"nothing is waiting on this call",
 		"task_start is refused",
-		"START_NO_MERGE_CHECK", // the warning the owner reads beside it
+		"START_NO_MERGE_CHECK", // the warning, which is the coordinator's and not on the owner's card
 		"do: Suggest a mergeCheckCommand",
+		"the owner's card does not show them",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("project_request_start's result does not say %q:\n%s", want, text)
@@ -229,6 +230,140 @@ func TestProjectRequestStartLeavesOutWhatWasNotSuggested(t *testing.T) {
 	if body["automatic"] != false || body["maxConcurrentTasks"] != float64(2) || body["line"] != "MAIN" {
 		t.Fatalf("project_request_start sent %#v", body)
 	}
+}
+
+// Automatic left out is on: the owner's card opens with it on whatever is sent, so leaving it out is a
+// suggestion rather than a refusal.
+func TestProjectRequestStartLeftOutAutomaticIsOn(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	res := mcp.callTool("project_request_start", map[string]interface{}{
+		"projectId":          "proj-1",
+		"line":               "PROJECT_BRANCH",
+		"maxConcurrentTasks": float64(3),
+		"why":                "B and C both build on A",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_request_start returned an error: %s", toolText(t, res))
+	}
+	if got := (*seen)[0].body["automatic"]; got != true {
+		t.Fatalf("project_request_start with no automatic sent automatic = %#v, want true", got)
+	}
+}
+
+// The main branch is a suggestion with either line, sent as given; left out or blank, nothing is
+// sent and the project keeps the main branch it stands on.
+func TestProjectRequestStartSendsASuggestedMainBranchAsGiven(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	request := func(line string, upstream interface{}) map[string]interface{} {
+		t.Helper()
+		args := map[string]interface{}{
+			"projectId": "proj-1", "line": line, "maxConcurrentTasks": float64(3), "why": "ready",
+		}
+		if upstream != nil {
+			args["upstreamRef"] = upstream
+		}
+		if res := mcp.callTool("project_request_start", args); res["isError"] == true {
+			t.Fatalf("project_request_start returned an error: %s", toolText(t, res))
+		}
+		return (*seen)[len(*seen)-1].body
+	}
+
+	if got := request("PROJECT_BRANCH", "refs/heads/release/2026")["upstreamRef"]; got != "refs/heads/release/2026" {
+		t.Fatalf("project_request_start sent upstreamRef = %#v, want refs/heads/release/2026", got)
+	}
+	if got := request("MAIN", "refs/heads/master")["upstreamRef"]; got != "refs/heads/master" {
+		t.Fatalf("project_request_start on MAIN sent upstreamRef = %#v, want refs/heads/master", got)
+	}
+	for name, upstream := range map[string]interface{}{"left out": nil, "blank": "   "} {
+		body := request("PROJECT_BRANCH", upstream)
+		if _, sent := body["upstreamRef"]; sent {
+			t.Fatalf("a main branch %s was sent: %#v", name, body)
+		}
+	}
+}
+
+func TestProjectRequestStartCLISendsASuggestedMainBranchAsGiven(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "sess-1")
+	t.Setenv("ORBIT_SERVICE_TOKEN", "")
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{
+		"request-start", "proj-1", "--line", "PROJECT_BRANCH", "--max-concurrent-tasks", "3",
+		"--upstream-ref", "refs/heads/master", "--why", "ready",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := (*seen)[0].body["upstreamRef"]; got != "refs/heads/master" {
+		t.Fatalf("--upstream-ref sent upstreamRef = %#v, want refs/heads/master (body %#v)", got, (*seen)[0].body)
+	}
+	if err := cmdProjectCLI([]string{
+		"request-start", "proj-1", "--line", "PROJECT_BRANCH", "--max-concurrent-tasks", "3", "--why", "ready",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, sent := (*seen)[1].body["upstreamRef"]; sent {
+		t.Fatalf("request-start with no --upstream-ref sent a main branch: %#v", (*seen)[1].body)
+	}
+}
+
+// The coordinator suggests a main branch only for a repository the owner has not chosen one for, and
+// reads it from the repository rather than guessing: the tool, the CLI help and the capabilities
+// listing each say when to leave it out, how to read it, and that the owner's press decides.
+func TestProjectRequestStartSaysWhenToSuggestAMainBranch(t *testing.T) {
+	props := mcpToolProps(toolDescriptors(false, false), "project_request_start")
+	upstream, _ := props["upstreamRef"].(map[string]interface{})
+	description, _ := upstream["description"].(string)
+	var arguments string
+	for _, spec := range projectCLICapabilities {
+		if spec.Tool == "project_request_start" {
+			for _, argument := range spec.Arguments {
+				if strings.HasPrefix(argument, "--upstream-ref ") {
+					arguments = argument
+				}
+			}
+		}
+	}
+	help := projectActionHelp["request-start"]
+	says := func(where, text string, wants ...string) {
+		t.Helper()
+		// The help wraps its lines; a phrase is the same phrase across a line break.
+		flat := strings.ToLower(strings.Join(strings.Fields(text), " "))
+		for _, want := range wants {
+			if !strings.Contains(flat, strings.ToLower(want)) {
+				t.Errorf("%s does not say %q: %q", where, want, text)
+			}
+		}
+	}
+	everywhere := []string{
+		"main branch",
+		// Not when the owner has already chosen one for this repository.
+		"integration.lastMainBranch",
+		"leave it out",
+		// Otherwise read from the repository, and sent as a full ref.
+		"git symbolic-ref --short refs/remotes/origin/HEAD",
+		"refs/heads/<name>",
+	}
+	whatItIs := []string{
+		"tasks start from",
+		"merged into",
+		"origin/master becomes refs/heads/master",
+		"only a suggestion",
+		"last choice for this repository ahead of it",
+		"nothing is written until they press Start",
+	}
+	for where, text := range map[string]string{
+		"the upstreamRef parameter":            description,
+		"`orbit project request-start --help`": help,
+		"the capabilities argument":            arguments,
+	} {
+		says(where, text, everywhere...)
+	}
+	says("the upstreamRef parameter", description, whatItIs...)
+	says("`orbit project request-start --help`", help, append(whatItIs, "--upstream-ref REF")...)
 }
 
 // Every reason the server gave, one per line with what to do — the whole point of returning them at
@@ -303,7 +438,6 @@ func TestProjectRequestStartRefusesABadShapeBeforeARoundTrip(t *testing.T) {
 		"no project":               func(a map[string]interface{}) { delete(a, "projectId") },
 		"no line":                  func(a map[string]interface{}) { delete(a, "line") },
 		"an unknown line":          func(a map[string]interface{}) { a["line"] = "SOMEWHERE" },
-		"no automatic":             func(a map[string]interface{}) { delete(a, "automatic") },
 		"automatic as a string":    func(a map[string]interface{}) { a["automatic"] = "yes" },
 		"no concurrency":           func(a map[string]interface{}) { delete(a, "maxConcurrentTasks") },
 		"zero concurrency":         func(a map[string]interface{}) { a["maxConcurrentTasks"] = float64(0) },
@@ -351,7 +485,7 @@ func TestProjectRequestStartCLISendsTheSameRequest(t *testing.T) {
 		t.Fatalf("request-start printed %q", out.String())
 	}
 
-	// --automatic=false is a suggestion too; leaving the flag out is not.
+	// --automatic=false is a suggestion too, and leaving the flag out suggests it on.
 	out.Reset()
 	if err := cmdProjectCLI([]string{
 		"request-start", "proj-1", "--line", "MAIN", "--automatic=false",
@@ -362,14 +496,13 @@ func TestProjectRequestStartCLISendsTheSameRequest(t *testing.T) {
 	if got := (*seen)[1].body["automatic"]; got != false {
 		t.Fatalf("--automatic=false sent automatic = %#v", got)
 	}
-	err := cmdProjectCLI([]string{
+	if err := cmdProjectCLI([]string{
 		"request-start", "proj-1", "--line", "MAIN", "--max-concurrent-tasks", "1", "--why", "one fix",
-	}, strings.NewReader(""), &out)
-	if err == nil || !strings.Contains(err.Error(), "--automatic is required") {
-		t.Fatalf("a request with no Automatic suggestion was accepted: %v", err)
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
 	}
-	if len(*seen) != 2 {
-		t.Fatalf("a refused command reached the server: %#v", *seen)
+	if got := (*seen)[2].body["automatic"]; got != true {
+		t.Fatalf("a request with no Automatic flag sent automatic = %#v, want it on", got)
 	}
 }
 

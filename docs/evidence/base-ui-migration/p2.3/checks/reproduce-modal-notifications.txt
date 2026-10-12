@@ -1,0 +1,101 @@
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs --project=chromium-light-desktop --project=webkit-dark-phone
+
+[WebServer] (node:1909009) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:1909087) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:9:1 › existing notifications remain accessible when a dialog opens (16.4s)
+(node:1909340) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:9:1 › existing notifications remain accessible when a dialog opens (15.9s)
+
+
+  1) [chromium-light-desktop] › ui-migration/toasts.browser.mjs:9:1 › existing notifications remain accessible when a dialog opens 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Notifications', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Notifications', exact: true }) with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Notifications', exact: true })
+
+
+      13 |   await expect(dialog).toBeVisible();
+      14 |   await info.attach('notification-with-dialog', { body: await page.screenshot(), contentType: 'image/png' });
+    > 15 |   await expect(page.getByRole('region', { name: 'Notifications', exact: true })).toBeVisible();
+         |                                                                                  ^
+      16 |   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+      17 |   await expect(dialog).toBeVisible();
+      18 | });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:15:82
+
+    Error Context: .toasts-results/toasts.browser.mjs-existin-873bc-essible-when-a-dialog-opens-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-existin-873bc-essible-when-a-dialog-opens-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-existin-873bc-essible-when-a-dialog-opens-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:9:1 › existing notifications remain accessible when a dialog opens 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: 'Notifications', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'Notifications', exact: true }) with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Notifications', exact: true })
+
+
+      13 |   await expect(dialog).toBeVisible();
+      14 |   await info.attach('notification-with-dialog', { body: await page.screenshot(), contentType: 'image/png' });
+    > 15 |   await expect(page.getByRole('region', { name: 'Notifications', exact: true })).toBeVisible();
+         |                                                                                  ^
+      16 |   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+      17 |   await expect(dialog).toBeVisible();
+      18 | });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:15:82
+
+    Error Context: .toasts-results/toasts.browser.mjs-existin-873bc-essible-when-a-dialog-opens-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-existin-873bc-essible-when-a-dialog-opens-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-existin-873bc-essible-when-a-dialog-opens-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-desktop] › ui-migration/toasts.browser.mjs:9:1 › existing notifications remain accessible when a dialog opens 
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:9:1 › existing notifications remain accessible when a dialog opens 
+npm error Lifecycle script `test:ui-toasts` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/toasts.config.mjs --project=chromium-light-desktop --project=webkit-dark-phone

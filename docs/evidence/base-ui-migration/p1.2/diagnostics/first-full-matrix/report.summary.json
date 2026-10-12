@@ -1,0 +1,1409 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "src/web/ui-migration/controls.config.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "controls*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4175 --strictPort",
+   "cwd": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/",
+   "url": "http://127.0.0.1:4175",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "controls.browser.mjs",
+   "file": "controls.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3025,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 50\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-disabled thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-loading thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 50\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-disabled thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-loading thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23",
+          "location": {
+           "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+           "column": 23,
+           "line": 126
+          },
+          "snippet": "  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+            "column": 23,
+            "line": 126
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 50\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 4,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-small texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 10,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 1\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 8,\u001b[39m\n\u001b[31m+     \"case\": \"radio-button-middle texts 2\",\u001b[39m\n\u001b[31m+     \"orbit\": 18,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-disabled thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": \"rgba(0, 35, 11, 0.2) 0px 2px 4px 0px\",\u001b[39m\n\u001b[31m+     \"case\": \"switch-loading thumb surface\",\u001b[39m\n\u001b[31m+     \"orbit\": \"none\",\u001b[39m\n\u001b[31m+     \"property\": \"boxShadow\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:34.528Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+          "column": 23,
+          "line": 126
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-dc4841ad186cedb83459",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4876,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:37.980Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-360441424e88234115f9",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1473,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:42.922Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-a82299bf175ad3e573b4",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 2032,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.22271728515625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.438362121582031,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.22265625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.4383544921875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.5545654296875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.12328338623047,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.5546875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.123291015625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.22271728515625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.438362121582031,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.22265625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.4383544921875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.5545654296875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.12328338623047,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.5546875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.123291015625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23",
+          "location": {
+           "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+           "column": 23,
+           "line": 126
+          },
+          "snippet": "  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+            "column": 23,
+            "line": 126
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.22271728515625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.438362121582031,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.22265625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.4383544921875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.5545654296875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.12328338623047,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.5546875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.123291015625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:44.696Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-chromium-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-chromium-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+          "column": 23,
+          "line": 126
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-8cea31dfd30d2ebff1a7",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4486,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:47.085Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-cc5a342ae5ed61151834",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1397,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:51.621Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-797b868a5233333db773",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1990,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:53.279Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-c6e44aac6c60637e2c1c",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4575,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:55.320Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-eb3a1c47845e22c40027",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1408,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:50:59.899Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-33b50a01e57924ed9e93",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1933,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:01.558Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-ac7b5419f99da60db816",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4388,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:03.539Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-fbbd3dfb2775a9b020f9",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1353,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:07.931Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-362eafe6facccf5fa59e",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 2315,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 14.2657470703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 14.3856201171875,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 7.2657470703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 7.3856201171875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.468505859375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.228759765625,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.468505859375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.228759765625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 14.2657470703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 14.3856201171875,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 7.2657470703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 7.3856201171875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.468505859375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.228759765625,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.468505859375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.228759765625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23",
+          "location": {
+           "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+           "column": 23,
+           "line": 126
+          },
+          "snippet": "  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+            "column": 23,
+            "line": 126
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 14.2657470703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 14.3856201171875,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 7.2657470703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 7.3856201171875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.468505859375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.228759765625,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.468505859375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.228759765625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:09.546Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-webkit-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-webkit-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+          "column": 23,
+          "line": 126
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-c47e152783b9a4cc295a",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5351,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:12.289Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-d52d868a611579657c9a",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2496,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:17.707Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-4f7f2be7240b89af0b08",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3725,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 14.447593688964844,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 14.236656188964844,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 7.4476318359375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 7.2366943359375,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.104812622070312,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.526687622070312,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.104736328125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.526611328125,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 14.447593688964844,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 14.236656188964844,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 7.4476318359375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 7.2366943359375,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.104812622070312,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.526687622070312,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.104736328125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.526611328125,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23",
+          "location": {
+           "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+           "column": 23,
+           "line": 126
+          },
+          "snippet": "  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+            "column": 23,
+            "line": 126
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 14.447593688964844,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 14.236656188964844,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 7.4476318359375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 7.2366943359375,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.104812622070312,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.526687622070312,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 17.104736328125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 17.526611328125,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:20.603Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-webkit-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-webkit-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+          "column": 23,
+          "line": 126
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-a923e9d4ed851fc13fdc",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4989,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:24.741Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-d31f773013e35cb93476",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2025,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:29.814Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-5813702d06d6ca5c4226",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 10,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3459,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.10540771484375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.203704833984375,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.10540771484375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.20367431640625,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.7891845703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.59259033203125,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.7891845703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.5926513671875,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.10540771484375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.203704833984375,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.10540771484375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.20367431640625,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.7891845703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.59259033203125,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.7891845703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.5926513671875,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23",
+          "location": {
+           "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+           "column": 23,
+           "line": 126
+          },
+          "snippet": "  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+            "column": 23,
+            "line": 126
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.10540771484375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.203704833984375,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.10540771484375,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.20367431640625,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.7891845703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.59259033203125,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.7891845703125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.5926513671875,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:32.152Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-webkit-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-webkit-dark-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+          "column": 23,
+          "line": 126
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-57a42e24b02d71df20cf",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5230,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:35.994Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-6e646c0ba33ddc1b62ff",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2816,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:41.292Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-4941097086df7370d48e",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    },
+    {
+     "title": "fixed control states match AntD geometry, typography and surfaces",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 12,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 3613,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.194931030273438,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.15692138671875,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.1949462890625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.156982421875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.610137939453125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.6861572265625,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.610107421875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.68603515625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.194931030273438,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.15692138671875,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.1949462890625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.156982421875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.610137939453125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.6861572265625,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.610107421875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.68603515625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23",
+          "location": {
+           "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+           "column": 23,
+           "line": 126
+          },
+          "snippet": "  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+            "column": 23,
+            "line": 126
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 26\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 13.194931030273438,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 13.15692138671875,\u001b[39m\n\u001b[31m+     \"property\": \"left\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 6.1949462890625,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 6.156982421875,\u001b[39m\n\u001b[31m+     \"property\": \"top\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.610137939453125,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.6861572265625,\u001b[39m\n\u001b[31m+     \"property\": \"width\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"ant\": 19.610107421875,\u001b[39m\n\u001b[31m+     \"case\": \"button-loading icons 0\",\u001b[39m\n\u001b[31m+     \"orbit\": 19.68603515625,\u001b[39m\n\u001b[31m+     \"property\": \"height\",\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  124 |   await info.attach('controls-state-comparison', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });\n  125 |   expect(errors).toEqual([]);\n> 126 |   expect(differences).toEqual([]);\n      |                       ^\n  127 | });\n  128 |\n  129 | test('hover and keyboard focus preserve visible control feedback', async ({ page }, info) => {\n    at /root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs:126:23"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:44.498Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "computed-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "controls-state-comparison",
+           "contentType": "image/png"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/.controls-results/controls.browser.mjs-fixed-01a2a-try-typography-and-surfaces-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/c53b7ba1-7808-57ca-9ee9-28abbe1bd5e2/src/web/ui-migration/controls.browser.mjs",
+          "column": 23,
+          "line": 126
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-b47a16da5cfbdf5c6e93",
+     "file": "controls.browser.mjs",
+     "line": 48,
+     "column": 1
+    },
+    {
+     "title": "hover and keyboard focus preserve visible control feedback",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6750,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:48.645Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "hover-focus-controls",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-dfc5042182807a65b647",
+     "file": "controls.browser.mjs",
+     "line": 129,
+     "column": 1
+    },
+    {
+     "title": "keyboard, labels, loading, disabled and native form values work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2158,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T01:51:55.478Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "behavior-controls",
+           "contentType": "application/json"
+          },
+          {
+           "name": "interactive-controls",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "d6fd24faa19aaff6fd04-9eb61e1fb31c832f97ac",
+     "file": "controls.browser.mjs",
+     "line": 162,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T01:50:33.699Z",
+  "duration": 84089.15299999999,
+  "expected": 18,
+  "skipped": 0,
+  "unexpected": 6,
+  "flaky": 0
+ }
+}

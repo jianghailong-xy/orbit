@@ -1,0 +1,116 @@
+
+> @orbit/web@0.1.0 pretest:ui-composer
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-composer
+> playwright test --config ui-migration/composer.config.mjs --project=webkit-light-desktop --project=webkit-light-phone --project=webkit-dark-desktop --project=webkit-dark-phone
+
+[WebServer] (node:3933194) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 72 tests using 1 worker
+
+(node:3933364) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   1 [webkit-light-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   2 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (2.5s)
+  ✓   3 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (2.2s)
+  ✓   4 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (3.2s)
+  ✓   5 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (2.8s)
+[WebServer] 4:02:24 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+[WebServer] 4:02:25 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+  ✓   6 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (3.0s)
+  ✓   7 [webkit-light-desktop] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (13.3s)
+[WebServer] 4:02:41 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+[WebServer] 4:02:43 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+  ✓   8 [webkit-light-desktop] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (7.7s)
+  ✓   9 [webkit-light-desktop] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (6.0s)
+  ✓  10 [webkit-light-desktop] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (2.9s)
+  ✓  11 [webkit-light-desktop] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (4.0s)
+  ✓  12 [webkit-light-desktop] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (3.6s)
+  ✓  13 [webkit-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px (4.0s)
+  ✓  14 [webkit-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px (3.9s)
+  ✓  15 [webkit-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px (4.0s)
+  ✓  16 [webkit-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px (3.6s)
+  ✓  17 [webkit-light-desktop] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (3.8s)
+  ✓  18 [webkit-light-desktop] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (1.0s)
+(node:3943833) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  19 [webkit-light-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓  20 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (2.4s)
+  ✓  21 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (1.9s)
+  ✓  22 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (3.0s)
+  ✓  23 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (2.8s)
+[WebServer] 4:03:36 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+[WebServer] 4:03:37 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+  ✓  24 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (2.7s)
+  ✓  25 [webkit-light-phone] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (6.8s)
+[WebServer] 4:03:45 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+[WebServer] 4:03:46 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+  ✓  26 [webkit-light-phone] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (3.3s)
+  ✓  27 [webkit-light-phone] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (5.7s)
+  ✓  28 [webkit-light-phone] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (3.4s)
+  ✓  29 [webkit-light-phone] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (3.9s)
+  ✓  30 [webkit-light-phone] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (3.6s)
+  -  31 [webkit-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px
+  -  32 [webkit-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px
+  -  33 [webkit-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px
+  -  34 [webkit-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px
+  ✓  35 [webkit-light-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (4.1s)
+  ✓  36 [webkit-light-phone] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (967ms)
+(node:3947826) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  37 [webkit-dark-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓  38 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (2.4s)
+  ✓  39 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (2.1s)
+  ✓  40 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (3.2s)
+  ✓  41 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (2.4s)
+[WebServer] 4:04:21 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+[WebServer] 4:04:22 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+  ✓  42 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (3.0s)
+  ✓  43 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (6.6s)
+[WebServer] 4:04:30 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+[WebServer] 4:04:31 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+  ✓  44 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (3.5s)
+  ✓  45 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (9.7s)
+  ✓  46 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (3.2s)
+  ✓  47 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (4.5s)
+  ✓  48 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (5.3s)
+  ✓  49 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px (3.9s)
+  ✓  50 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px (3.9s)
+  ✓  51 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px (3.9s)
+  ✓  52 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px (3.9s)
+  ✓  53 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (4.3s)
+  ✓  54 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (894ms)
+(node:3953360) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  55 [webkit-dark-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓  56 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (2.4s)
+  ✓  57 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (1.8s)
+  ✓  58 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (3.0s)
+  ✓  59 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (2.6s)
+[WebServer] 4:05:28 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+[WebServer] 4:05:29 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+  ✓  60 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (2.5s)
+  ✓  61 [webkit-dark-phone] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (6.4s)
+[WebServer] 4:05:36 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+[WebServer] 4:05:37 PM [vite] (client) [console.error] Warning: [antd: Image] `mask` used as ReactNode is deprecated. Please use `cover` instead.
+  ✓  62 [webkit-dark-phone] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (3.4s)
+  ✓  63 [webkit-dark-phone] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (5.6s)
+  ✓  64 [webkit-dark-phone] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (3.4s)
+  ✓  65 [webkit-dark-phone] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (3.8s)
+  ✓  66 [webkit-dark-phone] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (3.5s)
+  -  67 [webkit-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px
+  -  68 [webkit-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px
+  -  69 [webkit-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px
+  -  70 [webkit-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px
+  ✓  71 [webkit-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (4.1s)
+  ✓  72 [webkit-dark-phone] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (880ms)
+
+  12 skipped
+  60 passed (3.8m)

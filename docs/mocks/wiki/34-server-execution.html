@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>34 server execution</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  /* Board-local classes carry the x34- prefix: index.css has bare short class names. */
+  .x34-part { background: var(--bg-base); border: 1px solid #dde0e6; border-radius: 12px; padding: 18px 20px 20px; }
+  .x34-part + .x34-part { margin-top: 22px; }
+  .x34-h2 { font-size: 16px; font-weight: 700; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .x34-lead { font-size: 12.5px; color: var(--text-2); margin: 0 0 14px; line-height: 1.55; }
+  .x34-code { font-family: "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", monospace; font-size: 11px; color: var(--text-1);
+    background: var(--fill-inset); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+
+  /* part 1: today vs new */
+  .x34-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .x34-lane { border-radius: 10px; padding: 14px 16px; border: 1px solid var(--border-subtle); background: var(--bg-subtle); }
+  .x34-lane.new { border: 1.5px solid var(--brand); background: var(--bg-raised); }
+  .x34-lane h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .x34-node { border: 1px solid var(--border); background: var(--bg-raised); border-radius: 8px; padding: 7px 10px;
+    font-size: 12.5px; line-height: 1.5; color: var(--text-1); }
+  .x34-node small { display: block; font-size: 11.5px; color: var(--text-2); }
+  .x34-node.where { border-left: 4px solid var(--text-4); }
+  .x34-node.runner { border-left: 4px solid #8e6bd8; }
+  .x34-node.api { border-left: 4px solid var(--brand); }
+  .x34-node.worker { border-left: 4px solid var(--success-solid); }
+  .x34-node.model { border-left: 4px solid var(--warning-solid); }
+  .x34-node.bad { background: var(--error-bg); border-color: var(--error-border); }
+  .x34-down { color: var(--text-4); text-align: center; font-size: 15px; line-height: 1; margin: 3px 0; }
+  .x34-side { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .x34-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .x34-tag { font-size: 11.5px; padding: 2px 9px; border-radius: 10px; line-height: 18px; }
+  .x34-tag.bad { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+  .x34-tag.good { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+
+  /* part 2: components */
+  .x34-arch { display: grid; grid-template-columns: 220px 74px minmax(0, 1fr) 70px minmax(0, 1fr) 84px 190px;
+    grid-template-rows: auto auto; gap: 0; align-items: stretch; }
+  .x34-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .x34-col-h { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--text-3); margin: 0; }
+  .x34-col-s { font-size: 11.5px; color: var(--text-3); margin: -4px 0 2px; }
+  .x34-svc { border-radius: 10px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .x34-svc.runner { background: #f6f2ff; border: 1.5px solid #c7b5f2; }
+  .x34-svc.api { background: var(--brand-tint); border: 1.5px solid var(--brand-border); }
+  .x34-svc.worker { background: var(--success-bg); border: 1.5px solid var(--success-border); }
+  .x34-svc.model { background: var(--warning-bg); border: 1.5px solid var(--warning-border); }
+  .x34-svc.db { background: var(--bg-subtle); border: 1.5px dashed var(--border); margin-top: 14px; }
+  .x34-svc h4 { margin: 0; font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .x34-box { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 7px 9px; }
+  .x34-box b { font-size: 12.5px; font-weight: 650; display: block; }
+  .x34-box p { margin: 1px 0 0; font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
+  .x34-box.key { border: 1.5px solid var(--success-solid); }
+  .x34-new { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; background: var(--brand); color: #fff; }
+  .x34-same { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; background: var(--fill-muted); color: var(--text-2); }
+  .x34-link { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 0 2px; }
+  .x34-link .a { font-size: 20px; color: var(--text-3); line-height: 1; }
+  .x34-link .t { font-size: 10.5px; color: var(--text-2); text-align: center; line-height: 1.35; white-space: nowrap; }
+  .x34-tables { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+
+  /* part 3: queue */
+  .x34-q { display: grid; grid-template-columns: 450px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .x34-states { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; margin: 0 0 10px; }
+  .x34-st { border-radius: 6px; padding: 3px 9px; border: 1px solid var(--border); background: var(--bg-raised); font-weight: 600; }
+  .x34-st.run { border-color: var(--success-border); background: var(--success-bg); color: var(--success); }
+  .x34-st.ok { border-color: var(--success-border); }
+  .x34-st.fail { border-color: var(--error-border); background: var(--error-bg); color: var(--error); }
+  .x34-arr { color: var(--text-4); }
+  .x34-ol { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  .x34-ol li { counter-increment: s; position: relative; padding-left: 24px; font-size: 12.5px; line-height: 1.55; color: var(--text-1); }
+  .x34-ol li + li { margin-top: 5px; }
+  .x34-ol li::before { content: counter(s); position: absolute; left: 0; top: 2px; width: 17px; height: 17px; border-radius: 50%;
+    background: var(--text-1); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .x34-mini { font-size: 12px; font-weight: 700; color: var(--text-2); margin: 14px 0 6px; }
+  .x34-snap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-raised); }
+  .x34-snap-h { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); font-size: 12.5px; }
+  .x34-chip { font-size: 11px; font-weight: 700; border-radius: 10px; padding: 0 8px; line-height: 19px; }
+  .x34-chip.up { background: var(--success-bg); color: var(--success); }
+  .x34-chip.n { background: var(--fill-muted); color: var(--text-1); }
+  .x34-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .x34-tbl th { text-align: left; font-weight: 650; color: var(--text-3); font-size: 11px; padding: 6px 10px; background: var(--bg-subtle); }
+  .x34-tbl td { padding: 6px 10px; border-top: 1px solid var(--border-subtle); color: var(--text-1); }
+  .x34-tbl tr.sep td { background: var(--bg-subtle); color: var(--text-3); font-size: 11px; font-weight: 650; padding: 4px 10px; }
+  .x34-pri { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 4px; line-height: 17px; }
+  .x34-pri.hi { background: var(--brand-tint); color: var(--brand-strong); }
+  .x34-pri.lo { background: var(--fill-muted); color: var(--text-2); }
+  .x34-dim { color: var(--text-3); }
+
+  /* part 4: swimlanes */
+  .x34-swim { display: grid; grid-template-columns: 34px repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .x34-swim > div { border-top: 1px solid var(--border-subtle); padding: 6px 8px; min-height: 30px; }
+  .x34-swim > .hd { border-top: 0; font-size: 12px; font-weight: 700; padding: 8px; }
+  .x34-swim > .hd.runner { background: #f6f2ff; } .x34-swim > .hd.api { background: var(--brand-tint); }
+  .x34-swim > .hd.worker { background: var(--success-bg); } .x34-swim > .hd.model { background: var(--warning-bg); }
+  .x34-swim > .no { font-size: 11px; font-weight: 700; color: var(--text-3); text-align: center; padding-top: 9px; }
+  .x34-ev { display: block; border-radius: 7px; padding: 5px 8px; font-size: 11.8px; line-height: 1.45; color: var(--text-1); }
+  .x34-ev.runner { background: #f6f2ff; border: 1px solid #ddd0fa; }
+  .x34-ev.api { background: var(--brand-tint); border: 1px solid var(--brand-border); }
+  .x34-ev.worker { background: var(--success-bg); border: 1px solid var(--success-border); }
+  .x34-ev.model { background: var(--warning-bg); border: 1px solid var(--warning-border); }
+
+  /* part 5: deploy */
+  .x34-dep { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .x34-env { margin: 4px 0 0; padding: 0; list-style: none; font-size: 11.5px; line-height: 1.6; color: var(--text-2); }
+  .x34-decide { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  .x34-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-raised); }
+  .x34-card h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .x34-card p { margin: 0; font-size: 12px; line-height: 1.55; color: var(--text-1); }
+  .x34-card p + p { margin-top: 4px; }
+  .x34-rec { color: var(--brand-strong); font-weight: 700; }
+  .x34-cost { margin: 14px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; }
+  .x34-cost li { font-size: 12px; line-height: 1.5; color: var(--text-1); display: flex; gap: 8px; }
+  .x34-cost .p { flex: none; font-weight: 700; color: var(--text-3); width: 28px; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.title='H='+Math.ceil(s.getBoundingClientRect().height)})</script>
+</head>
+<body class="m">
+<div class="m-sheet zh">
+  <h1 class="m-h1">34 · 服务端执行：wiki-worker 消费作业，模型请求排队限流，runner 只做仓库操作</h1>
+  <p class="m-sub">设计见 <span class="x34-code">docs/wiki-server-execution-design.md</span>。① 今天和新方案对照 · ② 组件和数据 · ③ 模型请求队列 · ④ 一次维护运行的时序 · ⑤ 部署视图和已定事项。</p>
+
+  <!-- ① today vs new -->
+  <section class="x34-part" id="part-1">
+    <h2 class="x34-h2">① 今天 vs 新方案</h2>
+    <p class="x34-lead">今天，每个 wiki 作业都是 runner 上的一个 agent 会话，用的是空间 pin 的 provider。新方案里，作业在服务端执行，模型统一走部署方配置的 System model，runner 只负责读仓库。</p>
+    <div class="x34-vs">
+      <div class="x34-lane">
+        <h3>今天</h3>
+        <div class="x34-node api">事实到达 → 触发器在隐藏的「Wiki maintenance」列表里建一个任务</div>
+        <div class="x34-down">↓</div>
+        <div class="x34-node runner bad">runner 领取会话<small>占 1 个并发槽位；plan 起草 1–2 小时，单次运行最长 5 小时</small></div>
+        <div class="x34-down">↓</div>
+        <div class="x34-node runner">外层 Claude Code（干净启动，最多 120 轮）<small>它的模型只负责发一条 Bash：<span class="x34-code">orbit wiki maintain</span></small></div>
+        <div class="x34-down">↓</div>
+        <div class="x34-node runner">Go 流水线（在 runner 上）<small>每次模型调用都起一个 <span class="x34-code">claude -p --bare</span>；每个运行最多 4 个并发，没有全局上限</small></div>
+        <div class="x34-down">↓</div>
+        <div class="x34-side">
+          <div class="x34-node model bad">空间 pin 的 provider<small>用户自己的 key 或订阅；key 在 runner 的会话环境里</small></div>
+          <div class="x34-node where">本地 checkout<small>git 只在 runner 上跑</small></div>
+        </div>
+        <div class="x34-tags">
+          <span class="x34-tag bad">占 runner 槽位</span><span class="x34-tag bad">花用户额度</span><span class="x34-tag bad">key 在 runner 上</span>
+          <span class="x34-tag bad">没有全局并发上限</span><span class="x34-tag bad">改流水线要发 runner</span>
+        </div>
+      </div>
+      <div class="x34-lane new">
+        <h3>新方案</h3>
+        <div class="x34-node api">事实到达 → 触发器写一条作业 <span class="x34-code">wiki_job</span><small>apiserver；仍由事实驱动，不用时钟</small></div>
+        <div class="x34-down">↓</div>
+        <div class="x34-node worker">wiki-worker 领取作业（带租约）<small>新服务，Node.js，和 apiserver 同一个镜像；运行 TS 流水线，直接用服务端的数据和写入口</small></div>
+        <div class="x34-down">↓</div>
+        <div class="x34-node worker">每次模型调用都进队列 <span class="x34-code">wiki_model_request</span><small>调度器按全局并发 N 和优先级领取；请求同时就是断点</small></div>
+        <div class="x34-down">↓</div>
+        <div class="x34-side">
+          <div class="x34-node model">System model（vLLM）<small>部署方在 <span class="x34-code">.env</span> 里配置；key 只在 worker 上</small></div>
+          <div class="x34-node runner">runner 仓库操作<small>心跳时领取，在会话池之外执行：快照、片段、diff、锚点</small></div>
+        </div>
+        <div class="x34-tags">
+          <span class="x34-tag good">不占 runner 槽位</span><span class="x34-tag good">不花用户额度</span><span class="x34-tag good">key 只在 worker</span>
+          <span class="x34-tag good">全局限流、排队可见</span><span class="x34-tag good">改流水线随服务端部署</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② components -->
+  <section class="x34-part" id="part-2">
+    <h2 class="x34-h2">② 组件和数据</h2>
+    <p class="x34-lead">四个参与者共用一个 Postgres。runner 只和 apiserver 通信（沿用现有心跳和 runner 令牌）。worker 不对外提供接口：它读写数据库，并调用 System model。</p>
+    <div class="x34-arch">
+      <!-- runner -->
+      <div class="x34-col" style="grid-column:1;grid-row:1 / span 2">
+        <div class="x34-col-h">RUNNER · 用户的机器</div>
+        <div class="x34-col-s">仓库凭据只在这里</div>
+        <div class="x34-svc runner">
+          <h4>wiki-repo-op/v1 <span class="x34-new">新</span></h4>
+          <div class="x34-box"><b>snapshot</b><p>fetch <span class="x34-code">origin/main</span> → sha，建索引：路径和大小、文档标题、符号、可达提交、README 首段；同一个 sha 只传一次</p></div>
+          <div class="x34-box"><b>read</b><p>读给定 sha 上指定路径的片段，有上限；用于文档构建和脚注核对</p></div>
+          <div class="x34-box"><b>diff</b><p><span class="x34-code">--name-status -M</span>，以及新增的设计文档</p></div>
+          <div class="x34-box"><b>anchors</b><p>复用 <span class="x34-code">wiki_anchors.go</span> 的锚点检查</p></div>
+          <div class="x34-box"><b>不起会话 · 不占槽位</b><p>在会话池之外的 goroutine 里执行，照集成作业的做法</p></div>
+        </div>
+      </div>
+      <div class="x34-link" style="grid-column:2;grid-row:1">
+        <span class="t">心跳领取</span><span class="a">⇆</span><span class="t">结果回传<br>按代数校验</span>
+      </div>
+      <!-- apiserver -->
+      <div class="x34-col" style="grid-column:3;grid-row:1">
+        <div class="x34-col-h">APISERVER</div>
+        <div class="x34-col-s">不碰模型 key</div>
+        <div class="x34-svc api">
+          <h4>API 进程 <span class="x34-same">已有</span></h4>
+          <div class="x34-box"><b>触发器</b><p>事实到达、空间到期时写 <span class="x34-code">wiki_job</span>，不再建任务和会话</p></div>
+          <div class="x34-box"><b>读接口</b><p>Activity（进度、排队位置、逐次调用日志）、健康行、模型状态</p></div>
+          <div class="x34-box"><b>runner-door</b><p>仓库操作在心跳里下发，<span class="x34-code">POST …/repo-ops/:id/result</span> 接收结果</p></div>
+          <div class="x34-box"><b>写入口 <span class="x34-same">不变</span></b><p>submitChangeset、drafts、docs：审阅模式、配额、熔断都照旧</p></div>
+        </div>
+      </div>
+      <div class="x34-link" style="grid-column:4;grid-row:1">
+        <span class="t">经数据库</span><span class="a">⇆</span><span class="t">pg_notify<br>唤醒</span>
+      </div>
+      <!-- worker -->
+      <div class="x34-col" style="grid-column:5;grid-row:1">
+        <div class="x34-col-h">WIKI-WORKER · NODE.JS</div>
+        <div class="x34-col-s">同一镜像、同一套 TS 代码，换入口</div>
+        <div class="x34-svc worker">
+          <h4>worker 进程 <span class="x34-new">新</span></h4>
+          <div class="x34-box"><b>作业执行器</b><p>领取 <span class="x34-code">wiki_job</span>；同一空间串行；租约 60 秒，执行中续租</p></div>
+          <div class="x34-box"><b>TS 流水线 ×6</b><p>核实 · 文章 · 导入 · plan 起草/修订 · 文档构建 · 维护（从 Go 移植）</p></div>
+          <div class="x34-box key"><b>调度器</b><p>全局并发 N · 优先级 · 探测 <span class="x34-code">/health</span> · 遇 401 暂停 · 退避重试</p></div>
+          <div class="x34-box"><b>流式客户端</b><p>定期写回 <span class="x34-code">partial</span>；被打断后续写或重做</p></div>
+        </div>
+      </div>
+      <div class="x34-link" style="grid-column:6;grid-row:1">
+        <span class="a">→</span><span class="t">/v1/messages<br>最多 N 个在途</span>
+      </div>
+      <!-- model -->
+      <div class="x34-col" style="grid-column:7;grid-row:1">
+        <div class="x34-col-h">SYSTEM MODEL</div>
+        <div class="x34-col-s">部署方提供</div>
+        <div class="x34-svc model">
+          <h4>vLLM</h4>
+          <div class="x34-box"><b>Anthropic Messages</b><p>Bearer key；不开 thinking；plan 的 max_tokens 为 32,000</p></div>
+          <div class="x34-box"><b>只在 worker 的环境里</b><p><span class="x34-code">ORBIT_WIKI_MODEL_*</span></p></div>
+          <div class="x34-box"><b>地址</b><p>局域网 / 隧道地址，或用 <span class="x34-code">host-gateway</span> 访问宿主机</p></div>
+        </div>
+      </div>
+      <!-- database -->
+      <div style="grid-column:3 / span 3;grid-row:2">
+        <div class="x34-svc db">
+          <h4>Postgres <span class="x34-same">已有</span> · 新表和改动</h4>
+          <div class="x34-tables">
+            <div class="x34-box"><b>wiki_job <span class="x34-new">新</span></b><p>作业：种类、优先级、状态、等什么（repo / model）、租约和代数、进度、报告</p></div>
+            <div class="x34-box key"><b>wiki_model_request <span class="x34-new">新</span></b><p>模型请求队列：请求、优先级、租约；也是断点和调用日志（answer、partial、token、耗时）</p></div>
+            <div class="x34-box"><b>wiki_model_status <span class="x34-new">新</span></b><p>单行：up / down / auth_failed / unconfigured、模型名、worker 心跳</p></div>
+            <div class="x34-box"><b>wiki_repo_op <span class="x34-new">新</span></b><p>仓库操作：种类、输入、runner、租约和代数、结果</p></div>
+            <div class="x34-box"><b>仓库快照缓存 <span class="x34-new">新</span></b><p>每个空间保留最近一份：索引和片段，只对 owner 可见，随空间删除</p></div>
+            <div class="x34-box"><b>wiki_maintenance_run · wiki_plan_job</b><p>加 <span class="x34-code">job_id</span>；<span class="x34-code">task_id</span> 改为可空，二者必有其一</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ queue -->
+  <section class="x34-part" id="part-3">
+    <h2 class="x34-h2">③ 模型请求队列：全局并发上限由数据库保证</h2>
+    <p class="x34-lead">流水线不直接调用模型，每次调用都写一行请求，再等它完成。调度器按 <span class="x34-code">ORBIT_WIKI_MODEL_CONCURRENCY</span>（默认 4）领取，起几个 worker 进程都不会超过这个数。</p>
+    <div class="x34-q">
+      <div>
+        <div class="x34-states">
+          <span class="x34-st">queued</span><span class="x34-arr">→</span><span class="x34-st run">running</span><span class="x34-arr">→</span>
+          <span class="x34-st ok">succeeded</span><span class="x34-dim">/</span><span class="x34-st fail">failed</span><span class="x34-dim">/</span><span class="x34-st">cancelled</span>
+        </div>
+        <div class="x34-states" style="margin-top:-4px">
+          <span class="x34-st run">running</span><span class="x34-arr">— 租约过期 →</span><span class="x34-st">queued</span><span class="x34-dim">（attempts + 1，带上 partial）</span>
+        </div>
+        <div class="x34-mini">领取（在一个事务里）</div>
+        <ol class="x34-ol">
+          <li>先拿一把 advisory 锁，保证同一时刻只有一个调度器在领取</li>
+          <li>数出 running 且租约未过期的请求数 r</li>
+          <li>只领取 N − r 条：按 priority 降序、enqueued_at 升序，<span class="x34-code">FOR UPDATE SKIP LOCKED</span>，每行一个新代数</li>
+          <li>流式执行：定期写回 partial 并续租；结束时按代数比较并写入结果，再用 <span class="x34-code">pg_notify</span> 唤醒等待的作业</li>
+        </ol>
+        <div class="x34-mini">请求即断点</div>
+        <ol class="x34-ol">
+          <li>(job, step, unit, attempt) 唯一：作业重放时，已成功且答案能解析的请求直接复用</li>
+          <li>worker 收到 SIGTERM：停止领取，中止在途请求并保存 partial，把租约截止时间设为现在</li>
+        </ol>
+        <div class="x34-mini">模型状态（wiki_model_status）</div>
+        <ol class="x34-ol">
+          <li><b>down</b>：停止领取，每 10 秒探测一次 <span class="x34-code">/health</span>，恢复后自动继续</li>
+          <li><b>auth_failed（401）</b>：停止领取，等部署方改好 key、重启 worker</li>
+        </ol>
+      </div>
+      <div>
+        <div class="x34-snap">
+          <div class="x34-snap-h"><b>某一时刻的队列（示例）</b><span class="x34-chip up">System model · up</span><span class="x34-chip n">在途 4 / N = 4</span><span class="x34-chip n">排队 5</span></div>
+          <table class="x34-tbl">
+            <tr><th>#</th><th>空间</th><th>作业 · 步骤</th><th>优先级</th><th>状态</th><th>已等 / 已跑</th></tr>
+            <tr class="sep"><td colspan="6">在途（running）</td></tr>
+            <tr><td>–</td><td>space A</td><td>plan 起草 · 目录骨架</td><td><span class="x34-pri hi">owner 发起</span></td><td>running</td><td>6m 12s</td></tr>
+            <tr><td>–</td><td>space C</td><td>核实 · op 3/7</td><td><span class="x34-pri hi">会话在等</span></td><td>running</td><td>8s</td></tr>
+            <tr><td>–</td><td>space B</td><td>维护 · 抽取 · 案卷 4</td><td><span class="x34-pri lo">后台</span></td><td>running</td><td>41s</td></tr>
+            <tr><td>–</td><td>space B</td><td>维护 · 抽取 · 案卷 5</td><td><span class="x34-pri lo">后台</span></td><td>running</td><td>39s</td></tr>
+            <tr class="sep"><td colspan="6">排队（queued）· 按领取顺序</td></tr>
+            <tr><td>1</td><td>space C</td><td>核实 · op 4/7</td><td><span class="x34-pri hi">会话在等</span></td><td>queued</td><td>3s</td></tr>
+            <tr><td>2</td><td>space A</td><td>plan 起草 · 规则</td><td><span class="x34-pri hi">owner 发起</span></td><td>queued</td><td>6m 12s</td></tr>
+            <tr><td>3</td><td>space B</td><td>维护 · 抽取 · 案卷 6</td><td><span class="x34-pri lo">后台</span></td><td>queued</td><td>52s</td></tr>
+            <tr><td>4</td><td>space B</td><td>维护 · 抽取 · 案卷 7</td><td><span class="x34-pri lo">后台</span></td><td>queued</td><td>52s</td></tr>
+            <tr><td>5</td><td>space D</td><td>文章 · 主题 “部署”</td><td><span class="x34-pri lo">后台</span></td><td>queued</td><td>12s</td></tr>
+          </table>
+        </div>
+        <p class="m-cap">Activity 里的每一行都能看到「排在第几、已等多久」。同一优先级先来先得；各流水线自己的并发上限（每个作业最多 4 个在途请求）避免单个作业占满队列。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ sequence -->
+  <section class="x34-part" id="part-4">
+    <h2 class="x34-h2">④ 一次维护运行的时序</h2>
+    <p class="x34-lead">需要仓库的步骤先向 runner 要数据，其余步骤只在服务端完成。runner 离线时只有第 3、9、10 步要等。</p>
+    <div class="x34-swim">
+      <div class="hd"></div><div class="hd runner">runner</div><div class="hd api">apiserver</div><div class="hd worker">wiki-worker</div><div class="hd model">System model</div>
+
+      <div class="no">1</div><div></div><div><span class="x34-ev api">事实到达，空间到期 → 写 <span class="x34-code">wiki_job</span>（维护）</span></div><div></div><div></div>
+      <div class="no">2</div><div></div><div></div><div><span class="x34-ev worker">领取作业 → 写仓库操作 snapshot，唤醒 runner</span></div><div></div>
+      <div class="no">3</div><div><span class="x34-ev runner">心跳领取 → fetch → 建索引 → 回传（这个 sha 已有就跳过）</span></div><div><span class="x34-ev api">存快照，按代数校验</span></div><div></div><div></div>
+      <div class="no">4</div><div></div><div></div><div><span class="x34-ev worker">直接读案卷（服务端函数）→ 每个案卷一个抽取请求入队</span></div><div></div>
+      <div class="no">5</div><div></div><div></div><div><span class="x34-ev worker">调度器按 N 领取</span></div><div><span class="x34-ev model">流式返回条目</span></div>
+      <div class="no">6</div><div></div><div></div><div><span class="x34-ev worker">检查：字段、引文、锚点路径和提交（查快照）；不合格的带原因重问一次</span></div><div></div>
+      <div class="no">7</div><div></div><div><span class="x34-ev api">写入口：先 dry run 再提交 changeset → 推进游标</span></div><div><span class="x34-ev worker">按批提交，带幂等键</span></div><div></div>
+      <div class="no">8</div><div></div><div></div><div><span class="x34-ev worker">核实请求入队 → 写回结论</span></div><div><span class="x34-ev model">supported / partial / unsupported</span></div>
+      <div class="no">9</div><div><span class="x34-ev runner">执行仓库操作 anchors → 回传检查结果</span></div><div><span class="x34-ev api">更新锚点状态，必要时发起 challenge</span></div><div></div><div></div>
+      <div class="no">10</div><div><span class="x34-ev runner">执行 diff / read（受影响的文档节）</span></div><div></div><div><span class="x34-ev worker">文档请求入队 → 写 docs</span></div><div><span class="x34-ev model">重写受影响的节</span></div>
+      <div class="no">11</div><div></div><div><span class="x34-ev api">健康行、每日计数、Activity 更新</span></div><div><span class="x34-ev worker">作业结束：报告、token 合计</span></div><div></div>
+    </div>
+  </section>
+
+  <!-- ⑤ deploy + decisions -->
+  <section class="x34-part" id="part-5">
+    <h2 class="x34-h2">⑤ 部署视图和已定事项</h2>
+    <p class="x34-lead">compose 从 5 个服务变成 6 个（owner 2026-10-07 同意新增 worker）。<span class="x34-code">test/compose-topology.test.mjs</span> 和 upgrade skill 都要跟着改。</p>
+    <div class="x34-dep">
+      <div class="x34-svc api"><h4>apiserver <span class="x34-same">已有</span></h4>
+        <ul class="x34-env"><li><span class="x34-code">ORBIT_WIKI_EXECUTOR</span> = runner | canary | server</li><li><span class="x34-code">ORBIT_WIKI_EXECUTOR_CANARY_OWNERS</span></li><li>开机时跑迁移，不需要模型 key</li></ul></div>
+      <div class="x34-svc worker"><h4>wiki-worker <span class="x34-new">新</span></h4>
+        <ul class="x34-env"><li><span class="x34-code">command: node src/apiserver/dist/wiki-worker/main.js</span></li><li>Node.js：Nest 应用上下文，不监听端口；不跑迁移</li><li><span class="x34-code">depends_on</span>：apiserver 健康之后才启动</li><li><span class="x34-code">restart: unless-stopped</span> · <span class="x34-code">stop_grace_period: 30s</span></li><li><span class="x34-code">ORBIT_WIKI_MODEL_BASE_URL</span></li><li><span class="x34-code">ORBIT_WIKI_MODEL_API_KEY</span>（只在这里）</li><li><span class="x34-code">ORBIT_WIKI_MODEL</span> · <span class="x34-code">ORBIT_WIKI_MODEL_CONCURRENCY</span></li></ul></div>
+      <div class="x34-svc"><h4>其余 <span class="x34-same">不变</span></h4>
+        <ul class="x34-env"><li>gateway · web · postgres · pgbackup</li><li>upgrade：<span class="x34-code">up -d --wait apiserver wiki-worker web gateway</span></li><li>runner 只在仓库操作那一期发一次版</li></ul></div>
+    </div>
+    <div class="x34-decide">
+      <div class="x34-card"><h5>已定 · 1：部署时在途的模型请求怎么办</h5>
+        <p><b>A</b>：不等。worker 被重建时中止在途请求，带着 partial 回到队列里续写或重做。部署不变慢，但长调用（plan 骨架最长约 13 分钟）可能重做。</p>
+        <p><b>B</b>：部署前先排空。worker 停止领取，等在途请求跑完再重建。部署最多多等一次调用的时间。</p>
+        <p class="x34-rec">owner 2026-10-07 定：选 A。如果重做太多，再加 B。</p></div>
+      <div class="x34-card"><h5>已定 · 2：多个空间怎么分 GPU</h5>
+        <p><b>A</b>：优先级 + 先来先得 + 每个作业的并发上限。实现简单，排队顺序一眼能看懂。</p>
+        <p><b>B</b>：同一优先级内按空间轮转。更公平，但领取 SQL 更复杂，排队位置也更难解释。</p>
+        <p class="x34-rec">owner 2026-10-07 定：选 A。出现某个空间长期占满队列时，再加 B。</p></div>
+    </div>
+    <div class="x34-mini">落地（按依赖排）</div>
+    <ul class="x34-cost">
+      <li><span class="p">P1</span><span>worker 服务、模型请求队列、作业表、模型状态、执行器开关、metrics</span></li>
+      <li><span class="p">P2</span><span>runner 仓库操作 <span class="x34-code">wiki-repo-op/v1</span>（唯一一次 runner 发版）</span></li>
+      <li><span class="p">P3</span><span>核实移到服务端（不需要仓库）</span></li>
+      <li><span class="p">P4</span><span>文章</span></li>
+      <li><span class="p">P5</span><span>导入</span></li>
+      <li><span class="p">P6</span><span>plan 起草和修订（快照索引 + 门检查）</span></li>
+      <li><span class="p">P7</span><span>文档构建（片段 + 脚注）</span></li>
+      <li><span class="p">P8</span><span>维护运行（依赖 P3、P6、P7）</span></li>
+      <li><span class="p">P9</span><span>客户端：设置、Activity 里的运行详情和排队状态</span></li>
+      <li><span class="p">P10</span><span>本部署切到 server，一周后删除旧路径</span></li>
+    </ul>
+  </section>
+
+  <ul class="m-notes">
+    <li><span class="m-n">1</span><span><b>为什么 worker 单独成服务</b>：几小时的流式调用和聚类计算不压在 API 进程上；模型 key 只给 worker；worker 停了，读、搜和人工编辑都不受影响。</span></li>
+    <li><span class="m-n">2</span><span><b>为什么在数据库里限流</b>：进程内的信号量只管得住一个进程，重启就丢；数据库里的队列在多进程下也不会超过 N，重启后接着跑，排队状态也能直接展示给用户。</span></li>
+    <li><span class="m-n">3</span><span><b>为什么 runner 交快照</b>：plan 起草要读约 27 MB 原文，而 API 请求体上限是 10 MB；真正进 prompt 的只有几万字。门检查、锚点和脚注核对都查快照，不用每次回 runner 问。</span></li>
+    <li><span class="m-n">4</span><span><b>旧路径一直在</b>：<span class="x34-code">ORBIT_WIKI_EXECUTOR</span> 默认是 runner；每条流水线先只对 canary 生效，和旧路径对照后再切；P10 才删除旧路径，在那之前随时可以回退。</span></li>
+  </ul>
+</div>
+</body>
+</html>

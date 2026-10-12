@@ -1,0 +1,2886 @@
+{
+ "rule": "p0-drift README, main drift rule 7: bounded exception authorised by the coordinator on 2026-10-07 (request 34bWpmojjlLPL0Exs1kSw, recorded on task 34bTKzXFSRGjnDevEBJlh).",
+ "screenshots": [
+  "chromium-dark-desktop/profile-validation.png",
+  "chromium-light-desktop/profile-validation.png",
+  "chromium-dark-phone/profile-validation.png",
+  "chromium-light-phone/profile-validation.png",
+  "webkit-dark-phone/profile-validation.png",
+  "webkit-light-phone/profile-validation.png"
+ ],
+ "X": {
+  "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+  "subject": "feat(auth): add access token management and /pat/self introspection",
+  "firstParent": "e6786d077cbba6e5e4d8eea29e4bcdf78d77c605"
+ },
+ "regression": {
+  "id": "B1",
+  "introducedBy": "57f792135ff215c9bc0f70ead3150f7c0e535714",
+  "promotedToMainBy": "90e749e7243cab1f5f09840f6c2a51e0b71d1c23",
+  "description": "P2.3 57f792135 put will-change: transform on every .toast (Chromium rasterises the success pill on its own layer from a fractional x) and pinned the phone notification column with an inline width (WebKit phone: 358px instead of the CSS 350px, pill 4px to the right). p0-drift README「b 类」, p2.3-b1 README「根因」."
+ },
+ "fix": {
+  "commit": "3ec9cf83def280578481d1b9a4a02fa32359b0e1",
+  "subject": "fix(web): restore the success pill's original rasterization and phone width",
+  "deliveredAs": "86db4c8862d18cfbecd678301690f12f3ff5dade",
+  "patchId": "a02881375eabbef952c43a9e4fc7751d3d5a9e70",
+  "patchIdOfDelivered": "a02881375eabbef952c43a9e4fc7751d3d5a9e70",
+  "decision": {
+   "taskId": "34bQk0jlytjFYyi4OgLMK",
+   "evidenceRevision": 1,
+   "evidenceDigest": "f20eee2a99a00fa2f7b3d5c827f56b25a465b4c777d81063bc50d88facdd0554",
+   "verdict": "CONFIRM",
+   "document": "p2.3-b1/README.md"
+  }
+ },
+ "premises": {
+  "X on origin/main, not a promotion merge": true,
+  "B1 (57f792135) is an ancestor of X, so every main tree with X carries it": true,
+  "P2.3 promotion 90e749e72 is an ancestor of X": true,
+  "the fix (3ec9cf83d / 86db4c886) is not on origin/main": true,
+  "origin/main at check time": "455bcb8b61ccb8f6ae13b57ad9159d57907af47f"
+ },
+ "trees": {
+  "X+F": {
+   "commit": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+   "firstParent": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+   "patchId": "a02881375eabbef952c43a9e4fc7751d3d5a9e70",
+   "branch": "p0d2/d233a6cd0-plus-b1-fix (local, not delivered)"
+  },
+  "X^1+F": {
+   "commit": "16e0188ae2a6d912f6915b719c9c77ab04346f19",
+   "firstParent": "e6786d077cbba6e5e4d8eea29e4bcdf78d77c605",
+   "patchId": "a02881375eabbef952c43a9e4fc7751d3d5a9e70",
+   "branch": "p0d2/e6786d077-plus-b1-fix (local, not delivered)"
+  }
+ },
+ "runs": {
+  "X": {
+   "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+   "runnerCommit": "d2479173b7d11748278ca75f84e7ae20f5c75201",
+   "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+   "started": "2026-10-07T05:24:01Z",
+   "finished": "2026-10-07T05:31:23Z",
+   "exit": 1,
+   "environment": "p0.2",
+   "stats": {
+    "expected": 68,
+    "unexpected": 8,
+    "flaky": 0,
+    "skipped": 4
+   },
+   "screenshots": 232
+  },
+  "X+F": {
+   "commit": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+   "runnerCommit": "d2479173b7d11748278ca75f84e7ae20f5c75201",
+   "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+   "started": "2026-10-07T05:24:01Z",
+   "finished": "2026-10-07T05:31:23Z",
+   "exit": 1,
+   "environment": "p0.2",
+   "stats": {
+    "expected": 68,
+    "unexpected": 8,
+    "flaky": 0,
+    "skipped": 4
+   },
+   "screenshots": 232
+  },
+  "X^1+F": {
+   "commit": "16e0188ae2a6d912f6915b719c9c77ab04346f19",
+   "runnerCommit": "d2479173b7d11748278ca75f84e7ae20f5c75201",
+   "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+   "started": "2026-10-07T05:24:01Z",
+   "finished": "2026-10-07T05:31:23Z",
+   "exit": 1,
+   "environment": "p0.2",
+   "stats": {
+    "expected": 68,
+    "unexpected": 8,
+    "flaky": 0,
+    "skipped": 4
+   },
+   "screenshots": 232
+  },
+  "geometry X": {
+   "commit": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+   "runnerCommit": "d2479173b7d11748278ca75f84e7ae20f5c75201",
+   "args": "b1-state.diag.mjs -g profile$",
+   "started": "2026-10-07T05:28:16Z",
+   "finished": "2026-10-07T05:28:53Z",
+   "exit": 0,
+   "environment": "p0.2",
+   "stats": {
+    "expected": 8,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "screenshots": 16
+  },
+  "geometry X+F": {
+   "commit": "dcb5fd1bdfa7dd235822e050bbc5d9f546dbf89f",
+   "runnerCommit": "d2479173b7d11748278ca75f84e7ae20f5c75201",
+   "args": "b1-state.diag.mjs -g profile$",
+   "started": "2026-10-07T05:28:16Z",
+   "finished": "2026-10-07T05:28:52Z",
+   "exit": 0,
+   "environment": "p0.2",
+   "stats": {
+    "expected": 8,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "screenshots": 16
+  },
+  "geometry X^1+F": {
+   "commit": "16e0188ae2a6d912f6915b719c9c77ab04346f19",
+   "runnerCommit": "d2479173b7d11748278ca75f84e7ae20f5c75201",
+   "args": "b1-state.diag.mjs -g profile$",
+   "started": "2026-10-07T05:28:16Z",
+   "finished": "2026-10-07T05:28:52Z",
+   "exit": 0,
+   "environment": "p0.2",
+   "stats": {
+    "expected": 8,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "screenshots": 16
+  }
+ },
+ "proof1": {
+  "chromium-dark-desktop/profile-validation.png": {
+   "pixels": 490,
+   "maxChannelDelta": 88,
+   "p0Comparator": "fails",
+   "notificationBox": [
+    870,
+    0,
+    410,
+    86
+   ],
+   "inside": 490,
+   "outside": 0,
+   "clusters": [
+    {
+     "x": 1165,
+     "y": 28,
+     "width": 82,
+     "height": 11,
+     "pixels": 490
+    }
+   ],
+   "geometry": {
+    "X": {
+     "card": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "column": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "willChange": "transform",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;"
+    },
+    "X+F": {
+     "card": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "column": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "willChange": "auto",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;"
+    }
+   },
+   "b1Signature": {
+    "source": "p2.3-b1/root-cause/toast-box-tip-to-fix-v2.json (B1 tip 77233e226, which already has d233a6cd0, to its fix)",
+    "pixels": 490,
+    "insideToastBox": 490,
+    "outsideToastBox": 0,
+    "clusters": [
+     {
+      "x": 1165,
+      "y": 28,
+      "width": 82,
+      "height": 11,
+      "pixels": 490
+     }
+    ],
+    "introductionPixels": 504
+   },
+   "insideEqualsB1Signature": true,
+   "runToRunNoiseOutsideBox": {
+    "X vs X+F (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    },
+    "X run 1 vs X run 2 (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    },
+    "X run 2 vs X run 3 (outside box)": {
+     "pixels": 124,
+     "maxChannelDelta": 2,
+     "first": [
+      [
+       528,
+       242,
+       1
+      ],
+      [
+       529,
+       242,
+       1
+      ],
+      [
+       1029,
+       242,
+       1
+      ],
+      [
+       527,
+       243,
+       1
+      ],
+      [
+       528,
+       243,
+       1
+      ],
+      [
+       530,
+       243,
+       1
+      ],
+      [
+       1031,
+       243,
+       1
+      ],
+      [
+       1032,
+       243,
+       1
+      ],
+      [
+       527,
+       244,
+       1
+      ],
+      [
+       1032,
+       244,
+       1
+      ],
+      [
+       1033,
+       244,
+       1
+      ],
+      [
+       1033,
+       245,
+       2
+      ],
+      [
+       1034,
+       245,
+       1
+      ],
+      [
+       1033,
+       247,
+       1
+      ],
+      [
+       1034,
+       247,
+       1
+      ],
+      [
+       1059,
+       379,
+       1
+      ],
+      [
+       1059,
+       380,
+       1
+      ],
+      [
+       1058,
+       381,
+       1
+      ],
+      [
+       1059,
+       381,
+       1
+      ],
+      [
+       501,
+       408,
+       1
+      ],
+      [
+       501,
+       409,
+       1
+      ],
+      [
+       500,
+       410,
+       1
+      ],
+      [
+       526,
+       515,
+       1
+      ],
+      [
+       527,
+       515,
+       1
+      ],
+      [
+       1032,
+       515,
+       1
+      ],
+      [
+       1033,
+       515,
+       1
+      ],
+      [
+       525,
+       516,
+       2
+      ],
+      [
+       526,
+       516,
+       1
+      ],
+      [
+       1033,
+       516,
+       1
+      ],
+      [
+       525,
+       517,
+       1
+      ],
+      [
+       526,
+       517,
+       1
+      ],
+      [
+       1033,
+       517,
+       1
+      ],
+      [
+       525,
+       518,
+       1
+      ],
+      [
+       526,
+       518,
+       1
+      ],
+      [
+       1034,
+       518,
+       1
+      ],
+      [
+       525,
+       539,
+       1
+      ],
+      [
+       526,
+       539,
+       1
+      ],
+      [
+       1034,
+       539,
+       1
+      ],
+      [
+       525,
+       540,
+       1
+      ],
+      [
+       526,
+       540,
+       1
+      ]
+     ]
+    },
+    "X+F run 1 vs X+F run 2 (outside box)": {
+     "pixels": 4,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       528,
+       715,
+       1
+      ],
+      [
+       529,
+       715,
+       1
+      ],
+      [
+       529,
+       716,
+       1
+      ],
+      [
+       530,
+       716,
+       1
+      ]
+     ]
+    }
+   }
+  },
+  "chromium-light-desktop/profile-validation.png": {
+   "pixels": 504,
+   "maxChannelDelta": 113,
+   "p0Comparator": "fails",
+   "notificationBox": [
+    870,
+    0,
+    410,
+    86
+   ],
+   "inside": 495,
+   "outside": 9,
+   "clusters": [
+    {
+     "x": 1165,
+     "y": 28,
+     "width": 82,
+     "height": 11,
+     "pixels": 495
+    },
+    {
+     "x": 1058,
+     "y": 379,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 1058,
+     "y": 408,
+     "width": 2,
+     "height": 3,
+     "pixels": 4
+    }
+   ],
+   "geometry": {
+    "X": {
+     "card": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "column": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "willChange": "transform",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;"
+    },
+    "X+F": {
+     "card": {
+      "x": 1128.28125,
+      "y": 16,
+      "width": 135.71875,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 1128.28125
+     },
+     "column": {
+      "x": 904,
+      "y": 16,
+      "width": 360,
+      "height": 36,
+      "top": 16,
+      "right": 1264,
+      "bottom": 52,
+      "left": 904
+     },
+     "willChange": "auto",
+     "inlineStyle": "left: calc(1280px - max(16px, env(safe-area-inset-right, 0px)) - 360px); right: auto;"
+    }
+   },
+   "b1Signature": {
+    "source": "p2.3-b1/root-cause/toast-box-tip-to-fix-v2.json (B1 tip 77233e226, which already has d233a6cd0, to its fix)",
+    "pixels": 607,
+    "insideToastBox": 495,
+    "outsideToastBox": 112,
+    "clusters": [
+     {
+      "x": 1165,
+      "y": 28,
+      "width": 82,
+      "height": 11,
+      "pixels": 495
+     },
+     {
+      "x": 1029,
+      "y": 711,
+      "width": 6,
+      "height": 6,
+      "pixels": 11
+     },
+     {
+      "x": 525,
+      "y": 712,
+      "width": 6,
+      "height": 5,
+      "pixels": 9
+     },
+     {
+      "x": 500,
+      "y": 890,
+      "width": 8,
+      "height": 8,
+      "pixels": 9
+     },
+     {
+      "x": 1052,
+      "y": 890,
+      "width": 8,
+      "height": 8,
+      "pixels": 9
+     },
+     {
+      "x": 525,
+      "y": 750,
+      "width": 2,
+      "height": 13,
+      "pixels": 8
+     },
+     {
+      "x": 527,
+      "y": 242,
+      "width": 4,
+      "height": 3,
+      "pixels": 7
+     },
+     {
+      "x": 1030,
+      "y": 242,
+      "width": 5,
+      "height": 6,
+      "pixels": 7
+     }
+    ],
+    "introductionPixels": 504
+   },
+   "insideEqualsB1Signature": true,
+   "runToRunNoiseOutsideBox": {
+    "X vs X+F (outside box)": {
+     "pixels": 9,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       1058,
+       379,
+       1
+      ],
+      [
+       1058,
+       380,
+       1
+      ],
+      [
+       1059,
+       380,
+       1
+      ],
+      [
+       1058,
+       381,
+       1
+      ],
+      [
+       1059,
+       381,
+       1
+      ],
+      [
+       1059,
+       408,
+       1
+      ],
+      [
+       1058,
+       409,
+       1
+      ],
+      [
+       1059,
+       409,
+       1
+      ],
+      [
+       1058,
+       410,
+       1
+      ]
+     ]
+    },
+    "X run 1 vs X run 2 (outside box)": {
+     "pixels": 12,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       528,
+       242,
+       1
+      ],
+      [
+       530,
+       242,
+       1
+      ],
+      [
+       527,
+       243,
+       1
+      ],
+      [
+       528,
+       243,
+       1
+      ],
+      [
+       529,
+       243,
+       1
+      ],
+      [
+       530,
+       243,
+       1
+      ],
+      [
+       527,
+       244,
+       1
+      ],
+      [
+       527,
+       714,
+       1
+      ],
+      [
+       528,
+       715,
+       1
+      ],
+      [
+       528,
+       716,
+       1
+      ],
+      [
+       529,
+       716,
+       1
+      ],
+      [
+       530,
+       716,
+       1
+      ]
+     ]
+    },
+    "X run 2 vs X run 3 (outside box)": {
+     "pixels": 12,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       528,
+       242,
+       1
+      ],
+      [
+       530,
+       242,
+       1
+      ],
+      [
+       527,
+       243,
+       1
+      ],
+      [
+       528,
+       243,
+       1
+      ],
+      [
+       529,
+       243,
+       1
+      ],
+      [
+       530,
+       243,
+       1
+      ],
+      [
+       527,
+       244,
+       1
+      ],
+      [
+       527,
+       714,
+       1
+      ],
+      [
+       528,
+       715,
+       1
+      ],
+      [
+       528,
+       716,
+       1
+      ],
+      [
+       529,
+       716,
+       1
+      ],
+      [
+       530,
+       716,
+       1
+      ]
+     ]
+    },
+    "X+F run 1 vs X+F run 2 (outside box)": {
+     "pixels": 105,
+     "maxChannelDelta": 2,
+     "first": [
+      [
+       1031,
+       242,
+       1
+      ],
+      [
+       1030,
+       243,
+       1
+      ],
+      [
+       1031,
+       243,
+       1
+      ],
+      [
+       1032,
+       244,
+       1
+      ],
+      [
+       1033,
+       245,
+       1
+      ],
+      [
+       1034,
+       246,
+       1
+      ],
+      [
+       1033,
+       247,
+       1
+      ],
+      [
+       501,
+       408,
+       1
+      ],
+      [
+       1059,
+       408,
+       1
+      ],
+      [
+       500,
+       409,
+       1
+      ],
+      [
+       501,
+       409,
+       1
+      ],
+      [
+       1058,
+       409,
+       1
+      ],
+      [
+       1059,
+       409,
+       1
+      ],
+      [
+       501,
+       410,
+       1
+      ],
+      [
+       1058,
+       410,
+       1
+      ],
+      [
+       1032,
+       515,
+       1
+      ],
+      [
+       525,
+       516,
+       1
+      ],
+      [
+       526,
+       516,
+       1
+      ],
+      [
+       1033,
+       516,
+       1
+      ],
+      [
+       1034,
+       516,
+       1
+      ],
+      [
+       525,
+       517,
+       1
+      ],
+      [
+       1034,
+       517,
+       1
+      ],
+      [
+       1034,
+       518,
+       1
+      ],
+      [
+       1034,
+       539,
+       1
+      ],
+      [
+       525,
+       540,
+       1
+      ],
+      [
+       1034,
+       540,
+       1
+      ],
+      [
+       525,
+       541,
+       1
+      ],
+      [
+       526,
+       541,
+       1
+      ],
+      [
+       1033,
+       541,
+       1
+      ],
+      [
+       1034,
+       541,
+       1
+      ],
+      [
+       526,
+       542,
+       1
+      ],
+      [
+       527,
+       542,
+       1
+      ],
+      [
+       1033,
+       542,
+       1
+      ],
+      [
+       1032,
+       601,
+       1
+      ],
+      [
+       525,
+       602,
+       1
+      ],
+      [
+       526,
+       602,
+       1
+      ],
+      [
+       1033,
+       602,
+       1
+      ],
+      [
+       1034,
+       602,
+       1
+      ],
+      [
+       525,
+       603,
+       1
+      ],
+      [
+       1034,
+       603,
+       1
+      ]
+     ]
+    }
+   }
+  },
+  "chromium-dark-phone/profile-validation.png": {
+   "pixels": 315,
+   "maxChannelDelta": 48,
+   "p0Comparator": "match",
+   "notificationBox": [
+    0,
+    22,
+    390,
+    104
+   ],
+   "inside": 303,
+   "outside": 12,
+   "clusters": [
+    {
+     "x": 164,
+     "y": 69,
+     "width": 19,
+     "height": 10,
+     "pixels": 123
+    },
+    {
+     "x": 194,
+     "y": 71,
+     "width": 36,
+     "height": 8,
+     "pixels": 180
+    },
+    {
+     "x": 347,
+     "y": 195,
+     "width": 2,
+     "height": 3,
+     "pixels": 3
+    },
+    {
+     "x": 16,
+     "y": 309,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 16,
+     "y": 338,
+     "width": 2,
+     "height": 3,
+     "pixels": 4
+    }
+   ],
+   "geometry": {
+    "X": {
+     "card": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "column": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "willChange": "transform",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));"
+    },
+    "X+F": {
+     "card": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "column": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "willChange": "auto",
+     "inlineStyle": null
+    }
+   },
+   "b1Signature": {
+    "source": "p2.3-b1/root-cause/toast-box-tip-to-fix-v2.json (B1 tip 77233e226, which already has d233a6cd0, to its fix)",
+    "pixels": 303,
+    "insideToastBox": 303,
+    "outsideToastBox": 0,
+    "clusters": [
+     {
+      "x": 164,
+      "y": 69,
+      "width": 66,
+      "height": 10,
+      "pixels": 303
+     }
+    ],
+    "introductionPixels": 307
+   },
+   "insideEqualsB1Signature": true,
+   "runToRunNoiseOutsideBox": {
+    "X vs X+F (outside box)": {
+     "pixels": 12,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       347,
+       195,
+       1
+      ],
+      [
+       348,
+       195,
+       1
+      ],
+      [
+       348,
+       197,
+       1
+      ],
+      [
+       16,
+       309,
+       1
+      ],
+      [
+       16,
+       310,
+       1
+      ],
+      [
+       17,
+       310,
+       1
+      ],
+      [
+       16,
+       311,
+       1
+      ],
+      [
+       17,
+       311,
+       1
+      ],
+      [
+       17,
+       338,
+       1
+      ],
+      [
+       16,
+       339,
+       1
+      ],
+      [
+       17,
+       339,
+       1
+      ],
+      [
+       16,
+       340,
+       1
+      ]
+     ]
+    },
+    "X run 1 vs X run 2 (outside box)": {
+     "pixels": 3,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       347,
+       195,
+       1
+      ],
+      [
+       348,
+       195,
+       1
+      ],
+      [
+       348,
+       197,
+       1
+      ]
+     ]
+    },
+    "X run 2 vs X run 3 (outside box)": {
+     "pixels": 3,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       347,
+       195,
+       1
+      ],
+      [
+       348,
+       195,
+       1
+      ],
+      [
+       348,
+       197,
+       1
+      ]
+     ]
+    },
+    "X+F run 1 vs X+F run 2 (outside box)": {
+     "pixels": 18,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       44,
+       169,
+       1
+      ],
+      [
+       45,
+       169,
+       1
+      ],
+      [
+       43,
+       170,
+       1
+      ],
+      [
+       44,
+       170,
+       1
+      ],
+      [
+       46,
+       170,
+       1
+      ],
+      [
+       43,
+       171,
+       1
+      ],
+      [
+       347,
+       195,
+       1
+      ],
+      [
+       348,
+       195,
+       1
+      ],
+      [
+       348,
+       197,
+       1
+      ],
+      [
+       16,
+       309,
+       1
+      ],
+      [
+       16,
+       310,
+       1
+      ],
+      [
+       17,
+       310,
+       1
+      ],
+      [
+       16,
+       311,
+       1
+      ],
+      [
+       17,
+       311,
+       1
+      ],
+      [
+       17,
+       338,
+       1
+      ],
+      [
+       16,
+       339,
+       1
+      ],
+      [
+       17,
+       339,
+       1
+      ],
+      [
+       16,
+       340,
+       1
+      ]
+     ]
+    }
+   }
+  },
+  "chromium-light-phone/profile-validation.png": {
+   "pixels": 335,
+   "maxChannelDelta": 60,
+   "p0Comparator": "fails",
+   "notificationBox": [
+    0,
+    22,
+    390,
+    104
+   ],
+   "inside": 306,
+   "outside": 29,
+   "clusters": [
+    {
+     "x": 164,
+     "y": 69,
+     "width": 19,
+     "height": 10,
+     "pixels": 123
+    },
+    {
+     "x": 194,
+     "y": 71,
+     "width": 36,
+     "height": 8,
+     "pixels": 183
+    },
+    {
+     "x": 43,
+     "y": 169,
+     "width": 4,
+     "height": 3,
+     "pixels": 7
+    },
+    {
+     "x": 271,
+     "y": 169,
+     "width": 4,
+     "height": 3,
+     "pixels": 7
+    },
+    {
+     "x": 288,
+     "y": 169,
+     "width": 2,
+     "height": 2,
+     "pixels": 3
+    },
+    {
+     "x": 344,
+     "y": 169,
+     "width": 3,
+     "height": 3,
+     "pixels": 4
+    },
+    {
+     "x": 346,
+     "y": 195,
+     "width": 3,
+     "height": 4,
+     "pixels": 3
+    },
+    {
+     "x": 21,
+     "y": 333,
+     "width": 3,
+     "height": 2,
+     "pixels": 5
+    }
+   ],
+   "geometry": {
+    "X": {
+     "card": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "column": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "willChange": "transform",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));"
+    },
+    "X+F": {
+     "card": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "column": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "willChange": "auto",
+     "inlineStyle": null
+    }
+   },
+   "b1Signature": {
+    "source": "p2.3-b1/root-cause/toast-box-tip-to-fix-v2.json (B1 tip 77233e226, which already has d233a6cd0, to its fix)",
+    "pixels": 325,
+    "insideToastBox": 306,
+    "outsideToastBox": 19,
+    "clusters": [
+     {
+      "x": 164,
+      "y": 69,
+      "width": 66,
+      "height": 10,
+      "pixels": 306
+     },
+     {
+      "x": 43,
+      "y": 169,
+      "width": 4,
+      "height": 3,
+      "pixels": 7
+     },
+     {
+      "x": 372,
+      "y": 309,
+      "width": 2,
+      "height": 3,
+      "pixels": 5
+     },
+     {
+      "x": 372,
+      "y": 338,
+      "width": 2,
+      "height": 3,
+      "pixels": 4
+     },
+     {
+      "x": 346,
+      "y": 195,
+      "width": 3,
+      "height": 4,
+      "pixels": 3
+     }
+    ],
+    "introductionPixels": 358
+   },
+   "insideEqualsB1Signature": true,
+   "runToRunNoiseOutsideBox": {
+    "X vs X+F (outside box)": {
+     "pixels": 29,
+     "maxChannelDelta": 2,
+     "first": [
+      [
+       44,
+       169,
+       1
+      ],
+      [
+       46,
+       169,
+       1
+      ],
+      [
+       271,
+       169,
+       1
+      ],
+      [
+       272,
+       169,
+       1
+      ],
+      [
+       273,
+       169,
+       1
+      ],
+      [
+       288,
+       169,
+       1
+      ],
+      [
+       345,
+       169,
+       1
+      ],
+      [
+       43,
+       170,
+       1
+      ],
+      [
+       44,
+       170,
+       1
+      ],
+      [
+       45,
+       170,
+       1
+      ],
+      [
+       46,
+       170,
+       1
+      ],
+      [
+       271,
+       170,
+       1
+      ],
+      [
+       272,
+       170,
+       1
+      ],
+      [
+       273,
+       170,
+       2
+      ],
+      [
+       288,
+       170,
+       1
+      ],
+      [
+       289,
+       170,
+       1
+      ],
+      [
+       344,
+       170,
+       1
+      ],
+      [
+       345,
+       170,
+       1
+      ],
+      [
+       43,
+       171,
+       1
+      ],
+      [
+       274,
+       171,
+       1
+      ],
+      [
+       346,
+       171,
+       1
+      ],
+      [
+       347,
+       195,
+       1
+      ],
+      [
+       348,
+       196,
+       1
+      ],
+      [
+       346,
+       198,
+       1
+      ],
+      [
+       21,
+       333,
+       1
+      ],
+      [
+       22,
+       333,
+       1
+      ],
+      [
+       21,
+       334,
+       1
+      ],
+      [
+       22,
+       334,
+       1
+      ],
+      [
+       23,
+       334,
+       1
+      ]
+     ]
+    },
+    "X run 1 vs X run 2 (outside box)": {
+     "pixels": 22,
+     "maxChannelDelta": 2,
+     "first": [
+      [
+       271,
+       169,
+       1
+      ],
+      [
+       272,
+       169,
+       1
+      ],
+      [
+       273,
+       169,
+       1
+      ],
+      [
+       288,
+       169,
+       1
+      ],
+      [
+       345,
+       169,
+       1
+      ],
+      [
+       271,
+       170,
+       1
+      ],
+      [
+       272,
+       170,
+       1
+      ],
+      [
+       273,
+       170,
+       2
+      ],
+      [
+       288,
+       170,
+       1
+      ],
+      [
+       289,
+       170,
+       1
+      ],
+      [
+       344,
+       170,
+       1
+      ],
+      [
+       345,
+       170,
+       1
+      ],
+      [
+       274,
+       171,
+       1
+      ],
+      [
+       346,
+       171,
+       1
+      ],
+      [
+       347,
+       195,
+       1
+      ],
+      [
+       348,
+       196,
+       1
+      ],
+      [
+       346,
+       198,
+       1
+      ],
+      [
+       21,
+       333,
+       1
+      ],
+      [
+       22,
+       333,
+       1
+      ],
+      [
+       21,
+       334,
+       1
+      ],
+      [
+       22,
+       334,
+       1
+      ],
+      [
+       23,
+       334,
+       1
+      ]
+     ]
+    },
+    "X run 2 vs X run 3 (outside box)": {
+     "pixels": 40,
+     "maxChannelDelta": 2,
+     "first": [
+      [
+       271,
+       169,
+       1
+      ],
+      [
+       272,
+       169,
+       1
+      ],
+      [
+       273,
+       169,
+       1
+      ],
+      [
+       288,
+       169,
+       1
+      ],
+      [
+       345,
+       169,
+       1
+      ],
+      [
+       271,
+       170,
+       1
+      ],
+      [
+       272,
+       170,
+       1
+      ],
+      [
+       273,
+       170,
+       2
+      ],
+      [
+       288,
+       170,
+       1
+      ],
+      [
+       289,
+       170,
+       1
+      ],
+      [
+       344,
+       170,
+       1
+      ],
+      [
+       345,
+       170,
+       1
+      ],
+      [
+       274,
+       171,
+       1
+      ],
+      [
+       346,
+       171,
+       1
+      ],
+      [
+       347,
+       195,
+       1
+      ],
+      [
+       348,
+       196,
+       1
+      ],
+      [
+       346,
+       198,
+       1
+      ],
+      [
+       16,
+       309,
+       1
+      ],
+      [
+       17,
+       309,
+       1
+      ],
+      [
+       372,
+       309,
+       1
+      ],
+      [
+       373,
+       309,
+       1
+      ],
+      [
+       17,
+       310,
+       1
+      ],
+      [
+       372,
+       310,
+       1
+      ],
+      [
+       373,
+       310,
+       1
+      ],
+      [
+       16,
+       311,
+       1
+      ],
+      [
+       17,
+       311,
+       1
+      ],
+      [
+       373,
+       311,
+       1
+      ],
+      [
+       21,
+       333,
+       1
+      ],
+      [
+       22,
+       333,
+       1
+      ],
+      [
+       21,
+       334,
+       1
+      ],
+      [
+       22,
+       334,
+       1
+      ],
+      [
+       23,
+       334,
+       1
+      ],
+      [
+       16,
+       338,
+       1
+      ],
+      [
+       17,
+       338,
+       1
+      ],
+      [
+       373,
+       338,
+       1
+      ],
+      [
+       17,
+       339,
+       1
+      ],
+      [
+       372,
+       339,
+       1
+      ],
+      [
+       373,
+       339,
+       1
+      ],
+      [
+       17,
+       340,
+       1
+      ],
+      [
+       372,
+       340,
+       1
+      ]
+     ]
+    },
+    "X+F run 1 vs X+F run 2 (outside box)": {
+     "pixels": 19,
+     "maxChannelDelta": 1,
+     "first": [
+      [
+       44,
+       169,
+       1
+      ],
+      [
+       46,
+       169,
+       1
+      ],
+      [
+       43,
+       170,
+       1
+      ],
+      [
+       44,
+       170,
+       1
+      ],
+      [
+       45,
+       170,
+       1
+      ],
+      [
+       46,
+       170,
+       1
+      ],
+      [
+       43,
+       171,
+       1
+      ],
+      [
+       347,
+       195,
+       1
+      ],
+      [
+       348,
+       196,
+       1
+      ],
+      [
+       346,
+       198,
+       1
+      ],
+      [
+       16,
+       309,
+       1
+      ],
+      [
+       17,
+       309,
+       1
+      ],
+      [
+       17,
+       310,
+       1
+      ],
+      [
+       16,
+       311,
+       1
+      ],
+      [
+       17,
+       311,
+       1
+      ],
+      [
+       16,
+       338,
+       1
+      ],
+      [
+       17,
+       338,
+       1
+      ],
+      [
+       17,
+       339,
+       1
+      ],
+      [
+       17,
+       340,
+       1
+      ]
+     ]
+    }
+   }
+  },
+  "webkit-dark-phone/profile-validation.png": {
+   "pixels": 4239,
+   "maxChannelDelta": 167,
+   "p0Comparator": "fails",
+   "notificationBox": [
+    0,
+    22,
+    390,
+    104
+   ],
+   "inside": 4239,
+   "outside": 0,
+   "clusters": [
+    {
+     "x": 100,
+     "y": 44,
+     "width": 145,
+     "height": 76,
+     "pixels": 2609
+    },
+    {
+     "x": 223,
+     "y": 44,
+     "width": 58,
+     "height": 76,
+     "pixels": 1630
+    }
+   ],
+   "geometry": {
+    "X": {
+     "card": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "column": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "willChange": "transform",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));"
+    },
+    "X+F": {
+     "card": {
+      "x": 123.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 258.859375,
+      "bottom": 92,
+      "left": 123.140625
+     },
+     "column": {
+      "x": 16,
+      "y": 56,
+      "width": 350,
+      "height": 36,
+      "top": 56,
+      "right": 366,
+      "bottom": 92,
+      "left": 16
+     },
+     "willChange": "auto",
+     "inlineStyle": null
+    }
+   },
+   "b1Signature": {
+    "source": "p2.3-b1/root-cause/toast-box-tip-to-fix-v2.json (B1 tip 77233e226, which already has d233a6cd0, to its fix)",
+    "pixels": 4239,
+    "insideToastBox": 4239,
+    "outsideToastBox": 0,
+    "clusters": [
+     {
+      "x": 100,
+      "y": 44,
+      "width": 181,
+      "height": 76,
+      "pixels": 4239
+     }
+    ],
+    "introductionPixels": 3994
+   },
+   "insideEqualsB1Signature": true,
+   "runToRunNoiseOutsideBox": {
+    "X vs X+F (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    },
+    "X run 1 vs X run 2 (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    },
+    "X run 2 vs X run 3 (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    },
+    "X+F run 1 vs X+F run 2 (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    }
+   }
+  },
+  "webkit-light-phone/profile-validation.png": {
+   "pixels": 4861,
+   "maxChannelDelta": 224,
+   "p0Comparator": "fails",
+   "notificationBox": [
+    0,
+    22,
+    390,
+    104
+   ],
+   "inside": 4861,
+   "outside": 0,
+   "clusters": [
+    {
+     "x": 157,
+     "y": 42,
+     "width": 8,
+     "height": 5,
+     "pixels": 8
+    },
+    {
+     "x": 221,
+     "y": 42,
+     "width": 8,
+     "height": 5,
+     "pixels": 8
+    },
+    {
+     "x": 104,
+     "y": 43,
+     "width": 141,
+     "height": 78,
+     "pixels": 2843
+    },
+    {
+     "x": 225,
+     "y": 43,
+     "width": 57,
+     "height": 78,
+     "pixels": 1982
+    },
+    {
+     "x": 157,
+     "y": 92,
+     "width": 4,
+     "height": 1,
+     "pixels": 4
+    },
+    {
+     "x": 157,
+     "y": 117,
+     "width": 8,
+     "height": 5,
+     "pixels": 8
+    },
+    {
+     "x": 221,
+     "y": 117,
+     "width": 8,
+     "height": 5,
+     "pixels": 8
+    }
+   ],
+   "geometry": {
+    "X": {
+     "card": {
+      "x": 127.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 262.859375,
+      "bottom": 92,
+      "left": 127.140625
+     },
+     "column": {
+      "x": 16,
+      "y": 56,
+      "width": 358,
+      "height": 36,
+      "top": 56,
+      "right": 374,
+      "bottom": 92,
+      "left": 16
+     },
+     "willChange": "transform",
+     "inlineStyle": "width: calc(390px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));"
+    },
+    "X+F": {
+     "card": {
+      "x": 123.140625,
+      "y": 56,
+      "width": 135.71875,
+      "height": 36,
+      "top": 56,
+      "right": 258.859375,
+      "bottom": 92,
+      "left": 123.140625
+     },
+     "column": {
+      "x": 16,
+      "y": 56,
+      "width": 350,
+      "height": 36,
+      "top": 56,
+      "right": 366,
+      "bottom": 92,
+      "left": 16
+     },
+     "willChange": "auto",
+     "inlineStyle": null
+    }
+   },
+   "b1Signature": {
+    "source": "p2.3-b1/root-cause/toast-box-tip-to-fix-v2.json (B1 tip 77233e226, which already has d233a6cd0, to its fix)",
+    "pixels": 4861,
+    "insideToastBox": 4861,
+    "outsideToastBox": 0,
+    "clusters": [
+     {
+      "x": 104,
+      "y": 42,
+      "width": 178,
+      "height": 80,
+      "pixels": 4861
+     }
+    ],
+    "introductionPixels": 4863
+   },
+   "insideEqualsB1Signature": true,
+   "runToRunNoiseOutsideBox": {
+    "X vs X+F (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    },
+    "X run 1 vs X run 2 (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    },
+    "X run 2 vs X run 3 (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    },
+    "X+F run 1 vs X+F run 2 (outside box)": {
+     "pixels": 0,
+     "maxChannelDelta": 0,
+     "first": []
+    }
+   }
+  }
+ },
+ "proof1Others": {
+  "same": 203,
+  "noise": 19,
+  "changed": {
+   "chromium-dark-desktop/settings-saved.png": {
+    "pixels": 97,
+    "maxChannelDelta": 49,
+    "p0Comparator": "match",
+    "clusters": [
+     {
+      "x": 1195,
+      "y": 31,
+      "width": 8,
+      "height": 11,
+      "pixels": 59
+     },
+     {
+      "x": 1222,
+      "y": 31,
+      "width": 9,
+      "height": 8,
+      "pixels": 38
+     }
+    ]
+   },
+   "chromium-dark-phone/settings-saved.png": {
+    "pixels": 1316,
+    "maxChannelDelta": 90,
+    "p0Comparator": "fails",
+    "clusters": [
+     {
+      "x": 235,
+      "y": 39,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 233,
+      "y": 40,
+      "width": 58,
+      "height": 84,
+      "pixels": 735
+     },
+     {
+      "x": 231,
+      "y": 49,
+      "width": 10,
+      "height": 7,
+      "pixels": 4
+     },
+     {
+      "x": 159,
+      "y": 68,
+      "width": 91,
+      "height": 14,
+      "pixels": 559
+     },
+     {
+      "x": 235,
+      "y": 124,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 16,
+      "y": 627,
+      "width": 8,
+      "height": 8,
+      "pixels": 8
+     },
+     {
+      "x": 366,
+      "y": 627,
+      "width": 8,
+      "height": 8,
+      "pixels": 8
+     }
+    ]
+   },
+   "chromium-light-desktop/settings-saved.png": {
+    "pixels": 97,
+    "maxChannelDelta": 59,
+    "p0Comparator": "fails",
+    "clusters": [
+     {
+      "x": 1195,
+      "y": 31,
+      "width": 8,
+      "height": 11,
+      "pixels": 59
+     },
+     {
+      "x": 1222,
+      "y": 31,
+      "width": 9,
+      "height": 8,
+      "pixels": 38
+     }
+    ]
+   },
+   "chromium-light-phone/settings-saved.png": {
+    "pixels": 1418,
+    "maxChannelDelta": 113,
+    "p0Comparator": "fails",
+    "clusters": [
+     {
+      "x": 239,
+      "y": 44,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 233,
+      "y": 45,
+      "width": 52,
+      "height": 74,
+      "pixels": 851
+     },
+     {
+      "x": 233,
+      "y": 54,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 159,
+      "y": 68,
+      "width": 91,
+      "height": 14,
+      "pixels": 563
+     },
+     {
+      "x": 233,
+      "y": 109,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 239,
+      "y": 119,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     }
+    ]
+   }
+  },
+  "note": "The only other screenshots X+F changes are the Chromium settings-saved pills, the same B1 fix on the settings page (registered A4 from 4088d37e6, a tree before B1); not part of this exception."
+ },
+ "proof2": {
+  "chromium-dark-desktop/profile-validation.png": {
+   "bytesEqual": true,
+   "pixels": 0
+  },
+  "chromium-light-desktop/profile-validation.png": {
+   "bytesEqual": false,
+   "pixels": 89,
+   "maxChannelDelta": 2,
+   "p0Comparator": "match",
+   "clusters": [
+    {
+     "x": 1030,
+     "y": 242,
+     "width": 5,
+     "height": 6,
+     "pixels": 7
+    },
+    {
+     "x": 1058,
+     "y": 379,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 500,
+     "y": 408,
+     "width": 2,
+     "height": 3,
+     "pixels": 4
+    },
+    {
+     "x": 1032,
+     "y": 515,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 525,
+     "y": 516,
+     "width": 2,
+     "height": 2,
+     "pixels": 3
+    },
+    {
+     "x": 1033,
+     "y": 539,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 525,
+     "y": 540,
+     "width": 3,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 1032,
+     "y": 601,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 525,
+     "y": 602,
+     "width": 2,
+     "height": 2,
+     "pixels": 3
+    },
+    {
+     "x": 1033,
+     "y": 625,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 525,
+     "y": 626,
+     "width": 3,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 1032,
+     "y": 687,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 525,
+     "y": 688,
+     "width": 2,
+     "height": 2,
+     "pixels": 3
+    },
+    {
+     "x": 1029,
+     "y": 711,
+     "width": 6,
+     "height": 6,
+     "pixels": 11
+    },
+    {
+     "x": 525,
+     "y": 712,
+     "width": 6,
+     "height": 5,
+     "pixels": 9
+    },
+    {
+     "x": 500,
+     "y": 790,
+     "width": 8,
+     "height": 8,
+     "pixels": 9
+    }
+   ],
+   "withinNoise": true
+  },
+  "chromium-dark-phone/profile-validation.png": {
+   "bytesEqual": false,
+   "pixels": 86,
+   "maxChannelDelta": 2,
+   "p0Comparator": "match",
+   "clusters": [
+    {
+     "x": 347,
+     "y": 308,
+     "width": 2,
+     "height": 3,
+     "pixels": 3
+    },
+    {
+     "x": 41,
+     "y": 311,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 366,
+     "y": 446,
+     "width": 3,
+     "height": 2,
+     "pixels": 4
+    },
+    {
+     "x": 343,
+     "y": 556,
+     "width": 6,
+     "height": 6,
+     "pixels": 8
+    },
+    {
+     "x": 41,
+     "y": 558,
+     "width": 2,
+     "height": 4,
+     "pixels": 7
+    },
+    {
+     "x": 41,
+     "y": 582,
+     "width": 3,
+     "height": 4,
+     "pixels": 7
+    },
+    {
+     "x": 347,
+     "y": 582,
+     "width": 2,
+     "height": 4,
+     "pixels": 4
+    },
+    {
+     "x": 41,
+     "y": 644,
+     "width": 3,
+     "height": 4,
+     "pixels": 8
+    },
+    {
+     "x": 346,
+     "y": 644,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 41,
+     "y": 668,
+     "width": 3,
+     "height": 4,
+     "pixels": 7
+    },
+    {
+     "x": 347,
+     "y": 668,
+     "width": 2,
+     "height": 4,
+     "pixels": 4
+    },
+    {
+     "x": 41,
+     "y": 730,
+     "width": 3,
+     "height": 4,
+     "pixels": 8
+    },
+    {
+     "x": 346,
+     "y": 730,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 41,
+     "y": 754,
+     "width": 3,
+     "height": 4,
+     "pixels": 7
+    },
+    {
+     "x": 347,
+     "y": 754,
+     "width": 2,
+     "height": 4,
+     "pixels": 4
+    }
+   ],
+   "withinNoise": true
+  },
+  "chromium-light-phone/profile-validation.png": {
+   "bytesEqual": false,
+   "pixels": 74,
+   "maxChannelDelta": 2,
+   "p0Comparator": "match",
+   "clusters": [
+    {
+     "x": 43,
+     "y": 282,
+     "width": 4,
+     "height": 3,
+     "pixels": 7
+    },
+    {
+     "x": 41,
+     "y": 311,
+     "width": 3,
+     "height": 4,
+     "pixels": 7
+    },
+    {
+     "x": 366,
+     "y": 446,
+     "width": 3,
+     "height": 2,
+     "pixels": 4
+    },
+    {
+     "x": 344,
+     "y": 556,
+     "width": 5,
+     "height": 6,
+     "pixels": 7
+    },
+    {
+     "x": 41,
+     "y": 559,
+     "width": 2,
+     "height": 2,
+     "pixels": 3
+    },
+    {
+     "x": 347,
+     "y": 582,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 41,
+     "y": 583,
+     "width": 3,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 346,
+     "y": 644,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 41,
+     "y": 645,
+     "width": 2,
+     "height": 2,
+     "pixels": 3
+    },
+    {
+     "x": 347,
+     "y": 668,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 41,
+     "y": 669,
+     "width": 3,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 346,
+     "y": 730,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 41,
+     "y": 731,
+     "width": 2,
+     "height": 2,
+     "pixels": 3
+    },
+    {
+     "x": 347,
+     "y": 754,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 41,
+     "y": 755,
+     "width": 3,
+     "height": 3,
+     "pixels": 5
+    }
+   ],
+   "withinNoise": true
+  },
+  "webkit-dark-phone/profile-validation.png": {
+   "bytesEqual": true,
+   "pixels": 0
+  },
+  "webkit-light-phone/profile-validation.png": {
+   "bytesEqual": true,
+   "pixels": 0
+  }
+ }
+}

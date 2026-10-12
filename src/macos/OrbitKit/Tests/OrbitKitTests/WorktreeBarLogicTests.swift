@@ -60,6 +60,31 @@ final class WorktreeBarLogicTests: XCTestCase {
         XCTAssertEqual(WorktreeBarLogic.primary(worktreeDirty: nil, committed: true, turnActive: false), .merge)
     }
 
+    // MARK: turn in flight
+
+    func testTurnActiveWhileQueuedOrRunning() {
+        // The owner's report, 2026-10-09: Merge pressed just after sending a message, while the turn
+        // was still queued, came back "wait for the current turn to finish before merging".
+        XCTAssertTrue(WorktreeBarLogic.turnActive(status: .pending, runningSubagents: nil, sending: false))
+        XCTAssertTrue(WorktreeBarLogic.turnActive(status: .running, runningSubagents: nil, sending: false))
+    }
+
+    func testTurnActiveFromTheSendBeforeTheRecordCatchesUp() {
+        XCTAssertTrue(WorktreeBarLogic.turnActive(status: .awaitingInput, runningSubagents: nil, sending: true))
+        XCTAssertFalse(WorktreeBarLogic.turnActive(status: .awaitingInput, runningSubagents: nil, sending: false))
+    }
+
+    func testTurnActiveWhileParkedSubagentsRun() {
+        XCTAssertTrue(WorktreeBarLogic.turnActive(status: .awaitingInput, runningSubagents: 1, sending: false))
+        XCTAssertFalse(WorktreeBarLogic.turnActive(status: .awaitingInput, runningSubagents: 0, sending: false))
+    }
+
+    func testEndedSessionHoldsNothingBack() {
+        for status in [RunStatus.succeeded, .failed, .cancelled] {
+            XCTAssertFalse(WorktreeBarLogic.turnActive(status: status, runningSubagents: 2, sending: true), "\(status)")
+        }
+    }
+
     // MARK: default merge target
 
     func testDefaultTargetPrefersRememberedWhenStillOffered() {

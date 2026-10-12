@@ -7,7 +7,7 @@ import XCTest
 ///
 /// `BackgroundJobsTests` proves the reading; it proves nothing about what a reader sees unless the
 /// views read it, and no compiler here checks that — SwiftUI does not exist on Linux, and
-/// `AttachedNoteView.swift` / `ConsoleView.swift` / `BackgroundWakeCardView.swift` are compiled only
+/// `AttachedNoteView.swift` / `UserTurnRow.swift` / `BackgroundWakeCardView.swift` are compiled only
 /// by the macOS and iOS jobs. So the attachment is asserted over the source, the way
 /// `MarkdownCheckboxWiringTests` does, and each assertion is written so that CUTTING the wire is
 /// what turns it red.
@@ -57,7 +57,7 @@ final class BackgroundJobsWiringTests: XCTestCase {
 
     private static let notePath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/AttachedNoteView.swift"
     private static let bubblesPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/MessageBubbles.swift"
-    private static let consolePath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"
+    private static let rowPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/UserTurnRow.swift"
     private static let cardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/BackgroundWakeCardView.swift"
 
     // MARK: the block opens as rows
@@ -131,8 +131,12 @@ final class BackgroundJobsWiringTests: XCTestCase {
     /// The card holds the leftover block, and the bubble under it is drawn only for words somebody
     /// actually typed.
     func testAWakeTurnPutsTheLeftoverBlockInTheCardAndDrawsNoEmptyBubble() throws {
-        let branch = try section(try source(Self.consolePath),
-                                 from: "BackgroundWakeText.parse(b.note)", to: "case .assistant")
+        let row = try source(Self.rowPath)
+        // Once delivered the block is read off the recorded note, never out of the person's words.
+        XCTAssertTrue(row.contains("let wakeNote: String? = queued == nil ? b.note : b.text"),
+                      "a delivered wake is no longer read off the note the apiserver recorded")
+        let branch = try section(row, from: "BackgroundWakeText.parse(wakeNote)",
+                                 to: "UserBubbleView(bubble: b, onCancelQueued: cancel)")
 
         XCTAssertTrue(branch.contains("attached: attachedRest(background)"),
                       "whatever the card did not take rides in the card, because nobody typed this "
@@ -155,19 +159,19 @@ final class BackgroundJobsWiringTests: XCTestCase {
     /// got wherever it is drawn, and while it waits for the runner it offers no Cancel: the server
     /// refuses to withdraw a steer (409), so a Cancel there would be a button that only ever fails.
     func testASteeredWakeSaysHowFarItGotAndOffersNoCancel() throws {
-        let console = try source(Self.consolePath)
-        let queued = try section(console,
-                                 from: "} else if let background = BackgroundWakeText.parse(bubble.text) {",
-                                 to: "} else {")
-        XCTAssertTrue(queued.contains("bubble.turnId == nil || bubble.steer"),
+        // One branch draws the wake queued and delivered (`UserTurnRow`); the queue's Cancel is the
+        // one `QueuedControls` hands it, which a steer never gets.
+        let row = try source(Self.rowPath)
+        let controls = try section(row, from: "struct QueuedControls", to: "struct UserTurnRow")
+        XCTAssertTrue(controls.contains("bubble.turnId == nil || bubble.steer"),
                       "a steered wake waiting for the runner must not be offered a Cancel")
-        XCTAssertTrue(queued.contains("steerState: BackgroundWakeCard.steerState("),
-                      "it says how far it has got instead")
-        XCTAssertTrue(queued.contains("queued: true"), "and is still drawn as not yet an event")
-
-        let delivered = try section(console, from: "BackgroundWakeText.parse(b.note)", to: "case .assistant")
-        XCTAssertTrue(delivered.contains("steerState: BackgroundWakeCard.steerState("),
-                      "once written into the turn, its line still says how far it got")
+        let branch = try section(row,
+                                 from: "} else if let background = BackgroundWakeText.parse(wakeNote) {",
+                                 to: "} else {")
+        XCTAssertTrue(branch.contains("onCancelQueued: cancel,"), "the wake's Cancel is not the queue's")
+        XCTAssertTrue(branch.contains("steerState: BackgroundWakeCard.steerState("),
+                      "it says how far it has got instead — and still does once written into the turn")
+        XCTAssertTrue(branch.contains("queued: queued != nil"), "and is drawn as not yet an event while queued")
 
         let card = try section(try source(Self.cardPath), from: "struct BackgroundWakeCardView",
                                to: "private func jobRow")

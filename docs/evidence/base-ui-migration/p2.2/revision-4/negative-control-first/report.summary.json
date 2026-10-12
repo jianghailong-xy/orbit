@@ -1,0 +1,1129 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.config.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4",
+    "testIgnore": [],
+    "testMatch": [
+     "scroll-negative-control.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "scroll-negative-control.browser.mjs",
+   "file": "scroll-negative-control.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 226,
+         "error": {
+          "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)",
+          "stack": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20",
+          "location": {
+           "file": "eval at evaluate (:311:30), <anonymous>",
+           "column": 47,
+           "line": 6
+          }
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "eval at evaluate (:311:30), <anonymous>",
+            "column": 47,
+            "line": 6
+           },
+           "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:27.558Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "eval at evaluate (:311:30), <anonymous>",
+          "column": 47,
+          "line": 6
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-f99c82545d6fa3dc666c",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 253,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:28.104Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-02b2f326fb29149214f7",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 221,
+         "error": {
+          "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)",
+          "stack": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26",
+          "location": {
+           "file": "eval at evaluate (:311:30), <anonymous>",
+           "column": 47,
+           "line": 6
+          }
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "eval at evaluate (:311:30), <anonymous>",
+            "column": 47,
+            "line": 6
+           },
+           "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:28.621Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "eval at evaluate (:311:30), <anonymous>",
+          "column": 47,
+          "line": 6
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-fadfb8571b00eeab508c",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 261,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:29.097Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-5b966c9721004965c483",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 222,
+         "error": {
+          "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)",
+          "stack": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20",
+          "location": {
+           "file": "eval at evaluate (:311:30), <anonymous>",
+           "column": 47,
+           "line": 6
+          }
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "eval at evaluate (:311:30), <anonymous>",
+            "column": 47,
+            "line": 6
+           },
+           "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:29.612Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "eval at evaluate (:311:30), <anonymous>",
+          "column": 47,
+          "line": 6
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-fd1cfc5294f5a4f4661c",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 239,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:30.097Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-18acfee3a61411ee0680",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 224,
+         "error": {
+          "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)",
+          "stack": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26",
+          "location": {
+           "file": "eval at evaluate (:311:30), <anonymous>",
+           "column": 47,
+           "line": 6
+          }
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "eval at evaluate (:311:30), <anonymous>",
+            "column": 47,
+            "line": 6
+           },
+           "message": "Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at eval (eval at evaluate (:311:30), <anonymous>:6:47)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:30.631Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "eval at evaluate (:311:30), <anonymous>",
+          "column": 47,
+          "line": 6
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-c3dc01bf17d8c3b2b7f6",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 255,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:31.126Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-44e07f09e20fcc9b038f",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 285,
+         "error": {
+          "message": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')",
+          "stack": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+           "column": 14,
+           "line": 48
+          },
+          "snippet": "\u001b[90m   at \u001b[39m../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48\n\n  46 |   const viewport = page.viewportSize();\n  47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);\n> 48 |   await page.evaluate((inputType) => {\n     |              ^\n  49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,\n  50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,\n  51 |       input: null, movedAfterMs: null };"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+            "column": 14,
+            "line": 48
+           },
+           "message": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')\n\n   at ../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48\n\n  46 |   const viewport = page.viewportSize();\n  47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);\n> 48 |   await page.evaluate((inputType) => {\n     |              ^\n  49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,\n  50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,\n  51 |       input: null, movedAfterMs: null };\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:31.635Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+          "column": 14,
+          "line": 48
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-59738ea831758ee0303b",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 310,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:32.224Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-b8c038bc574f602e576b",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 10,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 267,
+         "error": {
+          "message": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')",
+          "stack": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+           "column": 14,
+           "line": 48
+          },
+          "snippet": "\u001b[90m   at \u001b[39m../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48\n\n  46 |   const viewport = page.viewportSize();\n  47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);\n> 48 |   await page.evaluate((inputType) => {\n     |              ^\n  49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,\n  50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,\n  51 |       input: null, movedAfterMs: null };"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+            "column": 14,
+            "line": 48
+           },
+           "message": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')\n\n   at ../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48\n\n  46 |   const viewport = page.viewportSize();\n  47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);\n> 48 |   await page.evaluate((inputType) => {\n     |              ^\n  49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,\n  50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,\n  51 |       input: null, movedAfterMs: null };\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:32.838Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+          "column": 14,
+          "line": 48
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-6a318deaa573f42c8941",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 304,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:33.413Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-3c1cc0d817a9b3f92918",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 12,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 287,
+         "error": {
+          "message": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')",
+          "stack": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+           "column": 14,
+           "line": 48
+          },
+          "snippet": "\u001b[90m   at \u001b[39m../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48\n\n  46 |   const viewport = page.viewportSize();\n  47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);\n> 48 |   await page.evaluate((inputType) => {\n     |              ^\n  49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,\n  50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,\n  51 |       input: null, movedAfterMs: null };"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+            "column": 14,
+            "line": 48
+           },
+           "message": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')\n\n   at ../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48\n\n  46 |   const viewport = page.viewportSize();\n  47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);\n> 48 |   await page.evaluate((inputType) => {\n     |              ^\n  49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,\n  50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,\n  51 |       input: null, movedAfterMs: null };\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:33.991Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-desktop/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-desktop/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+          "column": 14,
+          "line": 48
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-a864d7030021d281bfbf",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 305,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:34.595Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-ed289c6f9eb492176a42",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects retained scroll lock",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 14,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 275,
+         "error": {
+          "message": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')",
+          "stack": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26",
+          "location": {
+           "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+           "column": 14,
+           "line": 48
+          },
+          "snippet": "\u001b[90m   at \u001b[39m../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48\n\n  46 |   const viewport = page.viewportSize();\n  47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);\n> 48 |   await page.evaluate((inputType) => {\n     |              ^\n  49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,\n  50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,\n  51 |       input: null, movedAfterMs: null };"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+            "column": 14,
+            "line": 48
+           },
+           "message": "Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')\n\n   at ../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48\n\n  46 |   const viewport = page.viewportSize();\n  47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);\n> 48 |   await page.evaluate((inputType) => {\n     |              ^\n  49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,\n  50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,\n  51 |       input: null, movedAfterMs: null };\n    at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)\n    at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:35.199Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs",
+          "column": 14,
+          "line": 48
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-f2df7f49c3acc8ebf123",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    },
+    {
+     "title": "observer rejects late scroll lock",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 15,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 309,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:53:35.754Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rejected-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "late-release",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "852c7bf99f4f15145458-9734e97ef008b4d564aa",
+     "file": "scroll-negative-control.browser.mjs",
+     "line": 6,
+     "column": 42
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T11:53:26.833Z",
+  "duration": 9349.396,
+  "expected": 8,
+  "skipped": 0,
+  "unexpected": 8,
+  "flaky": 0
+ }
+}

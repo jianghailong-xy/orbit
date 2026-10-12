@@ -1,0 +1,134 @@
+[
+ {
+  "screenshot": "webkit-dark-desktop/notification-error.png",
+  "layer": "p0-drift",
+  "expected": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797",
+  "before": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797",
+  "after": "aa47ee44b7ffee6ac589b93a022b2d4303e9d9992851f7372e4a82e6c0dbb597",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 27115,
+  "p0ComparatorAfterVsExpected": "10149 pixels (ratio 0.01 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-dark-desktop/profile-validation.png",
+  "layer": "p0-drift",
+  "expected": "52a0f5eb9e5e9a474dc8c828ac753791e27146e693e4f9f535bae273b7019a3e",
+  "before": "52a0f5eb9e5e9a474dc8c828ac753791e27146e693e4f9f535bae273b7019a3e",
+  "after": "8d686d6d4ca78d33f82deaebdd45e5eb9cb8095c4dcc7a25c66364ddbc00ebd1",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 51674,
+  "p0ComparatorAfterVsExpected": "15662 pixels (ratio 0.02 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-dark-desktop/settings-saved.png",
+  "layer": "p0-drift",
+  "expected": "9f4cbab3da76449c9b15a04849d5a152217d55a3399b8357be53f6bf7a032bee",
+  "before": "9f4cbab3da76449c9b15a04849d5a152217d55a3399b8357be53f6bf7a032bee",
+  "after": "4bc4460111b9a46477d497933e0b5eaf245906ddacd6d25316a1ad407fca0fc2",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 66395,
+  "p0ComparatorAfterVsExpected": "20709 pixels (ratio 0.02 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-dark-phone/notification-error.png",
+  "layer": "p0.2",
+  "expected": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8",
+  "before": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8",
+  "after": "05b985e2a10990b802e16267d3e273fac6aa07deb9964e2c9a5994542b444928",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 6753,
+  "p0ComparatorAfterVsExpected": "6599 pixels (ratio 0.03 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-dark-phone/profile-validation.png",
+  "layer": "accepted",
+  "expected": "53f9152dc1deb11916165b1d3047761e4e72d7eda934b595adf35f949759bb18",
+  "before": "53f9152dc1deb11916165b1d3047761e4e72d7eda934b595adf35f949759bb18",
+  "after": "0f3a4108c15f1319245ea6e51311cd7bf410c28ba0bbfd3986ac0dff64089b2e",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 6753,
+  "p0ComparatorAfterVsExpected": "6728 pixels (ratio 0.03 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-dark-phone/settings-saved.png",
+  "layer": "p0-drift",
+  "expected": "ce46c1231e9b8837f1ecc9bc0e030398068559f709d8fefeb6a2d39f1d74c69a",
+  "before": "ce46c1231e9b8837f1ecc9bc0e030398068559f709d8fefeb6a2d39f1d74c69a",
+  "after": "40656db95780414b9ffba66014745816e1eba22a958fad4a30ef14ea625db8a5",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 6753,
+  "p0ComparatorAfterVsExpected": "6726 pixels (ratio 0.03 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-light-desktop/notification-error.png",
+  "layer": "p0-drift",
+  "expected": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324",
+  "before": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324",
+  "after": "b0dafa152e0862a583d18ccb6749b5be97e83b382e5bb564413c3517276353c1",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 29906,
+  "p0ComparatorAfterVsExpected": "3131 pixels (ratio 0.01 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-light-desktop/profile-validation.png",
+  "layer": "p0-drift",
+  "expected": "93218ccee8fd996ba118008834cd9aba8da2f39f3267397403da2f6d9032fae4",
+  "before": "93218ccee8fd996ba118008834cd9aba8da2f39f3267397403da2f6d9032fae4",
+  "after": "9f1ee22bac54e35d0e5a72d5e0e430912e72e596cce0f8835ea53b6aa0a202f1",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 47775,
+  "p0ComparatorAfterVsExpected": "9314 pixels (ratio 0.01 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-light-desktop/settings-saved.png",
+  "layer": "p0-drift",
+  "expected": "7fb81b5733dd607a66a469727f8cfc5fab817b2b9d8aff9dc4c4c0fefa7cb773",
+  "before": "7fb81b5733dd607a66a469727f8cfc5fab817b2b9d8aff9dc4c4c0fefa7cb773",
+  "after": "3f7a0158db8fd5c2eaa210c45386bf7d37377bba6a9c23f7705f719bc12ace99",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 63266,
+  "p0ComparatorAfterVsExpected": "14799 pixels (ratio 0.02 of all image pixels) are different."
+ },
+ {
+  "screenshot": "webkit-light-phone/notification-error.png",
+  "layer": "p0.2",
+  "expected": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8",
+  "before": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8",
+  "after": "a5295cf3dc9fecaa41b0404bc12cc62ba9e6cf8d0b00fc022c3ed82f4d495961",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 6753,
+  "p0ComparatorAfterVsExpected": "match"
+ },
+ {
+  "screenshot": "webkit-light-phone/profile-validation.png",
+  "layer": "accepted",
+  "expected": "0fc4f654253d7a41ec2cb664221f70105190aafc6c9c89238ff86f7f51d328db",
+  "before": "0fc4f654253d7a41ec2cb664221f70105190aafc6c9c89238ff86f7f51d328db",
+  "after": "fe86cd9b21ba30505c00b74bb38c4c5442c2d979a30237e12630bde31c3c4333",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 6753,
+  "p0ComparatorAfterVsExpected": "match"
+ },
+ {
+  "screenshot": "webkit-light-phone/settings-saved.png",
+  "layer": "p0-drift",
+  "expected": "bef63df2b75db164429ebe54d9801da5f60f07d560baba15c84e25f9a00c713f",
+  "before": "bef63df2b75db164429ebe54d9801da5f60f07d560baba15c84e25f9a00c713f",
+  "after": "645f9b38aa43728c1c594cde778aa1321f04f072862a1cbe4bf8d39dad9c4f43",
+  "beforeMatchesExpected": true,
+  "beforeBytesEqualExpected": true,
+  "differentPixels": 6753,
+  "p0ComparatorAfterVsExpected": "match"
+ }
+]

@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/after2 && git log --oneline -1 && git status --short && unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep \" select-\"'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_db559f26c594",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T05:33:19.730870+00:00",
+ "exitCode": null,
+ "outputSha256": "f96a43be0141cf1cdf6cf785399755509d9cdcf2fb804419016d9e292b73b276",
+ "outputBytes": 161608,
+ "note": "Killed by the runner (drain_cap) at 05:33 UTC when this session's engine was recycled, after 869 of 1480 tests had passed; Playwright writes its JSON report only at the end, so no sample survived. Re-run in chunks that are archived one by one (fix-select-after-*)."
+}

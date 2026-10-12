@@ -1,5 +1,6 @@
-import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
+import { type MergeRecoveryAction, type ProjectPromotionView, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
+  AppstoreOutlined,
   ArrowDownOutlined,
   ArrowLeftOutlined,
   ArrowUpOutlined,
@@ -17,6 +18,7 @@ import {
   EditOutlined,
   EllipsisOutlined,
   EyeOutlined,
+  ExclamationCircleOutlined,
   ExportOutlined,
   FolderOutlined,
   GlobalOutlined,
@@ -69,15 +71,16 @@ import {
 import { memoizeEventFull } from '../lib/eventFull';
 import { plainPreview } from '../lib/plainPreview';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
   Fragment,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  type RefObject,
   type TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -92,6 +95,7 @@ import {
   dragOffset,
   isFullSwipe,
   restingOffset,
+  sessionMovable,
   sessionSwipeActions,
   settleSwipe,
   swipeActionsOnScreen,
@@ -122,6 +126,7 @@ import {
   PROJECT_SESSION_REFRESH_MS,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
+  projectIntegrationQuery,
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
@@ -156,19 +161,24 @@ import {
 import {
   type ConfiguredProvider,
   clampPermissionModeForModel,
+  permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
-  defaultModelForProvider,
+  defaultEngineOf,
+  defaultModelFor,
+  defaultModelKey,
   effectiveSessionEffort,
   effectiveSessionModel,
-  effortOptionsForProvider,
+  effortOptionsFor,
+  isLoginProvider,
   livePinnedModel,
-  modelOptionsForProvider,
-  newSessionEffortForProvider,
-  newSessionModelForProvider,
-  normalizeEffortForProvider,
+  modelOptionsFor,
+  newSessionEffortFor,
+  newSessionModelFor,
+  normalizeEffortFor,
   providerIdentityResolved,
-  runtimeForProvider,
+  sessionEngineOf,
+  sessionPick,
   supportsAuto,
 } from '../lib/workspaceDefaults';
 import {
@@ -177,7 +187,7 @@ import {
   localStatusRows,
   openSlash,
   pickSlash as replaceSlashToken,
-  slashAssetMatchesProvider,
+  slashAssetMatchesEngine,
   slashCommandName,
   slashMatches as getSlashMatches,
   slashToken as getSlashToken,
@@ -186,7 +196,8 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
-import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
+import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
+import { accountNameOf, accountPlanUsage, ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY } from '../lib/engineAccounts';
 import { poolAccountHelp, poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { isLoginPool, poolSessionLoginMember } from '../lib/codexLogin';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
@@ -196,31 +207,34 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
-import { NewSessionProviderHero } from './NewSessionProviderHero';
+import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
+import { ManagedRunnerNotice } from './ManagedRunnerNotice';
+import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import {
+  currentEngineChoice,
   currentProviderChoice,
-  providerChoices,
-  sameRuntimeChoices,
+  engineChoices,
+  engineTitleFor,
+  keyName,
+  providerNameOn,
+  type ChoiceSources,
+  type ProviderChoice,
 } from '../lib/sessionProviderChoices';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
-import { WatchWakeCard } from './WatchWakeCard';
-import { BackgroundWakeCard } from './BackgroundWakeCard';
-import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
+import { WatchWakeNamesCtx } from './WatchWakeCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
-import { ProjectStartedCard } from './ProjectStartedCard';
-import { SessionMessageCard } from './SessionMessageCard';
 import {
-  parseWatchWake,
+  ago,
+  sameResourceId,
   sessionWatching,
   watchingCountWord,
   watchingSessions,
   watchingWord,
   type SessionWatching,
 } from '../lib/watches';
-import { parseBackgroundWake } from '../lib/backgroundWake';
-import { returnsToComposer } from '../lib/queuedTurnRestore';
+import { isQueuedWatchWake, returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import {
@@ -275,9 +289,17 @@ import {
   unpinSession,
   updateSessionConfig,
   switchSessionAccount,
+  type TurnCards,
   uploadAttachment,
 } from '../api';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { DshRepairCard } from './Transcript';
+import {
+  RunNeverStartedCard,
+  runNeverStarted,
+  type NeverStartedSession,
+} from './RunNeverStartedCard';
+import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
@@ -296,7 +318,7 @@ import {
   SessionCriteriaDecisionCard,
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
-import { CoordinatorQuestions } from './CoordinatorQuestionCard';
+import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import {
   ItemAsCard,
   exceptionCardRows,
@@ -310,8 +332,15 @@ import {
   ProjectPromotionReceipt,
   promotionChatBanner,
   promotionChatContext,
+  promotionItem,
   promotionRecordMoment,
 } from './ProjectPromotionCard';
+import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
+import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
+import { landingCard } from './ProjectPanoramaHeader';
+import { LandingJobsSheet } from './LandingJobsSheet';
+import { ProjectLandingCard } from './ProjectLandingCard';
+import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
   CHAT_SUBJECT_GONE,
@@ -331,6 +360,7 @@ import {
   DECISION_SENDING_BACK_PREFIX,
   EvidenceDecisionReceipt,
   SessionEvidenceDecisionCard,
+  coordinatorQueueRows,
   evidenceDecisionCardRows,
   evidenceDecisionRefusal,
   sendEvidenceDecision,
@@ -346,10 +376,17 @@ import {
 import {
   READY_TO_START,
   START_PROJECT_INTENT,
+  START_ROW_OWN,
   confirmedChangesProjectKey,
+  mainBranchName,
+  projectStarted,
+  startMainBranch,
+  startPageRow,
   type SettlementQuestion,
+  type StartPageRow,
 } from '../lib/projectStart';
-import { SessionProjectSettlementCard } from './ProjectSettlementCard';
+import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
+import { ProjectWhyNotDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -367,19 +404,22 @@ import {
 } from './OwnerConfirmationCard';
 import { OwnerConfirmationReopen } from './OwnerConfirmationReopen';
 import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
-import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
+import { Button } from './ui/Button';
+import { useConfirm } from './ui/ConfirmDialog';
+import { Image } from './ui/Image';
+import { Menu, type MenuItem } from './ui/Menu';
+import { Popover } from './ui/Popover';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
+import { Textarea } from './ui/Textarea';
+import { Tooltip } from './ui/Tooltip';
 import type {
-  ConfirmationReturnCard,
-  ConfirmationReviewRequestCard,
-  OpenItemDeliveryCard as OpenItemDelivery,
-  ProjectStartedCard as ProjectStarted,
-  SessionMessageCard as SessionMessage,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -388,11 +428,15 @@ import {
   accountOfEnv,
   accountToStartOn,
   AgentProvider,
+  CONTINUE_MESSAGE,
+  ENGINE_CLI_NAMES,
   derivePermissionSemantics,
   fastModeAvailable,
+  isAccountEngine,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
   TRASH_RETENTION_DAYS,
+  withEnginePlanUsage,
   type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
@@ -408,6 +452,7 @@ import {
   sessionIsStarting,
   sessionLifecycleLabel,
   sessionLifecycleStateOf,
+  sessionReadingState,
   sessionRetryPending,
   sessionRunStateOf,
   sessionRunStatusOf,
@@ -431,10 +476,12 @@ import {
   acceptedUserTurnLanded,
   clearAcceptedUserTurnsForSession,
   clearAcceptedUserTurnsForTurn,
+  queuedTurnEvent,
   queuedTurnsOutsideTranscript,
   reconcileAcceptedUserTurnSnapshot,
   reconcileQueuedTurnSnapshot,
   transcriptEventsWithDurableDeliveryReceipts,
+  turnCardsOf,
   type AcceptedUserTurn,
 } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
@@ -458,7 +505,8 @@ import {
   type TaskRunConflict,
   type TaskRunConflictAction,
 } from '../lib/taskRunHandoff';
-import { TaskRunHandedOverNotice, TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { TaskRunHandedOverNotice, TaskRunHandoffNotice, reportTaskRunConflict } from './TaskRunHandoffNotice';
+import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
   isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
@@ -485,6 +533,7 @@ import {
   waitingNoticeScope,
 } from '../lib/runnerSlots';
 import { reseedWithActiveSnapshot } from '../lib/reseedActiveSnapshot';
+import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 
 interface RunEvent {
   seq: number;
@@ -498,7 +547,11 @@ interface RunEvent {
 // until the current turn finishes. Tracked locally so the composer can show it and
 // offer to withdraw it before the runner picks it up. A `!cmd` shell turn queues the
 // same way, so it gets a bubble too — rendered as the command it will run.
-export interface QueuedTurn {
+//
+// The cards it is drawn as (`TurnCards`) are the ones the active snapshot carried, exactly as the
+// accepted-turn placeholder holds them: the queued tail draws the card the transcript will, rather
+// than a bubble it replaces when the runner takes the turn.
+export interface QueuedTurn extends TurnCards {
   turnId: string;
   content: string;
   shell?: boolean;
@@ -514,19 +567,6 @@ export interface QueuedTurn {
   attachments?: { id: string; mimeType: string }[];
   /** When the server queued it — the receipt's own timestamp, as an accepted turn's `acceptedAt`. */
   createdAt?: string;
-  /** An exception item's delivery carries the item's own fields beside its words, exactly as the
-   *  accepted-turn placeholder does (`AcceptedUserTurn.openItemDelivery`): the queued tail draws the
-   *  card the transcript will, rather than a bubble it replaces when the runner takes the turn. */
-  openItemDelivery?: OpenItemDelivery;
-  /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
-  projectStarted?: ProjectStarted;
-  /** And for a confirmation review's two turns: the request a reviewer is handed, and the reviewer's
-   *  return handed to the run (`ActiveSessionTurn.confirmationReviewRequest` / `confirmationReturn`). */
-  confirmationReviewRequest?: ConfirmationReviewRequestCard;
-  confirmationReturn?: ConfirmationReturnCard;
-  /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
-   *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
-  sessionMessage?: SessionMessage;
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
 }
@@ -605,6 +645,9 @@ interface ComposerSendVars {
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+// What a staged picture's thumbnail is called when its file has no name. The thumbnail is the button that opens the
+// picture in the viewer and is named by the file; the picture itself stays decorative (`alt=""`).
+const PREVIEW_IMAGE_LABEL = 'Preview image';
 
 // Compact byte size for a staged file chip ("12 KB", "3.4 MB").
 const fmtBytes = (n: number): string => {
@@ -639,11 +682,29 @@ const IS_MAC =
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
 const COMPLETE_SESSION_HINT = IS_MAC ? '⌘D' : 'Ctrl D';
 /** A runner that carries a session's conversation onto another of its accounts (runner
- *  codex_account_move.go, claude_account_move.go) — the one kind the composer offers the move on. */
+ *  codex_account_move.go, claude_account_move.go) — the one kind the composer offers the move on.
+ *  An Antigravity conversation lives in the session's own directory, never in an account's, so there
+ *  is nothing to carry: a runner that keeps Antigravity accounts at all can move one. */
 const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
   codex: 'codex-account-move/v1',
   claude: 'claude-account-move/v1',
+  antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY,
+  kimi: 'kimi-account-move/v1',
 };
+/** Where a session, and its workspace, keep the account each engine runs on — and whether a session's
+ *  was picked by hand. */
+const ACCOUNT_FIELD = {
+  codex: 'codexAccount',
+  claude: 'claudeAccount',
+  antigravity: 'antigravityAccount',
+  kimi: 'kimiAccount',
+} as const satisfies Record<AccountEngine, string>;
+const ACCOUNT_PINNED_FIELD = {
+  codex: 'codexAccountPinned',
+  claude: 'claudeAccountPinned',
+  antigravity: 'antigravityAccountPinned',
+  kimi: 'kimiAccountPinned',
+} as const satisfies Record<AccountEngine, string>;
 /** What the composer sends to put a session back on Automatic (PATCH /sessions/:id/account). */
 const AUTOMATIC_ACCOUNT = 'automatic';
 
@@ -763,20 +824,30 @@ function ContextWindowIndicator({
   );
   const tier = pct >= 90 ? 'danger' : pct >= 75 ? 'warn' : 'neutral';
   return (
-    <Popover content={pop} title="Context" placement="topRight" trigger={['hover', 'click']}>
-      <span
-        className="composer-pill composer-usage"
-        aria-label={
-          !known
-            ? 'Context window not reported yet'
-            : sized
-              ? `Context window ${pct}%`
-              : `Context ${fmtTokens(tokens)} tokens, window not reported`
-        }
-      >
-        <ContextRing pct={pct} tier={tier} />
-        <span className="composer-usage-pct">{headline}</span>
-      </span>
+    <Popover
+      title="Context"
+      side="top"
+      align="end"
+      openOnHover
+      // The pill stays the span it was drawn as; the popover makes it a button for the keyboard.
+      nativeButton={false}
+      trigger={
+        <span
+          className="composer-pill composer-usage"
+          aria-label={
+            !known
+              ? 'Context window not reported yet'
+              : sized
+                ? `Context window ${pct}%`
+                : `Context ${fmtTokens(tokens)} tokens, window not reported`
+          }
+        >
+          <ContextRing pct={pct} tier={tier} />
+          <span className="composer-usage-pct">{headline}</span>
+        </span>
+      }
+    >
+      {pop}
     </Popover>
   );
 }
@@ -794,6 +865,8 @@ const SESSION_VIEWS: { value: SessionView; label: string }[] = [
 // page is asked for — roughly a couple of rows, so the list is already widened by the time
 // the user reaches the bottom.
 const SESSION_LOAD_MORE_PX = 240;
+/** How long a finger rests on a phone's session row before its menu opens, as iOS's context menu. */
+const LONG_PRESS_MS = 500;
 
 // Drag-resizable width of the left session column, persisted across reloads.
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
@@ -803,6 +876,11 @@ const SESSION_COL_DEFAULT = 320;
 
 // Whether the session list's Pinned section is folded to its heading, persisted across reloads.
 const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
+
+// Two taps on the composer this close in time and place are one double-tap (the platforms' own
+// double-tap window).
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP_PX = 24;
 
 // Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
 // the list doesn't open-then-immediately-close a connection per session skipped past.
@@ -837,9 +915,10 @@ const JUMP_TO_START_PAGES = 30;
 // same). The follow a content update triggers lands just after the rows grew, and the gap read in
 // between — the normal state while a reply streams — must not flash the button.
 const STRANDED_AFTER_MS = 400;
-// What the sticky bar calls a turn the person typed. A watch's wake carries its own label on its card
-// instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
-// screen contradicting itself — which is what the account owner photographed on 2026-09-17.
+// What the sticky bar calls a turn the person typed. A card the control plane draws for a turn nobody
+// typed carries its own label instead (`data-sticky-label`), since saying this above a card reading
+// "not typed by you" is the screen contradicting itself — which is what the account owner
+// photographed on 2026-09-17, over a watch's wake.
 const STICKY_LABEL = 'Your question';
 // How long a cached /background scan stays fresh. `/background` scans the session's whole
 // tool-event history, so re-opening a session (or scrubbing the list) within this window paints
@@ -885,6 +964,9 @@ function pushHistory(sessionId: string | undefined, entry: string): void {
 
 // Recent sessions read better as relative time ("3h ago"); anything older than a
 // day falls back to an absolute month/day stamp. hour12:false keeps it compact.
+/** A row of a project's sessions page that is not a session: a merge into main, at its instant. */
+type ProjectPageMerge = { kind: 'merge'; id: string; promotion: ProjectPromotionView };
+
 const fmtTime = (d?: string): string => {
   if (!d) return '';
   const t = new Date(d).getTime();
@@ -907,6 +989,22 @@ const fmtTime = (d?: string): string => {
 // Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create;
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
+
+// "5:38 PM" today, "Wed, Aug 6, 5:38 PM" beyond it — a bare clock time on another day misleads
+// (the same call the transcript's turn foot makes).
+const fmtClock = (at: Date): string => {
+  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return at.toDateString() === new Date().toDateString()
+    ? time
+    : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
+};
+
+// The recap's prefix: what the line is, and when the server wrote it (Session.recapAt). A recap
+// that arrived with no time on it — an older control plane — keeps the word without one.
+const recapLabel = (recapAt?: string | null): string => {
+  const at = recapAt ? new Date(recapAt) : null;
+  return at && !Number.isNaN(at.getTime()) ? `Recap · ${fmtClock(at)}` : 'Recap';
+};
 
 // The runner's own sentence about a finished commit — which background jobs were live in the
 // checkout while it committed, and what it did about them (commitResultMessage). Trimmed because a
@@ -969,6 +1067,8 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
+  /** A muted prefix naming what the line is, before `text` — the recap's "Recap · 5:38 PM". */
+  label?: string;
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -998,6 +1098,11 @@ const OWNER_ITEM_WORDS: Record<string, string> = {
   FUSE_PAUSED: OWNER_ITEM_PAUSED,
 };
 
+/** The words above for an item whose project's main branch is `main` by name (the item's
+ *  `mainBranch`): a merge approval names the branch it merges into. */
+const ownerItemWords = (main: string): Record<string, string> =>
+  ({ ...OWNER_ITEM_WORDS, PROMOTION_APPROVAL: `Approve merge to ${main}` });
+
 /**
  * The item a row names: the oldest one it can name, which is the same item the needs-you bar above
  * the list points at. Mirrors `NeedsYouLogic.oldestItemWord` — an unparseable instant sorts last
@@ -1008,7 +1113,7 @@ const ownerItemWord = (s: any): string | null => {
   for (const item of s.ownerItems ?? []) {
     const word = item?.kind === 'ESCALATED' && item?.need
       ? `${OWNER_ITEM_ESCALATED}${OWNER_ITEM_NEED_SEPARATOR}${item.need}`
-      : OWNER_ITEM_WORDS[item?.kind];
+      : ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];
     if (!word) continue;
     const at = Date.parse(item?.since ?? '');
     const key = Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at;
@@ -1031,13 +1136,20 @@ const waitingLabel = (s: any): string => {
   // A project its coordinator asked to start: the row says what the card in it asks, not an
   // approval nobody is being asked for.
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
+  if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
+  if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
   return 'Waiting for approval';
 };
 
 // `watching` is this session as an observer — what its row says about the live watches that will
 // resume it (lib/watches `watchingSessions`) — and absent wherever a caller holds no watches.
-export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null): SessionLine => {
-  const state = sessionRunStateOf(s);
+// `recaps` is the account's Session recaps switch (Settings): on unless turned off, and off means
+// the row falls through to the raw reply exactly as it did before the recap existed. It only ever
+// gates that one line — every live line above it is untouched.
+export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null, recaps = true): SessionLine => {
+  // `sessionReadingState`, not the run's own status: a refused SOURCE is over (SR34) and its row
+  // wears what a dead run wears, rather than the Starting line the wait would otherwise draw.
+  const state = sessionReadingState(s);
   // Somebody is waiting on YOU here, which outranks everything else the row could say: every other
   // line reports what the workspace is doing, and this one is the only one you can act on.
   //
@@ -1089,6 +1201,12 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
   if (s.lastUserText) return sentLine(s.lastUserText);
+  // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
+  // the server wrote about the session, not the raw last reply flattened down to one line. Only
+  // here — below every live line above — so a working session still says what it is doing. Off
+  // with the account's Session recaps switch, the row falls through to the reply preview below.
+  if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
+    return { label: recapLabel(s.recapAt), text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
@@ -1133,8 +1251,7 @@ export function SessionTitleRow({
       <div className="session-title">{s.title}</div>
       {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
         <Tooltip
-          title={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}
-          placement="top"
+          content={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}
           open={hoverTipOpen}
         >
           <span className="session-merge-badge">⚠</span>
@@ -1149,6 +1266,46 @@ export function SessionTitleRow({
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
+    </div>
+  );
+}
+
+/** Rename… on a session row: the title in a field where the row's two lines were, drawn as a
+ * folder's Rename… is. The header editor's rules: Return or leaving the field hands back the trimmed
+ * title — unchanged text too, as the header does — and Esc or an emptied field hands back null. */
+function SessionRowRename({ title, onDone }: { title: string; onDone: (title: string | null) => void }) {
+  const [draft, setDraft] = useState(title);
+  const cancelled = useRef(false);
+  return (
+    <div className="session-rename">
+      <input
+        className="folder-name-input"
+        autoFocus
+        maxLength={200}
+        aria-label="Session title"
+        value={draft}
+        onFocus={(e) => {
+          // All of it selected (typing replaces it), with its head in view: Chromium keeps the field
+          // scrolled to the end it focused at, whichever way the selection runs.
+          const el = e.currentTarget;
+          el.setSelectionRange(0, el.value.length, 'backward');
+          el.scrollLeft = 0;
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelled.current = true;
+            e.currentTarget.blur();
+          }
+        }}
+        onBlur={() => onDone(cancelled.current ? null : draft.trim() || null)}
+      />
+      <span className="session-folder-hint">{FOLDER_COPY.editHint}</span>
     </div>
   );
 }
@@ -1168,12 +1325,100 @@ function SessionProjectProgressBar({ counts, runningCount }: { counts: ProjectSi
   );
 }
 
-/** A project occupies the coordinator's row, using the same two lines as a session. */
+/** The start, under the progress line of a project nobody has started (docs/mocks/
+ *  project-start-sessions-page; iOS `SessionProjectPage.startLine`): the coordinator's request —
+ *  Ready to start, since when, what it suggests, Review and start — or, with none, the owner's own
+ *  Start…, quiet. Either opens the start card over the page, and only that card's Start the project
+ *  starts anything. Not counted as needing the reader, as a start request is counted nowhere. */
+function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; projectId: string }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const asked = start.kind === 'asked' ? start.row : null;
+  const settings = asked?.startRequest?.settings ?? null;
+  // The integration read the landing line beside it holds (one query key): what the suggestion's
+  // Directly into names is the main branch the start card opens with.
+  const integration = useQuery(projectIntegrationQuery(projectId));
+  const standing = integration.data && typeof integration.data === 'object' ? integration.data : null;
+  return (
+    <div className="session-project-start">
+      {asked ? (
+        <div className="session-project-start-ask">
+          <div className="session-project-start-line">
+            <span className="session-project-start-dot is-asked" aria-hidden="true" />
+            <span className="session-project-start-title">{READY_TO_START}</span>
+            <span className="session-project-start-ago">
+              {SESSION_PROJECT_COPY.startAsked(ago(asked.waitingSince, Date.now()))}
+            </span>
+          </div>
+          {settings ? (
+            <div className="session-project-start-suggestion">
+              {SESSION_PROJECT_COPY.startSuggestion(settings, startMainBranch(settings.upstreamRef, standing))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="session-project-start-line">
+          <span className="session-project-start-dot" aria-hidden="true" />
+          <span>{SESSION_PROJECT_COPY.startNotAsked}</span>
+        </div>
+      )}
+      <button type="button" className={`session-project-start-press${asked ? ' is-primary' : ''}`}
+        title={SESSION_PROJECT_COPY.startHint} onClick={() => setOpen(true)}>
+        {asked ? SESSION_PROJECT_COPY.startReview : START_ROW_OWN}
+      </button>
+      <ProjectStartDialog projectId={projectId} asked={asked !== null} open={open} onClose={() => setOpen(false)}
+        onViewTasks={() => {
+          setOpen(false);
+          navigate(`/projects/${encodeId(projectId)}`);
+        }} />
+    </div>
+  );
+}
+
+/** The landing card of a project's sessions page, under the progress card and before the merge card
+ *  (iOS `SessionProjectPage.landingCard`; owner decision 2026-10-11, docs/mocks/project-landing-card):
+ *  the card `landingCard` builds off the project page's own read, ticking once a second while a task
+ *  lands, and a press that lists every job in flight (`LandingJobsSheet`) — or, from a server that
+ *  does not list them, opens the project page. A merge job's is the merge card's
+ *  (`ProjectMergeStrip`). Its own component, so the second hand redraws this card and not the
+ *  console around it. */
+function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
+  const integration = useQuery(projectIntegrationQuery(projectId));
+  const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
+  const live = view?.inFlight != null && !isMergeJob(view.inFlight);
+  const listed = view?.inFlightJobs !== undefined;
+  const [jobsOpen, setJobsOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return undefined;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [live]);
+  const card = live && view
+    ? landingCard(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
+    : null;
+  return (
+    <>
+      {card ? (
+        <ProjectLandingCard projectId={projectId} card={card} dialog={listed}
+          onPress={listed ? () => setJobsOpen(true) : onOpen} />
+      ) : null}
+      {/* Portalled out of the card, and kept while open even if the card goes, so a list being read
+          does not vanish under the reader when its last job lands. */}
+      {listed || jobsOpen ? (
+        <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
+      ) : null}
+    </>
+  );
+}
+
+/** A project occupies the coordinator's row, using the same two lines as a session. A click opens
+ *  the project's sessions page; the menu's Open Session reaches the grouping target. */
 export function SessionProjectListRow({
   project,
   active,
   onOpen,
-  onSessions,
   menu,
   menuOpen,
   onMenuOpenChange,
@@ -1182,8 +1427,7 @@ export function SessionProjectListRow({
   project: SessionProjectRow<any>;
   active: boolean;
   onOpen: () => void;
-  onSessions: () => void;
-  menu: MenuProps;
+  menu: MenuItem[];
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
   swipe?: {
@@ -1253,12 +1497,9 @@ export function SessionProjectListRow({
             <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
           </div>
           <div className="session-sub">
-            <button
-              type="button"
+            <span
               className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}`}
               title={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)}
-              aria-label={`Sessions for ${project.title}`}
-              onClick={(e) => { e.stopPropagation(); onSessions(); }}
             >
               {counts ? (
                 <>
@@ -1266,7 +1507,7 @@ export function SessionProjectListRow({
                   {SESSION_PROJECT_COPY.progress(counts.done, counts.total)}
                 </>
               ) : project.status}
-            </button>
+            </span>
             <div
               className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
               title={project.line.text}
@@ -1278,11 +1519,18 @@ export function SessionProjectListRow({
       </div>
       <div className="session-right">
         <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-          <Dropdown trigger={['click']} placement="bottomRight" menu={menu} open={menuOpen} onOpenChange={onMenuOpenChange}>
-            <button type="button" className="session-kebab" aria-label="Project actions" aria-haspopup="menu" aria-expanded={menuOpen}>
-              <MoreOutlined />
-            </button>
-          </Dropdown>
+          <Menu
+            side="bottom"
+            align="end"
+            items={menu}
+            open={menuOpen}
+            onOpenChange={onMenuOpenChange}
+            trigger={
+              <button type="button" className="session-kebab" aria-label="Project actions">
+                <MoreOutlined />
+              </button>
+            }
+          />
         </div>
       </div>
     </div>
@@ -1307,7 +1555,7 @@ export function SessionTagChips({
 
   return (
     <>
-      <Tooltip title={names} placement="top" open={tooltipOpen}>
+      <Tooltip content={names} open={tooltipOpen}>
         <span className="session-tag-chips" aria-hidden="true">
           <span className="session-tag-named">
             <span
@@ -1344,7 +1592,8 @@ export function SessionTagChips({
 // is coming, and nobody is being asked for one. Absent wherever a caller has no watches to hand
 // (the search palette's rows), which keeps the previous reading rather than inventing one.
 export function statusLabel(session: any, watching?: string | null): string {
-  const state = sessionRunStateOf(session);
+  // See sessionLine: a refused SOURCE reads as the failure it is.
+  const state = sessionReadingState(session);
   // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
   // decision is not held open by a turn, so it is still waiting once the conversation parks.
   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
@@ -1401,7 +1650,8 @@ export function orbitLinkStateWord(row: any): string {
  * these for the sessions filed in it (lib/sessionFolders), so a folder and its rows can't disagree.
  */
 export function statusGlyphMotion(session: any, watching?: string | null): 'spinner' | 'pulse' | null {
-  const state = sessionRunStateOf(session);
+  // See sessionLine: nothing about a refused run is in motion.
+  const state = sessionReadingState(session);
   if ((session.pendingApprovals ?? 0) > 0 || state === 'SUCCEEDED') return null;
   if (waitingNoticeFor(session) || isGenerating(session, state)) return 'spinner';
   if (state !== 'AWAITING_INPUT') return null;
@@ -1415,9 +1665,10 @@ export function statusGlyphMotion(session: any, watching?: string | null): 'spin
 export const sessionNeedsYou = (session: any): boolean =>
   (session.pendingApprovals ?? 0) > 0 && session.waitingKind !== 'START_REQUEST';
 
+// The spinner turns, and so does its box: its tip is placed once, as the replaced tip was, instead of bobbing with it.
 function RunningStatusIcon() {
   return (
-    <Tooltip title="Running">
+    <Tooltip content="Running" trackTrigger={false}>
       <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize: 16 }} />
     </Tooltip>
   );
@@ -1434,26 +1685,27 @@ function RunningStatusIcon() {
 // `watching` is the word for the live watches that will resume this session (`statusLabel`'s), and
 // absent wherever a caller holds no watches.
 export function StatusIcon({ session, watching }: { session: any; watching?: string | null }) {
-  const state = sessionRunStateOf(session);
+  // See sessionLine: the glyph agrees with the word beside it on a refused run too.
+  const state = sessionReadingState(session);
   const fontSize = 16;
   // First, and outside the generating gate — see `statusLabel`. The glyph and the label branch in
   // the same order on purpose: they are read together on one row.
   if ((session.pendingApprovals ?? 0) > 0)
     return (
-      <Tooltip title={waitingLabel(session)}>
+      <Tooltip content={waitingLabel(session)}>
         <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />
       </Tooltip>
     );
   // Under review: a clock in the neutral tone, beside the row's line in the same place (§5 N3).
   if (session.confirmationUnderReview)
     return (
-      <Tooltip title={UNDER_REVIEW}>
+      <Tooltip content={UNDER_REVIEW}>
         <ClockCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   if (state === 'SUCCEEDED')
     return (
-      <Tooltip title="Succeeded">
+      <Tooltip content="Succeeded">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
@@ -1461,7 +1713,7 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
   // glyph would read as a fourth outcome for what is still work in progress.
   if (waitingNoticeFor(session))
     return (
-      <Tooltip title={startingTitle(session)}>
+      <Tooltip content={startingTitle(session)} trackTrigger={false}>
         <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
       </Tooltip>
     );
@@ -1484,13 +1736,13 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
     // The strip's eye, still, because nothing here is running.
     if (watching && work?.kind !== 'subagent')
       return (
-        <Tooltip title={watching}>
+        <Tooltip content={watching}>
           <EyeOutlined style={{ color: 'var(--text-3)', fontSize }} />
         </Tooltip>
       );
     if (work)
       return (
-        <Tooltip title={work.text}>
+        <Tooltip content={work.text} trackTrigger={work.kind !== 'subagent'}>
           {work.kind === 'subagent' ? (
             <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
           ) : (
@@ -1502,7 +1754,7 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
         </Tooltip>
       );
     return (
-      <Tooltip title="Waiting for your reply">
+      <Tooltip content="Waiting for your reply">
         <MessageOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
@@ -1514,26 +1766,26 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
     // for the 30 seconds before it fixes itself.
     if (sessionRetryPending(session))
       return (
-        <Tooltip title="Retrying — the run resumes on its own">
+        <Tooltip content="Retrying — the run resumes on its own">
           <ClockCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
         </Tooltip>
       );
     const err: string = typeof session.error === 'string' ? session.error : '';
     if (err.toLowerCase().includes('offline'))
       return (
-        <Tooltip title="Disconnected — runner went offline">
+        <Tooltip content="Disconnected — runner went offline">
           <DisconnectOutlined style={{ color: 'var(--text-3)', fontSize }} />
         </Tooltip>
       );
     return (
-      <Tooltip title={err || 'Failed'}>
+      <Tooltip content={err || 'Failed'}>
         <CloseCircleFilled style={{ color: 'var(--error)', fontSize }} />
       </Tooltip>
     );
   }
   if (state === 'INTERRUPTED')
     return (
-      <Tooltip title="Interrupted">
+      <Tooltip content="Interrupted">
         <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
@@ -1542,13 +1794,13 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
   // rather than three because resume eligibility never depended on which act ended it.
   if (state === 'ENDED')
     return (
-      <Tooltip title="Ended">
+      <Tooltip content="Ended">
         <CheckCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   // PENDING — waiting for an active turn slot
   return (
-    <Tooltip title={queuedTitle(session)}>
+    <Tooltip content={queuedTitle(session)}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
@@ -1670,7 +1922,7 @@ function StopSquareIcon({ className }: { className?: string }) {
   );
 }
 
-/** What withdrawing a queued wake costs: said beside the action, and again when it asks to confirm. */
+/** What withdrawing a queued wake costs, said when the action asks to confirm. */
 const WAKE_WITHDRAW_CONSEQUENCE =
   "If withdrawn, this session is not woken this time, and the watch won't send it again.";
 
@@ -1691,7 +1943,8 @@ const WAKE_WITHDRAW_CONSEQUENCE =
  *
  * A wake a watch queued leaves through the same door, but it was never anyone's to take back:
  * withdrawing it dead-letters the watch's delivery (WAKE_WITHDRAWN), so the session is not woken
- * and the watch does not send it again. The action says what it does, and the line what follows.
+ * and the watch does not send it again. The action says what it does, and the confirmation it asks
+ * for says what follows — not this line, which sits under the wake's one-line event.
  */
 export function QueuedTurnMeta({
   placement,
@@ -1718,11 +1971,7 @@ export function QueuedTurnMeta({
     : placement === 'steer'
       ? steerDeliveryState(undefined).label
       : 'Queued for next turn';
-  const why = delivery != null
-    ? deliveryFailureExplanation(deliveryCode, deliveryReason)
-    : wake && placement === 'queued'
-      ? WAKE_WITHDRAW_CONSEQUENCE
-      : undefined;
+  const why = delivery != null ? deliveryFailureExplanation(deliveryCode, deliveryReason) : undefined;
   return (
     <span className="chat-queued-meta" title={deliveryReason}>
       <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
@@ -1742,8 +1991,16 @@ export function QueuedTurnMeta({
 // WorkspaceView remounts across runner switches.
 const lastSessionByWorkspace = new Map<string, string>();
 
-export function WorkspaceView({ runner }: { runner: Runner }) {
-  const { modal } = AntApp.useApp();
+export function WorkspaceView({
+  runner,
+  managed = null,
+}: {
+  runner: Runner;
+  /** The managed runner, when this console's runner is it (WorkspaceConsole decides). */
+  managed?: ManagedRunner | null;
+}) {
+  // The confirmations this view asks, drawn by the holder at the foot of the view.
+  const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -1758,6 +2015,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Workspace — the permission Mode a new session starts in). Cached/deduped with the nav footer.
   const me = useQuery(meQuery());
   const accountDefaultPermissionMode = me.data?.preferences?.defaultPermissionMode;
+  // The account's Session recaps switch (Settings): on unless turned off, so a list row prefers the
+  // server's recap until somebody opts out. Every row builder below reads it through `sessionLine`.
+  const recapsEnabled = me.data?.preferences?.recaps !== false;
   // Configured providers (custom slugs borrowing a built-in runtime) merged into the composer's
   // model list + context-window sizing when the open session/workspace uses one. Cached/deduped
   // app-wide by React Query; empty until it loads (then the model pill's options fill in).
@@ -1876,10 +2136,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const modelPreferenceMut = useMutation({
     // Keep rapid picks in order, including across a composer remount.
     scope: { id: 'model-preferences' },
-    mutationFn: ({ provider, model }: { provider: string; model: string }) =>
+    // Remembered per engine and provider (`<engine>:<provider>`, docs/provider-engine-contract.md
+    // §6.5): one key's model on Claude Code is not its model on DeepSeek Harness.
+    mutationFn: ({ engine, provider, model }: { engine: string; provider: string; model: string }) =>
       api('/users/me/preferences', {
         method: 'PATCH',
-        body: { defaultModels: { [provider]: model } },
+        body: { defaultModels: { [defaultModelKey(engine, provider)]: model } },
       }),
   });
   // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
@@ -1922,6 +2184,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
   };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
+  // Each session row's ⋯ by session id: where focus goes back to when a confirmation its menu opened closes.
+  const rowKebabs = useRef(new Map<string, HTMLButtonElement>());
+  // The session row whose Rename… field is open (SessionRowRename), from its ⋯ or a held press.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   // Touch swipe actions for session rows: on mobile the row's actions sit behind a swipe,
   // laid out like the iOS list (lib/sessionSwipe) — swipe right
   // for Complete / Move to Open + Pin, swipe left for Delete.
@@ -1942,6 +2208,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     geometry: SwipeGeometry;
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
+  // A press held on a phone's session row opens that row's menu where the finger is, as iOS's
+  // context menu does — the row's ⋯ is not drawn on a touch phone. Any move past the swipe's
+  // deadzone cancels it, so a drag never opens it.
+  const [pressMenu, setPressMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const pressTimer = useRef<number | undefined>(undefined);
+  // Set when a held press opened the menu, so the release cancels the click it would send — that
+  // click would close the menu it just opened, or open the row.
+  const pressHeld = useRef(false);
+  const cancelPress = (): void => {
+    window.clearTimeout(pressTimer.current);
+    pressTimer.current = undefined;
+  };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRowId, setShareRowId] = useState<string | null>(null);
@@ -1958,14 +2236,33 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     saving: boolean;
   } | null>(null);
   const [folderMenuOpenId, setFolderMenuOpenId] = useState<string | null>(null);
+  // The folder page's ⋯, where focus goes back to when Delete Folder…'s confirmation closes.
+  const folderHeadMore = useRef<HTMLSpanElement>(null);
   // The field's latest state for its handlers: a blur fired as Return or Esc unmounts the field
   // reads it closed and saves nothing, and a second Return can't race the first save.
   const folderEditRef = useRef(folderEdit);
   folderEditRef.current = folderEdit;
   const folderSaving = useRef(false);
-  // Controlled because the multi-select tag items stay open after a choice; ordinary actions
-  // close it explicitly (Ant Dropdown otherwise keeps every item open in multiple-select mode).
+  // A pick that opens a field of its own (Rename…, New Folder…, Find) opens it once its menu has handed focus back
+  // to the menu's button: opened any sooner, the field can mount in the commit that removes the menu, whose focus
+  // return then still lands on the button and blurs (so closes) the field — in WebKit, as P4.2 found for Rename. A
+  // pick made before focus entered the menu leaves the button focused, so it is blurred first and the return is a
+  // real move. Without a button that takes focus back (a folder row's ⋯, hidden as its menu closes; a held press's
+  // point, gone with its menu) nothing comes back to race the field, and it opens on the next task.
+  const afterMenu = (button: HTMLElement | null | undefined, action: () => void): void => {
+    if (!button) {
+      window.setTimeout(action, 0);
+      return;
+    }
+    if (document.activeElement === button) button.blur();
+    button.addEventListener('focus', action, { once: true });
+  };
+  // The list's scope menu's trigger, which New Folder… waits on (above).
+  const scopeTrigger = useRef<HTMLSpanElement>(null);
+  // Controlled because the tag items stay open after a choice; ordinary actions close it explicitly.
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  // The header's ⋯, where focus goes back to when a confirmation its menu opened closes.
+  const headerMore = useRef<HTMLButtonElement>(null);
   // React Query publishes isPending through a batched render; this synchronous lock closes the
   // small window where a second full-selection PUT could otherwise start before items disable.
   const tagSaveInFlight = useRef(false);
@@ -2132,9 +2429,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     swipeClickGuard.current = false;
     const id = projectId ?? session.id;
     const from = swipeOpen && swipeOpen.id === id ? swipeOpen.side : null;
+    const rect = e.currentTarget.getBoundingClientRect();
     const geometry = projectId
       ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
-      : swipeGeometry(sessionRowView(session), e.currentTarget.getBoundingClientRect().width, canFullSwipe);
+      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, sessionMovable(session));
     swipeRef.current = {
       session,
       id,
@@ -2145,6 +2443,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       from,
       geometry,
     };
+    cancelPress();
+    if (projectId) return;
+    const at = { id, x: t.clientX - rect.left, y: t.clientY - rect.top };
+    pressTimer.current = window.setTimeout(() => {
+      pressTimer.current = undefined;
+      const held = swipeRef.current;
+      if (!held || held.id !== id || held.axis !== '') return;
+      swipeRef.current = null; // the finger now holds a menu, not a swipe
+      swipeClickGuard.current = true; // and a click its release still sends must not open the row
+      pressHeld.current = true;
+      setSwipeOpen(null);
+      setMenuOpenId(null);
+      setPressMenu(at);
+    }, LONG_PRESS_MS);
   };
   const onRowTouchMove = (e: ReactTouchEvent): void => {
     const st = swipeRef.current;
@@ -2156,6 +2468,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // list's own scroll and never drags the row.
     if (st.axis === '') {
       if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+      cancelPress();
       st.axis = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
       if (st.axis === 'h') {
         setSwipeOpen((cur) => (cur && cur.id !== st.id ? null : cur)); // starting a swipe shuts any other open row
@@ -2165,7 +2478,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     st.offset = dragOffset(st.from, mx, st.geometry); // synchronous truth for the touchend decision
     setSwipeDrag({ id: st.id, dx: st.offset, armed: isFullSwipe(st.offset, st.geometry) });
   };
-  const onRowTouchEnd = (): void => {
+  const onRowTouchEnd = (e?: ReactTouchEvent): void => {
+    cancelPress();
+    if (pressHeld.current) {
+      pressHeld.current = false;
+      e?.preventDefault();
+    }
     const st = swipeRef.current;
     swipeRef.current = null;
     if (!st || st.axis !== 'h') {
@@ -2183,6 +2501,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // An OS-interrupted gesture (system swipe, incoming call) fires touchcancel, not touchend —
   // drop the drag and let the row settle back to its committed open/closed state.
   const onRowTouchCancel = (): void => {
+    cancelPress();
+    pressHeld.current = false;
     swipeRef.current = null;
     setSwipeDrag(null);
   };
@@ -2388,12 +2708,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         .map((card) => card.getAttribute('data-open-item'))
         .join(' '),
     );
-    // A turn a watch or the control plane queued is one of these too — it is where the answer under
-    // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
-    // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
-    // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A background
-    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is
-    // still giving (BackgroundWakeCard), so it carries no label and the bar keeps the question.
+    // A turn the control plane queued is one of these too — it is where the answer under it starts,
+    // so it is where the bar has to point — but it is no bubble and nobody typed it, so its card
+    // hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued twin in the
+    // tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a background
+    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is still
+    // giving (WatchWakeCard, BackgroundWakeCard), so it carries no label and the bar keeps the question.
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
@@ -2811,18 +3131,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     !live &&
     !!selectedSession.startedAt &&
     !!runner.online;
-  const resumable = selectedSession
-    ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable)
-    : false;
   const selectedResumeBlockedReason = selectedSession
     ? sessionResumeBlockedReasonOf(selectedSession)
     : null;
+  // A managed runner that is asleep or on its way up comes back by itself, so work for it is not
+  // refused as offline: the server queues a message for it, and the resume of an ended session
+  // too (SessionsService.resume). Sending is what wakes it.
+  const runnerTakesWork = !!runner.online || !!managed?.display.acceptsWork;
+  const managedResumes = !!managed?.display.acceptsWork && selectedResumeBlockedReason === 'RUNNER_OFFLINE';
+  const resumable = selectedSession
+    ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable) || managedResumes
+    : false;
   const selectedResumeBlockedCopy = sessionResumeBlockedMessage(selectedResumeBlockedReason);
   // A run can still look live/resumable in cached state while a Complete/end transition has
   // already denied its same-session endpoint. Never reinterpret that denial as a fresh run.
   const sameSessionSendBlocked =
     !!selectedSession &&
     (live || resumable) &&
+    !managedResumes &&
     !sessionCapabilityOf(selectedSession, 'canSend', true);
   const sameSessionSendBlockedCopy = sessionSendBlockedMessage(selectedResumeBlockedReason);
   const selectedCanComplete = selectedSession
@@ -2868,6 +3194,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
+  // The merges into main this project has made: rows on the page's timeline at their own instant
+  // (owner decision 2026-10-06), each opening its receipt.
+  const pageMergesQ = useQuery({
+    ...projectMergedPromotionsQuery(openProjectId ?? ''),
+    enabled: Boolean(openProjectId),
+    refetchInterval: 60_000,
+  });
+  const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
   const projectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
   ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
@@ -2877,6 +3211,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
   const pageProjectDetailsQ = useQuery({
     ...projectDetailsQuery(openProjectId ?? ''),
+    // It is also what a DONE project's ending card is drawn from (`pageSettledDoc`): the Open-only
+    // sidebar carries no row for it, so this page reads its own document either way.
     enabled: !!openProjectId && projectsQ.isSuccess && !pageProject,
     refetchInterval: PROJECT_SESSION_REFRESH_MS,
   });
@@ -2888,6 +3224,31 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   } : undefined);
   const pageProjectTitle = pageProject?.title ?? pageProjectDetailsQ.data?.title ?? projectMembers[0]?.projectMembership?.projectTitle ?? pageMenuCoordinator?.projectMembership?.projectTitle ?? 'Project';
   const pageRunningCount = projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
+  const pageStatus = pageProject?.status ?? pageProjectDetailsQ.data?.status ?? projectMembers[0]?.projectMembership?.projectStatus;
+  // The project's ending where the page's progress card was (owner, 2026-10-10): a DONE project's
+  // first card is its record — "This project is done · recorded by Orbit · 6 criteria · 5 on main
+  // · 1 no code to land" — and never a progress card with nothing in it but the word Done. The
+  // same card, off the same read, as the conversation's settled branch; a read that carries no
+  // projection, or one without the unified counts (an older server), keeps the progress card.
+  const pageDetails = pageProjectDetailsQ.data as unknown as ProjectDoneDocument | undefined;
+  const pageSettledDoc = pageDetails && pageStatus === 'DONE' && pageDetails.derivedDone != null
+      && 'counts' in pageDetails.derivedDone
+    ? pageDetails
+    : null;
+  const pageSessionsError = (projectSessionsQ.error ?? completedProjectSessionsQ.error) as Error | null;
+  // A project nobody has started (docs/mocks/project-start-sessions-page): its progress line says so,
+  // and the start's row sits under it — by the project page's own rule (`startPageRow`), read off the
+  // sidebar's `startedAt` and the open items, which are read only while that holds.
+  const pageStarted = pageProject ? projectStarted(pageProject) : null;
+  const pageNotStarted = pageProject?.status === 'OPEN' && pageStarted === false;
+  const pageOpenItemsQ = useQuery({
+    ...projectOpenItemsQuery(openProjectId ?? ''),
+    enabled: !!openProjectId && pageNotStarted,
+    refetchInterval: controlLive ? 20_000 : 4000,
+  });
+  const pageStart = pageNotStarted
+    ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
+    : null;
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -2924,10 +3285,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
-        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id)),
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, watchingBySession, selectedSession],
+      effectiveView, listByTag, runner.online, watchingBySession, selectedSession, recapsEnabled],
   );
   const listedSessions = useMemo(
     () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
@@ -2992,14 +3353,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
   // Note the Completed view is server-ordered by completed_at while bucketing reads last activity,
   // so its rows are grouped by when they last ran, not by when they moved — same as iOS.
-  const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: SessionProjectEntry<SessionListItem>[] }>>(
+  // On a project's page the merges into main it has made sit among its sessions at their own
+  // instant (`projectTimelineSections`): rows of their own kind, never sessions.
+  const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }>>(
     () =>
       openProjectId
         ? [
             ...(pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
               sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : []),
-            ...sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
-              .map((s) => ({ ...s, key: s.title, tag: null, sessions: s.sessions.map((row) => ({ ...row, kind: 'session' as const })) })),
+            ...projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
+              .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
+                item.kind === 'merge'
+                  ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
+                  : { ...item.session, kind: 'session' as const }) })),
           ]
         : groupByTag
         ? sessionTagSections(folderListing.entries).map((s) => ({
@@ -3017,7 +3383,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
             sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
           })),
-    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers],
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -3025,7 +3391,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
-    entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
+    entry.kind === 'merge' ? [] : entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
   )), [sections]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
@@ -3162,23 +3528,38 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     );
   }, [workspacesForRunner, lockedWorkspaceId]);
 
-  // The New Session provider pick, scoped to the workspace it was made under: switching workspaces means
-  // switching projects, so the previous pick must not follow. Kept as {workspaceId, provider} rather
-  // than reset by an effect so the stale value is never readable for a render.
-  const [draftProviderPick, setDraftProviderPick] = useState<{
+  // The New Session pick, scoped to the workspace it was made under: switching workspaces means
+  // switching projects, so the previous pick must not follow. Kept as {workspaceId, engine, provider}
+  // rather than reset by an effect so the stale value is never readable for a render. The hero picks
+  // the engine and the composer's Provider menu a credential it runs on; a new session sends both
+  // (docs/provider-engine-contract.md §3.2).
+  const [draftPick, setDraftPick] = useState<{
     workspaceId?: string;
+    engine: AgentProvider;
     provider: string;
   } | null>(null);
-  const draftProvider =
-    draftProviderPick && draftProviderPick.workspaceId === workspaceId ? draftProviderPick.provider : null;
-  // The provider a NEW session would run: an explicit pick, else what this project last ran on.
-  // `lastProvider` is derived server-side from the workspace's most recent interactive session — an
-  // workspace holds no provider of its own (apiserver workspaces/workspace-provider.ts). `provider` is the
-  // deprecated alias of the same derived value, still served for older native builds.
-  const pickedProvider: string =
-    draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
-  // The Codex or Claude account picked for the draft on the New Session hero, scoped to its workspace
-  // like the provider pick. Without one a new session starts where Automatic or its workspace says.
+  const draftHere = draftPick && draftPick.workspaceId === workspaceId ? draftPick : null;
+  // What a NEW session would run: an explicit pick, else what this project last ran on — the engine
+  // and the provider of its most recent interactive session, derived server-side (apiserver
+  // workspaces/workspace-provider.ts): a workspace holds neither of its own. `provider` is the
+  // deprecated alias of `lastProvider`, still served for older native builds.
+  const lastWorkspaceProvider = pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
+  const lastWorkspaceEngine = sessionEngineOf(pickedWorkspace?.lastEngine, lastWorkspaceProvider, configuredProviders);
+  const pickedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
+  const pickedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
+  // The managed runner's default workspace has no engine for a first session until its runner has
+  // been ready with one (`initialProvider`): before that the server refuses the session with
+  // MODEL_UNAVAILABLE, so the draft offers no default engine and shows the runner's state instead.
+  const managedDraftBlocked =
+    !selected &&
+    !!managed &&
+    !managed.display.startsNewSession &&
+    !!workspaceId &&
+    !!managed.status.workspaceId &&
+    routeId(managed.status.workspaceId) === routeId(workspaceId);
+  // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
+  // its workspace like the provider pick. Without one a new session starts where Automatic or its
+  // workspace says.
   const [draftAccountPick, setDraftAccountPick] = useState<{
     workspaceId?: string;
     engine: string;
@@ -3187,6 +3568,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const draftPickHere = draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick : null;
   const draftCodexAccount = draftPickHere?.engine === 'codex' ? draftPickHere.account : null;
   const draftClaudeAccount = draftPickHere?.engine === 'claude' ? draftPickHere.account : null;
+  const draftAntigravityAccount = draftPickHere?.engine === 'antigravity' ? draftPickHere.account : null;
+  const draftKimiAccount = draftPickHere?.engine === 'kimi' ? draftPickHere.account : null;
+  /** The draft's pick for one engine's account. */
+  const draftAccountOf = (engine: AccountEngine): string | null =>
+    draftPickHere?.engine === engine ? draftPickHere.account : null;
 
   // A provider switch made on an ENDED session, scoped to that session for the same reason the
   // draft pick is scoped to its workspace. There is nothing to PATCH while a session is ended, so
@@ -3205,12 +3591,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       ? endedProviderPick?.provider
       : null;
   const pendingResumeAccount = pendingResumeProvider ? (endedProviderPick?.account ?? null) : null;
-  // The provider this composer talks to: a live session's own, an ended session's pending pick,
-  // else the one picked for the draft. Declared here (not next to its other consumers) because
-  // the `/` autocomplete memo below needs it.
-  const shownProvider: string = selected
-    ? (pendingResumeProvider ?? selected.provider ?? detailForSelected?.provider ?? 'claude')
-    : pickedProvider;
+  // The engine a session runs on is the one it recorded, and it never changes — whichever provider
+  // the session is moved to. A row an older replica wrote is placed by its provider (sessionEngineOf).
+  const selectedEngine: AgentProvider = sessionEngineOf(
+    selected?.engine ?? detailForSelected?.engine,
+    selected?.provider ?? detailForSelected?.provider,
+    configuredProviders,
+  );
+  // The session's own provider and model, with an OpenCode session an older client started on a key
+  // read as that key and its bare model (sessionPick, contract §3.3).
+  const selectedPick = sessionPick(
+    selectedEngine,
+    selected?.provider ?? detailForSelected?.provider ?? 'claude',
+    selected?.model,
+  );
+  // The engine and provider this composer talks to: the session's — with an ended session's pending
+  // pick, which only ever moves it to another credential of the same engine — else the draft's.
+  // Declared here (not next to their other consumers) because the `/` autocomplete memo below needs
+  // them.
+  const shownEngine: AgentProvider = selected ? selectedEngine : pickedEngine;
+  const shownProvider: string = selected ? (pendingResumeProvider ?? selectedPick.provider) : pickedProvider;
   const shownProviderCapabilitiesResolved = providerIdentityResolved(
     shownProvider,
     configuredProvidersLoaded,
@@ -3218,8 +3618,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Codex has no slash registry: its app-server takes the prompt verbatim (no expansion of
   // `~/.codex/prompts`, nothing in the protocol for it), so `/anything` is plain text there.
   // Claude's commands and skills are meaningless in that session — don't offer them, and
-  // don't gate sending on them. `/status` is ours and stays.
-  const codexComposer = !supportsRunnerSlashAssets(shownProvider);
+  // don't gate sending on them. `/status` is ours and stays. Read off the engine, never the
+  // provider's slug: a key on Codex's protocol runs on Codex all the same.
+  const codexComposer = !supportsRunnerSlashAssets(shownEngine);
   // The selected session's permission mode as the SERVER resolves it: its own stored mode, else
   // the owner's account default, else Auto (common/permission-mode.ts). Reading the session row
   // alone would show one fixed mode for every session that never stored one — and since the pills
@@ -3238,8 +3639,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       | null
       | undefined) ?? null;
   const effectiveSelectedModel = effectiveSessionModel(
+    shownEngine,
     shownProvider,
-    selected?.model,
+    selectedPick.model,
     detailForSelected?.workspace?.model ?? selected?.workspace?.model ?? selectedWorkspaceFromList?.model,
     runner.modelCatalog,
     configuredProviders,
@@ -3256,7 +3658,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // last generation's model seeds the current default instead of an id that is no longer offered.
   const selectedModelDefault = selected
     ? livePinnedModel(
-        selected.model,
+        selectedPick.model,
+        shownEngine,
         shownProvider,
         runner.modelCatalog,
         configuredProviders,
@@ -3265,12 +3668,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       livePinnedModel(
         detailForSelected?.workspace?.model ??
           workspacesForRunner.find((a) => a.id === selected.workspace?.id)?.model,
+        shownEngine,
         shownProvider,
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
       ) ??
-      defaultModelForProvider(
+      defaultModelFor(
+        shownEngine,
         shownProvider,
         runner.modelCatalog,
         configuredProviders,
@@ -3287,12 +3692,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const decision = decideContextSeed(effortSeedState.current, contextKey, true);
     effortSeedState.current = decision.state;
     if (!decision.apply) return;
-    const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
     const owningWorkspace = workspacesForRunner.find((a) => a.id === selected.workspace?.id);
+    // By the session's engine, on the model it runs: Harness's levels are its catalogue row's own.
     setEffort(
-      normalizeEffortForProvider(
-        provider,
+      normalizeEffortFor(
+        selectedEngine,
+        selectedPick.provider,
         selected.effort ?? detailForSelected?.workspace?.effort ?? owningWorkspace?.effort ?? '',
+        effectiveSelectedModel,
+        runner.modelCatalog,
+        configuredProviders,
       ),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3308,7 +3717,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }, [selected?.id, live]);
 
   const pickedModelDefault = pickedWorkspace
-    ? newSessionModelForProvider(
+    ? newSessionModelFor(
+        pickedEngine,
         pickedProvider,
         me.data?.preferences?.defaultModels,
         runner.modelCatalog,
@@ -3321,57 +3731,53 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     configuredProvidersLoaded,
   );
 
-  // Everything that could run a session on this machine: engines first — with the health this
-  // runner reported, since the session runs there — then this account's providers. The New
-  // Session hero offers all of it; the composer's Provider pill offers the same-runtime slice.
+  // Everything that could run a session on this machine, by engine — with the health this runner
+  // reported, since the session runs there — and under each engine the credentials it runs on. The
+  // New Session hero offers the engines; the composer's Provider menu offers the credentials of the
+  // session's engine.
   const providerWorkspace = selected
     ? (workspacesQ.data ?? []).find((workspace) => workspace.id === selected.workspace?.id)
     : pickedWorkspace;
   const antigravityKeyAvailable = providerWorkspace
     ? providerWorkspace.antigravityKeyAvailableByRunner?.[runner.id] === true
     : runner.antigravity?.envKeyAvailable === true;
-  const providerChoicesForRunner = useMemo(
-    () =>
-      providerChoices(
-        configuredProviders,
-        runner.modelCatalog,
-        runner.runtimeDefaultModels,
-        runner.engines,
-        accountPools,
-        runner.planUsage,
-        runner.antigravity,
-        antigravityKeyAvailable,
-      ),
-    [
-      configuredProviders,
-      runner.modelCatalog,
-      runner.runtimeDefaultModels,
-      runner.engines,
-      accountPools,
-      runner.planUsage,
-      runner.antigravity,
+  const choiceSources = useMemo<ChoiceSources>(
+    () => ({
+      configured: configuredProviders,
+      modelCatalog: runner.modelCatalog,
+      runtimeDefaultModels: runner.runtimeDefaultModels,
+      engineHealth: runner.engines,
+      pools: accountPools,
+      planUsage: runner.planUsage,
+      antigravity: runner.antigravity,
       antigravityKeyAvailable,
-    ],
+      dshRunner: runner,
+    }),
+    [configuredProviders, runner, accountPools, antigravityKeyAvailable],
   );
-  const currentProviderChoiceForDraft = useMemo(
+  // The New Session hero's engines, each landing on the draft's pick when it is that engine's, else on
+  // what this workspace last ran there. The current one is the pick's own engine on the pick's own
+  // provider — drawn as it is even when that provider is no longer on offer (a key since removed).
+  const draftEngines = useMemo(
     () =>
-      currentProviderChoice(
-        pickedProvider,
-        providerChoicesForRunner,
-        runner.modelCatalog,
-        configuredProviders,
-        runner.runtimeDefaultModels,
-        runner.antigravity,
-      ),
-    [
-      pickedProvider,
-      providerChoicesForRunner,
-      runner.modelCatalog,
-      configuredProviders,
-      runner.runtimeDefaultModels,
-      runner.antigravity,
-    ],
+      engineChoices(choiceSources, [
+        { engine: pickedEngine, provider: pickedProvider },
+        { engine: lastWorkspaceEngine, provider: lastWorkspaceProvider },
+      ]),
+    [choiceSources, pickedEngine, pickedProvider, lastWorkspaceEngine, lastWorkspaceProvider],
   );
+  const currentDraftEngine = useMemo(
+    () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
+    [pickedEngine, pickedProvider, draftEngines, choiceSources],
+  );
+  // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
+  // provider of it reads, listed or not (a key since removed, the legacy built-in `dsh`).
+  const shownEngineProviders = useMemo(
+    () => draftEngines.find((engine) => engine.slug === shownEngine)?.providers ?? [],
+    [draftEngines, shownEngine],
+  );
+  const shownProviderChoice = (provider: string): ProviderChoice =>
+    currentProviderChoice(shownEngine, provider, shownEngineProviders, choiceSources);
   // What a switch just changed. Shown under the summary and cleared on a timer: the model move
   // is a silent side effect otherwise, and so is the write-back that remembers the pick.
   const [providerSwitchNote, setProviderSwitchNote] = useState<string | null>(null);
@@ -3397,39 +3803,43 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // What the pick on an ended session will actually do, and when. It replaces a four-second
   // `Model → X`, which named the change but not its timing — and the timing is the question,
   // because a run keeps its provider for its whole life.
+  // Said by the credentials' own names: the engine stays, only the credential moves.
   const composerProviderNote = pendingResumeProvider
     ? providerSwitchNoteFor({
-        from: selected?.provider ?? detailForSelected?.provider ?? null,
-        to: pendingResumeProvider,
+        from: selected ? providerNameOn(shownEngine, shownProviderChoice(selectedPick.provider)) : null,
+        to: providerNameOn(shownEngine, shownProviderChoice(pendingResumeProvider)),
         liveRun: taskRunIsGoing,
       })
     : null;
   // Where a routed message landed. Kept as state rather than a toast because it survives the
   // navigation that follows it: the reader arrives in the other run already knowing why.
   const [handedOverTo, setHandedOverTo] = useState<string | null>(null);
-  const pickDraftProvider = (slug: string): void => {
-    setDraftProviderPick({ workspaceId, provider: slug });
-    const picked = providerChoicesForRunner.find((c) => c.slug === slug);
-    // The pick binds this session and nothing else. Later sessions follow it only because the
-    // default is read back from what this project last ran — no config is being rewritten.
+  // The draft's engine, on a credential it runs on: the hero picks the engine (landing where it
+  // says), the Provider menu a credential of the draft's engine. The pick binds this session and
+  // nothing else. Later sessions follow it only because the default is read back from what this
+  // project last ran — no config is being rewritten.
+  const pickDraft = (engine: AgentProvider, provider: string): void => {
+    setDraftPick({ workspaceId, engine, provider });
+    const picked = draftEngines.find((row) => row.slug === engine)?.providers.find((c) => c.slug === provider);
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
   };
-  // An account row under an engine: that engine, on that account — or on Automatic (`null`). Like the
-  // provider, it binds the session being drafted and rewrites no workspace setting.
-  const pickDraftAccount = (slug: string, account: string | null): void => {
-    if (slug !== pickedProvider) pickDraftProvider(slug);
-    setDraftAccountPick(account === null ? null : { workspaceId, engine: slug, account });
+  // An account row under the draft engine's own sign-in: that sign-in, on that account — or on
+  // Automatic (`null`). Like the provider, it binds the session being drafted and rewrites no
+  // workspace setting.
+  const pickDraftAccount = (engine: AccountEngine, account: string | null): void => {
+    if (pickedProvider !== engine) pickDraft(engine as AgentProvider, engine);
+    setDraftAccountPick(account === null ? null : { workspaceId, engine, account });
   };
 
-  // The provider is part of the draft's seed context: picking a different one has to re-seed
-  // Model (each provider owns its own model space) and re-clamp Mode, which is exactly what a
-  // context change does — including resetting `dirty`, so a model chosen for the old provider
-  // never carries into the new one's namespace.
+  // The engine and provider are the draft's seed context: picking a different one has to re-seed
+  // Model (the model space is the pair's) and re-clamp Mode, which is exactly what a context change
+  // does — including resetting `dirty`, so a model chosen for the old pair never carries into the
+  // new one's namespace.
   const modelContextKey = selectedId
     ? `session:${selectedId}`
-    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedProvider}`;
+    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedEngine}:${pickedProvider}`;
   const effortContextKey = selectedId
     ? `session:${selectedId}:${live ? 'live' : 'ended'}`
     : modelContextKey;
@@ -3439,10 +3849,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // picker. Once the user chooses any model, ignore seed changes until the Workspace/Session context
   // changes. Dirty is explicit rather than inferred from value equality: choosing the same value
   // is still an intentional choice.
+  // '' is a seed too — OpenCode's (and agy's) "pick for yourself" — so only null waits.
   useEffect(() => {
-    const decision = decideContextSeed(modelSeedState.current, modelContextKey, !!modelSeed);
+    const ready = modelSeed !== null && modelSeed !== undefined;
+    const decision = decideContextSeed(modelSeedState.current, modelContextKey, ready);
     modelSeedState.current = decision.state;
-    if (decision.apply && modelSeed) setModel(modelSeed);
+    if (decision.apply && ready) setModel(modelSeed);
   }, [modelContextKey, modelSeed]);
 
   // A new session defaults to Auto — the app-level default (DEFAULT_PERMISSION_MODE) — rather
@@ -3454,6 +3866,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? clampPermissionModeForModel(
             'auto',
             pickedModelDefault ?? DEFAULT_MODEL,
+            pickedEngine,
             pickedProvider,
             configuredProviders,
             runner.modelCatalog,
@@ -3467,6 +3880,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             ? clampPermissionModeForModel(
                 effectivePermissionMode,
                 selectedModelDefault ?? DEFAULT_MODEL,
+                shownEngine,
                 shownProvider,
                 configuredProviders,
                 runner.modelCatalog,
@@ -3492,8 +3906,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
-      mode === 'Auto' &&
-      !supportsAuto(model, shownProvider, configuredProviders, runner.modelCatalog)
+      ((mode === 'Auto' && !supportsAuto(model, shownEngine, shownProvider, configuredProviders, runner.modelCatalog)) ||
+        !permissionModeSupported(MODE_TO_PERMISSION[mode], shownEngine))
     ) {
       setMode('Default');
     }
@@ -3503,6 +3917,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     mode,
     model,
     runner.modelCatalog,
+    shownEngine,
     shownProvider,
     shownProviderCapabilitiesResolved,
   ]);
@@ -3514,9 +3929,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // choice made before that request finishes.
   useEffect(() => {
     if (selectedId) return;
-    const provider = pickedProvider;
-    const seed = newSessionEffortForProvider(
-      provider,
+    const seed = newSessionEffortFor(
+      pickedEngine,
+      pickedProvider,
       me.data?.preferences?.defaultEffort,
       pickedWorkspace?.effort,
       pickedModelDefault,
@@ -3529,6 +3944,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }, [
     selectedId,
     effortContextKey,
+    pickedEngine,
     pickedProvider,
     pickedModelDefault,
     pickedWorkspace?.effort,
@@ -3559,8 +3975,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const selectedIsQueued = selected
     ? sessionRunStateOf(selectedStartingSession) === 'QUEUED'
     : false;
-  const antigravityQueueRepair = selectedIsQueued && runtimeForProvider(shownProvider, configuredProviders) === 'antigravity'
+  const antigravityQueueRepair = selectedIsQueued && selectedEngine === AgentProvider.ANTIGRAVITY
     ? antigravityRepair(selectedStartingSession?.error ?? '')
+    : null;
+  const dshQueueRepair = selectedIsQueued && selectedEngine === AgentProvider.DSH
+    ? dshRepair(selectedStartingSession?.error ?? '')
     : null;
   const queuedNoticeScope = selectedId
     ? `${selectedId}:${selectedStartingSession?.lastTurnAt ?? ''}`
@@ -3583,6 +4002,37 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     selectedWaiting !== null,
     STARTING_NOTICE_DELAY_MS,
     waitingNoticeScope(selectedId, selectedStartingSession),
+  );
+  // The engine that would have executed THIS session: its own, which no provider pick changes.
+  const selectedRuntime = selectedEngine;
+  // The key the session runs on, as the cards about a key its vendor rejected name it (board 8): the
+  // session's own — the credential that failed, never a pick held for the next turn.
+  const selectedKeyRow = configuredProviders.find((p) => p.slug === selectedPick.provider);
+  const selectedKeyName = selected && selectedKeyRow ? keyName(selectedKeyRow) : undefined;
+  // Whether this run never became one, and why — see RunNeverStartedCard. Read off the MERGED row,
+  // because the SOURCE columns only ride the detail payload. Deliberately outside the delayed-notice
+  // machinery above: this is a fact, not a wait that might still end, so it is not held back the ten
+  // seconds those notices are.
+  const neverStarted = useMemo(
+    () =>
+      selected && !selectedTrashed && !selectedMissing
+        ? runNeverStarted({
+            session: selectedSession as NeverStartedSession,
+            runtime: selectedRuntime,
+            keyName: selectedKeyName,
+            runnerName: runner.displayName || runner.name,
+          })
+        : null,
+    [
+      selected,
+      selectedSession,
+      selectedTrashed,
+      selectedMissing,
+      selectedRuntime,
+      selectedKeyName,
+      runner.displayName,
+      runner.name,
+    ],
   );
   const scopedEvents = useMemo(
     () => (eventsSessionId === selectedId ? events : []),
@@ -3646,6 +4096,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const visibleQueuedTurns = useMemo(
     () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
     [scopedQueuedTurns, transcriptEvents],
+  );
+  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be.
+  const queuedTailEvents = useMemo(
+    () => visibleQueuedTurns.map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
+    [visibleQueuedTurns],
   );
   // The render-time filter above removes duplication in the same frame the SSE event lands. Trim
   // the acknowledged copy afterwards so landed turns do not accumulate in memory.
@@ -3835,13 +4290,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 id: attachment.id,
                 mime: attachment.mimeType || 'application/octet-stream',
               })),
-              // The card the snapshot carried for an exception item's delivery, so the placeholder
-              // this row paints is the card the runner's echo will replace it with.
-              ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
-              ...(row.projectStarted ? { projectStarted: row.projectStarted } : {}),
-              // …and another session's message, drawn "From [that session]" rather than as the
-              // reader's own bubble while its echo is on the way.
-              ...(row.sessionMessage ? { sessionMessage: row.sessionMessage } : {}),
+              // Every card the snapshot carried, so the placeholder this row paints is the card the
+              // runner's echo will replace it with.
+              ...turnCardsOf(row),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -4116,12 +4567,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         seen.current.add(ev.seq);
         // A block the provider closes with no text of its own would otherwise take its reasoning
         // with it: the draft is cleared just below, and an empty durable event renders nothing.
-        // Keep what was streamed — and how long it took — on this LOCAL copy of the event. It is
-        // never sent back, so a reload still reads the server's empty text and still renders
-        // nothing, which is deliberate (see lib/thinkingDraft).
+        // Keep what was streamed — and how long it took, when the runner did not say — on this
+        // LOCAL copy of the event. It is never sent back, so a reload still reads the server's
+        // empty text and still renders nothing, which is deliberate (see lib/thinkingDraft).
         if (ev.type === 'thinking') {
           const patch = settleThinking(
-            ev.payload?.text,
+            ev.payload,
             streamingThinkRef.current,
             thinkStartedAtRef.current,
             Date.now(),
@@ -4928,7 +5379,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               anchor,
               moment: mergedAt,
               key: `promotion-receipt:${promotion.promotionId}`,
-              element: <ProjectPromotionReceipt promotion={promotion} />,
+              element: <ProjectPromotionReceipt promotion={promotion} asLine />,
             }];
       }),
     ],
@@ -4951,11 +5402,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // presses no door: the coordinator reads it and acts with the doors it has, and the card's own
   // presses stay where they were.
   const chatProjectTitle = selectedSession?.projectTitle ?? null;
+  // The project's main branch, which an item's re-check of the merge into main names: the open-items
+  // read its rows come from carries it.
+  const chatMain = mainBranchName(openItems.data?.mainBranch);
   // The card's facts as they read at `now`: at the press, for the bar, and again at the send.
   const coordinatorChatContext = useCallback(
     (subject: CoordinatorChatSubject, projectId: string, now: number): string =>
       subject.kind === 'item'
-        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now })
+        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now, main: chatMain })
         : promotionChatContext({
             projectTitle: chatProjectTitle,
             projectId,
@@ -4963,7 +5417,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             item: subject.item,
             now,
           }),
-    [chatProjectTitle],
+    [chatMain, chatProjectTitle],
   );
   const startCoordinatorChat = useCallback(
     (subject: CoordinatorChatSubject) => {
@@ -4998,6 +5452,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     [navigate, selectedId, startCoordinatorChat],
   );
 
+  // The project's main branch, which a card's rerun of a merge check names: the two promotion reads
+  // above carry it — the candidate on offer, else the newest merge.
+  const coordinatedMain = mainBranchName(
+    currentPromotion.data?.upstreamRef ?? mergedPromotions.data?.[0]?.upstreamRef,
+  );
+
   // The exceptions this project still owes somebody, drawn into the transcript at the moment each
   // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
   // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
@@ -5025,12 +5485,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               now={Date.now()}
               currentPromotionId={currentPromotion.data?.promotionId ?? null}
               onChat={chatAboutThis}
-            />
+              main={coordinatedMain} />
           ),
         }];
       }),
     [
       chatAboutThis,
+      coordinatedMain,
       coordinatedProjectId,
       currentPromotion.data?.promotionId,
       openItems.data,
@@ -5079,7 +5540,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (blockedAt === null) return [];
     const anchor = decisionReceiptAnchor(transcriptEvents, blockedAt);
     if (anchor === null) return [];
-    const rows = [...(openItems.data?.needsYou ?? []), ...(openItems.data?.withCoordinator ?? [])];
     return [{
       anchor,
       moment: blockedAt,
@@ -5088,10 +5548,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         <ProjectPromotionCard
           projectId={coordinatedProjectId}
           promotion={current}
-          item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
+          item={promotionItem(openItems.data, current.promotionId)}
           project={null}
           now={Date.now()}
           onChat={chatAboutThis}
+          asLine
         />
       ),
     }];
@@ -5104,11 +5565,29 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     transcriptEvents,
   ]);
 
+  // The coordinator's questions that have ended — answered, here or at another end, or withdrawn —
+  // each drawn as the record it became at the moment it ended (§5.2 R10, R12), placed by the rule
+  // every record above is (`decisionReceiptAnchor`). The question's own card, below the transcript,
+  // goes when the read drops it from `needsYou`, in the same poll that brings the record. The
+  // native clients do the same (`CoordinatorQuestions.receipts`).
+  const questionRecords = useMemo(
+    () =>
+      coordinatedProjectId
+        ? closedQuestionRows(openItems.data, transcriptEvents).map(({ record, placement }) => ({
+            anchor: placement,
+            moment: record.resolvedAt,
+            key: `question-record:${record.itemId}`,
+            element: <AnsweredQuestionCard record={record} />,
+          }))
+        : [],
+    [coordinatedProjectId, openItems.data, transcriptEvents],
+  );
+
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, blockedPromotionCard, exceptionCards],
   );
 
   // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
@@ -5243,6 +5722,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ...sessionCreatedTasksQuery(selectedId ?? ''),
     enabled: Boolean(selectedId) && !selectedTrashed,
   });
+  // What a watch's wake line calls the targets it names (WatchWakeCard), by either spelling of their
+  // ids: the title the watch itself carries for each target, else the row this conversation's Tasks
+  // card holds for it. Both reads are already on this page for the strips above the composer.
+  const wakeTargetName = useCallback(
+    (watchId: string, target: { kind: string; id: string }): string | undefined => {
+      const watches = Array.isArray(watchesForHeaderQ.data) ? (watchesForHeaderQ.data as WatchView[]) : [];
+      const watched = watches
+        .find((w) => sameResourceId(w.id, watchId))
+        ?.targets.find((t) => sameResourceId(t.targetResourceId, target.id));
+      if (watched?.targetTitle) return watched.targetTitle;
+      if (target.kind !== 'TASK') return undefined;
+      return createdTasks.data?.items.find((row) => sameResourceId(row.id, target.id))?.title;
+    },
+    [watchesForHeaderQ.data, createdTasks.data],
+  );
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
@@ -5281,14 +5775,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'coordinatorChat') return;
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
-    // the card is drawn from, and only once that read has come back, for the reason below.
+    // the card is drawn from, and only once that read has come back, for the reason below. A
+    // version waiting for the coordinator is still the reader's to send back from the card they
+    // opened (`Decide it myself`), so its place in that queue counts as being there.
     if (replyTo.target.kind === 'evidenceDecision') {
       const read = pendingDecisions.data;
       if (!read) return;
       const address = decisionRowKey(replyTo.target);
-      const still = evidenceDecisionCardRows(
-        read, selectedSession?.projectId ?? null, selectedId,
-      ).some((row) => decisionRowKey(row) === address);
+      const still = [
+        ...evidenceDecisionCardRows(read, selectedSession?.projectId ?? null, selectedId),
+        ...coordinatorQueueRows(read, selectedSession?.projectId ?? null, selectedId),
+      ].some((row) => decisionRowKey(row) === address);
       if (!still) setReplyTo(null);
       return;
     }
@@ -5399,7 +5896,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         qc.setQueryData(sessionQuery(selected.id).queryKey, fresh);
         const freshReason = sessionResumeBlockedReasonOf(fresh);
         const freshLegacyResumable = !!fresh.startedAt && !!runner.online;
-        const disposition = sessionSendDispositionOf(fresh, freshLegacyResumable);
+        const disposition =
+          !!managed?.display.acceptsWork && freshReason === 'RUNNER_OFFLINE'
+            ? 'RESUME'
+            : sessionSendDispositionOf(fresh, freshLegacyResumable);
         if (disposition === 'BLOCK')
           throw new Error(
             sessionSendBlockedMessage(
@@ -5439,7 +5939,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             selected.provider ??
             detailForSelected?.provider ??
             'claude';
-          const wireEffort = normalizeEffortForProvider(
+          // By the session's own engine, which the resume keeps whatever provider it carries.
+          const wireEffort = normalizeEffortFor(
+            selectedEngine,
             provider,
             effort,
             model,
@@ -5490,7 +5992,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // established "start a new session" behavior instead of sending an invalid resume.
       }
       const provider = pickedProvider;
-      const wireEffort = normalizeEffortForProvider(provider, effort);
+      // By the engine the session will run on. Harness levels are opaque catalogue values, so they are
+      // checked against the model's own row.
+      const wireEffort =
+        pickedEngine === AgentProvider.DSH
+          ? normalizeEffortFor(pickedEngine, provider, effort, model, runner.modelCatalog, configuredProviders)
+          : normalizeEffortFor(pickedEngine, provider, effort);
       const providerResolved = providerIdentityResolved(
         provider,
         configuredProvidersLoaded,
@@ -5520,9 +6027,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         prompt: content,
         assignedRunnerId: runner.id,
         workspaceId,
-        // Only an explicit pick travels: leaving it off keeps the server's inherit-from-workspace
-        // path, so a session started without touching the hero behaves exactly as before.
-        provider: draftProvider ?? undefined,
+        // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
+        // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
+        // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
+        ...(draftHere ? { engine: draftHere.engine, provider: draftHere.provider } : {}),
         model: createModel,
         permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
@@ -5536,6 +6044,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Only an explicit pick, as with the provider: none is Automatic, or the workspace's account.
         ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
         ...(draftClaudeAccount && pickedProvider === 'claude' ? { claudeAccount: draftClaudeAccount } : {}),
+        ...(draftAntigravityAccount && pickedProvider === 'antigravity'
+          ? { antigravityAccount: draftAntigravityAccount }
+          : {}),
+        ...(draftKimiAccount && pickedProvider === 'kimi' ? { kimiAccount: draftKimiAccount } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -5559,6 +6071,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (sendOperationRef.current?.clientTurnId === clientTurnId) {
         sendOperationRef.current = null;
       }
+      // Work for a managed runner that is not up asks it to wake: show that now, not at the next poll.
+      if (managed && !runner.online) qc.invalidateQueries({ queryKey: managedRunnerStatusQuery().queryKey });
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // Delivered, to the run that has this task rather than to the one it was typed in. Nothing
       // about this row changed, so none of the optimistic painting below applies — the bubble is
@@ -5827,13 +6341,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const withdrawWake = (turnId: string): void => {
     const sessionId = selectedId;
     if (!sessionId) return;
-    modal.confirm({
+    void confirm({
       title: 'Withdraw this wake?',
-      content: WAKE_WITHDRAW_CONSEQUENCE,
-      okText: 'Withdraw wake',
-      okButtonProps: { danger: true },
+      description: WAKE_WITHDRAW_CONSEQUENCE,
+      confirmText: 'Withdraw wake',
+      danger: true,
       cancelText: 'Keep it queued',
-      onOk: async () => {
+      onConfirm: async () => {
         setQueued((q) => q.filter((x) => x.turnId !== turnId));
         try {
           await cancelQueuedTurn(sessionId, turnId);
@@ -6028,21 +6542,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Trash pauses a public link rather than ending it (docs/share-links-design.md §3). That is worth
   // saying before the move: whoever has the link loses it now, and has it again if the session is
   // restored. A session nobody shared moves straight to Trash, with its Undo, as before.
-  const requestTrash = (session: any): void => {
+  const requestTrash = (session: any, returnFocus?: RefObject<HTMLElement | null>): void => {
     const target = { id: session.id, title: session.title, projectId: session.projectMembership?.projectId };
     const shared = session.id === selectedId ? selectedShared : session.shared === true;
     if (!shared) {
       deleteMut.mutate(target);
       return;
     }
-    modal.confirm({
+    void confirm({
       title: 'Move to Trash?',
-      content:
+      description:
         'Its public link is paused while the session is in Trash. Restoring the session turns the link back on.',
-      okText: 'Move to Trash',
-      okButtonProps: { danger: true },
+      confirmText: 'Move to Trash',
+      danger: true,
       cancelText: 'Cancel',
-      onOk: () => deleteMut.mutate(target),
+      onConfirm: () => deleteMut.mutate(target),
+      returnFocus,
     });
   };
   // Download HTML, from the session's own menu: the whole transcript through the owner's routes
@@ -6101,28 +6616,35 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         tone: 'error',
       }),
   });
-  const confirmPurge = (session: SessionToastTarget): void => {
-    modal.confirm({
+  const confirmPurge = (session: SessionToastTarget, returnFocus?: RefObject<HTMLElement | null>): void => {
+    void confirm({
       title: 'Delete permanently?',
-      content:
+      description:
         'This session and its full transcript will be permanently deleted. This cannot be undone.',
-      okText: 'Delete permanently',
-      okButtonProps: { danger: true },
+      confirmText: 'Delete permanently',
+      danger: true,
       cancelText: 'Cancel',
-      onOk: () => purgeMut.mutate(session),
+      onConfirm: () => purgeMut.mutate(session),
+      returnFocus,
     });
   };
-  // Double-click the header title to rename. Optimistically patch the title into every
-  // cached session list (the header reads `selected.title` off that list, not the detail
-  // query) so the new name shows instantly; reconcile or roll back on settle.
+  // Double-click the header title (or Rename… in a ⋯) to rename. Optimistically patch the title into
+  // every cached session list (the header reads `selected.title` off that list, not the detail
+  // query) — a project's sessions page included, where a row can be renamed too — so the new name
+  // shows instantly; reconcile or roll back on settle.
   const renameMut = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => renameSession(id, title),
-    onMutate: ({ id, title }) =>
-      qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
-        Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, title } : s)) : old,
-      ),
+    onMutate: ({ id, title }) => {
+      const patch = (old: any[] | undefined) =>
+        Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, title } : s)) : old;
+      qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, patch);
+      qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, patch);
+    },
     onError: (e: Error) => message.error("Couldn't rename the session", e.message),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['project-sessions'] });
+    },
   });
   // Pin/unpin a session to the top of the list. Optimistically flip pinnedAt in every cached
   // list (mirrors renameMut) so the row jumps immediately; reconcile on settle.
@@ -6148,15 +6670,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   });
   // A tapped swipe button (or a full swipe) runs the same request as the row's menu
   // action; the row settles closed either way.
-  const runSwipeAction = (action: SwipeAction, s: any): void => {
+  // `returnFocus`: the ⋯ the action was picked from, which a confirmation it opens hands focus back to.
+  const runSwipeAction = (action: SwipeAction, s: any, returnFocus?: RefObject<HTMLElement | null>): void => {
     setSwipeOpen(null);
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt, projectId: s.projectMembership?.projectId });
     else if (action === 'share') setShareRowId(s.id);
     else if (action === 'move') openMove(s);
-    else if (action === 'delete') requestTrash(s);
-    else confirmPurge({ id: s.id, title: s.title });
+    else if (action === 'delete') requestTrash(s, returnFocus);
+    else confirmPurge({ id: s.id, title: s.title }, returnFocus);
   };
   // Apply the menu's complete selection in one write. Optimistically patch every list scope so the
   // checkmarks, row dots and tag grouping move immediately; the server response restores its order.
@@ -6200,16 +6723,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     onError: (e: Error) => message.error("Couldn't enable worktree isolation", e.message),
   });
   const askEnableIsolation = (workspaceId: string) =>
-    modal.confirm({
+    void confirm({
       title: 'Enable worktree isolation?',
-      content:
+      description:
         "This initializes a git repo in the workspace's working directory (a default .gitignore" +
         ' + a baseline commit of the existing files) on its next run, so concurrent sessions' +
         ' each get their own branch instead of sharing the directory.',
-      okText: 'Enable',
-      // Swallow a rejected enable (onError already toasts) so confirm() closes cleanly
-      // instead of leaving an unhandled promise rejection.
-      onOk: () => enableIsoMut.mutateAsync(workspaceId).catch(() => {}),
+      confirmText: 'Enable',
+      // Swallow a rejected enable (onError already toasts) so the confirmation closes cleanly
+      // instead of holding its own copy of the error.
+      onConfirm: () => enableIsoMut.mutateAsync(workspaceId).catch(() => {}),
     });
   // Repair the machine's shared checkout when the runner reports it stuck mid-merge (which blocks
   // every session's merge there). Async like the others: the runner does it on its next heartbeat,
@@ -6222,11 +6745,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     },
     onError: (e: Error) => message.error("Couldn't clean up the checkout", e.message),
   });
-  const askCleanUpRepo = (workspaceId: string, root: string) =>
-    modal.confirm({
-      ...repoCleanupConfirm(root),
-      onOk: () => repoCleanupMut.mutateAsync(workspaceId).catch(() => {}),
+  const askCleanUpRepo = (workspaceId: string, root: string) => {
+    const cleanup = repoCleanupConfirm(root);
+    void confirm({
+      title: cleanup.title,
+      description: cleanup.content,
+      confirmText: cleanup.okText,
+      onConfirm: () => repoCleanupMut.mutateAsync(workspaceId).catch(() => {}),
     });
+  };
   // Merge this session's worktree branch into main on the runner that ran it. Async: the
   // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
   // (the status bar polls while pending). Invalidate detail so 'pending' shows immediately.
@@ -6616,7 +7143,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ? 'not found'
           : null,
       workspaceName: shownWorkspaceName,
-      provider: shownProvider,
+      engine: ENGINE_CLI_NAMES[shownEngine],
+      provider: providerNameOn(shownEngine, shownProviderChoice(shownProvider)),
       model: shownModel,
       permissionMode: shownMode,
       effort: shownEffort,
@@ -6625,7 +7153,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       fastMode: fastModeUsable && shownFastMode,
       contextTokens,
       contextWindow:
-        shownProvider === 'opencode' && shownModel === ''
+        shownEngine === AgentProvider.OPENCODE && shownModel === ''
           ? undefined
           : (reportedContextWindow ??
             contextWindowFor(shownModel, runner.modelCatalog, configuredProviders, shownProvider)),
@@ -6800,6 +7328,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // context on the next message. A bare `!` is a no-op; images are ignored. A terminal
     // session is capability-checked in the mutation; without resumable context it starts fresh.
     if (c.startsWith('!')) {
+      // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
+      // command is kept in the composer rather than sent to fail.
+      if (shownEngine === AgentProvider.DSH) {
+        message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
+        return;
+      }
       const cmd = c.slice(1).trim();
       if (cmd) send.mutate({ content: cmd, images: [], shell: true, intent: 'NEXT_TURN' });
       else setText('');
@@ -6856,7 +7390,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     : (!!text.trim() || readyImages.length > 0) &&
       !send.isPending &&
       !uploading &&
-      runner.online &&
+      runnerTakesWork &&
+      !managedDraftBlocked &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -6878,7 +7413,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // at the start of input or right after whitespace/newline, like the Claude Code TUI;
   // picking one replaces just that token with `/<name> ` (the trailing space drops the
   // regex match, so the menu auto-hides).
-  const taRef = useRef<any>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const suggestionHintId = useId();
+  // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
+  // timer that hands a held first tap on as the box's focus.
+  const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
@@ -6888,7 +7427,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // clamped so it can't collapse away or swallow the transcript.
   const startComposerResize = useCallback((e: ReactMouseEvent): void => {
     e.preventDefault();
-    const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+    const ta = taRef.current;
     const startY = e.clientY;
     const startH = ta?.offsetHeight ?? composerHeight ?? 120;
     const onMove = (ev: MouseEvent): void => {
@@ -6909,9 +7448,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // manual height changes (a double-click reset drops us back to auto-grow).
   const [composerCapped, setComposerCapped] = useState(false);
   useEffect(() => {
-    const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+    const ta = taRef.current;
     if (!ta) return;
-    // Measure on the next frame, after rc-textarea's autoSize pass settles this value's height.
+    // Measure on the next frame: the Textarea's autoSize pass has set this value's height before paint.
     const id = requestAnimationFrame(() => {
       setComposerCapped(ta.scrollHeight > ta.clientHeight + 1);
     });
@@ -6985,11 +7524,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         })),
       ].filter(
         (it) =>
-          slashAssetMatchesProvider(it.provider, shownProvider) &&
+          slashAssetMatchesEngine(it.provider, shownEngine) &&
           (!it.workspaceId || it.workspaceId === composerWorkspaceId),
       )),
     ],
-    [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownProvider],
+    [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownEngine],
   );
   const slashMatches = useMemo(() => {
     const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
@@ -7200,22 +7739,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // The project settlement card's "Ask the coordinator to handle it": the card's own facts — the
-  // blocked criteria, what each is waiting on and what would clear them — go out as one ordinary
-  // turn. Ordinary because nothing is waiting on an answer: the card explains a projection, and the
-  // work that would clear it is this agent's. The facts ARE the message, so unlike the armed
-  // replies above there is nothing to type first; the composer stays free for anything they leave
-  // out. The card stays where it is, with its own Confirm still live.
-  const delegateProjectSettlement = (talk: { facts: string }): void => {
-    if (send.isPending) return;
-    send.mutate({ content: talk.facts, images: [], intent: defaultSendIntent });
-  };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
   const selectedWorkspace = workspacesForRunner.find((a) => a.id === selected?.workspace?.id);
   const effectiveModel = effectiveSessionModel(
+    shownEngine,
     shownProvider,
-    selected?.model,
+    selectedPick.model,
     detailForSelected?.workspace?.model ?? selectedWorkspace?.model,
     runner.modelCatalog,
     configuredProviders,
@@ -7227,8 +7757,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // only thing that can be inheriting here is nothing.
   const effectiveFastMode: boolean = selected?.fastMode === true;
   const shownModel: string = live ? effectiveModel : model;
+  // The models of the pair the composer is on: a key brings its own table to every engine that runs
+  // it, OpenCode included, and DeepSeek Harness lists its runner's catalogue.
   const catalogModelOptions = shownProviderCapabilitiesResolved
-    ? modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)
+    ? modelOptionsFor(shownEngine, shownProvider, runner.modelCatalog, configuredProviders)
     : [];
   // Runtime configuration can name a valid model that is not in the reported catalog yet. Keep
   // that effective default/selectable session value visible in the picker instead of rendering a
@@ -7262,41 +7794,60 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? poolSessionLoginMember(shownPool, detailForSelected.poolCodexLogin)
         : sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
-  // Which of the runner's accounts a built-in Codex or Claude session spends — the draft's pick, or the
-  // one picked for the session, else its workspace's — and Default for an id this runner does not
-  // report, as dispatch resolves it (providers/account.ts accountOnRunner).
+  // Which of the runner's accounts a built-in Codex, Claude, Antigravity or Kimi session spends — the
+  // draft's pick, or the one picked for the session, else its workspace's — and Default for an id this
+  // runner does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
   const accountOnThisRunner = (engine: AccountEngine, wanted: string | null | undefined): string =>
     wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
+  // The runner's quota, Antigravity's included: its accounts' travels with that engine's health.
+  const runnerUsage = withEnginePlanUsage(runner.planUsage, runner.engines);
   // Automatic is on offer for an engine where the workspace leaves its account to Orbit: it picked none,
   // and its env selects no other config directory and no key of its own — with two accounts or more
   // to choose between. A new session there starts on the runner's account whose quota resets soonest:
   // the choice the server makes when it creates the session (automaticAccount), asked of the same numbers.
   const automaticOfferedOn = (
     engine: AccountEngine,
-    workspace: { env?: Record<string, string> | null; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+    workspace:
+      | {
+          env?: Record<string, string> | null;
+          codexAccount?: string | null;
+          claudeAccount?: string | null;
+          antigravityAccount?: string | null;
+          kimiAccount?: string | null;
+        }
+      | null
+      | undefined,
   ): boolean =>
-    !(engine === 'claude' ? workspace?.claudeAccount : workspace?.codexAccount) &&
+    !workspace?.[ACCOUNT_FIELD[engine]] &&
     accountsOf(runner, engine).length >= 2 &&
     accountOfEnv(engine, workspace?.env ?? null, accountsOf(runner, engine)) === 'default';
   const codexAccountsHere = accountsOf(runner, 'codex');
   const codexAutoOffered = automaticOfferedOn('codex', pickedWorkspace);
   const claudeAutoOffered = automaticOfferedOn('claude', pickedWorkspace);
+  const antigravityAutoOffered = automaticOfferedOn('antigravity', pickedWorkspace);
+  const kimiAutoOffered = automaticOfferedOn('kimi', pickedWorkspace);
   const codexAutoAccount = codexAutoOffered ? accountToStartOn('codex', codexAccountsHere, runner.planUsage, new Date()) : null;
   const claudeAutoAccount = claudeAutoOffered
     ? accountToStartOn('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
+    : null;
+  const antigravityAutoAccount = antigravityAutoOffered
+    ? accountToStartOn('antigravity', accountsOf(runner, 'antigravity'), runnerUsage, new Date())
+    : null;
+  const kimiAutoAccount = kimiAutoOffered
+    ? accountToStartOn('kimi', accountsOf(runner, 'kimi'), runnerUsage, new Date())
     : null;
   // Where an ended session's held switch onto `engine` resumes, as the server decides it
   // (accountOnProviderSwitch): the account it names; else, unless the session is pinned there,
   // Automatic's pick; else where it already was.
   const pendingEngineAccount = (engine: AccountEngine): string | null | undefined => {
     if (pendingResumeAccount && pendingResumeAccount !== AUTOMATIC_ACCOUNT) return pendingResumeAccount;
-    const own = engine === 'claude' ? detailForSelected?.claudeAccount : detailForSelected?.codexAccount;
-    const pinned = engine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned;
+    const own = detailForSelected?.[ACCOUNT_FIELD[engine]];
+    const pinned = detailForSelected?.[ACCOUNT_PINNED_FIELD[engine]];
     if (pinned && pendingResumeAccount !== AUTOMATIC_ACCOUNT) return own;
     const workspace = workspacesForRunner.find((w) => w.id === selected?.workspace?.id);
     return automaticOfferedOn(engine, workspace)
-      ? accountToStartOn(engine, accountsOf(runner, engine), runner.planUsage, new Date())
-      : (own ?? (engine === 'claude' ? detailForSelected?.workspace?.claudeAccount : detailForSelected?.workspace?.codexAccount));
+      ? accountToStartOn(engine, accountsOf(runner, engine), runnerUsage, new Date())
+      : (own ?? detailForSelected?.workspace?.[ACCOUNT_FIELD[engine]]);
   };
   const shownCodexAccount = accountOnThisRunner(
     'codex',
@@ -7314,12 +7865,37 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : (detailForSelected?.claudeAccount ?? detailForSelected?.workspace?.claudeAccount)
       : (draftClaudeAccount ?? pickedWorkspace?.claudeAccount ?? claudeAutoAccount),
   );
+  const shownAntigravityAccount = accountOnThisRunner(
+    'antigravity',
+    selectedId
+      ? pendingResumeProvider === 'antigravity'
+        ? pendingEngineAccount('antigravity')
+        : (detailForSelected?.antigravityAccount ?? detailForSelected?.workspace?.antigravityAccount)
+      : (draftAntigravityAccount ?? pickedWorkspace?.antigravityAccount ?? antigravityAutoAccount),
+  );
+  const shownKimiAccount = accountOnThisRunner(
+    'kimi',
+    selectedId
+      ? pendingResumeProvider === 'kimi'
+        ? pendingEngineAccount('kimi')
+        : (detailForSelected?.kimiAccount ?? detailForSelected?.workspace?.kimiAccount)
+      : (draftKimiAccount ?? pickedWorkspace?.kimiAccount ?? kimiAutoAccount),
+  );
   const shownAccount =
-    shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
-  // The engine whose account the composer names — built-in Codex or Claude, not an account pool — and the
-  // account it names in the quota gauge's popover, once the runner has more than one to tell apart.
+    shownProvider === 'codex'
+      ? shownCodexAccount
+      : shownProvider === 'claude'
+        ? shownClaudeAccount
+        : shownProvider === 'antigravity'
+          ? shownAntigravityAccount
+          : shownProvider === 'kimi'
+            ? shownKimiAccount
+            : 'default';
+  // The engine whose account the composer names — Codex, Claude, Antigravity or Kimi on its own sign-in
+  // on the runner, never a key or an account pool: accounts are the sign-in's alone — and the account
+  // it names in the quota gauge's popover, once the runner has more than one to tell apart.
   const shownAccountEngine: AccountEngine | null =
-    !shownPool && (shownProvider === 'codex' || shownProvider === 'claude') ? shownProvider : null;
+    isLoginProvider(shownProvider) && shownProvider === shownEngine && isAccountEngine(shownEngine) ? shownEngine : null;
   const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
   const shownAccountRow =
     shownAccountsHere.length >= 2
@@ -7330,37 +7906,48 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const shownAccountLabel = shownAccountRow ? accountNameOf(shownAccountRow) : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
-    : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
-      ? accountPlanUsage(runner.planUsage, shownProvider, shownAccount)
-      : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
-  // Where this session could move without changing CLI. Offered on the two routes that actually
-  // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A
-  // draft picks in the hero above instead (which offers every runtime, not one), and a terminal
-  // session that can't be resumed would start a NEW session on send, where the workspace decides. A
-  // single entry means there is nowhere to go, and the pill stays out of the composer entirely —
-  // the common case, one Claude sign-in and no configured providers.
+    : shownAccountEngine && shownAccount !== 'default'
+      ? accountPlanUsage(runnerUsage, shownAccountEngine, shownAccount)
+      : sessionPlanUsage(shownEngine, shownProvider, runnerUsage, configuredProviders);
+  // The user's own keys, every one — the turned-off ones too, which GET /providers leaves out: where a
+  // session's key is fixed (DeepSeek Harness's own, a Gemini key for Antigravity), and what became of
+  // a key the Provider menu no longer lists.
+  const shownProviderListed = shownEngineProviders.some((choice) => choice.slug === shownProvider);
+  const ownKeys = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+    enabled:
+      shownEngine === AgentProvider.ANTIGRAVITY ||
+      shownEngine === AgentProvider.DSH ||
+      (!!selected && !shownProviderListed && !isLoginProvider(shownProvider) && shownProvider !== AgentProvider.OPENCODE),
+  });
+  // What became of the session's own key when its engine's menu no longer lists it: turned off — its
+  // page is where it is turned back on — or deleted, which nothing here undoes. The engine stays
+  // either way; a credential of the same engine below fixes the session (board 5, case 4). Null for
+  // anything else, the legacy built-in `dsh` included: that is no key of the user's.
+  const shownKeyGone: { status: string; href?: string } | null = (() => {
+    if (!selected || shownProviderListed || isLoginProvider(shownProvider) || shownProvider === AgentProvider.OPENCODE) return null;
+    if (configuredProviders.some((p) => p.slug === shownProvider) || !ownKeys.data) return null;
+    const row = ownKeys.data.find((p) => p.slug === shownProvider);
+    if (row) return row.enabled ? null : { status: 'Turned off', href: `/providers/${encodeId(row.id)}` };
+    return shownProvider === AgentProvider.DSH ? null : { status: 'Key deleted' };
+  })();
+  // Where this session could move without changing engine: the credentials its engine runs on here.
+  // Offered on the three routes that actually carry a provider: a live session's config PATCH, the
+  // resume that revives an ended one, and the draft's create — whose engine the hero above picks. A
+  // terminal session that can't be resumed would start a NEW session on send, where the workspace
+  // decides. A single entry means there is nowhere to go, and the Provider row stays out of the menu
+  // entirely — the common case, one Claude sign-in and no keys. The one row that is not among them is
+  // the session's own provider when its engine no longer lists it (a key turned off or deleted, the
+  // legacy built-in `dsh`): it has no natural position, so it leads.
   const providerSwitchChoices = useMemo(
-    () =>
-      live || resumable
-        ? sameRuntimeChoices(
-            shownProvider,
-            providerChoicesForRunner,
-            configuredProviders,
-            runner.modelCatalog,
-            runner.runtimeDefaultModels,
-            runner.antigravity,
-          )
-        : [],
-    [
-      live,
-      resumable,
-      shownProvider,
-      providerChoicesForRunner,
-      configuredProviders,
-      runner.modelCatalog,
-      runner.runtimeDefaultModels,
-      runner.antigravity,
-    ],
+    (): ProviderChoice[] =>
+      !(live || resumable || !selected)
+        ? []
+        : shownProviderListed
+          ? shownEngineProviders
+          : [currentProviderChoice(shownEngine, shownProvider, shownEngineProviders, choiceSources), ...shownEngineProviders],
+    [live, resumable, selected, shownProviderListed, shownEngineProviders, shownEngine, shownProvider, choiceSources],
   );
   const { tokens: contextTokens, window: reportedContextWindow } = lastContextReading(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
@@ -7390,13 +7977,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: !!selectedId && retryMessageAskedFor === selectedId,
   }).data;
   const serverRetryText = serverRetry?.text ?? '';
-  const autoRetryText = retryText || serverRetryText;
-  // Whose words those are. Another Orbit session's are not the reader's to send again: through
-  // `send` they would go out in the owner's name, signed by nobody. So the Retry asks the server to
-  // re-send them as the automatic retry would — that session's, with the request they were, charged
-  // to nobody's hourly limit (docs/session-request-reply-contract.md §2.1). Read off the same bubble
-  // as the words, or off the server's answer when the window held none.
-  const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
+  // Whose words the window's answer is an answer for. Another Orbit session's are not the reader's
+  // to send again: through `send` they would go out in the owner's name, signed by nobody. So that
+  // press goes to the server's own chooser (`resendFromSession`, docs/session-request-reply-contract.md
+  // §2.1) — and where the promise belongs to the server, it has to BE the server's answer. The
+  // window cannot see turn attribution or whether a message was already answered, so on 2026-10-07 a
+  // card that promised the window's bubble had its press answered with "this session has no message
+  // for a retry to re-send" (session 34b78GE7Ud2aXWq8H1JsU: the failure had landed on a turn nobody
+  // sent, which the chooser refuses to walk past).
+  const retryIsTheReaders = !!retryText && !retry.sessionMessage;
+  // The words a re-send would carry: the reader's own when they are the reader's to send, and the
+  // server's answer whenever the press would be the server's own re-send — including when it
+  // answers with nothing, which is the one thing the window cannot rule out.
+  const autoRetryText = retryIsTheReaders ? retryText : serverRetryText;
+  // …and whether the server said there is nothing at all for a re-send to carry. The card swaps
+  // its verb for a continue then — and there is nothing to quote or to hand `send` as the reader's
+  // words, because the continue is the platform's own sentence (`CONTINUE_MESSAGE`). Only while the
+  // window is not holding words of the reader's: those are their own to send, and a frozen answer
+  // from an earlier look must not claim otherwise.
+  const nothingToResend = !retryIsTheReaders && !!serverRetry?.nothingToResend;
+  // Read off the same bubble as the words, or off the server's answer when the window held none or
+  // held somebody else's — the route and the words must never come from two different messages.
+  const retryFromSession = retryIsTheReaders ? undefined : serverRetry?.sessionMessage;
   const resendFromSession = useMutation({
     // With whatever the composer has picked — pressing Retry after choosing a provider means
     // "re-send this there", and the server moves the session as it would on a send.
@@ -7413,6 +8015,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     onError: (e: Error) => void message.error("Couldn't re-send the message", e.message),
   });
   const resendFromSessionMutate = resendFromSession.mutate;
+  /**
+   * "Start it again" on the refused-run card: a NEW run of the task, which is what the task panel's
+   * Run now makes and the only recovery SR34 leaves for a refused SOURCE — the pin is terminal, so
+   * the next start resolves against the configuration as it stands, never against this baseline.
+   * `triggerId` is the press's own name, drawn at the click: a resend of a lost answer reuses it
+   * and is one request, while the next click draws another and is a second run.
+   */
+  const startRunAgain = useMutation({
+    ...runRequestResend,
+    mutationFn: ({ taskId, triggerId }: { taskId: string; triggerId: string }) =>
+      api(`/tasks/${taskId}/execute`, { method: 'POST', body: { triggerId } }),
+    onSuccess: () => {
+      message.success('Assignee workspace triggered');
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      if (selectedId) void qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    },
+    // The task moved on between the page's read and the press; the refusal names the run that has
+    // it, so it is reported as that run rather than as the server's sentence about claims.
+    onError: (e: Error) => reportTaskRunConflict(message, e),
+  });
   const sendMutate = send.mutate;
   // §2.1, §8 criterion 19: a Retry already in flight is not offered a second time. The server is
   // idempotent on the failed message, so a second click could not queue a second turn for one — but
@@ -7420,19 +8042,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // and either way the button must not promise an attempt it is not making. Both cards draw it
   // disabled from this, and both handlers refuse a re-entry that reaches them anyway.
   const retryInFlight = send.isPending || resendFromSession.isPending;
-  const geminiProviders = useQuery({
-    queryKey: PROVIDERS_LIST_KEY,
-    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
-    enabled: shownProvider === 'antigravity',
-  });
-  const geminiProvider = geminiProviders.data?.find((p) => p.presetSlug === 'gemini' && p.runtime === 'antigravity');
+  // The key a Harness session runs on is the session's own provider — whichever DeepSeek key that
+  // is — and its page is where the key is fixed.
+  const dshProviderRow =
+    selectedEngine === AgentProvider.DSH ? ownKeys.data?.find((p) => p.slug === selectedPick.provider) : undefined;
+  const geminiProvider = ownKeys.data?.find((p) => p.presetSlug === 'gemini' && p.runtime === 'antigravity');
   const geminiChoice = providerSwitchChoices.find((c) =>
-    c.kind === 'byok' && configuredProviders.some((p) => p.slug === c.slug && p.presetSlug === 'gemini' && p.runtime === 'antigravity'),
+    c.kind === 'key' && configuredProviders.some((p) => p.slug === c.slug && p.presetSlug === 'gemini' && p.runtime === 'antigravity'),
   );
   const installAntigravity = useMutation({
     mutationFn: () => api(`/runners/${encodeId(runner.id)}/install`, { method: 'POST', body: { engine: 'antigravity' } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
     onError: (e: Error) => void message.error("Couldn't install Antigravity CLI", e.message),
+  });
+  const installDsh = useMutation({
+    mutationFn: () => api(`/runners/${encodeId(runner.id)}/install`, { method: 'POST', body: { engine: 'dsh' } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
+    onError: (e: Error) => void message.error("Couldn't install DeepSeek Harness", e.message),
   });
   // Hand an undelivered message back to the composer, so a message the engine never received can
   // be re-sent without being retyped out of a bubble. Explicitly user-initiated, so unlike the
@@ -7471,31 +8097,58 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The same retry, plus the pending auto-retry, for the quota / provider-error card. Disarming
   // is a plain fire-and-forget: the detail query refetches on settle, and the card's own
   // countdown is driven by the value it reads back.
+  // Whose outage the card names. The session's own provider — deliberately NOT `shownProvider`,
+  // which carries the composer's pending pick: choosing another provider for the next turn (which
+  // is exactly what a person does when a quota is spent) renamed the provider that had actually
+  // failed, so a card about claude's spent window read as deepseek's. `detailForSelected` first,
+  // because a pick just made is the stale thing here, not the detail.
+  const outageProvider = detailForSelected?.provider ?? selected?.provider ?? 'claude';
   const autoRetryHelp: AutoRetryHelp = useMemo(
     () => ({
-      provider: shownProvider,
+      provider: outageProvider,
       runnerName: runner.name,
       retryAt: detailForSelected?.retryAt ?? null,
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
-        autoRetryText && !selectedTrashed && !selectedMissing
-          ? retryFromSession && selectedId
+        !selectedTrashed && !selectedMissing && selectedId && (nothingToResend || autoRetryText)
+          ? nothingToResend
             ? () => {
-                if (retryInFlight) return;
-                resendFromSessionMutate(selectedId);
-              }
-            : () => {
+                // Nothing of the reader's to send, so the press sends the platform's continue in
+                // their name — the words the note under the button quotes. Through `send`, so the
+                // composer's pick travels with it and a refusal arrives as any send's does.
                 if (retryInFlight) return;
                 sendMutate({
-                  content: autoRetryText,
+                  content: CONTINUE_MESSAGE,
                   images: [],
-                  attachmentIds: retry.attachmentIds,
+                  attachmentIds: [],
                   source: 'autoRetry',
                 });
               }
+            : retryFromSession
+              ? () => {
+                  if (retryInFlight) return;
+                  resendFromSessionMutate(selectedId);
+                }
+              : () => {
+                  if (retryInFlight) return;
+                  sendMutate({
+                    content: autoRetryText,
+                    images: [],
+                    // The files of the bubble THOSE words came from — and none at all when they
+                    // came from the server's answer, which this page holds no bubble for.
+                    attachmentIds: retryIsTheReaders ? retry.attachmentIds : [],
+                    source: 'autoRetry',
+                  });
+                }
           : undefined,
       retryDisabled: retryInFlight,
-      retryText: autoRetryText,
+      // Never the continue: the card states that sentence under its own button, and a "Will
+      // re-send:" quote would read as the reader's own words.
+      retryText: nothingToResend ? '' : autoRetryText,
+      nothingToResend,
+      // Read off the WINDOW alone — false when it holds somebody else's message or none at all,
+      // which are the two cases the card asks the server about (see `retryIsTheReaders`).
+      retryWordsAreTheReaders: retryIsTheReaders,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
       // typed message's. Handed to the card rather than left to the toast: it is the card's offer
       // to re-send that has stopped being true, so the card is where that has to show.
@@ -7522,11 +8175,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : undefined,
     }),
     [
-      shownProvider,
+      outageProvider,
       runner.name,
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      nothingToResend,
+      retry,
+      retryIsTheReaders,
       retryInFlight,
       retryFromSession,
       runConflict?.conflict,
@@ -7545,6 +8201,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ? clampPermissionModeForModel(
               effectivePermissionMode,
               effectiveModel,
+              shownEngine,
               shownProvider,
               configuredProviders,
               runner.modelCatalog,
@@ -7552,14 +8209,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           : effectivePermissionMode
       ] ?? 'Default')
     : mode;
-  const shownEffort: string = normalizeEffortForProvider(
+  // Effort is the engine's vocabulary, never the provider slug's: a key on Codex's protocol offers
+  // Codex's levels, a key under OpenCode OpenCode's variants.
+  const shownEffort: string = normalizeEffortFor(
+    shownEngine,
     shownProvider,
     live ? effectiveEffort : effort,
     shownModel,
     runner.modelCatalog,
     configuredProviders,
   );
-  const shownEffortOptions = effortOptionsForProvider(
+  const shownEffortOptions = effortOptionsFor(
+    shownEngine,
     shownProvider,
     shownModel,
     runner.modelCatalog,
@@ -7567,37 +8228,32 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   // Whether this session has a fast lane to offer at all — Claude's `/fast` on the models that
   // carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
-  // advertises it. The runtime, never the slug: a configured (BYOK) identity borrows one.
+  // advertises it. The engine, never the slug: a key runs on whichever engine the session has.
   // Unresolved means no, which is the safe direction: a pill that appears and then vanishes is
   // worse than one that appears a moment late, and this is the same fact the server polices at
   // dispatch.
   const fastModeUsable =
-    shownProviderCapabilitiesResolved &&
-    fastModeAvailable(
-      runtimeForProvider(shownProvider, configuredProviders),
-      shownModel,
-      runner.modelCatalog,
-    );
+    shownProviderCapabilitiesResolved && fastModeAvailable(shownEngine, shownModel, runner.modelCatalog);
   const shownFastMode: boolean = live ? effectiveFastMode : fastMode;
   // What a permission mode ACTUALLY means on the engine that will run it. Derived with the same
-  // shared table the server stamps onto the session payload, so the picker cannot drift from it.
-  //
-  // Only for built-in engines: a configured (BYOK) slug borrows a runtime this screen cannot name,
-  // and telling someone "you will be asked" for a session that might be running on Codex is
-  // exactly the false assurance this is here to remove. Unknown => say nothing.
-  const shownProviderIsBuiltin = Object.values(AgentProvider).some((p) => p === shownProvider);
+  // shared table the server stamps onto the session payload, so the picker cannot drift from it —
+  // from the session's own engine, which a key no longer hides. A key (or pool) on Claude Code owns
+  // its model space, which Claude's per-model Auto list cannot speak for (supportsAuto), so its model
+  // is left out of that one question.
+  const shownOnOwnModels =
+    shownEngine === AgentProvider.CLAUDE &&
+    !isLoginProvider(shownProvider) &&
+    configuredProviders.some((p) => p.slug === shownProvider);
   const permissionSemanticsFor = useCallback(
     (label: string) =>
-      shownProviderIsBuiltin
-        ? derivePermissionSemantics(
-            shownProvider,
-            MODE_TO_PERMISSION[label],
-            shownModel,
-            runner.runsAsRoot,
-            runner.modelCatalog,
-          )
-        : undefined,
-    [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot, runner.modelCatalog],
+      derivePermissionSemantics(
+        shownEngine,
+        MODE_TO_PERMISSION[label],
+        shownOnOwnModels ? undefined : shownModel,
+        runner.runsAsRoot,
+        runner.modelCatalog,
+      ),
+    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog],
   );
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
   // online to act on it), and none of them aborts the running turn. When the change lands is the
@@ -7721,14 +8377,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
   };
   // Delete Folder…: only the folder goes. Its sessions are back in the list, none of them deleted.
-  const confirmDeleteFolder = (folder: SessionFolder): void => {
-    modal.confirm({
+  const confirmDeleteFolder = (folder: SessionFolder, returnFocus?: RefObject<HTMLElement | null>): void => {
+    void confirm({
       title: FOLDER_COPY.deleteTitle(folder.name),
-      content: FOLDER_COPY.deleteMessage,
-      okText: FOLDER_COPY.deleteConfirm,
-      okButtonProps: { danger: true },
+      description: FOLDER_COPY.deleteMessage,
+      confirmText: FOLDER_COPY.deleteConfirm,
+      danger: true,
       cancelText: 'Cancel',
-      onOk: async () => {
+      returnFocus,
+      onConfirm: async () => {
         try {
           await deleteSessionFolder(folder.id);
         } catch (error) {
@@ -7746,15 +8403,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
   };
   // A folder's two management entries — its row's ⋯ and its page's ⋯ offer the same pair.
-  const folderMenuItems = (folder: SessionFolder): MenuProps['items'] => [
+  // The menu stops its own clicks before they reach the row, which would open the folder.
+  const folderMenuItems = (folder: SessionFolder, returnFocus?: RefObject<HTMLElement | null>): MenuItem[] => [
     {
       key: 'rename',
       icon: <EditOutlined />,
       label: FOLDER_COPY.rename,
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
+      onSelect: () => {
         setFolderMenuOpenId(null);
-        setFolderEdit({ id: folder.id, draft: folder.name, error: null, saving: false });
+        afterMenu(returnFocus?.current, () => setFolderEdit({ id: folder.id, draft: folder.name, error: null, saving: false }));
       },
     },
     {
@@ -7762,10 +8419,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       icon: <DeleteOutlined />,
       label: FOLDER_COPY.delete,
       danger: true,
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
+      onSelect: () => {
         setFolderMenuOpenId(null);
-        confirmDeleteFolder(folder);
+        confirmDeleteFolder(folder, returnFocus);
       },
     },
   ];
@@ -7814,23 +8470,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         <span className="session-folder-count">{row.sessionCount}</span>
         <span className="session-folder-end">
           <RightOutlined className="session-folder-chev" />
-          <Dropdown
-            trigger={['click']}
-            placement="bottomRight"
+          <Menu
+            side="bottom"
+            align="end"
+            // The ⋯ stays the span it is drawn as (see `.session-folder-more`); the menu makes it a button.
+            nativeButton={false}
             open={folderMenuOpenId === row.folder.id}
             onOpenChange={(open) => setFolderMenuOpenId(open ? row.folder.id : null)}
-            menu={{ items: folderMenuItems(row.folder) }}
-          >
-            <span
-              className="session-kebab session-folder-more"
-              role="button"
-              aria-label={FOLDER_COPY.more}
-              title={FOLDER_COPY.more}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreOutlined />
-            </span>
-          </Dropdown>
+            items={folderMenuItems(row.folder)}
+            trigger={
+              <span
+                className="session-kebab session-folder-more"
+                role="button"
+                aria-label={FOLDER_COPY.more}
+                title={FOLDER_COPY.more}
+              >
+                <MoreOutlined />
+              </span>
+            }
+          />
         </span>
       </div>
     );
@@ -7895,10 +8553,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickAccount = (account: string, signedOut: boolean): void => {
     if (!shownAccountEngine) return;
     if (signedOut) {
-      navigate(`/providers?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
+      navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
       return;
     }
-    if (!selected) return;
+    // A draft starts on it: nothing on the server yet, so the pick rides on the create.
+    if (!selected) {
+      pickDraftAccount(shownAccountEngine, account === AUTOMATIC_ACCOUNT ? null : account);
+      return;
+    }
     // An ended session whose switch onto this engine is still held: nothing on the server is on the
     // engine yet, so the account rides along with the switch, on the message that revives it.
     if (pendingResumeProvider && endedProviderPick) {
@@ -7911,35 +8573,46 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   };
   // `account`, when the pick was one of the engine's accounts listed under it rather than the engine's
   // own row: the switch lands the session there (SessionConfigDto.account) — Automatic's pick otherwise.
+  // Every row is a credential of the session's own engine, so no pick here changes the engine — the
+  // server refuses one that would (ENGINE_IMMUTABLE, PROVIDER_ENGINE_INCOMPATIBLE).
   const pickProvider = (v: string, account?: string): void => {
     if (v === shownProvider) {
       if (account !== undefined) pickAccount(account, false);
       return;
     }
     // A provider this runner can't run isn't a switch — it's a request for the sign-in (or
-    // install) that would make it one. Go straight to that engine's row on the Providers page, as
-    // the New Session picker's row does — or, for a choice that names its own fix (an account
+    // install) that would make it one. Go straight to that engine's row on Infrastructure, as
+    // the New Session hero's row does — or, for a choice that names its own fix (an account
     // pool), to that page. The chip keeps showing the provider still in use.
     const picked = providerSwitchChoices.find((c) => c.slug === v);
     if (picked?.unavailable) {
       navigate(
         picked.fixHref ??
-          `/providers?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
+          `/infrastructure?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? shownEngine}`,
       );
       return;
     }
-    // Each provider owns its model space, so carry the running model only when the new one offers
-    // it (two Anthropic accounts do; a third-party endpoint with its own list does not) and
-    // otherwise take that provider's default. Mode and effort follow the model, exactly as a model
+    // A draft holds the pick for its create. Model, mode and effort re-seed on their own: the
+    // provider is part of the draft's seed context (`modelContextKey`).
+    if (!selected) {
+      if (account === undefined) pickDraft(shownEngine, v);
+      else if (isAccountEngine(v)) pickDraftAccount(v, account === AUTOMATIC_ACCOUNT ? null : account);
+      return;
+    }
+    // Each credential owns its model space on the engine, so carry the running model only when the
+    // new one offers it (two Anthropic accounts do; a third-party endpoint with its own list does not)
+    // and otherwise take that one's default. Mode and effort follow the model, exactly as a model
     // switch makes them.
-    const nextModel = modelOptionsForProvider(v, runner.modelCatalog, configuredProviders).some(
+    const nextModel = modelOptionsFor(shownEngine, v, runner.modelCatalog, configuredProviders).some(
       (option) => option.value === shownModel,
     )
       ? shownModel
-      : defaultModelForProvider(v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
-    const drop = shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders, runner.modelCatalog);
+      : defaultModelFor(shownEngine, v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
+    const drop =
+      shownMode === 'Auto' && !supportsAuto(nextModel, shownEngine, v, configuredProviders, runner.modelCatalog);
     const currentEffort = live ? effectiveEffort : effort;
-    const nextEffort = normalizeEffortForProvider(
+    const nextEffort = normalizeEffortFor(
+      shownEngine,
       v,
       currentEffort,
       nextModel,
@@ -7976,42 +8649,63 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setEffort(nextEffort);
     }
   };
+  // The sign-in card's Retry is the same press through the same two doors, so it makes the same
+  // promise: the window's words only while they are the reader's own to send. Another session's go
+  // to the server's chooser, and are quoted — and routed — only as the server answered them.
+  const authRetryText = retryIsTheReaders ? retryText : serverRetryText;
+  const authRetryFromSession = retryIsTheReaders ? undefined : serverRetry?.sessionMessage;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
       provider: shownProvider,
+      keyName: selectedKeyName,
       runnerName: runner.displayName || runner.name,
       runnerId: runner.id,
       runnerVersion: runner.version,
-      runtime: runtimeForProvider(shownProvider, configuredProviders),
+      googleLogin: runner.antigravity?.googleLogin,
+      runtime: shownEngine,
       onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
         ? () => pickProvider(geminiChoice.slug)
         : undefined,
-      onOpenProviders: () => navigate(`/providers?runner=${encodeId(runner.id)}&engine=antigravity`),
+      onOpenProviders: () => navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=antigravity`),
       onInstall: runner.online && runner.antigravity?.supported ? () => installAntigravity.mutate() : undefined,
-      installDisabled: installAntigravity.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
+      installDisabled: installAntigravity.isPending || installDsh.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
+      onEditDshKey: () => navigate(dshProviderRow ? `/providers/${encodeId(dshProviderRow.id)}` : '/infrastructure#keys'),
+      onInstallDsh: runner.online && runner.capabilities?.includes(DSH_RUNNER_CAPABILITY) ? () => installDsh.mutate() : undefined,
       onRetry:
-        retryText && !selectedTrashed && !selectedMissing
-          ? retry.sessionMessage && selectedId
+        authRetryText && !selectedTrashed && !selectedMissing
+          ? authRetryFromSession && selectedId
             ? () => {
                 if (retryInFlight) return;
                 resendFromSessionMutate(selectedId);
               }
             : () => {
                 if (retryInFlight) return;
-                sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds });
+                sendMutate({
+                  content: authRetryText,
+                  images: [],
+                  // As the quota card's: only the words the reader's own bubble carries bring its
+                  // files; the server's answer comes without any this page could name.
+                  attachmentIds: retryIsTheReaders ? retry.attachmentIds : [],
+                });
               }
           : undefined,
       retryDisabled: retryInFlight,
-      retryText,
+      retryText: authRetryText,
+      // The card asks for the words when the window holds somebody else's (or none), for the same
+      // reason the quota card does: that press is the server's own re-send.
+      retryWordsAreTheReaders: retryIsTheReaders,
+      onNeedRetryText: selectedId ? () => setRetryMessageAskedFor(selectedId) : undefined,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
-      onUseApiKey: () => navigate('/providers'),
+      onUseApiKey: () => navigate('/infrastructure#keys'),
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.
     [
       shownProvider,
+      shownEngine,
+      selectedKeyName,
       runner.name,
       runner.displayName,
       runner.id,
@@ -8025,6 +8719,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       pickProvider,
       installAntigravity.mutate,
       installAntigravity.isPending,
+      installDsh.mutate,
+      installDsh.isPending,
+      dshProviderRow,
+      runner.capabilities,
       shownModel,
       shownMode,
       effectiveEffort,
@@ -8032,7 +8730,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       live,
       configMut.mutate,
       retry,
-      retryText,
+      authRetryText,
+      authRetryFromSession,
+      retryIsTheReaders,
       retryInFlight,
       selectedId,
       selectedTrashed,
@@ -8049,21 +8749,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ...prev,
         preferences: {
           ...prev.preferences,
-          defaultModels: { ...prev.preferences?.defaultModels, [shownProvider]: v },
+          defaultModels: { ...prev.preferences?.defaultModels, [defaultModelKey(shownEngine, shownProvider)]: v },
         },
       } : prev,
     );
-    modelPreferenceMut.mutate({ provider: shownProvider, model: v });
+    modelPreferenceMut.mutate({ engine: shownEngine, provider: shownProvider, model: v });
     if (v === shownModel) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;
     }
     // Switching to a model that can't do Auto while Auto is selected would send a mode claude
     // rejects — snap back to Default.
-    const drop = shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
+    const drop =
+      shownMode === 'Auto' && !supportsAuto(v, shownEngine, shownProvider, configuredProviders, runner.modelCatalog);
     // An OpenCode variant is model-defined: a model switch can strip it.
     const currentEffort = live ? effectiveEffort : effort;
-    const nextEffort = normalizeEffortForProvider(
+    const nextEffort = normalizeEffortFor(
+      shownEngine,
       shownProvider,
       currentEffort,
       v,
@@ -8093,7 +8795,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickEffort = (v: string): void => {
     if (v === shownEffort) return;
     effortSeedState.current = dirtyContextSeed(effortContextKey);
-    const normalized = normalizeEffortForProvider(
+    const normalized = normalizeEffortFor(
+      shownEngine,
       shownProvider,
       v,
       shownModel,
@@ -8126,11 +8829,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     </span>
   );
   // The runner's accounts of the session's engine, listed under it in the Provider submenu for a
-  // session on built-in Codex or Claude to move between — each with its own quota, as the New Session
-  // picker lists them. Only with two or more (one is nothing to choose), and only on a runner that
-  // carries a conversation from one account to another: an older one would resume it where it was.
+  // session on built-in Codex, Claude, Antigravity or Kimi to move between — each with its own quota, as
+  // the New Session picker lists them. Only with two or more (one is nothing to choose), and for a session
+  // only on a runner that carries a conversation from one account to another: an older one would resume
+  // it where it was. A draft has no conversation to carry, so it starts on any of them.
   const accountRows =
-    shownAccountEngine && runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine])
+    shownAccountEngine && (!selected || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine]))
       ? (providerSwitchChoices.find((choice) => choice.slug === shownAccountEngine)?.accounts ?? [])
       : [];
   const accountsOffered = accountRows.length > 1;
@@ -8141,13 +8845,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const automaticHere = !!shownAccountEngine && automaticOfferedOn(shownAccountEngine, shownWorkspaceRow);
   const sessionAutomatic =
     automaticHere &&
-    (pendingResumeProvider
+    (!selected
+      ? !draftAccountOf(shownAccountEngine)
+      : pendingResumeProvider
       ? !pendingResumeAccount || pendingResumeAccount === AUTOMATIC_ACCOUNT
-      : !(shownAccountEngine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned));
-  // Another built-in engine's accounts, listed under it as the New Session picker lists them: a switch
-  // onto that engine can land on any of them. On a runner that carries a conversation between them.
+      : !detailForSelected?.[ACCOUNT_PINNED_FIELD[shownAccountEngine]]);
+  // Another built-in engine's accounts, listed under it as the engine's own are: a switch
+  // onto that engine can land on any of them. For a session, on a runner that carries a conversation
+  // between them.
   const accountRowsFor = (engine: AccountEngine) => {
-    const rows = runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[engine])
+    const rows = !selected || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[engine])
       ? (providerSwitchChoices.find((choice) => choice.slug === engine)?.accounts ?? [])
       : [];
     return rows.length > 1 ? rows : [];
@@ -8163,7 +8870,203 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
-  const modelMenuItems: MenuProps['items'] = [
+  // The menu's title: the engine this session runs on — its own, recorded when it started and never
+  // changed, so no pick below can move it (board 5 ③); a draft's is the one the hero picked.
+  const engineTitle = useMemo(() => engineTitleFor(shownEngine), [shownEngine]);
+  const engineTitleGlyph = engineTitle.glyphKey ? PROVIDER_GLYPHS[engineTitle.glyphKey] : undefined;
+  // What the Provider row says it is on: an engine's own sign-in by the account in use — Automatic
+  // while Orbit picks it — OpenCode's own configuration by that, anything else by its own name.
+  const shownProviderRow = providerSwitchChoices.find((choice) => choice.slug === shownProvider);
+  const shownProviderValue =
+    shownProviderRow?.kind === 'login'
+      ? accountsOffered && sessionAutomatic
+        ? 'Automatic'
+        : (shownAccountLabel ?? shownProviderRow.label)
+      : shownProviderRow?.kind === 'opencode'
+        ? 'Own sign-in'
+        : (shownProviderRow?.label ?? shownProvider);
+  // One credential's row — and, under an engine's own sign-in, its accounts. On the sign-in the
+  // session is on, those are the ones it moves between (switchAccount); on a session spending a key
+  // or a pool of the same engine, the ones a switch onto the sign-in lands on (pickProvider with the
+  // account).
+  const providerRows = (choice: ProviderChoice): MenuItem[] => {
+    // Carry the reason on the row itself, where it answers the question being asked ("why can't I
+    // pick Claude?"). It stays pickable rather than greyed because picking it does something useful
+    // — it goes where the fix is (see pickProvider), which is the New Session hero's behaviour for
+    // the same engine. The running provider is exempt: it is the chip's own provider, and needs no
+    // parenthetical.
+    const blocked = !!choice.unavailable && choice.slug !== shownProvider;
+    const here = choice.slug === shownAccountEngine;
+    const engine: AccountEngine | null = choice.kind === 'login' && isAccountEngine(choice.slug) ? choice.slug : null;
+    const accounts = here ? (accountsOffered ? accountRows : []) : engine && !blocked ? accountRowsFor(engine) : [];
+    const automatic =
+      accounts.length > 0 && (here ? automaticHere : !!engine && automaticOfferedOn(engine, shownWorkspaceRow));
+    const pick = (account: string, signedOut: boolean) => {
+      if (here) return pickAccount(account, signedOut);
+      if (signedOut) {
+        navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${engine}`);
+        return;
+      }
+      pickProvider(engine!, account);
+    };
+    // An engine's own sign-in with more than one account is its accounts: the sign-in row itself
+    // would name nothing they do not.
+    const rows: MenuItem[] =
+      accounts.length > 0
+        ? []
+        : [
+            {
+              key: `provider:${choice.slug}`,
+              // Distinguishable at a glance from a credential that is ready to run, without being
+              // inert: the identity is dimmed, the call to action is not.
+              className: blocked ? 'composer-provider-fix' : undefined,
+              label: (
+                <span className="scope-menu-row">
+                  <span className="composer-provider-name">
+                    {(choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                    {blocked ? `${providerNameOn(shownEngine, choice)} — ${choice.unavailable}, fix it →` : choice.label}
+                    {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                  </span>
+                  {checkSlot(choice.slug === shownProvider)}
+                </span>
+              ),
+              onSelect: () => pickProvider(choice.slug),
+            },
+          ];
+    return [
+      ...rows,
+      ...(automatic
+        ? [
+            {
+              key: `${choice.slug}-account:automatic`,
+              className: 'composer-account-row',
+              label: (
+                <span className="scope-menu-row">
+                  <span className="composer-account-row-name">Automatic</span>
+                  {menuValue('Switches to soonest reset')}
+                  {checkSlot(here && sessionAutomatic)}
+                </span>
+              ),
+              onSelect: () => pick(AUTOMATIC_ACCOUNT, false),
+            },
+          ]
+        : []),
+      ...accounts.map((account) => ({
+        key: `${choice.slug}-account:${account.id}`,
+        className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
+          account.unavailable ? ' composer-provider-fix' : ''
+        }`,
+        label: (
+          <span className="scope-menu-row">
+            <span className="composer-account-row-name">
+              {account.unavailable ? `${account.label} — ${account.unavailable}, sign in →` : account.label}
+            </span>
+            {!account.unavailable && account.quota && menuValue(account.quota)}
+            {checkSlot(here && account.id === shownAccount && !sessionAutomatic)}
+          </span>
+        ),
+        onSelect: () => pick(account.id, !!account.unavailable),
+      })),
+    ];
+  };
+  // The session's own provider when its engine no longer lists it — a key turned off or deleted, the
+  // legacy built-in `dsh` — first, under its own heading, saying what became of it: a turned-off key
+  // opens its page, where it is turned back on; a deleted one is no choice at all (board 5 ④).
+  const sessionKeyRow = (choice: ProviderChoice): MenuItem => ({
+    key: `provider:${choice.slug}`,
+    disabled: shownKeyGone?.status === 'Key deleted',
+    className: shownKeyGone ? 'composer-provider-gone' : undefined,
+    label: (
+      <span className="scope-menu-row">
+        <span className="composer-provider-name">
+          <BrandMark choice={choice} size={16} />
+          {choice.label}
+          {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+        </span>
+        {shownKeyGone ? (
+          <span className="scope-menu-value is-warning">
+            <span className="scope-menu-value-text">{shownKeyGone.status === 'Key deleted' ? 'Deleted' : shownKeyGone.status}</span>
+          </span>
+        ) : (
+          checkSlot(true)
+        )}
+      </span>
+    ),
+    onSelect: () => (shownKeyGone?.href ? navigate(shownKeyGone.href) : undefined),
+  });
+  // The submenu, grouped by where a credential comes from (board 4 ④): the runner's own sign-in (or
+  // OpenCode's own configuration on it), the account pools, the keys — only what the session's engine
+  // runs (the compatibility table), never another engine's.
+  const providerGroup = (key: string, label: string, choices: ProviderChoice[]): MenuItem[] =>
+    choices.length === 0
+      ? []
+      : [{ key: `provider-group:${key}`, type: 'group' as const, label, children: choices.flatMap(providerRows) }];
+  // The machine the session's engine runs on, as its sign-in group names it.
+  const runnerLabel = runner.displayName || runner.name;
+  const listedChoices = shownProviderListed ? providerSwitchChoices : providerSwitchChoices.slice(1);
+  const ownCredential = listedChoices.filter((c) => c.kind === 'login' || c.kind === 'opencode');
+  // A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run, so its
+  // absence under OpenCode is said rather than left to be wondered about (board 4 ⑤).
+  const subscriptionOnly =
+    shownEngine === AgentProvider.OPENCODE
+      ? configuredProviders.filter(
+          (p) => p.runtime === AgentProvider.CLAUDE && p.engines?.length === 1 && p.engines[0] === AgentProvider.CLAUDE,
+        )
+      : [];
+  const providerMenuGroups: MenuItem[] = [
+    ...(!shownProviderListed && providerSwitchChoices[0]
+      ? [{ key: 'provider-group:session', type: 'group' as const, label: "This session's key", children: [sessionKeyRow(providerSwitchChoices[0])] }]
+      : []),
+    ...providerGroup(
+      'machine',
+      ownCredential.some((c) => c.kind === 'login' && !c.unavailable) ? `Signed in on ${runnerLabel}` : `On ${runnerLabel}`,
+      ownCredential,
+    ),
+    ...providerGroup('pools', 'Account pools', listedChoices.filter((c) => c.kind === 'pool')),
+    ...providerGroup('keys', 'API keys', listedChoices.filter((c) => c.kind === 'key')),
+    ...(subscriptionOnly.length > 0
+      ? [
+          {
+            key: 'provider-foot',
+            type: 'group' as const,
+            label: (
+              <span className="composer-provider-foot">
+                {subscriptionOnly.map((p) => p.label).join(', ')} {subscriptionOnly.length === 1 ? 'isn’t' : 'aren’t'} here: a
+                subscription token runs on Claude Code only.
+              </span>
+            ),
+          },
+        ]
+      : []),
+  ];
+  const modelMenuItems: MenuItem[] = [
+    // The menu's own title, and not a control: the one fact none of the rows below states is which
+    // CLI executes at all. It is never picked here — a run keeps its engine for its whole life, and
+    // moving it is the Provider row's job — so the row carries no onClick, no chevron, and the
+    // class drops the item's pointer and hover fill.
+    {
+      key: 'engine-title',
+      className: 'composer-engine-title',
+      label: (
+        <span className="composer-engine-title-row">
+          <span className="composer-engine-title-glyph" style={{ color: engineTitle.brand.from }}>
+            {engineTitleGlyph ? (
+              <svg
+                viewBox="0 0 24 24"
+                width={14}
+                height={14}
+                fill="currentColor"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: engineTitleGlyph }}
+              />
+            ) : (
+              <span className="composer-engine-title-mono">{engineTitle.brand.mono}</span>
+            )}
+          </span>
+          <span className="composer-engine-title-name">{engineTitle.name}</span>
+        </span>
+      ),
+    },
     ...(smartRoute
       ? [
           {
@@ -8183,13 +9086,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               </div>
             ),
           },
-          { key: 'smart-route-divider', type: 'divider' as const },
+          { key: 'smart-route-divider', type: 'separator' as const },
         ]
       : []),
-    // Only when there is somewhere to go: a second account with the same vendor, another endpoint on
-    // the same CLI, or another of the runner's Codex accounts. One entry means no switch is possible,
-    // and the row is left out rather than shown inert — the common case, one Claude sign-in and no
-    // configured providers.
+    // Only when there is somewhere to go: another credential the session's engine runs — a key, a
+    // pool, its own sign-in — or another of the runner's accounts. One entry means no switch is
+    // possible, and the row is left out rather than shown inert — the common case, one Claude sign-in
+    // and no keys.
     ...(providerSwitchChoices.length > 1 || accountsOffered
       ? [
           {
@@ -8197,87 +9100,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             label: (
               <span className="scope-menu-row">
                 Provider
-                {menuValue(providerSwitchChoices.find((c) => c.slug === shownProvider)?.label ?? shownProvider)}
+                {shownKeyGone ? (
+                  <span className="scope-menu-value is-warning">
+                    <span className="scope-menu-value-text">{shownKeyGone.status}</span>
+                  </span>
+                ) : (
+                  menuValue(shownProviderValue)
+                )}
               </span>
             ),
-            children: providerSwitchChoices.flatMap((choice) => {
-              // Carry the reason on the row itself, where it answers the question being asked
-              // ("why can't I pick Claude?"). It stays pickable rather than greyed because picking
-              // it does something useful — it goes where the fix is (see pickProvider), which is
-              // the New Session picker's behaviour for the same row. The running provider is
-              // exempt: it is the chip's own provider, and needs no parenthetical.
-              const blocked = !!choice.unavailable && choice.slug !== shownProvider;
-              // Each built-in engine's accounts under it, as the New Session picker lists them: on the
-              // engine the session is on, the ones it moves between (switchAccount); under another,
-              // the ones a switch onto that engine lands on (pickProvider with the account).
-              const here = choice.slug === shownAccountEngine;
-              const engine: AccountEngine | null =
-                choice.slug === 'codex' || choice.slug === 'claude' ? choice.slug : null;
-              const accounts = here ? (accountsOffered ? accountRows : []) : engine && !blocked ? accountRowsFor(engine) : [];
-              const automatic =
-                accounts.length > 0 && (here ? automaticHere : !!engine && automaticOfferedOn(engine, shownWorkspaceRow));
-              const pick = (account: string, signedOut: boolean) => {
-                if (here) return pickAccount(account, signedOut);
-                if (signedOut) {
-                  navigate(`/providers?runner=${encodeId(runner.id)}&engine=${engine}`);
-                  return;
-                }
-                pickProvider(engine!, account);
-              };
-              return [
-                {
-                  key: `provider:${choice.slug}`,
-                  // Distinguishable at a glance from a provider that is ready to run, without being
-                  // inert: the identity is dimmed, the call to action is not.
-                  className: blocked ? 'composer-provider-fix' : undefined,
-                  label: (
-                    <span className="scope-menu-row">
-                      {blocked
-                        ? `${choice.label} — ${choice.unavailable}, fix it →`
-                        : choice.label}
-                      {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
-                      {/* With its accounts listed, the tick is on the account the session runs on. */}
-                      {checkSlot(choice.slug === shownProvider && accounts.length === 0)}
-                    </span>
-                  ),
-                  onClick: () => pickProvider(choice.slug),
-                },
-                ...(automatic
-                  ? [
-                      {
-                        key: `${choice.slug}-account:automatic`,
-                        className: 'composer-account-row',
-                        label: (
-                          <span className="scope-menu-row">
-                            <span className="composer-account-row-name">Automatic</span>
-                            {menuValue('Resets soonest')}
-                            {checkSlot(here && sessionAutomatic)}
-                          </span>
-                        ),
-                        onClick: () => pick(AUTOMATIC_ACCOUNT, false),
-                      },
-                    ]
-                  : []),
-                ...accounts.map((account) => ({
-                  key: `${choice.slug}-account:${account.id}`,
-                  className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
-                    account.unavailable ? ' composer-provider-fix' : ''
-                  }`,
-                  label: (
-                    <span className="scope-menu-row">
-                      <span className="composer-account-row-name">
-                        {account.unavailable ? `${account.label} — ${account.unavailable}, sign in →` : account.label}
-                      </span>
-                      {!account.unavailable && account.quota && menuValue(account.quota)}
-                      {checkSlot(here && account.id === shownAccount && !sessionAutomatic)}
-                    </span>
-                  ),
-                  onClick: () => pick(account.id, !!account.unavailable),
-                })),
-              ];
-            }),
+            children: providerMenuGroups,
           },
-          { key: 'provider-divider', type: 'divider' as const },
+          { key: 'provider-divider', type: 'separator' as const },
         ]
       : []),
     ...shownModelOptions.map((option) => ({
@@ -8289,9 +9123,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {checkSlot(option.value === shownModel)}
         </span>
       ),
-      onClick: () => pickModel(option.value),
+      onSelect: () => pickModel(option.value),
     })),
-    { key: 'effort-divider', type: 'divider' as const },
+    { key: 'effort-divider', type: 'separator' as const },
     {
       key: 'effort',
       label: (
@@ -8308,7 +9142,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {checkSlot(option.value === shownEffort)}
           </span>
         ),
-        onClick: () => pickEffort(option.value),
+        onSelect: () => pickEffort(option.value),
       })),
     },
     // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast" tier
@@ -8338,18 +9172,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   {checkSlot(option.value === shownFastMode)}
                 </span>
               ),
-              onClick: () => pickFastMode(option.value),
+              onSelect: () => pickFastMode(option.value),
             })),
           },
         ]
       : []),
     ...(smartRoute
       ? [
-          { key: 'smart-route-open-divider', type: 'divider' as const },
+          { key: 'smart-route-open-divider', type: 'separator' as const },
           {
             key: 'open-task',
             label: <span className="composer-route-open">Open task ›</span>,
-            onClick: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
+            onSelect: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
           },
         ]
       : []),
@@ -8370,12 +9204,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       tagIds: selectedKeys.filter((id) => available.has(id)),
     });
   };
+  // A tag item adds its tag or takes it off; the whole selection is then written in one go.
+  const toggleTag = (key: string): void =>
+    setTagsFromMenu({
+      key,
+      selectedKeys: selectedSessionTagIds.includes(key)
+        ? selectedSessionTagIds.filter((id) => id !== key)
+        : [...selectedSessionTagIds, key],
+    });
   // One menu for everything that scopes the list: which slice (exclusive), then — below a
   // divider — the tag narrowing and sectioning. Tag entries only appear once the owner has
   // tags; the view entries always do, so Trash is reachable without ever having made one.
   // No group headings: the trigger already names the axis, and the shared check column is
   // what marks the three views as a mutually exclusive set.
-  const scopeItems: MenuProps['items'] = [
+  const scopeItems: MenuItem[] = [
     ...SESSION_VIEWS.map((v) => ({
       key: v.value,
       label: (
@@ -8384,11 +9226,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {checkSlot(shownView === v.value)}
         </span>
       ),
-      onClick: () => switchView(v.value),
+      onSelect: () => switchView(v.value),
     })),
     ...(sessionTags.length > 0
       ? [
-          { key: 'tag-divider', type: 'divider' as const },
+          { key: 'tag-divider', type: 'separator' as const },
           {
             key: 'filter',
             label: (
@@ -8416,7 +9258,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     {checkSlot(tagFilter === null)}
                   </span>
                 ),
-                onClick: () => setTagFilter(null),
+                onSelect: () => setTagFilter(null),
               },
               // Colour is how a tag is identified everywhere else (the row dots, the
               // "Group by Tag" headings), so carry the swatch here too.
@@ -8431,7 +9273,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     {checkSlot(tagFilter === t.id)}
                   </span>
                 ),
-                onClick: () => setTagFilter(tagFilter === t.id ? null : t.id),
+                onSelect: () => setTagFilter(tagFilter === t.id ? null : t.id),
               })),
             ],
           },
@@ -8443,7 +9285,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 {checkSlot(groupByTag)}
               </span>
             ),
-            onClick: () => setGroupByTag((g) => !g),
+            onSelect: () => setGroupByTag((g) => !g),
           },
         ]
       : []),
@@ -8451,11 +9293,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // narrowed to or grouped by a tag, or Trash, would have nowhere to draw the new one.
     ...(scopeWorkspaceId && listShowsFolders(shownView, listByTag)
       ? [
-          { key: 'folder-divider', type: 'divider' as const },
+          { key: 'folder-divider', type: 'separator' as const },
           {
             key: 'new-folder',
             label: <span className="scope-menu-row">{FOLDER_COPY.newFolder}</span>,
-            onClick: startNewFolder,
+            onSelect: () => afterMenu(scopeTrigger.current, startNewFolder),
           },
         ]
       : []),
@@ -8491,13 +9333,83 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : !runner.online
-          ? 'Runner offline'
+        : managedDraftBlocked || !runnerTakesWork
+          ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
             : selectedId
               ? 'Reply…'
               : 'Send this workspace a task…';
+  // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
+  // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
+  // screen). Only the placeholders above that explain why the box cannot send outrank it — and
+  // those states never offer one.
+  const waitingSummary = selectedSession as { pendingApprovals?: number; waitingKind?: string | null } | null;
+  const offeredSuggestion = offeredPromptSuggestion(
+    eventsSessionId === selectedId ? currentPromptSuggestion(events) : null,
+    {
+      idle,
+      draftEmpty: text === '' && images.length === 0,
+      replying: !!replyTo,
+      pendingApprovals: approvals.length + (waitingSummary?.pendingApprovals ?? 0),
+      waitingKind: waitingSummary?.waitingKind,
+      sendable:
+        !!selectedSession &&
+        !selectedTrashed &&
+        !selectedCompleted &&
+        !selectedMissing &&
+        !loadingSession &&
+        !sameSessionSendBlocked &&
+        runnerTakesWork,
+      failed: !!selectedSession && sessionRunStatusOf(selectedSession) === 'FAILED',
+    },
+  );
+  // Into the box with the caret at the end, the way a recalled draft lands: a guess is where the
+  // message starts, not a message sent — the person reads it, edits it if they like, and sends.
+  const acceptSuggestion = (): void => {
+    if (!offeredSuggestion) return;
+    setText(offeredSuggestion);
+    if (histIdx !== -1) setHistIdx(-1);
+    setTimeout(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = ta.value.length;
+    }, 0);
+  };
+  // A touch screen has no Tab: two taps on the box take the suggestion, as on the iPhone. The second
+  // tap is kept from the box, so it neither zooms the page nor drops the caret into the words it just
+  // received. The first is held too while the box is not focused yet: the keyboard it would raise
+  // lifts the page, and the second tap would land on the keyboard instead. A lone tap is handed on as
+  // the box's focus once the double-tap window passes (a timer this short keeps the tap's user
+  // activation, so the keyboard still comes up). A focused box keeps its first tap.
+  const onComposerTouchEnd = (e: ReactTouchEvent<HTMLTextAreaElement>): void => {
+    const touch = e.changedTouches[0];
+    const last = lastComposerTap.current;
+    if (!offeredSuggestion || !touch) {
+      lastComposerTap.current = null;
+      return;
+    }
+    const tap = { at: e.timeStamp, x: touch.clientX, y: touch.clientY };
+    if (
+      last &&
+      tap.at - last.at <= DOUBLE_TAP_MS &&
+      Math.hypot(tap.x - last.x, tap.y - last.y) <= DOUBLE_TAP_SLOP_PX
+    ) {
+      window.clearTimeout(last.held);
+      lastComposerTap.current = null;
+      e.preventDefault();
+      acceptSuggestion();
+      return;
+    }
+    const box = e.currentTarget;
+    let held: number | undefined;
+    if (document.activeElement !== box) {
+      e.preventDefault();
+      held = window.setTimeout(() => box.focus(), DOUBLE_TAP_MS);
+    }
+    lastComposerTap.current = { ...tap, held };
+  };
 
   return (
     <div className={`workspace-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
@@ -8510,19 +9422,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </button>
             <span className="session-folder-titles">
               <span className="session-folder-title">{pageProjectTitle}</span>
-              <span className="session-folder-workspace">{SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}</span>
+              <span className="session-folder-workspace">
+                {loadingSessions && projectMembers.length === 0
+                  ? SESSION_PROJECT_COPY.pageSubtitleLoading
+                  : SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}
+              </span>
             </span>
-            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
-              { key: 'project', label: SESSION_PROJECT_COPY.openProject,
-                onClick: () => navigate(`/projects/${encodeId(openProjectId)}`) },
-              { key: 'coordinator', label: SESSION_PROJECT_COPY.openCoordinator, disabled: !pageMenuCoordinator,
-                onClick: () => pageMenuCoordinator && navigateWithPaneSlide('push', () =>
-                  navigate(sessionPath(pageMenuCoordinator.id), { state: stampFromList() })) },
-            ] }}>
-              <button type="button" className="session-kebab session-folder-head-more" aria-label="Project actions">
-                <MoreOutlined />
-              </button>
-            </Dropdown>
+            {/* The page's one action, as iOS's toolbar has it: the project's own page. The
+                coordinator is the first row below, so it needs no entry of its own up here. */}
+            <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
+              aria-label={SESSION_PROJECT_COPY.openProject} title={SESSION_PROJECT_COPY.openProject}
+              onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
+              <AppstoreOutlined />
+            </button>
           </div>
         ) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -8556,11 +9468,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               )}
               <span className="session-folder-workspace">{headWorkspaceName}</span>
             </span>
-            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: folderMenuItems(openFolder) }}>
-              <span className="session-kebab session-folder-head-more" role="button" aria-label={FOLDER_COPY.more}>
-                <MoreOutlined />
-              </span>
-            </Dropdown>
+            <Menu
+              side="bottom"
+              align="end"
+              nativeButton={false}
+              items={folderMenuItems(openFolder, folderHeadMore)}
+              trigger={
+                <span ref={folderHeadMore} className="session-kebab session-folder-head-more" role="button" aria-label={FOLDER_COPY.more}>
+                  <MoreOutlined />
+                </span>
+              }
+            />
           </div>
         ) : (
           <div className="session-col-head">
@@ -8570,31 +9488,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 chip row — both read as clutter in a narrow column, and Open is nearly always
                 the answer. The trigger names the current view so a list scoped to
                 Completed/Trash always explains itself. (The native clients still tab.) */}
-            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
-              <span
-                className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
-                title="Switch view, filter and group"
-              >
-                {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
-                <DownOutlined />
-              </span>
-            </Dropdown>
+            <Menu
+              side="bottom"
+              align="end"
+              nativeButton={false}
+              popupClassName="session-scope-popup"
+              items={scopeItems}
+              trigger={
+                <span
+                  ref={scopeTrigger}
+                  className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
+                  title="Switch view, filter and group"
+                >
+                  {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
+                  <DownOutlined />
+                </span>
+              }
+            />
           </div>
         )}
         {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
           <div className="session-folder-error">{folderEdit.error}</div>
-        )}
-        {openProjectId && (
-          <div className="session-project-page-progress">
-            {pageTaskCounts && (
-              <>
-                <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
-                <span>{SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}</span>
-              </>
-            )}
-            <a href={`/projects/${encodeId(openProjectId)}`} aria-label={SESSION_PROJECT_COPY.openProject}
-              onClick={(e) => { e.preventDefault(); navigate(`/projects/${encodeId(openProjectId)}`); }}>↗</a>
-          </div>
         )}
         {!openProjectId && <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
@@ -8625,9 +9539,65 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ref={listRef}
           onScroll={onSessionListScroll}
         >
+          {/* The project's first card and its merge into main lead the list and scroll with it, as
+              on iOS (docs/mocks/project-sessions-page-web); the coordinator's conversation keeps
+              a line about the merge. A DONE project's first card is its ending, in the progress
+              card's place (docs/mocks/project-done-sessions-page) — the progress card itself would
+              say nothing but the word Done. */}
+          {openProjectId && pageSettledDoc && (
+            <ProjectWhyNotDoneCard project={pageSettledDoc} />
+          )}
+          {openProjectId && !pageSettledDoc && (
+            <>
+              <div className="session-project-page-card">
+                <div className="session-project-page-progress">
+                  {pageTaskCounts ? (
+                    <>
+                      <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
+                      <span>
+                        {pageNotStarted
+                          ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
+                          : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
+                      </span>
+                    </>
+                  ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+                </div>
+                {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
+              </div>
+              {/* The landing left the progress card on 2026-10-11: it is a card of its own under it
+                  (docs/mocks/project-landing-card), ahead of the merge card in the same list. */}
+              <SessionProjectLanding projectId={openProjectId}
+                onOpen={() => navigate(`/projects/${encodeId(openProjectId)}`)} />
+            </>
+          )}
+          {openProjectId && (
+            <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
+              onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
+                navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
+          )}
           {openProjectId
-            ? projectMembers.length === 0 && !loadingSessions &&
-              <div className="chat-note">{projectSessionsQ.isError || completedProjectSessionsQ.isError ? 'Couldn’t load project sessions.' : 'No sessions in this project.'}</div>
+            ? projectMembers.length === 0 && !loadingSessions && (
+              <div className="session-project-empty">
+                {pageSessionsError ? (
+                  <>
+                    <ExclamationCircleOutlined className="session-project-empty-icon" />
+                    <b>{SESSION_PROJECT_COPY.pageUnread}</b>
+                    <span>{pageSessionsError.message}</span>
+                    <button type="button" className="session-project-empty-retry" onClick={() => {
+                      void projectSessionsQ.refetch();
+                      void completedProjectSessionsQ.refetch();
+                    }}>
+                      {SESSION_PROJECT_COPY.retry}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <MessageOutlined className="session-project-empty-icon" />
+                    <b>{SESSION_PROJECT_COPY.pageEmpty}</b>
+                  </>
+                )}
+              </div>
+            )
             : openFolder
             ? listedSessions.length === 0 &&
               !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
@@ -8674,6 +9644,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 </div>
               )}
               {sec.sessions.map((s) => {
+                if (s.kind === 'merge') {
+                  return (
+                    <ProjectMergeTimelineRow key={s.id} promotion={s.promotion}
+                      time={fmtTime(s.promotion.merged?.at ?? undefined)} />
+                  );
+                }
                 if (s.kind === 'project') {
                   const coordinator = s.coordinator;
                   const openTarget = () => {
@@ -8693,10 +9669,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       project={s}
                       active={s.members.some((member) => member.id === selectedId) ||
                         selectedSession?.projectMembership?.projectId === s.projectId}
-                      onOpen={openTarget}
-                      onSessions={() => {
+                      onOpen={() => {
                         if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
                         if (swipeOpen) { setSwipeOpen(null); return; }
+                        setMenuOpenId(null);
                         enterProjectSessions(s.projectId);
                       }}
                       menuOpen={menuOpenId === s.id}
@@ -8707,31 +9683,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         onMove: onRowTouchMove, onEnd: onRowTouchEnd, onCancel: onRowTouchCancel,
                         onAction: (action) => runSwipeAction(action, coordinator),
                       } : undefined}
-                      menu={{
-                        items: [
-                          { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session' },
-                          { key: 'sessions', label: SESSION_PROJECT_COPY.sessions },
-                          { key: 'project', label: SESSION_PROJECT_COPY.openProject },
-                          { type: 'divider' as const },
-                          { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator },
-                          { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator },
-                        ],
-                        onClick: ({ key, domEvent }) => {
-                          domEvent.stopPropagation();
-                          setMenuOpenId(null);
-                          if (key === 'session') openTarget();
-                          else if (key === 'sessions') enterProjectSessions(s.projectId);
-                          else if (key === 'project') navigate(`/projects/${encodeId(s.projectId)}`);
-                          else if (coordinator) runSwipeAction(key as SwipeAction, coordinator);
-                        },
-                      }}
+                      // The menu stops its own clicks before they reach the row, which would open it.
+                      menu={[
+                        { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
+                          onSelect: () => { setMenuOpenId(null); openTarget(); } },
+                        { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
+                          onSelect: () => { setMenuOpenId(null); enterProjectSessions(s.projectId); } },
+                        { key: 'project', label: SESSION_PROJECT_COPY.openProject,
+                          onSelect: () => { setMenuOpenId(null); navigate(`/projects/${encodeId(s.projectId)}`); } },
+                        { key: 'divider', type: 'separator' },
+                        { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
+                          onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('pin', coordinator); } },
+                        { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator,
+                          onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('move', coordinator); } },
+                      ]}
                     />
                   );
                 }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const memberView = sessionRowView(actionSession);
-                const swipeActions = sessionSwipeActions(memberView);
-                const swipeSizes = swipeWidths(memberView);
+                const movable = sessionMovable(s);
+                const swipeActions = sessionSwipeActions(memberView, movable);
+                const swipeSizes = swipeWidths(memberView, movable);
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 // Open and Completed rows open their transcript; only
@@ -8741,7 +9714,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
                 const watching = sessionWatching(watchingBySession, s.id);
-                const line = sessionLine(actionSession, openable, watching);
+                const line = sessionLine(actionSession, openable, watching, recapsEnabled);
                 const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                 const swipeTx = drag
                   ? drag.dx
@@ -8759,7 +9732,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
                   purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
                 };
-                const menuItem = (action: SwipeAction) => ({
+                // `close` closes the menu the item is in: the row's ⋯ menu or the one a held press opens;
+                // `kebab` reads that ⋯ when the item is picked.
+                const menuItem = (action: SwipeAction, close: () => void, kebab?: () => HTMLElement | null): MenuItem => ({
                   key: action,
                   icon: swipeButtons[action].icon,
                   disabled: swipeButtons[action].disabled,
@@ -8777,22 +9752,42 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     ? !canCompleteRow ? 'Complete unavailable right now'
                       : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
                     : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
+                  // The menu stops its own clicks before they reach the row, which would open it.
+                  onSelect: () => {
+                    close();
+                    runSwipeAction(action, s, kebab && { current: kebab() });
+                  },
                 });
-                const menuItems: MenuProps['items'] = memberView === 'trash'
-                  ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
-                  : [
-                      ...swipeActions.leading.map(menuItem),
-                      { type: 'divider' },
-                      menuItem('share'),
-                      ...(!s.projectMembership || s.projectMembership.role === 'COORDINATOR' ? [menuItem('move')] : []),
-                      { type: 'divider' },
-                      menuItem('delete'),
-                    ];
+                // Rename… opens a field rather than acting, so it is no swipe action (as on iOS) and
+                // sits with the other … items. A trashed session's title isn't edited (the header's
+                // isn't either).
+                const menuItems = (close: () => void, kebab?: () => HTMLElement | null): MenuItem[] =>
+                  memberView === 'trash'
+                    ? [menuItem('restore', close), { key: 'divider', type: 'separator' }, menuItem('purge', close, kebab)]
+                    : [
+                        ...swipeActions.leading.map((action) => menuItem(action, close, kebab)),
+                        { key: 'divider', type: 'separator' },
+                        { key: 'rename', icon: <EditOutlined />, label: 'Rename…', onSelect: () => {
+                          close();
+                          afterMenu(kebab?.(), () => setRenamingId(s.id));
+                        } },
+                        menuItem('share', close),
+                        ...(movable ? [menuItem('move', close)] : []),
+                        { key: 'divider-delete', type: 'separator' },
+                        menuItem('delete', close, kebab),
+                      ];
+                const renaming = renamingId === s.id;
                 return (
                   <div
-                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}`}
+                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${renaming ? ' renaming' : ''}`}
                     key={s.id}
+                    // While it is renamed, a press anywhere else on the row keeps the field's focus
+                    // (leaving the field saves), and a click there doesn't open the row.
+                    onMouseDown={(e) => {
+                      if (renaming && !(e.target instanceof HTMLInputElement)) e.preventDefault();
+                    }}
                     onClick={() => {
+                      if (renaming) return;
                       if (swipeClickGuard.current) {
                         swipeClickGuard.current = false;
                         return; // this click merely ends a swipe
@@ -8807,11 +9802,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           navigate(sessionItemPath(actionSession), { state: stampFromList() }),
                         );
                     }}
-                    onTouchStart={(e) => onRowTouchStart(e, actionSession, canFullSwipe)}
+                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe); }}
                     onTouchMove={onRowTouchMove}
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
                   >
+                    {isMobile && pressMenu?.id === s.id && (
+                      <Menu
+                        open
+                        side="bottom"
+                        align="start"
+                        // Where the finger is held: an empty mark the menu is placed against, not a control.
+                        nativeButton={false}
+                        popupClassName="session-row-menu session-press-menu"
+                        onOpenChange={(open) => { if (!open) setPressMenu(null); }}
+                        items={menuItems(() => setPressMenu(null))}
+                        trigger={<span className="session-press-anchor" style={{ left: pressMenu.x, top: pressMenu.y }} />}
+                      />
+                    )}
                     {isMobile &&
                       (['leading', 'trailing'] as const).map((side) => (
                         <div
@@ -8848,64 +9856,71 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
-                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
-                        {/* Tags lead the second line and the reply preview follows them. They sat
-                            beside the title as bare colour dots until the naming pass started
-                            writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
-                            meaning lived only in a tooltip. Here they read at a glance and the
-                            preview yields, being the echo of a reply rather than the handle you
-                            file the session under. */}
-                        <div className="session-sub">
-                          <SessionTagChips
-                            tags={s.tags as SessionTagRef[] | null | undefined}
-                            tooltipOpen={hoverTipOpen}
+                        {renaming ? (
+                          <SessionRowRename
+                            title={s.title ?? ''}
+                            onDone={(title) => {
+                              setRenamingId(null);
+                              if (title) renameMut.mutate({ id: s.id, title });
+                            }}
                           />
-                          <div
-                            className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
-                          >
-                            {line.text}
-                          </div>
-                        </div>
+                        ) : (
+                          <>
+                            <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+                            {/* Tags lead the second line and the reply preview follows them. They sat
+                                beside the title as bare colour dots until the naming pass started
+                                writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
+                                meaning lived only in a tooltip. Here they read at a glance and the
+                                preview yields, being the echo of a reply rather than the handle you
+                                file the session under. */}
+                            <div className="session-sub">
+                              <SessionTagChips
+                                tags={s.tags as SessionTagRef[] | null | undefined}
+                                tooltipOpen={hoverTipOpen}
+                              />
+                              <div
+                                className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                              >
+                                {/* The label and the space after it are drawn together, so a line
+                                    with no label carries no separator of its own. */}
+                                {line.label && (
+                                  <>
+                                    <span className="session-preview-label">{line.label}</span>{' '}
+                                  </>
+                                )}
+                                {line.text}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="session-right">
                       <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                        <Dropdown
-                          trigger={['click']}
-                          placement="bottomRight"
-                          autoFocus
-                          classNames={{ root: 'session-row-menu' }}
+                        <Menu
+                          side="bottom"
+                          align="end"
+                          popupClassName="session-row-menu"
                           open={menuOpenId === s.id}
                           onOpenChange={(open) => {
                             setMenuOpenId((current) => open ? s.id : current === s.id ? null : current);
                             if (open) setSwipeOpen(null);
                           }}
-                          menu={{
-                            items: menuItems,
-                            onClick: ({ key, domEvent }) => {
-                              domEvent.stopPropagation();
-                              setMenuOpenId(null);
-                              runSwipeAction(key as SwipeAction, s);
-                            },
-                          }}
-                        >
-                          <button
-                            type="button"
-                            className="session-kebab"
-                            aria-label="More actions"
-                            aria-haspopup="menu"
-                            aria-expanded={menuOpenId === s.id}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => {
-                              if (e.key !== 'ArrowDown') return;
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setMenuOpenId(s.id);
-                            }}
-                          >
-                            <EllipsisOutlined />
-                          </button>
-                        </Dropdown>
+                          items={menuItems(() => setMenuOpenId(null), () => rowKebabs.current.get(s.id) ?? null)}
+                          trigger={
+                            <button
+                              ref={(node) => {
+                                if (node) rowKebabs.current.set(s.id, node);
+                                else rowKebabs.current.delete(s.id);
+                              }}
+                              type="button"
+                              className="session-kebab"
+                              aria-label="More actions"
+                            >
+                              <EllipsisOutlined />
+                            </button>
+                          }
+                        />
                       </div>
                     </div>
                   </div>
@@ -8918,7 +9933,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               abrupt end of list. */}
           {loadingSessions && (
             <div className="session-list-more">
-              <Spin size="small" />
+              <Spinner size="small" />
             </div>
           )}
         </div>
@@ -9002,9 +10017,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     onChange={(e) => setTitleDraft(e.target.value)}
                     onFocus={(e) => {
                       // Select all (double-click-to-rename = type replaces), but anchor the
-                      // caret at the START so a long title shows its head, not its tail.
+                      // caret at the START so a long title shows its head, not its tail. The
+                      // anchor alone doesn't scroll: Chromium keeps the field at the end it
+                      // focused at.
                       const el = e.currentTarget;
                       el.setSelectionRange(0, el.value.length, 'backward');
+                      el.scrollLeft = 0;
                     }}
                     onKeyDown={(e) => {
                       if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
@@ -9070,38 +10088,34 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           </div>
           {selected && !composing && (
             <>
-              <Dropdown
-                trigger={['click']}
-                placement="bottomRight"
+              <Menu
+                side="bottom"
+                align="end"
+                popupClassName="workspace-header-menu"
                 open={headerMenuOpen}
                 onOpenChange={setHeaderMenuOpen}
-                menu={{
-                  selectable: !selectedTrashed,
-                  multiple: !selectedTrashed,
-                  selectedKeys: selectedTrashed ? [] : selectedSessionTagIds,
-                  onSelect: selectedTrashed ? undefined : setTagsFromMenu,
-                  onDeselect: selectedTrashed ? undefined : setTagsFromMenu,
-                  items: selectedTrashed
+                items={
+                  selectedTrashed
                     ? [
                         {
                           key: 'restore',
                           icon: <UndoOutlined />,
                           label: 'Restore to Open',
                           disabled: !selectedCanRestore,
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
                             requestRestore(selected);
                           },
                         },
-                        { type: 'divider' },
+                        { key: 'divider-1', type: 'separator' },
                         {
                           key: 'purge',
                           icon: <DeleteOutlined />,
                           danger: true,
                           label: 'Delete permanently',
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
-                            confirmPurge({ id: selected.id, title: selected.title });
+                            confirmPurge({ id: selected.id, title: selected.title }, headerMore);
                           },
                         },
                       ]
@@ -9112,19 +10126,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           key: 'find',
                           icon: <SearchOutlined />,
                           label: `Find in session · ${FIND_HINT}`,
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
-                            openSessionFind();
+                            afterMenu(headerMore.current, openSessionFind);
                           },
                         },
                         ...(sessionTags.length > 0
                           ? [
                               {
+                                key: 'tags',
                                 type: 'group' as const,
                                 label: 'Tags',
                                 children: sessionTags.map((t) => ({
                                   key: t.id,
                                   disabled: setTagsMut.isPending,
+                                  // A tag is added or taken off, and the menu stays open for the next one.
+                                  selected: selectedSessionTagIds.includes(t.id),
+                                  closeOnSelect: false,
+                                  onSelect: () => toggleTag(t.id),
                                   label: (
                                     <span className="scope-menu-row">
                                       <span className="scope-tag-label">
@@ -9141,7 +10160,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                               },
                             ]
                           : []),
-                        { type: 'divider' as const },
+                        { key: 'divider-2', type: 'separator' as const },
                         // A Completed session is retained, not gone — offer the same move
                         // its row has in Completed, so it can return to Open in place.
                         ...(selectedCompleted
@@ -9151,18 +10170,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 icon: <UndoOutlined />,
                                 label: 'Move to Open',
                                 disabled: !selectedCanRestore,
-                                onClick: () => {
+                                onSelect: () => {
                                   setHeaderMenuOpen(false);
                                   requestRestore(selected);
+                                },
+                              },
+                              {
+                                key: 'rename',
+                                icon: <EditOutlined />,
+                                label: 'Rename…',
+                                onSelect: () => {
+                                  setHeaderMenuOpen(false);
+                                  setTitleDraft(selected.title);
+                                  afterMenu(headerMore.current, () => setEditingTitle(true));
                                 },
                               },
                               {
                                 key: 'move',
                                 icon: <FolderOutlined />,
                                 label: MOVE_COPY.action,
-                                onClick: () => openMove(selectedSession ?? selected),
+                                onSelect: () => openMove(selectedSession ?? selected),
                               },
-                              { type: 'divider' as const },
+                              { key: 'divider-3', type: 'separator' as const },
                             ]
                           : selectedLifecycleState === 'OPEN'
                             ? [
@@ -9171,9 +10200,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                   icon: <CheckOutlined />,
                                   label: 'Complete',
                                   disabled: !selectedCanComplete,
-                                  onClick: () => {
+                                  onSelect: () => {
                                     setHeaderMenuOpen(false);
                                     requestComplete(selected);
+                                  },
+                                },
+                                // The same editor a double-click on the title opens, which nothing
+                                // on screen announces.
+                                {
+                                  key: 'rename',
+                                  icon: <EditOutlined />,
+                                  label: 'Rename…',
+                                  onSelect: () => {
+                                    setHeaderMenuOpen(false);
+                                    setTitleDraft(selected.title);
+                                    afterMenu(headerMore.current, () => setEditingTitle(true));
                                   },
                                 },
                                 // Filing it, beside the other move it can make (§2).
@@ -9181,9 +10222,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                   key: 'move',
                                   icon: <FolderOutlined />,
                                   label: MOVE_COPY.action,
-                                  onClick: () => openMove(selectedSession ?? selected),
+                                  onSelect: () => openMove(selectedSession ?? selected),
                                 },
-                                { type: 'divider' as const },
+                                { key: 'divider-4', type: 'separator' as const },
                               ]
                             : []),
                         // Two words for two links (docs/share-links-design.md §8): Copy link is
@@ -9193,7 +10234,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           key: 'copy-link',
                           icon: <LinkOutlined />,
                           label: 'Copy link',
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
                             copySessionLink(selected);
                           },
@@ -9208,7 +10249,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           ) : (
                             'Share…'
                           ),
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
                             setShareOpen(true);
                           },
@@ -9218,27 +10259,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           icon: <DownloadOutlined />,
                           label: downloadingHtml ? 'Preparing HTML…' : 'Download HTML',
                           disabled: downloadingHtml,
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
                             void downloadHtml(selectedSession ?? selected);
                           },
                         },
-                        { type: 'divider' },
+                        { key: 'divider-5', type: 'separator' },
                         {
                           key: 'delete',
                           icon: <DeleteOutlined />,
                           danger: true,
                           label: 'Delete',
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
-                            requestTrash(selected);
+                            requestTrash(selected, headerMore);
                           },
                         },
-                      ],
-                }}
-              >
-                <Button type="text" icon={<MoreOutlined />} title="More actions" />
-              </Dropdown>
+                      ]
+                }
+                trigger={<Button ref={headerMore} variant="text" icon={<MoreOutlined />} title="More actions" />}
+              />
             </>
           )}
         </div>
@@ -9340,6 +10380,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
+              <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
                   says so, and otherwise it is the way to the first message, which scrolling alone
                   never reaches (see jumpToStart). Pinned to the top of the viewport rather than
@@ -9359,8 +10400,45 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   )}
                 </div>
               )}
-              {placeholder === 'queued' && showQueuedNotice && (
-                antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
+              {/* A run that never became one says why, in place of the waiting notice that would
+                  otherwise promise it is still coming. It takes the slot the two notices below
+                  take, and suppresses them: the same empty transcript cannot be both a start that
+                  is on its way and a start that was refused. */}
+              {selected && !selectedTrashed && neverStarted && (
+                <RunNeverStartedCard
+                  never={neverStarted}
+                  actions={{
+                    // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
+                    // task — the same write the task panel's Run now makes, under the same
+                    // request token so a lost answer is resent rather than duplicated.
+                    startAgain: selectedSession?.taskId
+                      ? () =>
+                          startRunAgain.mutate({
+                            taskId: selectedSession.taskId as string,
+                            triggerId: newRunRequestToken(),
+                          })
+                      : undefined,
+                    // An ordinary session is resumable as it stands, so the message goes again —
+                    // the transcript's own retry, whose words it would carry.
+                    sendAgain: authErrorHelp.onRetry,
+                    install:
+                      selectedRuntime === AgentProvider.DSH
+                        ? authErrorHelp.onInstallDsh
+                        : authErrorHelp.onInstall,
+                    openProviders:
+                      selectedRuntime === AgentProvider.DSH
+                        ? authErrorHelp.onEditDshKey
+                        : authErrorHelp.onOpenProviders,
+                    openRunner: () => navigate(`/runners/${encodeId(runner.id)}`),
+                    // The conversation is the other way to answer a refusal, so this only arms it:
+                    // the reader's own words are the point, and nothing is sent for them.
+                    chatAbout: () => setTimeout(() => taRef.current?.focus(), 0),
+                    busy: retryInFlight || startRunAgain.isPending,
+                  }}
+                />
+              )}
+              {placeholder === 'queued' && showQueuedNotice && !neverStarted && (
+                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
                     <span />
@@ -9370,7 +10448,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   <div className="chat-queued-desc">{slotWaitDescription}</div>
                 </div>
               )}
-              {placeholder === 'starting' && showStartingNotice && (
+              {placeholder === 'starting' && showStartingNotice && !neverStarted && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -9440,11 +10518,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   }
                 />
               )}
-              {/* The merge this project is asking its owner to make, drawn in the conversation that
-                  is coordinating it (mock 4, §3.3): what would land on main, what the checks came
-                  to, and — while it is under way — why nobody is being asked to press anything yet.
-                  Read from the candidate itself rather than from any turn, so it is the same card
-                  the project page shows.
+              {/* The merge this project is asking its owner to make, as one line in the conversation
+                  that is coordinating it: the card's home is the project's sessions view (owner
+                  decision 2026-10-06), and the line opens that same card — what would land on main,
+                  what the checks came to, and while it is under way why nobody is being asked to
+                  press anything yet. Read from the candidate itself rather than from any turn.
                   ASKING, NOT RECORDING: what already has a moment is drawn at that moment instead —
                   a merge as its receipt (`mergedPromotions` above), a candidate a check blocked as
                   the card itself (`blockedPromotionCard` above) — rather than kept here under
@@ -9456,15 +10534,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   projectId={coordinatedProjectId}
                   drawRecords={false}
                   onChat={chatAboutThis}
+                  asLine
                 />
               )}
               {/* A question THIS conversation put to the account owner, drawn where it was asked
                   (mock 5, §5.2): the coordinator asks and goes on working, and the card is what the
                   owner answers — so the conversation shows what it is waiting on rather than only
                   the sentence it wrote when it asked. Drawn from the open items and not from any
-                  turn, so it is the same card the project page shows, and it goes when it is
-                  answered. Keyed apart from its siblings for the reason the evidence card's note
-                  gives below. */}
+                  turn, so it is the same card the project page shows. Once it is answered or
+                  withdrawn it is drawn above as the record it became (`questionRecords`). Keyed
+                  apart from its siblings for the reason the evidence card's note gives below. */}
               {selected && selectedId && !selectedTrashed && (
                 <CoordinatorQuestions
                   key={`coordinator-question:${selectedId}`}
@@ -9484,6 +10563,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   key={`evidence:${selectedId}`}
                   sessionId={selectedId}
                   projectId={selectedSession?.projectId ?? null}
+                  coordinator={selectedSession}
                   onSendBack={startEvidenceSendBack}
                 />
               )}
@@ -9518,33 +10598,42 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   onViewTasks={(createdTasks.data?.total ?? 0) > 0 ? viewCreatedTasks : undefined}
                 />
               )}
-              {/* The other end of that question: the work filed under this project has met every
-                  criterion it states and no task under it is IN_PROGRESS, so is the project done?
-                  Drawn from the
-                  project page's own `['project', id]` read and pressed straight at the status door
-                  with the browser's credential — the one shape that door accepts from a
-                  conversation. Keyed by the session, because whether it was delivered belongs to
-                  this conversation, and by a key none of its siblings carries, for the reason the
-                  evidence card's note above gives. */}
+              {/* The owner's end of the close-out, and the only card this slot draws since the
+                  owner's ruling of 2026-10-07 04:20Z took "Why is this project not done?" out of
+                  the conversation: "Is this project done?" while the coordinator has asked (or the
+                  row says Record as done…), and the receipt in its place once it is recorded. A
+                  project nobody has asked about draws nothing here — its gaps and the entries that
+                  act on them are the project page's Open items row and the Needs you hint. Keyed
+                  by the session, because whether it was delivered belongs to this conversation,
+                  and by a key none of its siblings carries, for the reason the evidence card's
+                  note above gives. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
-                  onDelegate={delegateProjectSettlement}
+                  coordinator={
+                    selectedSession?.projectMembership?.role === undefined
+                      || selectedSession?.projectMembership?.role === 'COORDINATOR'
+                  }
+                  waitingKind={selectedSession?.waitingKind ?? null}
                 />
               )}
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&
                 transcriptEvents.length > 0 && (
-                antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
+                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
                   <span>{slotWaitDescription}</span>
                 </div>
               )}
+              {/* The one-line form for a transcript that already has content. A run whose engine
+                  never spoke has none, so this is only ever the other waits — but the gate is
+                  shared with the pane above rather than left to that coincidence. */}
               {selected &&
                 !selectedTrashed &&
                 showStartingNotice &&
+                !neverStarted &&
                 transcriptEvents.length > 0 && (
                 <div className="chat-note chat-slot-wait">
                   <span>
@@ -9571,184 +10660,39 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
                   onDecline={startDeclineReply}
+                  rememberable={approvalRememberOffered(shownEngine)}
                 />
               ))}
-              {!selectedTrashed && visibleQueuedTurns.map((q) => {
-                // Another Orbit session's message is asked about FIRST, off the card the snapshot
-                // carried, before anything is read out of its words — which are the sending agent's to
-                // choose, and could take the shape of a wake below (the transcript's own order,
-                // NodeView).
-                const fromSession = q.sessionMessage ?? null;
-                // A wake a watch queued is the card the transcript draws once a runner takes it
-                // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
-                // its delivery stands is the queue's line to say, as for every queued row.
-                const wake = fromSession ? null : parseWatchWake(q.content);
-                // A wake the control plane queued for a background job's news, or for a wakeup coming
-                // due, is nobody's message either: it gets the line the transcript draws once a
-                // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
-                const background = fromSession || wake ? null : parseBackgroundWake(q.content);
-                return fromSession ? (
-                  // Drawn "From [that session]" while it waits, as the transcript draws it once a
-                  // runner takes it. Cancel withdraws it and hands nothing back to the composer — the
-                  // words are the sending session's (`returnsToComposer`) — and there is no Put back
-                  // for the same reason.
-                  <SessionMessageCard
+              {!selectedTrashed && queuedTailEvents.map(({ turn: q, event }) => {
+                // Each row is drawn from the event its echo will be, by the transcript's own dispatch
+                // (QueuedUserTurn): the card the transcript draws once a runner takes it, or the bubble
+                // the reader typed — so taking the turn changes nothing about how it reads. What is the
+                // queue's own is said here, in the slot each card keeps for it: how the turn stands,
+                // and the way out of it.
+                //
+                // A wake a watch queued is withdrawn rather than cancelled, because nothing sends it
+                // again; and only words the reader typed are put back in the composer
+                // (`returnsToComposer`), as Cancel and Stop hand back only those.
+                const wake = isQueuedWatchWake(q);
+                return (
+                  <QueuedUserTurn
                     key={q.turnId}
-                    card={fromSession}
-                    text={q.content}
-                    ts={q.createdAt}
+                    event={event}
+                    turnImages={turnImages}
                     queued={
                       <QueuedTurnMeta
                         placement={q.placement}
                         delivery={q.delivery}
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
+                        wake={wake}
+                        onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
+                        onPutBack={
+                          restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined
+                        }
                       />
                     }
                   />
-                ) : wake ? (
-                  <WatchWakeCard
-                    key={q.turnId}
-                    wake={wake}
-                    text={q.content}
-                    linkable
-                    undelivered={false}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        wake
-                        onCancel={() => withdrawWake(q.turnId)}
-                      />
-                    }
-                  />
-                ) : background ? (
-                  <BackgroundWakeCard
-                    key={q.turnId}
-                    wake={background}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                      />
-                    }
-                  />
-                ) : q.openItemDelivery ? (
-                  // An exception item's delivery is nobody's message on the queue either, and for a
-                  // stronger reason than the two wakes above: nobody typed it at all. It gets the
-                  // card the transcript draws once a runner takes it, with the queue's line at its
-                  // foot — so taking the turn changes nothing about how the delivery reads. Read off
-                  // the payload the active snapshot carried, never out of the text's shape.
-                  <OpenItemDeliveryCard
-                    key={q.turnId}
-                    card={q.openItemDelivery}
-                    text={q.content}
-                    ts={q.createdAt}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                        onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                      />
-                    }
-                  />
-                ) : q.confirmationReviewRequest || q.confirmationReturn ? (
-                  // A confirmation review's turns are Orbit's on the queue too: the card the
-                  // transcript draws once a runner takes them, with the queue's line at its foot.
-                  q.confirmationReviewRequest ? (
-                    <ReviewRequestedCard
-                      key={q.turnId}
-                      card={q.confirmationReviewRequest}
-                      ts={q.createdAt}
-                      queued={
-                        <QueuedTurnMeta
-                          placement={q.placement}
-                          delivery={q.delivery}
-                          deliveryCode={q.deliveryCode}
-                          deliveryReason={q.deliveryReason}
-                          onCancel={() => cancelQueued(q.turnId)}
-                        />
-                      }
-                    />
-                  ) : (
-                    <SentBackByReviewerCard
-                      key={q.turnId}
-                      card={q.confirmationReturn!}
-                      ts={q.createdAt}
-                      queued={
-                        <QueuedTurnMeta
-                          placement={q.placement}
-                          delivery={q.delivery}
-                          deliveryCode={q.deliveryCode}
-                          deliveryReason={q.deliveryReason}
-                          onCancel={() => cancelQueued(q.turnId)}
-                        />
-                      }
-                    />
-                  )
-                ) : q.projectStarted ? (
-                  // The message telling the coordinator its project was started, as the card the
-                  // transcript draws once a runner takes it — the same reason as the delivery above.
-                  <ProjectStartedCard
-                    key={q.turnId}
-                    card={q.projectStarted}
-                    text={q.content}
-                    ts={q.createdAt}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                        onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                      />
-                    }
-                  />
-                ) : (
-                  <div className="chat-msg chat-user chat-queued" key={q.turnId}>
-                    {turnImages[q.turnId]?.length ? (
-                      // Fresh local previews (object URLs) — instant, before a reload drops them.
-                      <div className="chat-images">
-                        {turnImages[q.turnId].map((im, i) => (
-                          <ChatImage key={i} src={im.url} />
-                        ))}
-                      </div>
-                    ) : q.attachments?.length ? (
-                      // After a reload the local previews are gone; fetch the refs the queued-turn
-                      // list carries from the server, so an image-only turn stays visible.
-                      <div className="chat-images">
-                        {q.attachments.map((a) => (
-                          <AttachmentImage key={a.id} id={a.id} />
-                        ))}
-                      </div>
-                    ) : null}
-                    {/* Same Markdown render as the settled bubble it becomes (see UserBubble), so a
-                        message doesn't change shape when the runner picks it up. A queued `!cmd`
-                        shows the command verbatim — markdown would mangle its shell syntax. */}
-                    {q.shell ? (
-                      <code className="chat-queued-cmd">!{q.content}</code>
-                    ) : (
-                      q.content && <MD breaks>{q.content}</MD>
-                    )}
-                    <QueuedTurnMeta
-                      placement={q.placement}
-                      delivery={q.delivery}
-                      deliveryCode={q.deliveryCode}
-                      deliveryReason={q.deliveryReason}
-                      onCancel={() => cancelQueued(q.turnId)}
-                      onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                    />
-                  </div>
                 );
               })}
               {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}
@@ -9805,6 +10749,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   )}
                 </div>
               )}
+              </WatchWakeNamesCtx.Provider>
             </div>
           ) : composing ? (
             // The provider hero is centered as a hero only while it's alone: .workspace-draft is a
@@ -9814,23 +10759,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              <NewSessionProviderHero
-                current={currentProviderChoiceForDraft}
-                choices={providerChoicesForRunner}
-                onPick={pickDraftProvider}
-                currentAccount={pickedProvider === 'claude' ? shownClaudeAccount : shownCodexAccount}
-                automatic={{
-                  ...(codexAutoOffered ? { codex: !draftCodexAccount } : {}),
-                  ...(claudeAutoOffered ? { claude: !draftClaudeAccount } : {}),
-                }}
-                onPickAccount={pickDraftAccount}
-                runnerId={runner.id}
-                currentModelLabel={shownModelLabel}
-                // Nothing to choose until we know which workspace (and so which project) this runs in.
-                disabled={!pickedWorkspace}
-                note={providerSwitchNote}
-                projectIntent={projectIntent}
-              />
+              {!managedDraftBlocked && (
+                <NewSessionProviderHero
+                  current={currentDraftEngine}
+                  engines={draftEngines}
+                  onPick={pickDraft}
+                  runnerId={runner.id}
+                  currentModelLabel={shownModelLabel}
+                  // Nothing to choose until we know which workspace (and so which project) this runs in.
+                  disabled={!pickedWorkspace}
+                  note={providerSwitchNote}
+                  projectIntent={projectIntent}
+                />
+              )}
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}
@@ -9864,6 +10805,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         </div>
 
       <div className="workspace-composer">
+        {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
+            waking, failed (with Retry), removed. */}
+        {managed && managed.display.kind !== 'available' && <ManagedRunnerNotice managed={managed} />}
         {/* What this session is waiting on: live watches it observes. A watch waits on the server,
             not in a process, so it gets its own strip rather than a row in the tray below
             (docs/watch-contract.md §9.2). Hidden when there are none. */}
@@ -10140,7 +11084,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         className="composer-attach-thumb"
                         src={im.previewUrl}
                         alt=""
-                        preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
+                        label={im.name || PREVIEW_IMAGE_LABEL}
+                        cover={<EyeOutlined className="composer-attach-eye" />}
                       />
                     ) : (
                       <AttachmentImage id={im.id as string} variant="chip" />
@@ -10189,9 +11134,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {/* Behind the input, drawing its chips. Same characters, same metrics — see the
               `.composer-field` block in index.css for why that is not negotiable. */}
           <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} />
-          <Input.TextArea
+          <Textarea
             ref={taRef}
             onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
+            onTouchEnd={onComposerTouchEnd}
             className={shellMode ? 'composer-shell' : undefined}
             variant="borderless"
             // Auto-grow up to 12 rows, then scroll — unless the user has dragged the handle to
@@ -10202,7 +11148,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // remeasures the whole value on every keystroke) and the transcript. Pasting past
             // the cap truncates; very large content should go through File instead.
             maxLength={MAX_PROMPT_CHARS}
-            placeholder={composerPlaceholder}
+            placeholder={offeredSuggestion ? '' : composerPlaceholder}
+            aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
             value={text}
             disabled={composerDisabled}
             // Typing exits history recall: the next Up starts fresh from this draft.
@@ -10293,6 +11240,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   return;
                 }
               }
+              // Tab takes the offered suggestion. An open menu above has already had the key, and
+              // with no suggestion on offer Tab moves focus as it always has.
+              if (
+                e.key === 'Tab' &&
+                offeredSuggestion &&
+                !e.shiftKey &&
+                !e.altKey &&
+                !e.ctrlKey &&
+                !e.metaKey &&
+                !e.nativeEvent.isComposing
+              ) {
+                e.preventDefault();
+                acceptSuggestion();
+                return;
+              }
               // Shell-style history recall. Up only fires on the first line and Down on
               // the last line (with no text selected), so navigating within a multi-line
               // draft still moves the caret normally. After recall the caret is parked at
@@ -10361,32 +11323,79 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               }
             }}
           />
+          {offeredSuggestion && (
+            <div className="composer-suggestion">
+              {/* Drawn for the eye; a screen reader hears the box's description below instead. */}
+              <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
+                {offeredSuggestion}
+              </span>
+              {/* The grey line itself says how to take it, and there is no button to see: Tab with a
+                  keyboard, a double-tap on the box on a touch screen. Which shows is CSS's call. Drawn in
+                  docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
+              <kbd className="composer-suggestion-key" aria-hidden="true">
+                Tab
+              </kbd>
+              <span className="composer-suggestion-tap" aria-hidden="true">
+                Double-tap to use
+              </span>
+              {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
+                  from the eye there, and gone with a keyboard, which has Tab. */}
+              <button
+                type="button"
+                className="composer-suggestion-use"
+                // Fill without blurring the box first: the click's focus change would land the
+                // caret somewhere before the text arrives.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={acceptSuggestion}
+                aria-label={`Use suggestion: ${offeredSuggestion}`}
+                title="Use this suggestion"
+              >
+                Use
+              </button>
+              <span id={suggestionHintId} className="sr-only">
+                Suggested reply: {offeredSuggestion}.
+                <span className="composer-suggestion-tab-hint"> Press Tab to use it.</span>
+              </span>
+            </div>
+          )}
           </div>
           <div className="composer-toolbar">
-            {/* In shell mode this stops being a menu: `trigger={[]}` makes the Dropdown an inert
-                wrapper so the button below acts on its own onClick (leave shell mode) instead of
-                opening the attachment menu. Nothing in that menu applies to a raw command anyway —
-                and a mode you can enter needs a visible way out. */}
-            <Dropdown
-              trigger={shellMode ? [] : ['click']}
-              placement="topLeft"
+            {/* In shell mode this stops being a menu: the `❯` below is a button on its own that leaves
+                shell mode, instead of opening the attachment menu. Nothing in that menu applies to a
+                raw command anyway — and a mode you can enter needs a visible way out. */}
+            {shellMode ? (
+              <Button
+                className="composer-attach-btn composer-shell-btn"
+                variant="text"
+                onClick={exitShell}
+                disabled={composerDisabled}
+                aria-label="Leave shell mode"
+                title="Leave shell mode"
+              >
+                ❯
+              </Button>
+            ) : (
+            <Menu
+              side="top"
+              align="start"
               disabled={composerDisabled}
-              menu={{
-                className: 'composer-attach-menu',
-                // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
-                // array's last entry is the one beside the `+` — while the native menu
-                // (ComposerView.swift `addMenu`) hands its items to the system with the first one
-                // nearest the button and gets them back reversed. Hence the native source reads
-                // Command…File and this reads File…Command: both clients put Command under the
-                // thumb and File at the far end, and a divider between the two groups. Pinned by
-                // WorkspaceView.composerMenu.test.tsx, drawn in
-                // docs/mocks/composer-attach-menu-phone.html.
-                items: [
+              // On a phone it takes the native menu's density (`variant="attachment"`, ui/Floating.css).
+              variant="attachment"
+              popupClassName="composer-attach-menu"
+              // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
+              // array's last entry is the one beside the `+` — while the native menu
+              // (ComposerView.swift `addMenu`) hands its items to the system with the first one
+              // nearest the button and gets them back reversed. Hence the native source reads
+              // Command…File and this reads File…Command: both clients put Command under the
+              // thumb and File at the far end, and a divider between the two groups. Pinned by
+              // WorkspaceView.composerMenu.test.tsx, drawn in
+              // docs/mocks/composer-attach-menu-phone.html.
+              items={[
                   {
                     key: 'file',
                     icon: <PaperClipOutlined />,
                     label: 'File',
-                    onClick: () => fileInputRef.current?.click(),
+                    onSelect: () => fileInputRef.current?.click(),
                   },
                   {
                     key: 'image',
@@ -10395,9 +11404,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
                     // upload can't work in says so on pick, rather than greying the item out.
                     label: 'Image',
-                    onClick: () => imageInputRef.current?.click(),
+                    onSelect: () => imageInputRef.current?.click(),
                   },
-                  { type: 'divider' },
+                  { key: 'divider', type: 'separator' },
                   {
                     key: 'shell',
                     // The terminal box, as native Shell draws it — not `ConsoleSqlOutlined`, whose
@@ -10413,37 +11422,34 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         ? 'Shell (session unavailable)'
                         : 'Shell',
                     disabled: sameSessionSendBlocked || (!!selected && !live && !resumable),
-                    onClick: insertShell,
+                    onSelect: insertShell,
                   },
                   {
                     key: 'skill',
                     icon: <ThunderboltOutlined />,
                     label: 'Skill',
                     disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
-                    onClick: () => insertSlash('skill'),
+                    onSelect: () => insertSlash('skill'),
                   },
                   {
                     key: 'command',
                     icon: <SlashCommandIcon />,
                     label: 'Command',
                     disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
-                    onClick: () => insertSlash('command'),
+                    onSelect: () => insertSlash('command'),
                   },
-                ],
-              }}
-            >
-              <Button
-                className={shellMode ? 'composer-attach-btn composer-shell-btn' : 'composer-attach-btn'}
-                type="text"
-                icon={shellMode ? undefined : <PlusOutlined />}
-                onClick={shellMode ? exitShell : undefined}
-                disabled={composerDisabled}
-                aria-label={shellMode ? 'Leave shell mode' : 'Add attachment'}
-                title={shellMode ? 'Leave shell mode' : undefined}
-              >
-                {shellMode ? '❯' : null}
-              </Button>
-            </Dropdown>
+                ]}
+              trigger={
+                <Button
+                  className="composer-attach-btn"
+                  variant="text"
+                  icon={<PlusOutlined />}
+                  disabled={composerDisabled}
+                  aria-label="Add attachment"
+                />
+              }
+            />
+            )}
             {/* The workspace is only a Select when it can actually be picked (new, unlocked
                 session); once read-only it shows as a static pill left of Model below. */}
             {!workspaceReadOnly && (
@@ -10451,13 +11457,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <Select
                   size="small"
                   variant="borderless"
-                  suffixIcon={null}
-                  value={shownWorkspaceId}
-                  onChange={setWorkspaceId}
+                  showArrow={false}
+                  value={shownWorkspaceId ?? null}
+                  onValueChange={(v) => setWorkspaceId(v ?? undefined)}
                   options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
                   placeholder="Default"
                   disabled={live || !!lockedWorkspaceId}
-                  popupMatchSelectWidth={false}
+                  matchTriggerWidth={false}
                 />
               </span>
             )}
@@ -10465,9 +11471,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               <Select
                 size="small"
                 variant="borderless"
-                suffixIcon={null}
+                showArrow={false}
                 value={shownMode}
-                onChange={(v) => {
+                onValueChange={(v) => {
+                  if (v === null) return;
                   if (live) {
                     configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
                   } else {
@@ -10488,11 +11495,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   // to another machine, so Bypass on a root runner is not a mode awaiting its moment
                   // — claude exits during startup and the session never produces anything. Disabled
                   // and not hidden, so the reason is visible instead of the option silently missing.
+                  //
+                  // A mode the RUNTIME refuses outright (DeepSeek Harness outside Default, Auto and
+                  // Don't Ask) is disabled for the same reason: the server rejects the session rather
+                  // than run it as something else, so it is not an intent that can wait.
                   const semantics = permissionSemanticsFor(m);
-                  const runnable = permissionModeAvailableOnRunner(
-                    MODE_TO_PERMISSION[m],
-                    runner.runsAsRoot,
-                  );
+                  const runnable =
+                    permissionModeAvailableOnRunner(MODE_TO_PERMISSION[m], runner.runsAsRoot) &&
+                    permissionModeSupported(MODE_TO_PERMISSION[m], shownEngine);
                   const shortNote = semantics?.shortNote;
                   return {
                     value: m,
@@ -10501,7 +11511,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   };
                 })}
                 disabled={!configEditable}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
               />
             </span>
             <span className="composer-pill-spacer" />
@@ -10509,51 +11519,48 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 way a reference composer writes "model · effort" as one button: the model in the
                 label's colour, the effort after it in the secondary one. The menu behind it
                 (`modelMenuItems`) keeps each field's own rules. */}
-            <span className="composer-pill composer-model-pill">
-              <Dropdown
-                trigger={['click']}
-                placement="topRight"
-                disabled={!configEditable}
-                // Rows that open a level down open on hover where the pointer can hover, the way
-                // the browser's own menus do — and on a tap where it cannot, because a phone has
-                // no hover to give: one row, two gestures, decided by the pointer.
-                // They open to the right — and on a phone, where the control sits near the
-                // right edge, there is no right: shift the level back inside the screen rather
-                // than let it hang off the edge (and widen the page with it).
-                menu={{
-                  className: 'composer-model-menu',
-                  items: modelMenuItems,
-                  triggerSubMenuAction: canHover ? 'hover' : 'click',
-                  builtinPlacements: {
-                    rightTop: {
-                      points: ['tl', 'tr'],
-                      overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
-                    },
-                  },
-                }}
-              >
-                <button
-                  type="button"
-                  className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+            {/* No model to show where a first session cannot start yet: the managed default
+                workspace before its runner was ever ready (`managedDraftBlocked`). */}
+            {!managedDraftBlocked && (
+              <span className="composer-pill composer-model-pill">
+                <Menu
+                  side="top"
+                  align="end"
                   disabled={!configEditable}
-                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
-                    smartRoute ? ', picked by smart selection' : ''
-                  }`}
-                >
-                  {smartRoute && (
-                    <span className="composer-model-spark" aria-hidden="true">
-                      ✦
-                    </span>
-                  )}
-                  <span className="composer-model-name">{shownModelLabel}</span>
-                  <span className="composer-model-effort">
-                    {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
-                  </span>
-                </button>
-              </Dropdown>
-            </span>
+                  // Rows that open a level down open on hover where the pointer can hover, the way
+                  // the browser's own menus do — and on a tap where it cannot, because a phone has
+                  // no hover to give: one row, two gestures, decided by the pointer.
+                  // They open to the right — and on a phone, where the control sits near the
+                  // right edge, there is no right: shift the level back inside the screen rather
+                  // than let it hang off the edge (and widen the page with it).
+                  submenuOverflow="slide"
+                  popupClassName="composer-model-menu"
+                  items={modelMenuItems}
+                  trigger={
+                    <button
+                      type="button"
+                      className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+                      disabled={!configEditable}
+                      aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                        smartRoute ? ', picked by smart selection' : ''
+                      }`}
+                    >
+                      {smartRoute && (
+                        <span className="composer-model-spark" aria-hidden="true">
+                          ✦
+                        </span>
+                      )}
+                      <span className="composer-model-name">{shownModelLabel}</span>
+                      <span className="composer-model-effort">
+                        {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
+                      </span>
+                    </button>
+                  }
+                />
+              </span>
+            )}
             {shownPool && shownPoolAccount && (
-              <Tooltip title={poolAccountHelp(shownPool, shownPoolAccount)}>
+              <Tooltip content={poolAccountHelp(shownPool, shownPoolAccount)}>
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
                   <span className="composer-account-name">{shownPoolAccount.member.label}</span>
                 </span>
@@ -10562,15 +11569,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
-                // Which of the runner's Codex or Claude accounts this quota is, named inside the popover
-                // rather than beside the gauge, where a phone's toolbar has no room for an email. A
-                // draft names the one it would start on.
+                // Which of the runner's Codex, Claude, Antigravity or Kimi accounts this quota is, named
+                // inside the popover rather than beside the gauge, where a phone's toolbar has no room for
+                // an email. A draft names the one it would start on.
                 account={
                   shownAccountEngine && shownAccountLabel
                     ? {
                         label: shownAccountLabel,
                         ...(!selectedId &&
-                        !(shownAccountEngine === 'claude' ? draftClaudeAccount : draftCodexAccount) &&
+                        !draftAccountOf(shownAccountEngine) &&
                         automaticOfferedOn(shownAccountEngine, pickedWorkspace)
                           ? { note: 'Automatic — the account whose quota resets soonest' }
                           : selectedId && sessionAutomatic && accountsOffered
@@ -10591,7 +11598,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             )}
             {/* Context stays visible even before the first turn reports tokens — a New Session reads
                 "—". Rightmost pill, to the right of plan usage. */}
-            {!(shownProvider === 'opencode' && shownModel === '') && (
+            {!(shownEngine === AgentProvider.OPENCODE && shownModel === '') && (
               <ContextWindowIndicator
                 tokens={contextTokens}
                 reportedWindow={reportedContextWindow}
@@ -10604,8 +11611,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {showStop ? (
               <Button
                 className="composer-send"
-                type="primary"
-                shape="circle"
+                variant="primary"
                 icon={<StopSquareIcon />}
                 onClick={() => selected && control.mutate(selected.id)}
                 aria-label="Stop"
@@ -10613,8 +11619,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             ) : (
               <Button
                 className="composer-send"
-                type="primary"
-                shape="circle"
+                variant="primary"
                 icon={<ArrowUpOutlined />}
                 disabled={!canSend}
                 loading={send.isPending}
@@ -10626,6 +11631,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         </div>
       </div>
       </div>
+      {confirmation}
     </div>
   );
 }

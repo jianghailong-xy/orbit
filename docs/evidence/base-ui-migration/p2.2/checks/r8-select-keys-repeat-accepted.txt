@@ -1,0 +1,161 @@
+
+Running 120 tests using 1 worker
+
+  ✓    1 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 0 (1.7s)
+  ✓    2 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 1 (1.3s)
+  ✓    3 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 2 (1.3s)
+  ✓    4 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 3 (1.4s)
+  ✓    5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 4 (1.5s)
+  ✓    6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 5 (1.4s)
+  ✓    7 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 6 (1.5s)
+  ✓    8 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 7 (1.3s)
+  ✓    9 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 8 (1.4s)
+  ✓   10 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 9 (1.5s)
+  ✓   11 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 10 (1.5s)
+  ✓   12 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 11 (1.5s)
+  ✓   13 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 12 (1.4s)
+  ✓   14 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 13 (1.4s)
+  ✓   15 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 14 (1.5s)
+  ✓   16 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 15 (1.4s)
+  ✓   17 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 16 (1.5s)
+  ✓   18 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 17 (1.6s)
+  ✓   19 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 18 (1.5s)
+  ✓   20 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 19 (1.5s)
+  ✓   21 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 20 (1.5s)
+  ✓   22 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 21 (1.5s)
+  ✓   23 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 22 (1.3s)
+  ✓   24 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 23 (1.5s)
+  ✓   25 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 24 (1.4s)
+  ✓   26 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 25 (1.4s)
+  ✓   27 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 26 (1.5s)
+  ✓   28 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 27 (1.5s)
+  ✓   29 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 28 (1.5s)
+  ✓   30 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 29 (1.5s)
+  ✓   31 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 30 (1.5s)
+  ✓   32 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 31 (1.5s)
+  ✓   33 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 32 (1.5s)
+  ✓   34 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 33 (1.5s)
+  ✓   35 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 34 (1.5s)
+  ✓   36 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 35 (1.4s)
+  ✓   37 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 36 (1.4s)
+  ✓   38 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 37 (1.4s)
+  ✓   39 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 38 (1.5s)
+  ✓   40 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter sample 39 (1.5s)
+  ✓   41 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 0 (1.4s)
+  ✓   42 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 1 (1.4s)
+  ✓   43 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 2 (1.4s)
+  ✓   44 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 3 (1.4s)
+  ✓   45 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 4 (1.4s)
+  ✓   46 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 5 (1.3s)
+  ✓   47 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 6 (1.4s)
+  ✓   48 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 7 (1.4s)
+  ✓   49 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 8 (1.4s)
+  ✓   50 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 9 (1.4s)
+  ✓   51 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 10 (1.4s)
+  ✓   52 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 11 (1.4s)
+  ✓   53 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 12 (1.3s)
+  ✓   54 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 13 (1.4s)
+  ✓   55 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 14 (1.3s)
+  ✓   56 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 15 (1.4s)
+  ✓   57 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 16 (1.5s)
+  ✓   58 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 17 (1.4s)
+  ✓   59 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 18 (1.4s)
+  ✓   60 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 19 (1.4s)
+  ✓   61 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 20 (1.5s)
+  ✓   62 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 21 (1.4s)
+  ✓   63 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 22 (1.4s)
+  ✓   64 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 23 (1.3s)
+  ✓   65 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 24 (1.5s)
+  ✓   66 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 25 (1.4s)
+  ✓   67 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 26 (1.5s)
+  ✓   68 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 27 (1.4s)
+  ✓   69 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 28 (1.3s)
+  ✘   70 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 29 (15.1s)
+  ✓   71 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 30 (1.4s)
+  ✓   72 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 31 (1.3s)
+  ✓   73 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 32 (1.3s)
+  ✓   74 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 33 (1.4s)
+  ✓   75 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 34 (1.3s)
+  ✓   76 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 35 (1.3s)
+  ✓   77 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 36 (1.3s)
+  ✓   78 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 37 (1.3s)
+  ✓   79 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 38 (1.4s)
+  ✓   80 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 39 (1.4s)
+  ✓   81 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 0 (1.4s)
+  ✓   82 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 1 (1.4s)
+  ✓   83 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 2 (1.4s)
+  ✓   84 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 3 (1.4s)
+  ✓   85 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 4 (1.3s)
+  ✓   86 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 5 (1.4s)
+  ✓   87 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 6 (1.3s)
+  ✓   88 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 7 (1.3s)
+  ✓   89 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 8 (1.3s)
+  ✓   90 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 9 (1.4s)
+  ✓   91 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 10 (1.3s)
+  ✓   92 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 11 (1.3s)
+  ✓   93 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 12 (1.4s)
+  ✓   94 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 13 (1.4s)
+  ✓   95 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 14 (1.3s)
+  ✓   96 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 15 (1.3s)
+  ✓   97 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 16 (1.4s)
+  ✓   98 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 17 (1.4s)
+  ✓   99 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 18 (1.4s)
+  ✓  100 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 19 (1.3s)
+  ✓  101 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 20 (1.3s)
+  ✓  102 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 21 (1.3s)
+  ✓  103 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 22 (1.4s)
+  ✓  104 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 23 (1.5s)
+  ✓  105 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 24 (1.4s)
+  ✓  106 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 25 (1.4s)
+  ✓  107 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 26 (1.3s)
+  ✓  108 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 27 (1.3s)
+  ✓  109 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 28 (1.4s)
+  ✓  110 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 29 (1.4s)
+  ✓  111 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 30 (1.5s)
+  ✓  112 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 31 (1.3s)
+  ✓  113 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 32 (1.5s)
+  ✓  114 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 33 (1.3s)
+  ✓  115 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 34 (1.4s)
+  ✓  116 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 35 (1.5s)
+  ✓  117 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 36 (1.4s)
+  ✓  118 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 37 (1.4s)
+  ✓  119 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 38 (1.5s)
+  ✓  120 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter sample 39 (1.5s)
+
+
+  1) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 29 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByTestId('theme')
+    Expected: "dark"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByTestId('theme') with timeout 15000ms
+      - waiting for getByTestId('theme')
+
+
+      35 |     test.skip(info.project.use.browserName !== 'chromium', 'paired with the Chromium-only throttled probe');
+      36 |     await page.goto(target.url);
+    > 37 |     await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+         |                                             ^
+      38 |     await page.evaluate(() => document.fonts.ready);
+      39 |     const before = (await target.read(page)).trim();
+      40 |     await page.evaluate(observeKeys);
+        at /var/tmp/p22-r8-accepted/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:37:45
+
+    Error Context: src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-3e6bb-n-ArrowDown-Enter-sample-29-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-3e6bb-n-ArrowDown-Enter-sample-29-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-3e6bb-n-ArrowDown-Enter-sample-29-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter sample 29 
+  119 passed (3.1m)

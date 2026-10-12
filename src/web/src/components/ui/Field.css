@@ -1,0 +1,98 @@
+/* The replaced vertical form item as measured: a 22px label 8px over a 32px control row, 24px below.
+   Messages take that 24px instead of adding to it (one 22px line fits), and an extra line follows them. */
+.orbit-field {
+  margin-bottom: 24px;
+  font-family: var(--orbit-font-family);
+  font-size: var(--orbit-font-size);
+  line-height: var(--orbit-line-height);
+  vertical-align: top;
+}
+.orbit-field[data-help] {
+  margin-bottom: 0;
+}
+.orbit-field-label {
+  padding: 0 0 8px;
+  white-space: initial;
+  text-align: start;
+}
+.orbit-field-label > label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--orbit-font-size);
+}
+.orbit-field-control {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.orbit-field-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--orbit-control-height);
+}
+.orbit-field-input-content {
+  flex: auto;
+  max-width: 100%;
+}
+.orbit-field-additional {
+  display: flex;
+  flex-direction: column;
+}
+.orbit-field-help {
+  min-height: 24px;
+  color: var(--text-3);
+  transition: opacity 0.1s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+.orbit-field-error {
+  overflow: hidden;
+  color: var(--orbit-control-error);
+  animation: orbit-field-help-in 0.1s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+.orbit-field-help[data-leaving] {
+  opacity: 0;
+}
+.orbit-field-help[data-leaving] .orbit-field-error {
+  transform: translateY(-5px);
+  transition: transform 0.1s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+.orbit-field-extra {
+  min-height: var(--orbit-control-height-sm);
+  color: var(--text-3);
+  transition: color 0.2s cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+/* A check the field passed or failed, after the control's own suffix (the password toggle). */
+.orbit-field-feedback {
+  display: block;
+  font-size: var(--orbit-font-size);
+  text-align: center;
+  pointer-events: none;
+  animation: orbit-field-feedback-in 0.2s cubic-bezier(0.12, 0.4, 0.29, 1.46);
+}
+.orbit-field-feedback[data-status='success'] {
+  color: var(--orbit-badge-success);
+}
+.orbit-field-feedback[data-status='error'] {
+  color: var(--orbit-control-error);
+}
+@keyframes orbit-field-help-in {
+  from { opacity: 0; transform: translateY(-5px); }
+}
+@keyframes orbit-field-feedback-in {
+  from { opacity: 0; transform: scale(0.2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbit-field-help,
+  .orbit-field-help[data-leaving] .orbit-field-error,
+  .orbit-field-extra {
+    transition: none;
+  }
+  .orbit-field-error,
+  .orbit-field-feedback {
+    animation: none;
+  }
+}

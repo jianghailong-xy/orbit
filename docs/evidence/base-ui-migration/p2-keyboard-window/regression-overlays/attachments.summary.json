@@ -1,0 +1,999 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/regression-overlays/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-drawer--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-drawer--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+   "bytes": 151,
+   "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b",
+   "fields": {
+    "attempts": 2,
+    "pendingBlocksDismissal": true,
+    "duplicatesBlocked": true,
+    "failedThenRetried": true,
+    "result": "confirmed then cancelled"
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+   "bytes": 136,
+   "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a",
+   "fields": {
+    "unmountSettlesFalse": true,
+    "staleCompletionIgnored": true,
+    "sequentialFreshState": true,
+    "synchronousFailureVisible": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+   "bytes": 14774,
+   "sha256": "ba8717045d7329d390b24c70a4291923627b5ca8e47d462db287862cb3742b73"
+  },
+  {
+   "name": "chromium-dark-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+   "bytes": 144,
+   "sha256": "b14d0080fcbe9d035b1b691704a8232bca043b885c967735f0aec5d37c2ee0d4",
+   "fields": {
+    "tabBothDirections": true,
+    "dragReleaseIgnored": true,
+    "escape": true,
+    "outside": "mouse",
+    "closeButton": true,
+    "restored": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+   "bytes": 115,
+   "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51",
+   "fields": {
+    "escapeAndOutsideOptOut": true,
+    "retainedDraft": true,
+    "bottomSheet": true,
+    "longFooterReachable": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+   "bytes": 205,
+   "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f",
+   "fields": {
+    "parentPreserved": true,
+    "restoredEachLayer": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+   "bytes": 87,
+   "sha256": "e47e9fc589ef68a15a88c080b733b7b856f113fa17d9e4cd05a8bcc6ecc36983",
+   "fields": {
+    "initial": "dark",
+    "liveThemeInherited": true,
+    "composingEscapeIgnored": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-drawer--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-drawer--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+   "bytes": 151,
+   "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b",
+   "fields": {
+    "attempts": 2,
+    "pendingBlocksDismissal": true,
+    "duplicatesBlocked": true,
+    "failedThenRetried": true,
+    "result": "confirmed then cancelled"
+   }
+  },
+  {
+   "name": "chromium-dark-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+   "bytes": 136,
+   "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a",
+   "fields": {
+    "unmountSettlesFalse": true,
+    "staleCompletionIgnored": true,
+    "sequentialFreshState": true,
+    "synchronousFailureVisible": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+   "bytes": 14844,
+   "sha256": "d29b021df5124c4ba2ba438cd5d3bab1ba73a6c3de97474aa10e168410722063"
+  },
+  {
+   "name": "chromium-dark-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+   "bytes": 144,
+   "sha256": "9e3e89b01ae53fe132b8cbe898e5cd83e2fceb164b7121b03bb0a1dc793fd19b",
+   "fields": {
+    "tabBothDirections": true,
+    "dragReleaseIgnored": true,
+    "escape": true,
+    "outside": "touch",
+    "closeButton": true,
+    "restored": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+   "bytes": 115,
+   "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51",
+   "fields": {
+    "escapeAndOutsideOptOut": true,
+    "retainedDraft": true,
+    "bottomSheet": true,
+    "longFooterReachable": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+   "bytes": 205,
+   "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f",
+   "fields": {
+    "parentPreserved": true,
+    "restoredEachLayer": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+   "bytes": 87,
+   "sha256": "e47e9fc589ef68a15a88c080b733b7b856f113fa17d9e4cd05a8bcc6ecc36983",
+   "fields": {
+    "initial": "dark",
+    "liveThemeInherited": true,
+    "composingEscapeIgnored": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-drawer--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-drawer--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+   "bytes": 151,
+   "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b",
+   "fields": {
+    "attempts": 2,
+    "pendingBlocksDismissal": true,
+    "duplicatesBlocked": true,
+    "failedThenRetried": true,
+    "result": "confirmed then cancelled"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+   "bytes": 136,
+   "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a",
+   "fields": {
+    "unmountSettlesFalse": true,
+    "staleCompletionIgnored": true,
+    "sequentialFreshState": true,
+    "synchronousFailureVisible": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+   "bytes": 14612,
+   "sha256": "620b9f4278d106056c7d32985333d8302569e29240e9ce918aa334b01a2c8206"
+  },
+  {
+   "name": "chromium-light-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+   "bytes": 144,
+   "sha256": "b14d0080fcbe9d035b1b691704a8232bca043b885c967735f0aec5d37c2ee0d4",
+   "fields": {
+    "tabBothDirections": true,
+    "dragReleaseIgnored": true,
+    "escape": true,
+    "outside": "mouse",
+    "closeButton": true,
+    "restored": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+   "bytes": 115,
+   "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51",
+   "fields": {
+    "escapeAndOutsideOptOut": true,
+    "retainedDraft": true,
+    "bottomSheet": true,
+    "longFooterReachable": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+   "bytes": 205,
+   "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f",
+   "fields": {
+    "parentPreserved": true,
+    "restoredEachLayer": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+   "bytes": 88,
+   "sha256": "0dd72cd9af1c3d3950a8d0210ba3b96e0f8c6f502a56ed651cae08b9e1372a4e",
+   "fields": {
+    "initial": "light",
+    "liveThemeInherited": true,
+    "composingEscapeIgnored": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-drawer--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-drawer--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+   "bytes": 151,
+   "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b",
+   "fields": {
+    "attempts": 2,
+    "pendingBlocksDismissal": true,
+    "duplicatesBlocked": true,
+    "failedThenRetried": true,
+    "result": "confirmed then cancelled"
+   }
+  },
+  {
+   "name": "chromium-light-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+   "bytes": 136,
+   "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a",
+   "fields": {
+    "unmountSettlesFalse": true,
+    "staleCompletionIgnored": true,
+    "sequentialFreshState": true,
+    "synchronousFailureVisible": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+   "bytes": 14682,
+   "sha256": "2d78e93d295547881756d5ea65fcde82595a59e4ba819680bfe7060c460771ed"
+  },
+  {
+   "name": "chromium-light-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+   "bytes": 144,
+   "sha256": "9e3e89b01ae53fe132b8cbe898e5cd83e2fceb164b7121b03bb0a1dc793fd19b",
+   "fields": {
+    "tabBothDirections": true,
+    "dragReleaseIgnored": true,
+    "escape": true,
+    "outside": "touch",
+    "closeButton": true,
+    "restored": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+   "bytes": 115,
+   "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51",
+   "fields": {
+    "escapeAndOutsideOptOut": true,
+    "retainedDraft": true,
+    "bottomSheet": true,
+    "longFooterReachable": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+   "bytes": 205,
+   "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f",
+   "fields": {
+    "parentPreserved": true,
+    "restoredEachLayer": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+   "bytes": 88,
+   "sha256": "0dd72cd9af1c3d3950a8d0210ba3b96e0f8c6f502a56ed651cae08b9e1372a4e",
+   "fields": {
+    "initial": "light",
+    "liveThemeInherited": true,
+    "composingEscapeIgnored": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-drawer--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-drawer--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+   "bytes": 151,
+   "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b",
+   "fields": {
+    "attempts": 2,
+    "pendingBlocksDismissal": true,
+    "duplicatesBlocked": true,
+    "failedThenRetried": true,
+    "result": "confirmed then cancelled"
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+   "bytes": 136,
+   "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a",
+   "fields": {
+    "unmountSettlesFalse": true,
+    "staleCompletionIgnored": true,
+    "sequentialFreshState": true,
+    "synchronousFailureVisible": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+   "bytes": 14646,
+   "sha256": "7878960fa63b1455cf7f499568cc131b5c8d8d8dd2ef78ed693119475672ac3c"
+  },
+  {
+   "name": "webkit-dark-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+   "bytes": 144,
+   "sha256": "b14d0080fcbe9d035b1b691704a8232bca043b885c967735f0aec5d37c2ee0d4",
+   "fields": {
+    "tabBothDirections": true,
+    "dragReleaseIgnored": true,
+    "escape": true,
+    "outside": "mouse",
+    "closeButton": true,
+    "restored": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+   "bytes": 115,
+   "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51",
+   "fields": {
+    "escapeAndOutsideOptOut": true,
+    "retainedDraft": true,
+    "bottomSheet": true,
+    "longFooterReachable": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+   "bytes": 205,
+   "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f",
+   "fields": {
+    "parentPreserved": true,
+    "restoredEachLayer": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+   "bytes": 87,
+   "sha256": "e47e9fc589ef68a15a88c080b733b7b856f113fa17d9e4cd05a8bcc6ecc36983",
+   "fields": {
+    "initial": "dark",
+    "liveThemeInherited": true,
+    "composingEscapeIgnored": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-drawer--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-drawer--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+   "bytes": 151,
+   "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b",
+   "fields": {
+    "attempts": 2,
+    "pendingBlocksDismissal": true,
+    "duplicatesBlocked": true,
+    "failedThenRetried": true,
+    "result": "confirmed then cancelled"
+   }
+  },
+  {
+   "name": "webkit-dark-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+   "bytes": 136,
+   "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a",
+   "fields": {
+    "unmountSettlesFalse": true,
+    "staleCompletionIgnored": true,
+    "sequentialFreshState": true,
+    "synchronousFailureVisible": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+   "bytes": 14716,
+   "sha256": "cdddd23ea8cd49240c65f2ab8ca99fcdb4f55008d7e8dab3d55ffbdf4545bba7"
+  },
+  {
+   "name": "webkit-dark-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+   "bytes": 144,
+   "sha256": "9e3e89b01ae53fe132b8cbe898e5cd83e2fceb164b7121b03bb0a1dc793fd19b",
+   "fields": {
+    "tabBothDirections": true,
+    "dragReleaseIgnored": true,
+    "escape": true,
+    "outside": "touch",
+    "closeButton": true,
+    "restored": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+   "bytes": 115,
+   "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51",
+   "fields": {
+    "escapeAndOutsideOptOut": true,
+    "retainedDraft": true,
+    "bottomSheet": true,
+    "longFooterReachable": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 171,
+   "sha256": "77f52b5cbc7ca2a6dbca17c3c59c36dc4766a1229fcc9af6f5ef3eca7be7d4a7",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "PageDown",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+   "bytes": 205,
+   "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f",
+   "fields": {
+    "parentPreserved": true,
+    "restoredEachLayer": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+   "bytes": 87,
+   "sha256": "e47e9fc589ef68a15a88c080b733b7b856f113fa17d9e4cd05a8bcc6ecc36983",
+   "fields": {
+    "initial": "dark",
+    "liveThemeInherited": true,
+    "composingEscapeIgnored": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-drawer--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-drawer--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+   "bytes": 151,
+   "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b",
+   "fields": {
+    "attempts": 2,
+    "pendingBlocksDismissal": true,
+    "duplicatesBlocked": true,
+    "failedThenRetried": true,
+    "result": "confirmed then cancelled"
+   }
+  },
+  {
+   "name": "webkit-light-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+   "bytes": 136,
+   "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a",
+   "fields": {
+    "unmountSettlesFalse": true,
+    "staleCompletionIgnored": true,
+    "sequentialFreshState": true,
+    "synchronousFailureVisible": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+   "bytes": 14484,
+   "sha256": "eebacc598964ab13e09ac3b1752ad726bea52c19e77a21005a27c8b087d4d5a1"
+  },
+  {
+   "name": "webkit-light-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+   "bytes": 144,
+   "sha256": "b14d0080fcbe9d035b1b691704a8232bca043b885c967735f0aec5d37c2ee0d4",
+   "fields": {
+    "tabBothDirections": true,
+    "dragReleaseIgnored": true,
+    "escape": true,
+    "outside": "mouse",
+    "closeButton": true,
+    "restored": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+   "bytes": 115,
+   "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51",
+   "fields": {
+    "escapeAndOutsideOptOut": true,
+    "retainedDraft": true,
+    "bottomSheet": true,
+    "longFooterReachable": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 168,
+   "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "wheel",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+   "bytes": 205,
+   "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f",
+   "fields": {
+    "parentPreserved": true,
+    "restoredEachLayer": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+   "bytes": 88,
+   "sha256": "0dd72cd9af1c3d3950a8d0210ba3b96e0f8c6f502a56ed651cae08b9e1372a4e",
+   "fields": {
+    "initial": "light",
+    "liveThemeInherited": true,
+    "composingEscapeIgnored": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-drawer--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+   "bytes": 57,
+   "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb",
+   "fields": {
+    "focusAtEveryLayer": true,
+    "scrollRestored": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-drawer--legacy-children.json",
+   "bytes": 86,
+   "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748",
+   "fields": {
+    "modal": true,
+    "popconfirm": true,
+    "select": true,
+    "parentPreserved": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+   "bytes": 151,
+   "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b",
+   "fields": {
+    "attempts": 2,
+    "pendingBlocksDismissal": true,
+    "duplicatesBlocked": true,
+    "failedThenRetried": true,
+    "result": "confirmed then cancelled"
+   }
+  },
+  {
+   "name": "webkit-light-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+   "bytes": 136,
+   "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a",
+   "fields": {
+    "unmountSettlesFalse": true,
+    "staleCompletionIgnored": true,
+    "sequentialFreshState": true,
+    "synchronousFailureVisible": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+   "bytes": 14554,
+   "sha256": "1bf624d320601b53083acfcb8ae2248771f914afe8b7760cc273f6485319ef33"
+  },
+  {
+   "name": "webkit-light-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+   "bytes": 144,
+   "sha256": "9e3e89b01ae53fe132b8cbe898e5cd83e2fceb164b7121b03bb0a1dc793fd19b",
+   "fields": {
+    "tabBothDirections": true,
+    "dragReleaseIgnored": true,
+    "escape": true,
+    "outside": "touch",
+    "closeButton": true,
+    "restored": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+   "bytes": 115,
+   "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51",
+   "fields": {
+    "escapeAndOutsideOptOut": true,
+    "retainedDraft": true,
+    "bottomSheet": true,
+    "longFooterReachable": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+   "bytes": 171,
+   "sha256": "77f52b5cbc7ca2a6dbca17c3c59c36dc4766a1229fcc9af6f5ef3eca7be7d4a7",
+   "fields": {
+    "explicitFocus": true,
+    "requiredValidation": true,
+    "nativeEnter": true,
+    "motionCompleted": true,
+    "scrollMethod": "PageDown",
+    "scrollLockedUntilClose": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+   "bytes": 205,
+   "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f",
+   "fields": {
+    "parentPreserved": true,
+    "restoredEachLayer": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+   "bytes": 88,
+   "sha256": "0dd72cd9af1c3d3950a8d0210ba3b96e0f8c6f502a56ed651cae08b9e1372a4e",
+   "fields": {
+    "initial": "light",
+    "liveThemeInherited": true,
+    "composingEscapeIgnored": true
+   }
+  }
+ ]
+}

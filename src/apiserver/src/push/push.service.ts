@@ -210,6 +210,9 @@ export class PushService {
    *
    * Deliberately narrow, because the interrupt budget is per-person while the number of agents
    * running is not: `settleAlert` announces only what happened on its own and is really over.
+   * The alert says what the session's recap says whenever one has been written — read at this
+   * moment, off the row, so it reflects whichever pass had landed by the time the settlement
+   * fired; that decision is `settleAlert`'s, not this method's.
    * Called on the STATUS event the runner/reaper mark `final` — the one signal that fires
    * exactly once per finalization — and again when auto-retry gives up, which settles a
    * failure without moving the row's status.
@@ -229,6 +232,9 @@ export class PushService {
           completedAt: true,
           deletedAt: true,
           error: true,
+          // The rolling recap, when one has been written: `settleAlert` prefers it over the
+          // rules line, and falls back to that line when it is null.
+          recapText: true,
           owner: { select: { preferences: true } },
         },
       });

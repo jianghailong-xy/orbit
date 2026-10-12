@@ -1,0 +1,73 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/lib/toast.test.tsx src/lib/toastFeed.test.ts src/lib/theme.test.tsx src/components/ui/boundary.test.ts
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web
+
+ ❯ src/lib/toast.test.tsx (12 tests | 12 failed) 44ms
+   ❯ a toast says what happened to what (7)
+     × draws a confirmation as a pill with the thing it happened to under the outcome 26ms
+     × pins a failure as a tinted card, the server's words in their own block 3ms
+     × keeps a failure on screen when later toasts arrive, above them 2ms
+     × lets a confirmation go after three seconds, and a failure stay until its × 2ms
+     × draws a bare headline when the line would add nothing 2ms
+     × hands nothing back for a mutation's onError to wait on 1ms
+     × reads the line out after the headline 1ms
+   ❯ a session result (5)
+     × keeps failures from different events and entities independently dismissible 1ms
+     × does not turn selecting diagnostic text into a session navigation 1ms
+     × carries Undo as a card, and opens its session from the copy 1ms
+     × is a pill you click through to the session when there is nothing else to do 1ms
+     × puts the operation's next result where its last one stood, and clears its failure 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/toast.test.tsx > a toast says what happened to what > draws a confirmation as a pill with the thing it happened to under the outcome
+ FAIL  src/lib/toast.test.tsx > a toast says what happened to what > pins a failure as a tinted card, the server's words in their own block
+ FAIL  src/lib/toast.test.tsx > a toast says what happened to what > keeps a failure on screen when later toasts arrive, above them
+ FAIL  src/lib/toast.test.tsx > a toast says what happened to what > lets a confirmation go after three seconds, and a failure stay until its ×
+ FAIL  src/lib/toast.test.tsx > a toast says what happened to what > draws a bare headline when the line would add nothing
+ FAIL  src/lib/toast.test.tsx > a toast says what happened to what > hands nothing back for a mutation's onError to wait on
+ FAIL  src/lib/toast.test.tsx > a toast says what happened to what > reads the line out after the headline
+ FAIL  src/lib/toast.test.tsx > a session result > keeps failures from different events and entities independently dismissible
+ FAIL  src/lib/toast.test.tsx > a session result > does not turn selecting diagnostic text into a session navigation
+ FAIL  src/lib/toast.test.tsx > a session result > carries Undo as a card, and opens its session from the copy
+ FAIL  src/lib/toast.test.tsx > a session result > is a pill you click through to the session when there is nothing else to do
+ FAIL  src/lib/toast.test.tsx > a session result > puts the operation's next result where its last one stood, and clears its failure
+ReferenceError: ResizeObserver is not defined
+ ❯ src/components/ToastViewport.tsx:91:22
+     89|     const measure = () => setViewportWidth(probe.getBoundingClientRect…
+     90|     measure();
+     91|     const observer = new ResizeObserver(measure);
+       |                      ^
+     92|     observer.observe(probe);
+     93|     return () => { observer.disconnect(); probe.remove(); };
+ ❯ Object.react_stack_bottom_frame ../../node_modules/react-dom/cjs/react-dom-client.development.js:28656:20
+ ❯ runWithFiberInDEV ../../node_modules/react-dom/cjs/react-dom-client.development.js:1048:13
+ ❯ commitHookEffectListMount ../../node_modules/react-dom/cjs/react-dom-client.development.js:13748:29
+ ❯ commitHookLayoutEffects ../../node_modules/react-dom/cjs/react-dom-client.development.js:13712:11
+ ❯ commitLayoutEffectOnFiber ../../node_modules/react-dom/cjs/react-dom-client.development.js:15041:13
+ ❯ recursivelyTraverseLayoutEffects ../../node_modules/react-dom/cjs/react-dom-client.development.js:16482:11
+ ❯ commitLayoutEffectOnFiber ../../node_modules/react-dom/cjs/react-dom-client.development.js:15263:11
+ ❯ recursivelyTraverseLayoutEffects ../../node_modules/react-dom/cjs/react-dom-client.development.js:16482:11
+ ❯ commitLayoutEffectOnFiber ../../node_modules/react-dom/cjs/react-dom-client.development.js:15263:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  12 failed | 18 passed (30)
+   Start at  15:32:47
+   Duration  1.93s (transform 36%, environment 29%, import 19%, tests 16%)
+
+    Isolate  4 workers spawned · ~274ms startup each (spawn + environment, per file)
+             at least ~274ms faster with isolate: false — reuses workers across files instead of one per file
+
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c vitest run --maxWorkers=2 src/lib/toast.test.tsx src/lib/toastFeed.test.ts src/lib/theme.test.tsx src/components/ui/boundary.test.ts

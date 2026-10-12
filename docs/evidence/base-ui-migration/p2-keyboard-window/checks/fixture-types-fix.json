@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_56a382b6a8c4",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "5a6ee008a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T04:36:25.552576+00:00",
+ "exitCode": 0,
+ "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "outputBytes": 0,
+ "note": "Fixed tree. No output: tsc --noEmit prints nothing when all four fixture projects type-check (the choices project includes Menu.tsx)."
+}

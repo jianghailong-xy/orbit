@@ -1,0 +1,96 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T05:48:22.796Z",
+  "duration": 129983.278,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 8,
+  "flaky": 0
+ },
+ "passed": 0,
+ "expectedFailures": 0,
+ "skipped": 0,
+ "unexpected": [
+  {
+   "project": "chromium-light-desktop",
+   "test": "wiki",
+   "file": "pages.browser.mjs",
+   "screenshot": null,
+   "expectedLayer": null,
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "locator": "locator('.wk-card').first()",
+   "differentPixels": null
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "wiki",
+   "file": "pages.browser.mjs",
+   "screenshot": null,
+   "expectedLayer": null,
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "locator": "locator('.wk-card').first()",
+   "differentPixels": null
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "wiki",
+   "file": "pages.browser.mjs",
+   "screenshot": null,
+   "expectedLayer": null,
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "locator": "locator('.wk-card').first()",
+   "differentPixels": null
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "wiki",
+   "file": "pages.browser.mjs",
+   "screenshot": null,
+   "expectedLayer": null,
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "locator": "locator('.wk-card').first()",
+   "differentPixels": null
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "wiki",
+   "file": "pages.browser.mjs",
+   "screenshot": null,
+   "expectedLayer": null,
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "locator": "locator('.wk-card').first()",
+   "differentPixels": null
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "wiki",
+   "file": "pages.browser.mjs",
+   "screenshot": null,
+   "expectedLayer": null,
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "locator": "locator('.wk-card').first()",
+   "differentPixels": null
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "wiki",
+   "file": "pages.browser.mjs",
+   "screenshot": null,
+   "expectedLayer": null,
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "locator": "locator('.wk-card').first()",
+   "differentPixels": null
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "wiki",
+   "file": "pages.browser.mjs",
+   "screenshot": null,
+   "expectedLayer": null,
+   "error": "Error: expect(locator).toBeVisible() failed",
+   "locator": "locator('.wk-card').first()",
+   "differentPixels": null
+  }
+ ],
+ "flaky": []
+}

@@ -148,7 +148,11 @@ struct AgentRowView: View {
                             .background(.quaternary, in: Capsule())
                     }
                 }
-                Text(AgentDefaults.providerName(agent.defaultProvider, configured: configuredProviders)
+                // What its next session starts on, engine and credential in one phrase (board 7):
+                // "Claude Code", "Claude Code via DeepSeek".
+                Text(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: configuredProviders),
+                                                      provider: agent.defaultProvider,
+                                                      configured: configuredProviders)
                      + (agent.workDir.map { " · \($0)" } ?? ""))
                     .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
             }
@@ -381,6 +385,8 @@ struct AgentPanes: View {
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
+    /// The last grouping drawn and its inputs (see `body`).
+    @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -395,7 +401,14 @@ struct AgentPanes: View {
         // this column. Compact's rows push their own pages onto the section's `NavigationStack`, so
         // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
         #if os(iOS)
-        let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
+        // The grouping runs only when what it is computed from changed (`SessionListingMemo`): the
+        // body re-runs on a selection, a pop back to the list or a focus request, none of which
+        // moves a row. The list's closures, which SwiftUI also runs on its own as rows scroll in,
+        // read these rather than regrouping the account's sessions each time.
+        let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)
+        let folderListing = grouping.folderListing
+        let timeSections = grouping.timeSections
+        let projectRows = grouping.projectRows
         #endif
         List(selection: listSelection) {
             #if os(iOS)
@@ -413,7 +426,7 @@ struct AgentPanes: View {
                     Section {
                         ForEach(section.sessions) { sessionRow($0) }
                     } header: {
-                        tagSectionHeader(section.tag)
+                        sectionHeaderBand { tagSectionHeader(section.tag) }
                     }
                 }
             } else {
@@ -466,13 +479,13 @@ struct AgentPanes: View {
                                 ForEach(section.sessions) { listRow($0, projects: projectRows) }
                             }
                         } header: {
-                            pinnedSectionHeader(section.title)
+                            sectionHeaderBand { pinnedSectionHeader(section.title) }
                         }
                     } else {
                         Section {
                             ForEach(section.sessions) { listRow($0, projects: projectRows) }
                         } header: {
-                            Text(section.title).textCase(nil)
+                            sectionHeaderBand { Text(section.title).textCase(nil) }
                         }
                     }
                 }
@@ -550,7 +563,8 @@ struct AgentPanes: View {
                     }
                     .background(.bar)
                 }
-                NeedsYouBannerView(excluding: app.selectedAgentSessionID)
+                NeedsYouBannerView(excluding: app.selectedAgentSessionID,
+                                   projectInColumn: rowNavigation == .selection)
             }
         }
         #endif
@@ -812,11 +826,36 @@ struct AgentPanes: View {
     }
 
     #if os(iOS)
+    /// What the list's grouping is computed from, read off the models each pass — which is also
+    /// what re-runs the body when one of them changes (see `SessionListingMemo`).
+    private var listInputs: SessionListInputs {
+        SessionListInputs(workspaceID: agent.id, sessions: agents.agentSessions, tagFilter: tagFilter,
+                          accountSessions: app.sessions, allSessions: agents.allSessions,
+                          folders: app.sessionFolders, projects: app.projects?.sidebarProjects ?? [],
+                          watches: app.watches?.summaries ?? [:], view: view, groupByTag: groupByTag,
+                          searching: isSearching, runnerOffline: agents.runnerIsOffline(agent.runnerId),
+                          recaps: accountShowsRecaps)
+    }
+
+    /// The account's Session recaps switch, off only when explicitly turned off (`AppModel.user`
+    /// carries the preferences). Read here so a toggle regroups the list into the lines it asks for.
+    private var accountShowsRecaps: Bool { app.user?.preferences?.showRecaps ?? true }
+
+    /// The whole grouping, from its inputs alone: static, so it cannot read a fact the memo's key
+    /// does not carry.
+    private static func grouping(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionListGrouping {
+        let projectListing = Self.projectListing(inputs, lines)
+        let folderListing = Self.folderListing(projectListing, inputs)
+        let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
+        return SessionListGrouping(projectListing: projectListing, folderListing: folderListing,
+                                   timeSections: Self.timeSections(folderListing, inputs), projectRows: projectRows)
+    }
+
     /// The recency sections the list draws, split out of the `ForEach` so the leading one can be
     /// rendered without its title (see the list body). Over what is left after the folders take
     /// theirs — a session inside a folder is drawn behind its row, not here (§3.3).
-    private var timeSections: [SessionTimeSection] {
-        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: view == .open && tagFilter == nil)
+    private static func timeSections(_ folderListing: SessionFolderListing, _ inputs: SessionListInputs) -> [SessionTimeSection] {
+        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil)
     }
 
     /// This workspace's list, split by folder (§3.3): the folder rows the list draws at its top,
@@ -826,32 +865,39 @@ struct AgentPanes: View {
     /// row's spinner exactly as it silences the workspace's own. Trash, a tag filter and Group by
     /// Tag all leave the folder rows empty (§3.3): each is a grouping of its own, and a second one
     /// stacked on the list would leave a session with two places to be.
-    private var folderListing: SessionFolderListing {
-        let ungrouped = SessionFolderGrouping.listing(shownSessions,
-                                      folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
-                                      view: view,
-                                      byTag: tagFilter != nil || groupByTag,
-                                      runnerOffline: agents.runnerIsOffline(agent.runnerId))
-        guard SessionProjectGrouping.listShowsProjects(view: view, byTag: tagFilter != nil || groupByTag) else {
-            return ungrouped
+    private static func folderListing(_ projectListing: SessionProjectListing, _ inputs: SessionListInputs) -> SessionFolderListing {
+        guard SessionProjectGrouping.listShowsProjects(view: inputs.view, byTag: inputs.byTag) else {
+            return SessionFolderGrouping.listing(inputs.shownSessions,
+                                      folders: inputs.workspaceFolders,
+                                      view: inputs.view,
+                                      byTag: inputs.byTag,
+                                      runnerOffline: inputs.runnerOffline)
         }
         return SessionFolderListing(folders: projectListing.folders,
                                     sessions: projectListing.entries.map(\.timeGroupingSession))
     }
 
-    private var projectListing: SessionProjectListing {
-        SessionProjectGrouping.listing(shownSessions,
-                                      folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
-                                      projects: app.projects?.sidebarProjects ?? [], view: view,
-                                      byTag: tagFilter != nil || groupByTag, searching: isSearching,
-                                      runnerOffline: agents.runnerIsOffline(agent.runnerId),
-                                      coordinators: agents.allSessions + app.sessions,
-                                      contentSessions: view == .open ? app.sessions : agents.allSessions,
-                                      watching: Dictionary((app.sessions + agents.allSessions).compactMap { session in
-                                          app.watches?.summary(for: session.id).map { (session.id, $0) }
+    private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {
+        let shownSessions = inputs.shownSessions
+        // The grouping reads only the coordinators out of these, so only they are copied out of the
+        // account's lists — not several hundred sessions each, concatenated whole on every pass.
+        let isCoordinator = { (session: Session) in session.projectMembership?.role == .coordinator }
+        let coordinators = inputs.allSessions.filter(isCoordinator) + inputs.accountSessions.filter(isCoordinator)
+        // Only the sessions the grouping looks a watch up for — this list's own and the projects'
+        // coordinators — not every session of the account, each a `PublicID` key conversion.
+        let watched = shownSessions + coordinators
+        return SessionProjectGrouping.listing(shownSessions,
+                                      folders: inputs.workspaceFolders,
+                                      projects: inputs.projects, view: inputs.view,
+                                      byTag: inputs.byTag, searching: inputs.searching,
+                                      runnerOffline: inputs.runnerOffline,
+                                      coordinators: coordinators,
+                                      contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions,
+                                      watching: Dictionary(watched.compactMap { session in
+                                          inputs.watch(for: session.id).map { (session.id, $0) }
                                       }, uniquingKeysWith: { _, latest in latest }),
-                                      line: { SessionLine.make(for: $0, live: true,
-                                                              watching: app.watches?.summary(for: $0.id)) })
+                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id),
+                                                         recaps: inputs.recaps) })
     }
 
     private func projectRow(_ row: SessionProjectRow) -> some View {
@@ -865,7 +911,7 @@ struct AgentPanes: View {
             case .project: app.openProjectSessions(address)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) })
+        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(address) })
         .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
@@ -926,10 +972,12 @@ struct AgentPanes: View {
             // Doubles as the short-query notice the palette keeps in its footer: below the
             // server's content threshold only names are matched, which is worth saying before
             // "no matches" reads as "this doesn't exist".
-            Text(contentSearched
-                 ? "All sessions"
-                 : "Matching names only — type more to search message text.")
-                .textCase(nil)
+            sectionHeaderBand {
+                Text(contentSearched
+                     ? "All sessions"
+                     : "Matching names only — type more to search message text.")
+                    .textCase(nil)
+            }
         }
     }
 
@@ -1037,6 +1085,34 @@ struct AgentPanes: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
         .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+    }
+
+    /// A section header's band: its title drawn over the list's own surface, so that the header
+    /// *pins* with something behind it. SwiftUI's plain list floats a section's header over the rows
+    /// as they scroll under it but paints nothing behind a custom header — so a row on its way up
+    /// read straight through "Yesterday" / "2–7 days ago", its title overlapping the header's glyph
+    /// for glyph (every appearance, light and dark).
+    ///
+    /// The list's own header insets sit *outside* the header's view, so a bare `.background` on the
+    /// title would cover its line and leave the strips above and below it see-through. The surface
+    /// is therefore grown past the title's own frame by the insets that surround it — measured off
+    /// the header this replaces on the simulator (iOS 26.5: the title sits 33pt below the band's
+    /// top, which ends 9pt below the title's line). Nothing here is layout: a background lays out
+    /// nothing, so the header keeps the system's own metrics, the band stays the height it was (a
+    /// header that added its own padding instead measured 2pt short per section), and the Pinned
+    /// header's tap target — the button, not this — is exactly the size it was.
+    ///
+    /// The fill is `systemBackground`, what the list itself draws in each appearance — the same fill
+    /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
+    /// disappears behind it instead of reading through it.
+    private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                Color(uiColor: .systemBackground)
+                    .padding(.top, -33)
+                    .padding(.bottom, -9)
+            }
     }
     #endif
 }
@@ -1175,6 +1251,8 @@ struct AgentConsoleDetail: View {
 /// input at full parity — the `+` menu, `!`-shell, slash autocomplete, attachments, and the
 /// model/permission/effort footer — instead of the simplified field it used to carry.
 struct NewSessionView: View {
+    /// Where the status cards end, room under the last one included (see the cards' scroll view).
+    private static let statusCardsEnd = "status-cards-end"
     let agent: Agent
     /// Runtime-reported default resolved before this draft is constructed.
     let defaultModel: String
@@ -1208,7 +1286,7 @@ struct NewSessionView: View {
     #if os(macOS)
     @State private var showSwitcher = false
     #endif
-    @State private var showProviderPicker = false
+    @State private var showEnginePicker = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
@@ -1247,32 +1325,37 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if draft.localStatusCards.isEmpty {
+            if let managed = draft.managed, managed.blocksNewSession {
+                // The managed runner's default workspace before its runner was ever ready: there is
+                // no engine for a first session yet (the server would refuse it), so the runner's
+                // state stands where the engine would, and the composer below sends nothing.
+                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // The same room above the band as the hero it stands in for.
+                    .padding(.bottom, .composerBandFade)
+            } else if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
-                    // Who runs this session is the hero — the native port of web's
-                    // `NewSessionProviderHero`: the vendor's own mark, then its name as the one
-                    // tappable identity. The workspace name sits in the iOS navigation bar;
-                    // macOS keeps its workspace switcher below the hero.
+                    // Which engine runs this session is the hero — the native port of web's
+                    // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
+                    // one tappable identity. Which provider of it the session spends is the
+                    // composer's Provider menu's to pick and to say. The workspace name sits in the iOS navigation bar; macOS keeps its workspace
+                    // switcher below the hero.
                     VStack(spacing: 14) {
-                        ProviderMark(provider: draft.provider, size: 68,
-                                     brandKey: currentProviderChoice.brandKey,
-                                     label: currentProviderChoice.label,
-                                     poolSize: currentProviderChoice.poolSize,
-                                     poolUnit: currentProviderChoice.poolUnit)
-                        Button { showProviderPicker = true } label: {
+                        ProviderMark(provider: currentEngine.slug, size: 68,
+                                     brandKey: currentEngine.brandKey,
+                                     label: currentEngine.label)
+                        Button { showEnginePicker = true } label: {
                             HStack(spacing: 7) {
-                                Text(currentProviderChoice.label)
+                                Text(currentEngine.label)
                                     .font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                                if let detail = currentProviderChoice.labelDetail {
-                                    Text(detail).font(.footnote).foregroundStyle(.secondary)
-                                }
                                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Provider: \(currentProviderChoice.label). Switch")
+                        .accessibilityLabel("Engine: \(currentEngine.label). Switch")
                     }
                     VStack(spacing: 5) {
                         // The pick is sticky, so it can point at an engine this machine can no
@@ -1282,9 +1365,9 @@ struct NewSessionView: View {
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
-                                    if currentProviderChoice.fixEngine == "antigravity",
-                                       let url = draft.providersURL(engine: "antigravity", runnerID: rid) { openURL(url) }
-                                    else { app.route(to: .runner(rid)) }
+                                    let engine = currentProviderChoice.fixEngine ?? ""
+                                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                                    else { app.openRunnerEngine(rid, engine: engine) }
                                 }
                             } label: {
                                 Text("\(blocker) on this runner · Fix it")
@@ -1315,6 +1398,8 @@ struct NewSessionView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
+                // The room above the band a list keeps under its last row (`fadesIntoComposerBand`).
+                .padding(.bottom, .composerBandFade)
             } else {
                 // Once a local command has produced output this is no longer an empty state. Replace
                 // the hero instead of showing both, and stack repeated commands vertically.
@@ -1326,20 +1411,30 @@ struct NewSessionView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(16)
+                        .padding([.horizontal, .top], 16)
+                        // The room the fade lies over (`fadesIntoComposerBand`), and where a new card
+                        // scrolls the list to: a scroll to the card itself would leave its end in the fade.
+                        Color.clear.frame(height: .composerBandFade).id(Self.statusCardsEnd)
                     }
+                    .fadesIntoComposerBand()
                     .defaultScrollAnchor(.center)
                     .onChange(of: draft.localStatusCards.count) {
-                        if let last = draft.localStatusCards.last {
-                            proxy.scrollTo(last.id, anchor: .bottom)
+                        if !draft.localStatusCards.isEmpty {
+                            proxy.scrollTo(Self.statusCardsEnd, anchor: .bottom)
                         }
                     }
                 }
             }
 
-            // Same band as the live console (its `Divider` replaces the one that used to be hand-rolled
-            // here), so the draft composer and the real one are inset and spaced identically.
+            // Same band as the live console, so the draft composer and the real one are inset and
+            // spaced identically.
             ComposerBand {
+                // The managed runner's state, as the live console shows it, unless it already stands
+                // in the hero's place above.
+                if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
+                    ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                        .padding(.bottom, .composerBandGap)
+                }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
                 if let msg = draft.statusMessage {
                     HStack {
@@ -1395,20 +1490,15 @@ struct NewSessionView: View {
             }
         }
         #endif
-        .sheet(isPresented: $showProviderPicker) {
+        .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
-            // the machine this draft would run on, and the one whose Engines section fixes a row.
-            ProviderSwitchSheet(
-                choices: providerChoices.contains { $0.slug == draft.provider } ? providerChoices : [currentProviderChoice] + providerChoices, currentSlug: draft.provider, agentName: agent.name,
-                currentAccount: draft.provider == "claude" ? draft.account(for: "claude") : draft.codexAccount,
-                automatic: ["codex", "claude"].reduce(into: [String: Bool]()) { offered, engine in
-                    if draft.automaticOffered(engine) { offered[engine] = draft.draftAutomatic(engine) }
-                },
-                onSelect: { slug in draft.pickDraftProvider(slug) },
-                onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
+            // the machine this draft would run on, and the one whose engine page fixes a row.
+            EngineSwitchSheet(
+                engines: engines, current: currentEngine, agentName: agent.name,
+                onSelect: { engine, provider in draft.pickDraft(engine: engine, provider: provider) },
                 onFixRunner: agent.runnerId.map { rid in { engine in
-                    if engine == "antigravity", let url = draft.providersURL(engine: engine, runnerID: rid) { openURL(url) }
-                    else { app.route(to: .runner(rid)) }
+                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                    else { app.openRunnerEngine(rid, engine: engine) }
                 } })
         }
     }
@@ -1420,24 +1510,35 @@ struct NewSessionView: View {
     }
     #endif
 
-    /// Engines first, then this account's pools — its own and the shared ones it is in — then its
-    /// configured providers. Built from the draft's own snapshot so the list matches the model space
-    /// the pills are already resolving against.
-    private var providerChoices: [ProviderChoice] {
-        SessionProviderChoices.choices(configured: draft.configuredProviders,
-                                       catalog: draft.modelCatalog,
-                                       engines: draft.runnerEngines,
-                                       pools: draft.allPools,
-                                       planUsage: draft.runnerPlanUsage,
-                                       antigravity: draft.runnerAntigravity,
-                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true)
+    /// What the hero judges the engines and their credentials by: the draft's own snapshot — so the
+    /// list matches the model space the pills are already resolving against — with this workspace's
+    /// Gemini key on the machine it would run on.
+    private var sources: ChoiceSources {
+        var sources = draft.choiceSources
+        sources.antigravityKeyAvailable =
+            agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true
+        return sources
+    }
+
+    /// The engines the hero offers, by their CLIs' names, each landing on the draft's pick when it is
+    /// that engine's, else on what this workspace last ran there (web parity).
+    private var engines: [EngineChoice] {
+        SessionProviderChoices.engines(sources: sources, preferred: [
+            EnginePick(engine: draft.engine, provider: draft.provider),
+            EnginePick(engine: agent.defaultEngine(configured: draft.configuredProviders), provider: agent.defaultProvider),
+        ])
+    }
+
+    /// The draft's engine on the draft's own provider, drawn as it is even where that provider is no
+    /// longer on offer (a key since removed), so the hero still names what it would run.
+    private var currentEngine: EngineChoice {
+        SessionProviderChoices.currentEngine(engine: draft.engine, provider: draft.provider, engines: engines,
+                                             sources: sources)
     }
 
     private var currentProviderChoice: ProviderChoice {
-        SessionProviderChoices.current(draft.provider, in: providerChoices,
-                                       configured: draft.configuredProviders,
-                                       catalog: draft.modelCatalog,
-                                       antigravity: draft.runnerAntigravity)
+        currentEngine.provider
+            ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
     }
 
     /// The full model name (the composer footer only carries a truncated one). No funding label:
@@ -1447,7 +1548,7 @@ struct NewSessionView: View {
     /// No account either (web parity): the composer's quota gauge names it in its detail.
     private var heroSubtitle: String {
         draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, for: draft.provider,
+            ? AgentDefaults.friendlyName(draft.modelID, engine: draft.engine, provider: draft.provider,
                                          catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
@@ -1468,9 +1569,22 @@ struct AgentSessionRow: View {
     @Environment(AppModel.self) private var app
     /// The live watches that will resume this session: what a parked row says it's doing instead.
     private var watching: WatchSessionSummary? { app.watches?.summary(for: session.id) }
-    // Second line: the last-reply / live-state preview (mirrors the web Agent console). `live` mirrors
-    // web's `openable` — false on the Trash tab (a deleted session isn't live), true elsewhere.
-    private var line: SessionLine { SessionLine.make(for: session, live: !deleted, watching: watching) }
+    // Second line: the recap / last-reply / live-state preview (mirrors the web Agent console).
+    // `live` mirrors web's `openable` — false on the Trash tab (a deleted session isn't live), true
+    // elsewhere — and `recaps` is the account's Session recaps switch, read from the same `me` every
+    // other preference comes from (absent means on).
+    private var line: SessionLine {
+        SessionLine.make(for: session, live: !deleted, watching: watching,
+                         recaps: app.user?.preferences?.showRecaps ?? true)
+    }
+
+    /// The second line as one text run: the recap's muted label, a space, then the line. Built by
+    /// concatenation (not an HStack) so the label and the text truncate together as one line, the
+    /// way web's inline spans do. Lines with no label — all but the recap — are the text alone.
+    private var lineText: Text {
+        guard let label = line.label else { return Text(line.text) }
+        return Text("\(label) ").foregroundStyle(.tertiary) + Text(line.text)
+    }
 
     var body: some View {
         #if os(iOS)
@@ -1501,7 +1615,7 @@ struct AgentSessionRow: View {
                     }
                     HStack(spacing: 7) {
                         SessionCoordinatorBadge(session: session)
-                        Text(line.text).font(.orbitListSubtitle)
+                        lineText.font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
                 }
@@ -1552,7 +1666,7 @@ struct AgentSessionRow: View {
                         // Only one chip is visual; VoiceOver still hears the complete filing context.
                         .accessibilityLabel("Tags: \(tags.map(\.name).joined(separator: ", "))")
                 }
-                Text(line.text)
+                lineText
                     .font(.orbitListSubtitle)
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
@@ -1588,7 +1702,7 @@ struct AgentSessionRow: View {
                 if let tags = session.tags, !tags.isEmpty {
                     SessionTagChips(tags: tags)
                 }
-                Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                lineText.font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
         }
         .padding(.vertical, 2)
@@ -1707,6 +1821,25 @@ struct SessionLiveIndicator: View {
     }
 }
 
+/// Whether the animated row cues in this subtree — `SpinnerGlyph` and `BreathingGlyph` — are on
+/// screen, and so may redraw. True everywhere by default; the compact shell's agents stack sets it
+/// false for the session list a page has been pushed over.
+///
+/// That list is not torn down by the push — keeping it mounted is what keeps its rows and scroll
+/// position for the pop back — but not one pixel of it is on screen. One
+/// `TimelineView(.animation)` per running row went on redrawing at the display's cadence anyway, so
+/// the cost of the list scaled with how many sessions were running even while the list was behind a
+/// conversation. The drawer's own cues are held back the same way by its `live:` parameter; this is
+/// that switch, for the rows themselves.
+private struct LiveRowCuesKey: EnvironmentKey { static let defaultValue = true }
+
+extension EnvironmentValues {
+    var liveRowCues: Bool {
+        get { self[LiveRowCuesKey.self] }
+        set { self[LiveRowCuesKey.self] = newValue }
+    }
+}
+
 /// A symbol that breathes — a slow opacity pulse, the web's `status-glyph-active`. It is the one
 /// motion in this vocabulary that is neither rotation nor a dot, and it means one thing: there is
 /// work happening here, without the agent generating. Drawn in the neutral tone, which is the tone
@@ -1719,10 +1852,12 @@ struct BreathingGlyph: View {
     private let trough: Double = 0.42  // the web's 50% keyframe
     private let frameInterval: Double = 1.0 / 30.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.liveRowCues) private var liveRowCues
     var body: some View {
-        if reduceMotion {
+        if reduceMotion || !liveRowCues {
             // The words are the state; the motion is only emphasis, and this is the ambient loop
-            // that reduced-motion exists to switch off.
+            // that reduced-motion exists to switch off — or one drawn for a list that is not on
+            // screen at all (see `liveRowCues`).
             symbol
         } else {
             TimelineView(.animation(minimumInterval: frameInterval)) { context in
@@ -1760,16 +1895,26 @@ struct SpinnerGlyph: View {
     /// quarter of the redraws. The angle stays a pure function of wall-clock time, so the rate has no
     /// effect on how fast it appears to spin.
     private let frameInterval: Double = 1.0 / 30.0
+    @Environment(\.liveRowCues) private var liveRowCues
     var body: some View {
-        TimelineView(.animation(minimumInterval: frameInterval)) { context in
-            let angle = context.date.timeIntervalSinceReferenceDate
-                .truncatingRemainder(dividingBy: period) / period * 360
-            Circle()
-                .trim(from: 0, to: 0.7)
-                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .frame(width: 13, height: 13)
-                .rotationEffect(.degrees(angle))
+        if liveRowCues {
+            TimelineView(.animation(minimumInterval: frameInterval)) { context in
+                arc(angle: context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: period) / period * 360)
+            }
+        } else {
+            // A list that is not on screen (see `liveRowCues`): the arc is drawn once, still. Nobody
+            // can see it — what matters is that no display link runs for it, and that the angle is a
+            // pure function of the clock again the moment the list is the page showing.
+            arc(angle: 0)
         }
+    }
+    private func arc(angle: Double) -> some View {
+        Circle()
+            .trim(from: 0, to: 0.7)
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .frame(width: 13, height: 13)
+            .rotationEffect(.degrees(angle))
     }
 }
 
@@ -1794,25 +1939,28 @@ struct AgentFormContent: View {
     @State private var modelRouting = false
     @State private var confirmingDelete = false
 
-    /// Not an editable field: an agent holds no provider. This is what the project last ran on,
-    /// and it is here only because the effort vocabulary below genuinely differs by runtime. The
+    /// Not editable fields: an agent holds no engine or provider. This is what the project last ran
+    /// on, and it is here only because the effort vocabulary below genuinely differs by engine. The
     /// choice itself lives in the composer, per session.
     private var provider: String { agent.defaultProvider }
+    private var engine: String { agent.defaultEngine(configured: agents.configuredProviders) }
 
     private var effortOptions: [Effort] {
         // `model` / `modelCatalog` were dropped when agents stopped storing a model default; the
         // Runtime-resolved `effectiveModel` and the runner's own catalog replace them.
         let catalog = agents.modelCatalog(for: agent.runnerId)
-        let options = AgentDefaults.efforts(for: provider, model: effectiveModel, catalog: catalog)
+        let options = AgentDefaults.efforts(for: engine, provider: provider, model: effectiveModel,
+                                            catalog: catalog, configured: agents.configuredProviders)
         let current = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: effectiveModel, catalog: catalog)
+            effort, for: engine, provider: provider, model: effectiveModel, catalog: catalog,
+            configured: agents.configuredProviders)
         return options.contains(current) ? options : [current] + options
     }
 
     /// Agents no longer store a model default. Resolve the model this Runtime will provide, which
     /// is what the effort vocabulary above is drawn from.
     private var effectiveModel: String {
-        agents.effectiveDefaultModel(for: provider, runnerId: agent.runnerId)
+        agents.effectiveDefaultModel(engine: engine, provider: provider, runnerId: agent.runnerId)
     }
 
     var body: some View {
@@ -1874,6 +2022,20 @@ struct AgentFormContent: View {
 
             Section {
                 Button("Delete agent", role: .destructive) { confirmingDelete = true }
+                    // Delete is destructive and drops the agent from the list, so gate it behind an
+                    // explicit confirmation — on the button that asks, so the panel opens against it
+                    // rather than at the top of the form. The server soft-deletes (its sessions are
+                    // kept and stay linked); close the sheet afterward since the agent is gone from
+                    // here.
+                    .orbitConfirmation("Delete \(agent.name)?", isPresented: $confirmingDelete) {
+                        Button("Delete agent", role: .destructive) {
+                            dismiss()
+                            Task { await agents.delete(agent.id) }
+                        }
+                        Button("Cancel", role: .cancel) { }
+                    } message: {
+                        Text("This removes the workspace from your Workspaces list. Its sessions are kept.")
+                    }
             }
         }
         .formStyle(.grouped)
@@ -1891,19 +2053,6 @@ struct AgentFormContent: View {
                 Button("Done") { commitAndDismiss() }
             }
         }
-        // Delete is destructive and drops the agent from the list, so gate it behind an explicit
-        // confirmation. The server soft-deletes (its sessions are kept and stay linked); close the
-        // sheet afterward since the agent is gone from here.
-        .confirmationDialog("Delete \(agent.name)?", isPresented: $confirmingDelete,
-                            titleVisibility: .visible) {
-            Button("Delete agent", role: .destructive) {
-                dismiss()
-                Task { await agents.delete(agent.id) }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This removes the workspace from your Workspaces list. Its sessions are kept.")
-        }
     }
 
     private func prefill() {
@@ -1919,7 +2068,7 @@ struct AgentFormContent: View {
     /// for field so a look-and-close never fires a needless PATCH.
     private var prefilledEffort: Effort {
         let saved = Effort(rawValue: agent.effort ?? "") ?? .default
-        return AgentDefaults.normalizeEffort(saved, for: provider)
+        return AgentDefaults.normalizeEffort(saved, for: engine)
     }
 
     private var isDirty: Bool {

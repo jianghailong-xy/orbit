@@ -1,0 +1,99 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --grep attachment matches|access matches|tooltip matches|popover matches|popover owns|disabled-button|menu arrows|touch or pointer
+
+[WebServer] (node:2573627) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 64 tests using 1 worker
+
+(node:2573829) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (4.5s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › access matches the current surface, density and option states (3.4s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › popover matches the current surface, density and option states (3.3s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (3.2s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices.browser.mjs:200:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.3s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices.browser.mjs:233:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.6s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices.browser.mjs:402:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.7s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices.browser.mjs:644:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.5s)
+(node:2578277) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [chromium-light-phone] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (3.6s)
+  ✓  10 [chromium-light-phone] › ui-migration/choices.browser.mjs:82:3 › access matches the current surface, density and option states (3.2s)
+  ✓  11 [chromium-light-phone] › ui-migration/choices.browser.mjs:82:3 › popover matches the current surface, density and option states (3.2s)
+  ✓  12 [chromium-light-phone] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (3.0s)
+  ✓  13 [chromium-light-phone] › ui-migration/choices.browser.mjs:200:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.2s)
+  ✓  14 [chromium-light-phone] › ui-migration/choices.browser.mjs:233:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.6s)
+  ✓  15 [chromium-light-phone] › ui-migration/choices.browser.mjs:402:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.7s)
+  ✓  16 [chromium-light-phone] › ui-migration/choices.browser.mjs:644:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.5s)
+(node:2581329) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (3.1s)
+  ✓  18 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:82:3 › access matches the current surface, density and option states (3.0s)
+  ✓  19 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:82:3 › popover matches the current surface, density and option states (3.1s)
+  ✓  20 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (2.8s)
+  ✓  21 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:200:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.1s)
+  ✓  22 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:233:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.6s)
+  ✓  23 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:402:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.6s)
+  ✓  24 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:644:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.4s)
+(node:2583044) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  25 [chromium-dark-phone] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (3.1s)
+  ✓  26 [chromium-dark-phone] › ui-migration/choices.browser.mjs:82:3 › access matches the current surface, density and option states (3.2s)
+  ✓  27 [chromium-dark-phone] › ui-migration/choices.browser.mjs:82:3 › popover matches the current surface, density and option states (3.0s)
+  ✓  28 [chromium-dark-phone] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (2.9s)
+  ✓  29 [chromium-dark-phone] › ui-migration/choices.browser.mjs:200:1 › menu arrows, disabled items, submenu, checkbox and focus return work (971ms)
+  ✓  30 [chromium-dark-phone] › ui-migration/choices.browser.mjs:233:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.4s)
+  ✓  31 [chromium-dark-phone] › ui-migration/choices.browser.mjs:402:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.6s)
+  ✓  32 [chromium-dark-phone] › ui-migration/choices.browser.mjs:644:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.3s)
+(node:2584514) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  33 [webkit-light-desktop] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (2.8s)
+  ✓  34 [webkit-light-desktop] › ui-migration/choices.browser.mjs:82:3 › access matches the current surface, density and option states (2.4s)
+  ✓  35 [webkit-light-desktop] › ui-migration/choices.browser.mjs:82:3 › popover matches the current surface, density and option states (2.6s)
+  ✓  36 [webkit-light-desktop] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (2.7s)
+  ✓  37 [webkit-light-desktop] › ui-migration/choices.browser.mjs:200:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.3s)
+  ✓  38 [webkit-light-desktop] › ui-migration/choices.browser.mjs:233:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.7s)
+  ✓  39 [webkit-light-desktop] › ui-migration/choices.browser.mjs:402:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.8s)
+  ✓  40 [webkit-light-desktop] › ui-migration/choices.browser.mjs:644:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.4s)
+(node:2586823) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  41 [webkit-light-phone] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (2.3s)
+  ✓  42 [webkit-light-phone] › ui-migration/choices.browser.mjs:82:3 › access matches the current surface, density and option states (2.4s)
+  ✓  43 [webkit-light-phone] › ui-migration/choices.browser.mjs:82:3 › popover matches the current surface, density and option states (2.4s)
+  ✓  44 [webkit-light-phone] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (2.1s)
+  ✓  45 [webkit-light-phone] › ui-migration/choices.browser.mjs:200:1 › menu arrows, disabled items, submenu, checkbox and focus return work (947ms)
+  ✓  46 [webkit-light-phone] › ui-migration/choices.browser.mjs:233:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.4s)
+  ✓  47 [webkit-light-phone] › ui-migration/choices.browser.mjs:402:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.6s)
+  ✓  48 [webkit-light-phone] › ui-migration/choices.browser.mjs:644:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.2s)
+(node:2588397) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  49 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (2.3s)
+  ✓  50 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:82:3 › access matches the current surface, density and option states (2.3s)
+  ✓  51 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:82:3 › popover matches the current surface, density and option states (2.3s)
+  ✓  52 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (2.3s)
+  ✓  53 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:200:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.0s)
+  ✓  54 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:233:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.6s)
+  ✓  55 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:402:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.7s)
+  ✓  56 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:644:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.4s)
+(node:2590308) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  57 [webkit-dark-phone] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (2.4s)
+  ✓  58 [webkit-dark-phone] › ui-migration/choices.browser.mjs:82:3 › access matches the current surface, density and option states (2.3s)
+  ✓  59 [webkit-dark-phone] › ui-migration/choices.browser.mjs:82:3 › popover matches the current surface, density and option states (2.4s)
+  ✓  60 [webkit-dark-phone] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (2.3s)
+  ✓  61 [webkit-dark-phone] › ui-migration/choices.browser.mjs:200:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.2s)
+  ✓  62 [webkit-dark-phone] › ui-migration/choices.browser.mjs:233:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.5s)
+  ✓  63 [webkit-dark-phone] › ui-migration/choices.browser.mjs:402:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (2.1s)
+  ✓  64 [webkit-dark-phone] › ui-migration/choices.browser.mjs:644:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.6s)
+
+  64 passed (2.4m)

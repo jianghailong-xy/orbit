@@ -2,7 +2,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { TaskAttributionBody, TaskAttributionCard } from './TaskAttributionCard';
-import { orderCrossings, publicIdOf, type TaskAttribution } from '../lib/attribution';
+import { MOVE_TASK_STATE_MEANING } from './ProjectCrossingsCard';
+import {
+  CROSSING_STATE_MEANING,
+  orderCrossings,
+  publicIdOf,
+  type AttributionCrossing,
+  type CrossingState,
+  type TaskAttribution,
+} from '../lib/attribution';
 
 // The card fetches its own read, so the stub keeps an accidental live call visible as a failure
 // rather than a hang. A static render never dispatches one — react-query subscribes in an effect —
@@ -43,6 +51,20 @@ function view(over: Partial<TaskAttribution> = {}): TaskAttribution {
 }
 
 const paint = (v: TaskAttribution) => renderToStaticMarkup(<TaskAttributionBody view={v} />);
+
+const STATES = ['PENDING', 'APPROVED', 'DENIED', 'APPLIED'] as const;
+
+/** A crossing of `kind` touching this task, from its project to another one. */
+function crossing(kind: string, state: CrossingState): AttributionCrossing {
+  return {
+    handoffId: 'h1', kind, state,
+    from: OWNING, to: { ...OWNING, projectId: OTHER, title: 'Somewhere else' },
+    subjectTaskId: TASK, crossingKey: 'c'.repeat(64),
+    requestedAt: '2026-10-06T09:00:00.000Z', decidedAt: null, expiresAt: null,
+    code: state === 'PENDING' ? 'APPROVAL_PENDING' : null,
+    requiredAction: state === 'PENDING' ? 'AWAIT_HANDOFF_APPROVAL' : null,
+  };
+}
 
 describe('TaskAttributionCard — where this work counts', () => {
   it('names the owning project by TITLE and by pasteable id, not by one of them', () => {
@@ -111,6 +133,35 @@ describe('TaskAttributionCard — where this work counts', () => {
     expect(html).toContain('the work is not filed anywhere until you answer');
   });
 
+  it('reads a request to MOVE this task as a move: it stays where it is until you answer', () => {
+    for (const state of STATES) {
+      const html = paint(view({ crossing: crossing('MOVE_TASK', state), crossingAbsentReason: null }));
+      expect(html).toContain(MOVE_TASK_STATE_MEANING[state]);
+      // The filing's words are false of a task that is already filed somewhere.
+      expect(html).not.toContain(CROSSING_STATE_MEANING[state]);
+    }
+    const pending = paint(view({ crossing: crossing('MOVE_TASK', 'PENDING'), crossingAbsentReason: null }));
+    expect(pending).toContain('the task stays in its project until you answer, and confirming moves it');
+    expect(pending).not.toContain('the work is not filed anywhere until you answer');
+  });
+
+  it('leaves the words of a filing and of a dependency exactly as they were', () => {
+    // Literal, not read from the map, so a change to the words themselves fails here too.
+    const filing: Record<CrossingState, string> = {
+      PENDING: 'the work is not filed anywhere until you answer',
+      APPROVED: 'the writer may now file it; it has not been filed yet',
+      DENIED: 'refusing is final for this crossing — file the work yourself if you change your mind',
+      APPLIED: 'this answer has been spent; it authorises nothing further',
+    };
+    for (const kind of ['FILE_TASK', 'DEPEND_ON_TASK']) {
+      for (const state of STATES) {
+        const html = paint(view({ crossing: crossing(kind, state), crossingAbsentReason: null }));
+        expect(html).toContain(filing[state]);
+        expect(html).not.toContain(MOVE_TASK_STATE_MEANING[state]);
+      }
+    }
+  });
+
   it('shows an attribution blocker with its code, its owner and what would clear it', () => {
     const html = paint(view({
       blocker: {
@@ -154,6 +205,24 @@ describe('TaskAttributionCard — a server that does not answer', () => {
       </QueryClientProvider>,
     );
     expect(html).toContain('Attribution boundary could not be loaded');
+  });
+});
+
+describe('TaskAttributionCard — as the task page mounts it', () => {
+  it('says what a move request means, from the card\'s own read', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
+    // Seeded rather than fetched, for the reason the 404 case gives: a static render never runs it.
+    qc.setQueryData(['task', TASK, 'attribution'], view({
+      crossing: crossing('MOVE_TASK', 'PENDING'),
+      crossingAbsentReason: null,
+    }));
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <TaskAttributionCard taskId={TASK} />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain(MOVE_TASK_STATE_MEANING.PENDING);
+    expect(html).not.toContain('the work is not filed anywhere until you answer');
   });
 });
 

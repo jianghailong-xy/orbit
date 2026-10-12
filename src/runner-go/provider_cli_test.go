@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -284,6 +285,98 @@ func TestEveryFamilyWithPerActionHelpOwnsItsLeafHelp(t *testing.T) {
 		}
 		if !ownsLeafHelp(family) {
 			t.Errorf("%s defines per-action help but main answers its --help with the family overview", family)
+		}
+	}
+}
+
+// usableProvidersWithEngines is GET /runner/providers as the T3 control plane answers it: each entry
+// with the engines it runs, the default first (docs/provider-engine-contract.md §6.3).
+const usableProvidersWithEngines = `[{"slug":"claude","runtime":"claude","engines":["claude"],"builtin":true},` +
+	`{"slug":"dsh","runtime":"dsh","engines":["dsh"],"builtin":true},` +
+	`{"slug":"deepseek-2","label":"DeepSeek 2","runtime":"claude","models":[{"value":"deepseek-v4","label":"DeepSeek V4"}],"defaultModel":"deepseek-v4","engines":["claude","opencode","dsh"],"builtin":false},` +
+	`{"slug":"team-codex","label":"Team Codex","runtime":"codex","engines":["codex"],"builtin":false}]`
+
+// T5: `orbit provider list` and provider_list hand the server's list on as it came, so every entry's
+// `engines` reaches the reader — in both the CLI's output forms and the tool's answer.
+func TestProviderCLIListPrintsTheEnginesEachProviderRuns(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/runner/providers" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(usableProvidersWithEngines))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "")
+
+	var served []map[string]interface{}
+	if err := json.Unmarshal([]byte(usableProvidersWithEngines), &served); err != nil {
+		t.Fatal(err)
+	}
+	engines := func(t *testing.T, output string) {
+		t.Helper()
+		var listed []map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &listed); err != nil {
+			t.Fatalf("output is not the server's JSON list: %v\n%s", err, output)
+		}
+		if !reflect.DeepEqual(listed, served) {
+			t.Fatalf("listed = %#v\nwant the server's list as it came: %#v", listed, served)
+		}
+		key := listed[2]
+		if !reflect.DeepEqual(key["engines"], []interface{}{"claude", "opencode", "dsh"}) {
+			t.Fatalf("the DeepSeek key's engines = %#v", key["engines"])
+		}
+	}
+	for _, args := range [][]string{{"list", "--json"}, {"list"}} {
+		var out bytes.Buffer
+		if err := cmdProviderCLI(args, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("orbit provider %v: %v", args, err)
+		}
+		engines(t, out.String())
+	}
+	mcp := &mcpServer{t: NewTransport(srv.URL, "runner-token")}
+	res := mcp.callTool("provider_list", map[string]interface{}{})
+	if res["isError"] == true {
+		t.Fatalf("provider_list returned an error: %#v", res["content"])
+	}
+	engines(t, resultText(res))
+}
+
+// The provider help says what a provider is now: a credential whose `--runtime` is the protocol its
+// endpoint speaks (the flag keeps its name), listed with the engines it runs, and whose deletion
+// moves nothing onto the runner's Claude sign-in.
+func TestProviderCLIHelpSpeaksOfProtocolsAndEngines(t *testing.T) {
+	help := func(action string) string {
+		var out bytes.Buffer
+		if err := cmdProviderCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("provider %s --help: %v", action, err)
+		}
+		return out.String()
+	}
+	list := help("list")
+	for _, want := range []string{`"engines"`, "credential", "Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness", "provider not available"} {
+		if !strings.Contains(list, want) {
+			t.Fatalf("provider list --help does not say %q:\n%s", want, list)
+		}
+	}
+	for _, action := range []string{"create", "update"} {
+		text := help(action)
+		if !strings.Contains(text, "--runtime PROTOCOL") || !strings.Contains(text, "antigravity") ||
+			strings.Contains(text, "The coding engine that drives it") {
+			t.Fatalf("provider %s --help does not describe --runtime as the protocol:\n%s", action, text)
+		}
+	}
+	deletion := help("delete")
+	if strings.Contains(deletion, "built-in claude") || !strings.Contains(deletion, "keep") ||
+		!strings.Contains(deletion, "cannot start again until it is re-pinned") {
+		t.Fatalf("provider delete --help:\n%s", deletion)
+	}
+	for _, spec := range providerCLICapabilities {
+		if spec.Tool != "provider_create" && spec.Tool != "provider_update" {
+			continue
+		}
+		if !strings.Contains(strings.Join(spec.Arguments, " "), "--runtime <claude|codex|kimi|antigravity> (the protocol") {
+			t.Fatalf("%s capability arguments = %v", spec.Tool, spec.Arguments)
 		}
 	}
 }

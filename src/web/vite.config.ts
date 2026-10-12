@@ -38,6 +38,20 @@ export default defineConfig({
       },
     },
   },
+  // The first page gets ONE stylesheet: every CSS module the entry imports statically, in the order the
+  // modules are first imported (main.tsx's own list, then each Orbit component's CSS where the app first
+  // imports the component). Left to automatic chunking, a component the entry shares with a lazy chunk (the
+  // dependency graphs, the session export) moves into a shared chunk, and a shared chunk's stylesheet is
+  // linked ahead of the entry's — index.css included — so a page rule then wins a same-weight tie with that
+  // component that it loses everywhere else. CSS only lazy chunks import (React Flow's) stays with them.
+  // Held by src/firstPageStylesheet.test.ts.
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: { groups: [{ name: 'app', test: /\.css$/, tags: ['$initial'] }] },
+      },
+    },
+  },
   // `<Transcript>` alone takes seconds to mount on a loaded host — 7.8s for the first mount, measured
   // with a swift build running beside it — so vitest's 5s default reds its specs on wall clock alone,
   // and a red gets read as a regression in whatever was just changed. 30s is the headroom those specs

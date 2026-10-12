@@ -3,6 +3,8 @@ package io.orbitd.android.core.realtime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
+private fun JsonObject.toolId() = text("toolUseId") ?: text("tool_use_id") ?: text("id")
+
 @Serializable
 data class Transcript(
     val events: List<RunEvent> = emptyList(),
@@ -18,6 +20,18 @@ data class Transcript(
 ) {
     val maxSeq: Long get() = maxOf(resumeSeq, events.lastOrNull()?.seq ?: 0)
     val oldestSeq: Long? get() = events.firstOrNull()?.seq
+
+    /** The engine's guess at the next message (docs/prompt-suggestions-design.md §3.4), while it is
+     * still the newest of user / turn_end / prompt_suggestion. It always arrives after its own turn's
+     * turn_end, so a later turn_end is a newer turn ending and a later user event is a message from
+     * any device. Never drawn as a row: the composer offers it. */
+    val promptSuggestion: String? get() {
+        for (event in events.asReversed()) when (event.type) {
+            "prompt_suggestion" -> return event.fields.text("text")?.trim()?.takeIf { it.isNotEmpty() }
+            "user", "turn_end" -> return null
+        }
+        return null
+    }
 
     /** The server sends the whole current prefix again on each connect. Never persist animation
      * or append that prefix to a draft from a spent connection. */
@@ -45,10 +59,13 @@ data class Transcript(
         val parent = fields.text("parentToolUseId") ?: ""
         val text = fields.text("delta") ?: fields.text("text") ?: ""
         val rows = if (event.durable) (events + event).sortedBy { it.seq } else events
-        var next = copy(events = rows.takeLast(WINDOW_SIZE), hasMore = hasMore || rows.size > WINDOW_SIZE)
+        // Live deltas must keep the durable list's identity. Readers project that list once,
+        // independently of the changing text/output tail.
+        var next = copy(events = if (event.durable) rows.takeLast(WINDOW_SIZE) else events,
+            hasMore = hasMore || rows.size > WINDOW_SIZE)
         // Reordered history belongs in its sorted position, without clearing the current draft.
         if (event.durable && event.seq < maxSeq) return if (event.type == "tool_result") {
-            val id = fields.text("toolUseId") ?: return next
+            val id = fields.toolId() ?: return next
             next.copy(toolOutputs = toolOutputs - id)
         } else next
         when (event.type) {
@@ -57,10 +74,10 @@ data class Transcript(
             "assistant" -> next = next.copy(textDrafts = textDrafts - parent)
             "thinking" -> next = next.copy(thinkingDrafts = thinkingDrafts - parent)
             "tool_output" -> {
-                val id = fields.text("toolUseId") ?: return next
+                val id = fields.toolId() ?: return next
                 val lastBoundary = events.lastOrNull { it.type in setOf("user", "turn_end", "interrupt", "result") }?.seq ?: 0
-                val use = events.lastOrNull { it.type == "tool_use" && it.fields.text("toolUseId") == id }
-                val settled = events.any { it.type == "tool_result" && it.fields.text("toolUseId") == id }
+                val use = events.lastOrNull { it.type == "tool_use" && it.fields.toolId() == id }
+                val settled = events.any { it.type == "tool_result" && it.fields.toolId() == id }
                 val background = (use?.fields?.get("input") as? JsonObject)?.text("run_in_background") == "true"
                 if (id !in settledToolIds && !settled && !background && (use == null || use.seq > lastBoundary)) {
                     val previous = toolOutputs[id]?.number("snapshotSeq")
@@ -70,10 +87,11 @@ data class Transcript(
                     }
                 }
             }
-            "tool_result" -> fields.text("toolUseId")?.let { next = next.copy(toolOutputs = toolOutputs - it) }
+            "tool_result" -> fields.toolId()?.let { next = next.copy(toolOutputs = toolOutputs - it) }
             "tool_use" -> next = next.copy(textDrafts = textDrafts - parent, thinkingDrafts = thinkingDrafts - parent)
-            "background_output" -> fields.text("shellId")?.let { next = next.copy(backgroundOutputs = backgroundOutputs + (it to fields)) }
-            "task_progress" -> fields.text("toolUseId")?.let { next = next.copy(taskProgress = taskProgress + (it to fields)) }
+            "background_output" -> (fields.text("toolUseId") ?: fields.text("shellId") ?: fields.text("id") ?: fields.text("taskId"))
+                ?.let { next = next.copy(backgroundOutputs = backgroundOutputs + (it to fields)) }
+            "task_progress" -> fields.toolId()?.let { next = next.copy(taskProgress = taskProgress + (it to fields)) }
             "user", "turn_end", "interrupt", "result" -> next = next.finishLive()
             "status" -> if (fields.text("status") != "RUNNING") next = next.finishLive()
         }
@@ -81,7 +99,7 @@ data class Transcript(
     }
 
     private fun finishLive() = withoutLive().copy(settledToolIds = settledToolIds + toolOutputs.keys +
-        events.filter { it.type == "tool_use" }.mapNotNull { it.fields.text("toolUseId") })
+        events.filter { it.type == "tool_use" }.mapNotNull { it.fields.toolId() })
 
     companion object {
         const val WINDOW_SIZE = 2_000

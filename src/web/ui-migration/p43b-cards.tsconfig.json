@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["vite/client", "node"], "resolveJsonModule": true },
+  "include": ["p43b-cards.tsx"],
+  "exclude": []
+}

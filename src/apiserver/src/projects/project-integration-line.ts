@@ -2,15 +2,19 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import {
   uuidToBase62,
+  type ProjectBranchCandidates,
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
   type ProjectIntegrationView as SharedProjectIntegrationView,
+  type ProjectLastMainBranch,
   type ProjectListIntegration,
+  type ProjectIntegrationJob,
   type IntegrationJobKind,
   type IntegrationJobPhase,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { branchName } from './project-criterion-landing';
+import { IntegrationCheckSource, integrationJobLimitSeconds } from './project-integration-job';
 import { readProjectLandTaskViews } from './project-task-integration';
 
 /**
@@ -52,9 +56,10 @@ export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
 export type IntegrationRefSource = 'EXPLICIT' | 'DEFAULT_RULE';
 
 /**
- * A project's upstream until its owner says otherwise. Never probed: the API server has no
- * repository to ask, and falling back to `master` would be a convention of one repository in a
- * product that is about all of them (L6).
+ * A project's upstream when its owner has never said otherwise for its repository. Never probed:
+ * the API server has no repository to ask, and falling back to `master` would be a convention of one
+ * repository in a product that is about all of them (L6). What the owner HAS said is remembered
+ * instead: a new binding starts from their last choice for the same repository (`bind`).
  */
 export const DEFAULT_UPSTREAM_REF = 'refs/heads/main';
 
@@ -100,10 +105,20 @@ export function canonicalRepoUrl(raw: string): string | null {
   return url === '' ? null : url;
 }
 
+/**
+ * A repository as a person names it: the last two segments of its canonical URL, so
+ * `ssh://github.com/acme/payments-api` is `acme/payments-api`. For showing only — identity is the
+ * canonical URL.
+ */
+export function repositoryShortName(canonical: string): string {
+  return canonical.split('/').filter((segment) => segment !== '').slice(-2).join('/');
+}
+
 /** The columns of a binding this module reads and serves. */
 const LINE_COLUMNS = {
   id: true,
   upstreamRef: true,
+  upstreamRefChosenAt: true,
   integrationRef: true,
   integrationRefSource: true,
   integrationStartedAt: true,
@@ -139,7 +154,30 @@ export function readProjectCodebase(
 export async function readProjectIntegrationLines(
   prisma: Pick<PrismaService, 'projectCodebase'>,
   projectIds: readonly string[],
-): Promise<Map<string, ProjectListIntegration>> {
+): Promise<Map<string, ProjectListIntegration<Date>>> {
+  const lines = new Map<string, ProjectListIntegration<Date>>();
+  for (const [projectId, { integration }] of await readProjectListBindings(prisma, projectIds)) {
+    if (integration) lines.set(projectId, integration);
+  }
+  return lines;
+}
+
+/** What a list row reads off a project's binding: its line, null until somebody decided one, and
+ *  its main branch by name, which it has either way. */
+export interface ProjectListBinding {
+  integration: ProjectListIntegration<Date> | null;
+  mainBranch: string;
+}
+
+/**
+ * The statement behind `readProjectIntegrationLines`, for the rows that also name the project's
+ * main branch (`mainBranch` on `GET /projects` and `GET /projects/sidebar`). A project with no
+ * binding is absent: it has no repository, and its row's words say main.
+ */
+export async function readProjectListBindings(
+  prisma: Pick<PrismaService, 'projectCodebase'>,
+  projectIds: readonly string[],
+): Promise<Map<string, ProjectListBinding>> {
   if (projectIds.length === 0) return new Map();
   const rows = await prisma.projectCodebase.findMany({
     where: { projectId: { in: [...projectIds] }, slot: 'primary' },
@@ -147,19 +185,55 @@ export async function readProjectIntegrationLines(
       ...LINE_COLUMNS,
       projectId: true,
       _count: { select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } } },
+      integrationJobs: {
+        where: { state: { in: ['QUEUED', 'RUNNING'] } },
+        select: {
+          id: true, state: true, kind: true, phase: true, createdAt: true, claimedAt: true, heartbeatAt: true,
+          task: { select: { title: true } },
+        },
+      },
     },
   });
-  const lines = new Map<string, ProjectListIntegration>();
+  const bindings = new Map<string, ProjectListBinding>();
   for (const row of rows) {
+    const binding: ProjectListBinding = { integration: null, mainBranch: branchName(row.upstreamRef) };
+    bindings.set(row.projectId, binding);
     const line = decidedLine(row);
     if (!line) continue;
-    lines.set(row.projectId, {
+    const lead = oldestInFlight(row.integrationJobs ?? []);
+    binding.integration = {
       line,
       ref: branchName(row.integrationRef),
       activeJobCount: row._count.integrationJobs,
-    });
+      ...(lead ? {
+        inFlight: {
+          taskTitle: lead.task?.title ?? null,
+          kind: lead.kind as IntegrationJobKind,
+          phase: lead.phase as IntegrationJobPhase | null,
+          state: lead.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
+          startedAt: lead.claimedAt ?? lead.createdAt,
+          heartbeatAt: lead.heartbeatAt,
+          waitMs: claimedWaitMs({
+            state: lead.state,
+            startedAt: lead.claimedAt ?? lead.createdAt,
+            queuedAt: lead.createdAt,
+          }),
+        },
+      } : {}),
+    };
   }
-  return lines;
+  return bindings;
+}
+
+/** `readProjectIntegrationView`'s ORDER BY over a project's active jobs, in memory: running first,
+ *  then the oldest by claim-or-enqueue, `id` breaking a tie. */
+function oldestInFlight<J extends { id: string; state: string; createdAt: Date; claimedAt: Date | null }>(
+  jobs: readonly J[],
+): J | null {
+  const startedAt = (job: J) => (job.claimedAt ?? job.createdAt).getTime();
+  return [...jobs].sort((a, b) =>
+    Number(b.state === 'RUNNING') - Number(a.state === 'RUNNING')
+    || startedAt(a) - startedAt(b) || a.id.localeCompare(b.id))[0] ?? null;
 }
 
 /** How long this project's exception items wait on its coordinator before they are the owner's. */
@@ -205,6 +279,7 @@ export function projectIntegrationView(
     lineAbsentReason: line ? null : 'NOT_DECIDED',
     ref: row && line ? branchName(row.integrationRef) : null,
     upstreamRef: row ? branchName(row.upstreamRef) : null,
+    upstreamChosenAt: row?.upstreamRefChosenAt ?? null,
     source: row && line ? (row.integrationRefSource as IntegrationRefSource) : null,
     locked: !!row?.integrationStartedAt,
     startedAt: row?.integrationStartedAt ?? null,
@@ -216,7 +291,9 @@ export function projectIntegrationView(
 }
 
 /**
- * The settings, plus what the integration queue has done with them (§1.6).
+ * The settings, plus what the integration queue has done with them (§1.6), and what the project's
+ * main branch can be chosen from: its repository, the branches its coordination workspace reported,
+ * and this account's last choice for that repository (L6).
  *
  * The queue facts are read on top of the binding the caller already read, which is why this is its
  * own endpoint rather than four more fields on the project document: `project-get-query-count`
@@ -226,17 +303,17 @@ export function projectIntegrationView(
  * zero commits ahead, and a project that has never absorbed main is not one that synced at the
  * epoch — printed as numbers, both would read as "nothing has happened here", which is the one
  * thing the row must not say about work that has.
+ *
+ * The caller has established that the project is the reader's: the reads added for the main branch
+ * take the project's owner from its own row.
  */
 export async function readProjectIntegrationView(
   prisma: Pick<PrismaService, '$queryRaw'>,
   projectId: string,
   settings: ProjectIntegrationSettingsView,
 ): Promise<ProjectIntegrationView> {
-  const [counts] = await prisma.$queryRaw<Array<{ integrating: number; queued: number }>>(Prisma.sql`
-    SELECT (count(*) FILTER (WHERE "state" = 'RUNNING'))::int AS "integrating",
-           (count(*) FILTER (WHERE "state" = 'QUEUED'))::int AS "queued"
-      FROM "project_integration_job"
-     WHERE "project_id" = ${projectId}::uuid`);
+  const memory = await readMainBranchMemory(prisma, projectId);
+  const branches = await readBranchCandidates(prisma, projectId);
   // The last finished attempt's checks may have failed on a tree that never landed. Keep its
   // verdict separate from the last successful landing's measured distance from upstream.
   const [newest] = await prisma.$queryRaw<Array<{
@@ -266,55 +343,297 @@ export async function readProjectIntegrationView(
        AND "main_sync_sha" IS NOT NULL
      ORDER BY "finished_at" DESC, "id" DESC
      LIMIT 1`);
-  // Running work takes precedence over queued work: an older queued job must not hide the work
-  // the runner is doing. Within either state, name the oldest job. Kind and phase distinguish a
-  // promotion check from a landing, and checks from the git steps around them.
-  //
-  // Its clock starts at the claim for a running job and at the enqueue for a queued one — a QUEUED
-  // job has never been claimed, so the two spellings are one COALESCE and no job reports the age of
-  // the wrong wait. `id` breaks a tie between two jobs created in the same millisecond; uuid v7
-  // sorts by time.
-  const [oldest] = await prisma.$queryRaw<Array<{
-    state: string; kind: IntegrationJobKind; phase: IntegrationJobPhase | null;
-    taskTitle: string | null; startedAt: Date; heartbeatAt: Date | null;
-  }>>(Prisma.sql`
-    SELECT j."state", j."kind", j."phase",
-           t."title" AS "taskTitle",
-           COALESCE(j."claimed_at", j."created_at") AS "startedAt",
-           j."heartbeat_at" AS "heartbeatAt"
-      FROM "project_integration_job" j
-      LEFT JOIN "task" t ON t."id" = j."task_id"
-     WHERE j."project_id" = ${projectId}::uuid
-       AND j."state" IN ('RUNNING', 'QUEUED')
-     ORDER BY (j."state" = 'RUNNING') DESC,
-              COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC
-     LIMIT 1`);
+  const jobs = await readInFlightJobs(prisma, projectId);
   // Each current LAND_TASK through the task read model, so this page and the task's own describe
   // one landing in the same words (§2.7a).
   const landTasks = await readProjectLandTaskViews(prisma, projectId);
 
   const ahead = newest?.aheadOfUpstream ?? null;
+  const lead = jobs[0];
   return {
     ...settings,
+    lastMainBranch: lastMainBranchView(memory),
+    repository: memory.repository ? repositoryShortName(memory.repository) : null,
+    branches,
     commitsAheadOfUpstream: ahead,
     commitsAheadOfUpstreamAbsentReason: ahead === null ? 'NO_LANDING_YET' : null,
     lastUpstreamSyncAt: synced?.at ?? null,
     lastUpstreamSyncAbsentReason: synced ? null : 'NEVER_SYNCED',
-    integratingCount: counts?.integrating ?? 0,
-    queuedCount: counts?.queued ?? 0,
+    integratingCount: jobs.filter((job) => job.state === 'RUNNING').length,
+    queuedCount: jobs.filter((job) => job.state === 'QUEUED').length,
     mergeCheckOnTip: lastLandingCheck(newest?.checks),
     landTasks,
-    inFlight: oldest
+    inFlight: lead
       ? {
-        taskTitle: oldest.taskTitle,
-        kind: oldest.kind,
-        phase: oldest.phase,
-        state: oldest.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
-        startedAt: oldest.startedAt,
-        heartbeatAt: oldest.heartbeatAt,
+        taskTitle: lead.taskTitle,
+        kind: lead.kind,
+        phase: lead.phase,
+        state: lead.state,
+        startedAt: lead.startedAt,
+        heartbeatAt: lead.heartbeatAt,
+        waitMs: claimedWaitMs(lead),
       }
       : null,
+    inFlightJobs: jobs,
   };
+}
+
+/** A project's repository and this account's last choice of main branch for it (L6). */
+export interface MainBranchMemory {
+  /** Canonical: the binding's, or before there is one, the coordination workspace's. */
+  repository: string | null;
+  /** The newest choice of the owner's for that repository, as `rememberedUpstreamRef` reads it. */
+  last: { upstreamRef: string; chosenAt: Date } | null;
+}
+
+/**
+ * A project's repository and the owner's last choice of main branch for it, in one statement keyed
+ * by the project alone — so the project document can spend exactly one on it, issued beside its
+ * other reads (`project-get-query-count.pg.spec.ts`).
+ *
+ * A bound project's repository is its binding's, and the choice is read for that URL the way
+ * `rememberedUpstreamRef` reads it: the newest row of the same owner and repository that has one.
+ * An unbound project's repository is its coordination workspace's remote, which is canonical only
+ * once `canonicalRepoUrl` has read it — so for that project the statement answers the owner's
+ * newest choice for EACH repository they ever chose for, a row apiece, and the one for this
+ * repository is picked here. That is bounded by the owner's repositories, never by their projects
+ * or their work, and nothing is read when there is no repository to read for.
+ */
+export async function readMainBranchMemory(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+): Promise<MainBranchMemory> {
+  const rows = await prisma.$queryRaw<Array<{
+    boundRepository: string | null;
+    workspaceRepoUrl: string | null;
+    chosenRepository: string | null;
+    upstreamRef: string | null;
+    chosenAt: Date | null;
+  }>>(Prisma.sql`
+    SELECT cb."canonical_repo_url" AS "boundRepository", w."repo_url" AS "workspaceRepoUrl",
+           chosen."canonical_repo_url" AS "chosenRepository", chosen."upstream_ref" AS "upstreamRef",
+           chosen."upstream_ref_chosen_at" AS "chosenAt"
+      FROM "project" p
+      LEFT JOIN "project_codebase" cb ON cb."project_id" = p."id" AND cb."slot" = 'primary'
+      LEFT JOIN "workspace" w ON w."id" = p."coordinator_workspace_id"
+      LEFT JOIN LATERAL (
+        SELECT DISTINCT ON (c."canonical_repo_url")
+               c."canonical_repo_url", c."upstream_ref", c."upstream_ref_chosen_at"
+          FROM "project_codebase" c
+         WHERE c."owner_id" = p."owner_id"
+           AND c."upstream_ref_chosen_at" IS NOT NULL
+           AND (CASE WHEN cb."canonical_repo_url" IS NOT NULL
+                     THEN c."canonical_repo_url" = cb."canonical_repo_url"
+                     ELSE NULLIF(btrim(w."repo_url"), '') IS NOT NULL END)
+         ORDER BY c."canonical_repo_url", c."upstream_ref_chosen_at" DESC, c."id" DESC
+      ) chosen ON true
+     WHERE p."id" = ${projectId}::uuid`);
+  const [first] = rows;
+  const repository = first?.boundRepository
+    ?? (first?.workspaceRepoUrl ? canonicalRepoUrl(first.workspaceRepoUrl) : null);
+  const last = repository ? rows.find((row) => row.chosenRepository === repository) : undefined;
+  return {
+    repository,
+    last: last?.upstreamRef && last.chosenAt
+      ? { upstreamRef: last.upstreamRef, chosenAt: last.chosenAt }
+      : null,
+  };
+}
+
+/** `lastMainBranch` as every reader is served it: both names short, as a person reads them. */
+export function lastMainBranchView(memory: MainBranchMemory): ProjectLastMainBranch<Date> | null {
+  return memory.repository && memory.last
+    ? {
+      branch: branchName(memory.last.upstreamRef),
+      repository: repositoryShortName(memory.repository),
+      chosenAt: memory.last.chosenAt,
+    }
+    : null;
+}
+
+/** Orbit's own session branches, which are never anybody's main branch. */
+const ORBIT_SESSION_BRANCHES = 'orbit/';
+
+/**
+ * The branches a project's main branch can be chosen from: the local branches the runner reported
+ * for the newest session of the project's coordination workspace that reported any
+ * (`session.merge_targets` — refreshed on every heartbeat while a session runs and once more when
+ * it ends), without Orbit's `orbit/*` session branches and without this account's project branches.
+ * `reportedAt` is when that session's row was last written, which is no earlier than the report.
+ *
+ * The account's project branches are the `integration_ref` of each binding of the project's owner
+ * that differs from its `upstream_ref`: a line onto a project branch. A landing leaves that branch
+ * behind in the coordination workspace's checkout, and it is never any project's main branch —
+ * chosen, the project would merge into another project's branch. A line straight onto main has the
+ * main branch itself for its `integration_ref`, so that branch stays, and so does a branch that is
+ * only named `project/…`.
+ *
+ * Newest by creation rather than by last report, so the read walks the workspace's
+ * `(workspace_id, created_at DESC)` index and stops at the first session with a report: the row
+ * that reads this polls, and a coordination workspace can hold thousands of sessions, all of them
+ * reporting the same repository. The account's project branches are read in the same statement,
+ * once, through `project_codebase_owner_idx`, and each reported name is compared against them
+ * there. Null when no session there has reported a branch, when none is left, or when the project
+ * has no coordination workspace.
+ */
+export async function readBranchCandidates(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+): Promise<ProjectBranchCandidates<Date> | null> {
+  const [reported] = await prisma.$queryRaw<Array<{
+    names: string[];
+    workspaceName: string;
+    reportedAt: Date;
+  }>>(Prisma.sql`
+    SELECT ARRAY(
+             SELECT b."name"
+               FROM unnest(s."merge_targets") WITH ORDINALITY AS b("name", "ord")
+              WHERE ('refs/heads/' || b."name") <> ALL (ARRAY(
+                      SELECT c."integration_ref"
+                        FROM "project_codebase" c
+                       WHERE c."owner_id" = p."owner_id"
+                         AND c."integration_ref" <> c."upstream_ref"))
+              ORDER BY b."ord") AS "names",
+           w."name" AS "workspaceName", s."updated_at" AS "reportedAt"
+      FROM "project" p
+      JOIN "workspace" w ON w."id" = p."coordinator_workspace_id"
+      JOIN LATERAL (
+        SELECT s."merge_targets", s."updated_at"
+          FROM "session" s
+         WHERE s."workspace_id" = w."id"
+           AND s."owner_id" = p."owner_id"
+           AND s."deleted_at" IS NULL
+           AND cardinality(s."merge_targets") > 0
+         ORDER BY s."created_at" DESC, s."id" DESC
+         LIMIT 1
+      ) s ON true
+     WHERE p."id" = ${projectId}::uuid`);
+  if (!reported) return null;
+  const names = reported.names.filter((name) => !name.startsWith(ORBIT_SESSION_BRANCHES));
+  return names.length === 0
+    ? null
+    : { names, workspaceName: reported.workspaceName, reportedAt: reported.reportedAt };
+}
+
+/**
+ * What a claimed job waited its turn, for the row's "Waited …"; null for one still queued, whose
+ * whole elapsed time is that wait (its `startedAt` is the enqueue).
+ *
+ * The same measurement the task's own landing carries (`LandTaskIntegrationView.waitMs`), taken
+ * from the same two instants: the clock a reader watches on this line counts from the claim, so
+ * without this the minutes a job spent waiting for a runner read as minutes of work.
+ */
+function claimedWaitMs(job: { state: string; startedAt: Date; queuedAt: Date }): number | null {
+  if (job.state !== 'RUNNING') return null;
+  return Math.max(0, job.startedAt.getTime() - job.queuedAt.getTime());
+}
+
+/** One RUNNING or QUEUED job as `readInFlightJobs` reads it, before the limit is decided. */
+interface InFlightJobRow extends IntegrationCheckSource {
+  id: string;
+  state: string;
+  kind: IntegrationJobKind;
+  phase: IntegrationJobPhase | null;
+  generation: number;
+  taskId: string | null;
+  taskTitle: string | null;
+  createdAt: Date;
+  claimedAt: Date | null;
+  heartbeatAt: Date | null;
+  runnerName: string | null;
+  retryRequestedBySessionId: string | null;
+  retryRequestedByUserId: string | null;
+  /** Seconds since the runner last said anything about it, by the database's clock. */
+  silentSeconds: number | null;
+  /** Another job on the same runner, repository and target ref was claimed first and still runs. */
+  behindAnotherOnRunner: boolean;
+}
+
+/**
+ * Every job this project has RUNNING and QUEUED, in `inFlight`'s order (§1.6 `inFlightJobs`).
+ *
+ * Running work takes precedence over queued work: an older queued job must not hide the work the
+ * runner is doing. Within either state, the oldest job first. Its clock starts at the claim for a
+ * running job and at the enqueue for a queued one — a QUEUED job has never been claimed, so the two
+ * spellings are one COALESCE and no job reports the age of the wrong wait. `id` breaks a tie between
+ * two jobs created in the same millisecond; uuid v7 sorts by time.
+ *
+ * The columns `checksFor` reads come along so a running job's limit is the one its claim was handed:
+ * the acceptance of the task whose session the job names, and the codebase's merge check.
+ *
+ * A claimed job that has not reported since its claim may be waiting its turn rather than lost: the
+ * runner takes the repository and target ref under one in-process lock, and a CHECK_PROMOTION's
+ * serial key does not keep a landing on the same ref from being claimed beside it. While a job of any
+ * project on the same runner, repository and ref was claimed first and still runs, this one is not
+ * timed out — offering a retry of it would run the same work twice.
+ */
+export async function readInFlightJobs(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+  /** Read just this job — how the retry door judges a timeout by the rule the page shows. */
+  jobId?: string,
+): Promise<ProjectIntegrationJob<Date>[]> {
+  const rows = await prisma.$queryRaw<InFlightJobRow[]>(Prisma.sql`
+    SELECT j."id", j."state", j."kind", j."phase", j."generation",
+           j."task_id" AS "taskId", t."title" AS "taskTitle",
+           j."created_at" AS "createdAt", j."claimed_at" AS "claimedAt",
+           j."heartbeat_at" AS "heartbeatAt",
+           r."name" AS "runnerName",
+           j."retry_requested_by_session_id" AS "retryRequestedBySessionId",
+           j."retry_requested_by_user_id" AS "retryRequestedByUserId",
+           p."source_kind" AS "promotionSourceKind",
+           st."acceptance_command" AS "acceptanceCommand",
+           st."acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
+           st."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+           cb."merge_check_command" AS "mergeCheckCommand",
+           cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
+           j."skip_merge_check" AS "skipMergeCheck",
+           EXTRACT(EPOCH FROM now() - COALESCE(j."heartbeat_at", j."claimed_at"))::float8 AS "silentSeconds",
+           (j."state" = 'RUNNING' AND j."heartbeat_at" <= j."claimed_at" AND EXISTS (
+              SELECT 1
+                FROM "project_integration_job" o
+                JOIN "project_codebase" ocb ON ocb."id" = o."codebase_id"
+               WHERE o."state" = 'RUNNING'
+                 AND o."runner_id" = j."runner_id"
+                 AND o."target_ref" = j."target_ref"
+                 AND ocb."canonical_repo_url" = cb."canonical_repo_url"
+                 AND o."claimed_at" < j."claimed_at"
+                 AND o."id" <> j."id")) AS "behindAnotherOnRunner"
+      FROM "project_integration_job" j
+      JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
+      LEFT JOIN "task" t ON t."id" = j."task_id"
+      LEFT JOIN "session" s ON s."id" = j."session_id"
+      LEFT JOIN "task" st ON st."id" = s."task_id"
+      LEFT JOIN "project_promotion" p ON p."id" = j."promotion_id"
+      LEFT JOIN "runner" r ON r."id" = j."runner_id"
+     WHERE j."project_id" = ${projectId}::uuid
+       AND j."state" IN ('RUNNING', 'QUEUED')
+       ${jobId ? Prisma.sql`AND j."id" = ${jobId}::uuid` : Prisma.empty}
+     ORDER BY (j."state" = 'RUNNING') DESC,
+              COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC`);
+  return rows.map((row) => {
+    const running = row.state === 'RUNNING';
+    const limitSeconds = integrationJobLimitSeconds(row);
+    const timedOut = limitSeconds !== null && !row.behindAnotherOnRunner
+      && (row.silentSeconds ?? 0) > limitSeconds;
+    return {
+      jobId: row.id,
+      kind: row.kind,
+      state: running ? 'RUNNING' : 'QUEUED',
+      phase: row.phase,
+      taskId: row.taskId,
+      taskTitle: row.taskTitle,
+      generation: row.generation,
+      startedAt: row.claimedAt ?? row.createdAt,
+      queuedAt: row.createdAt,
+      heartbeatAt: row.heartbeatAt,
+      runnerName: running ? row.runnerName : null,
+      retriedBy: row.retryRequestedByUserId ? 'OWNER' : row.retryRequestedBySessionId ? 'COORDINATOR' : null,
+      timedOut,
+      limitSeconds,
+      retryable: timedOut && row.kind === 'LAND_TASK',
+    };
+  });
 }
 
 /** The last attempt's check evidence, not the success of its push or the state of the current tip.
@@ -351,7 +670,9 @@ async function lockCodebase(
   projectId: string,
 ): Promise<ProjectCodebaseLine | null> {
   const [row] = await tx.$queryRaw<ProjectCodebaseLine[]>(Prisma.sql`
-    SELECT "id", "upstream_ref" AS "upstreamRef", "integration_ref" AS "integrationRef",
+    SELECT "id", "upstream_ref" AS "upstreamRef",
+           "upstream_ref_chosen_at" AS "upstreamRefChosenAt",
+           "integration_ref" AS "integrationRef",
            "integration_ref_source" AS "integrationRefSource",
            "integration_started_at" AS "integrationStartedAt",
            "merge_check_command" AS "mergeCheckCommand",
@@ -363,20 +684,46 @@ async function lockCodebase(
 }
 
 /**
+ * The main branch this owner chose last for a repository (L6): the newest of their bindings of it
+ * that records a choice, `id` breaking a tie inside one millisecond — one range of
+ * `project_codebase_upstream_choice_idx`. Null when they never chose one there.
+ */
+export async function rememberedUpstreamRef(
+  db: Pick<Prisma.TransactionClient, 'projectCodebase'>,
+  ownerId: string,
+  canonicalRepoUrl: string,
+): Promise<string | null> {
+  const last = await db.projectCodebase.findFirst({
+    where: { ownerId, canonicalRepoUrl, upstreamRefChosenAt: { not: null } },
+    orderBy: [{ upstreamRefChosenAt: 'desc' }, { id: 'desc' }],
+    select: { upstreamRef: true },
+  });
+  return last?.upstreamRef ?? null;
+}
+
+/**
  * Bind a project to its repository, standing on the upstream until a line is decided. A concurrent
  * binder may have won: the insert then does nothing, and the caller locks the row that one left.
+ *
+ * The upstream is the one the owner chose last for the same repository, and `refs/heads/main` only
+ * when they never chose one there (L6) — the start door, a first `PATCH …/integration` and the
+ * first integration of a project nobody started all bind through here. The binding does not
+ * record a choice of its own: it carries one, and `upstream_ref_chosen_at` stays null until the
+ * owner names this project's upstream.
  */
 async function bind(
   tx: Prisma.TransactionClient,
   binding: { ownerId: string; projectId: string; canonicalRepoUrl: string },
 ): Promise<ProjectCodebaseLine> {
+  const upstreamRef = await rememberedUpstreamRef(tx, binding.ownerId, binding.canonicalRepoUrl)
+    ?? DEFAULT_UPSTREAM_REF;
   await tx.projectCodebase.createMany({
     data: [{
       ownerId: binding.ownerId,
       projectId: binding.projectId,
       canonicalRepoUrl: binding.canonicalRepoUrl,
-      upstreamRef: DEFAULT_UPSTREAM_REF,
-      integrationRef: DEFAULT_UPSTREAM_REF,
+      upstreamRef,
+      integrationRef: upstreamRef,
       refAuthority: 'REMOTE',
       remoteName: 'origin',
     }],
@@ -426,7 +773,14 @@ export async function projectRepository(
  *
  * A participant: the caller owns the transaction, has already established that the project is the
  * owner's, and — when it also holds the project row — took it first (rank 40 before this 55).
- * With no binding yet, the repository is the one the project's coordination workspace names.
+ * With no binding yet, the repository is the one the project's coordination workspace names, and
+ * the binding starts from the owner's last choice of upstream for it (`bind`).
+ *
+ * Every door the owner names an upstream through ends here — `PATCH /projects/:id/integration`,
+ * `integration` on a project create or update (the CLI's `--upstream-ref` among them) and the start
+ * door through `startProjectLine` — so this is where the choice is recorded: a request that names
+ * `upstreamRef` writes `upstream_ref_chosen_at` with it, which is what the next binding of the same
+ * repository starts from (L6).
  */
 export async function configureProjectIntegration(
   tx: Prisma.TransactionClient,
@@ -494,7 +848,7 @@ export async function configureProjectIntegration(
       code: 'INTEGRATION_LINE_LOCKED',
       message: `this project started integrating into ${branchName(row.integrationRef)} at `
         + `${row.integrationStartedAt.toISOString()}, so its integration line can no longer change. `
-        + 'To change it, merge the project branch into main or abandon it first.',
+        + `To change it, merge the project branch into ${branchName(row.upstreamRef)} or abandon it first.`,
     });
   }
 
@@ -502,6 +856,8 @@ export async function configureProjectIntegration(
     where: { id: row.id },
     data: {
       upstreamRef,
+      // The owner named it, so it is their choice, even where it is the upstream already there.
+      ...(settings.upstreamRef !== undefined ? { upstreamRefChosenAt: new Date() } : {}),
       integrationRef,
       ...(chosen ? { integrationRefSource: 'EXPLICIT' } : {}),
       ...(settings.mergeCheckCommand !== undefined
@@ -570,6 +926,12 @@ export interface StartLineSettings {
   line: IntegrationLine;
   /** A full `refs/heads/…` ref, only with `PROJECT_BRANCH`. */
   projectBranchName?: string;
+  /**
+   * The main branch, a full `refs/heads/…` ref. Asked for, it is the owner's choice and recorded
+   * as one; left out, the project keeps the upstream it stands on. In the answer, the upstream the
+   * project stands on once the start is done — absent only for a project with no binding.
+   */
+  upstreamRef?: string;
   mergeCheckCommand: string | null;
 }
 
@@ -606,16 +968,19 @@ export async function defaultStartLine(
  * transaction and holds the project row. Three ways it goes:
  *
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
- *     merge check, and says so — `locked`, with the line the project is actually on.
+ *     merge check, and says so — `locked`, with the line the project is actually on. A main branch
+ *     the start asked for is not written either, and not recorded as a choice.
  *   * THERE IS NO REPOSITORY. A project with no binding whose coordination workspace names no remote
  *     has nothing a line or a check could be recorded on, and nothing ever lands on a branch of it.
  *     A start that asks for `MAIN` and no check asks nothing of it and writes nothing; one asking for
- *     a project branch or a merge check is refused, 409 `INTEGRATION_REPOSITORY_UNKNOWN`, because
- *     writing the rest of the start without them would drop what the owner chose.
- *   * OTHERWISE the line is written `EXPLICIT` — binding the project first when it has no binding —
- *     together with the merge check.
+ *     a project branch, a main branch or a merge check is refused, 409
+ *     `INTEGRATION_REPOSITORY_UNKNOWN`, because writing the rest of the start without them would
+ *     drop what the owner chose.
+ *   * OTHERWISE the line is written `EXPLICIT` — binding the project first when it has no binding,
+ *     on the owner's last main branch for the repository — together with the merge check, and the
+ *     main branch when the start names one, which records it as the owner's choice (L6).
  *
- * Answers with the line and check as they stand once it is done.
+ * Answers with the line, the main branch and the check as they stand once it is done.
  */
 export async function startProjectLine(
   tx: Prisma.TransactionClient,
@@ -626,11 +991,13 @@ export async function startProjectLine(
   const row = await lockCodebase(tx, projectId);
   const locked = !!row?.integrationStartedAt;
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
-    if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null) {
+    if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null
+      || settings.upstreamRef !== undefined) {
       throw repositoryUnknown('this project has no repository to integrate into, so it can have '
-        + 'neither a project branch nor a merge check: its coordination workspace has no recorded '
-        + 'remote. Wait for the runner to detect origin, or set Repository URL in the workspace '
-        + 'settings. A project without a repository can start on main with no merge check.');
+        + 'no project branch, main branch or merge check: its coordination workspace has no '
+        + 'recorded remote. Wait for the runner to detect origin, or set Repository URL in the '
+        + 'workspace settings. A project without a repository can start on main with no merge '
+        + 'check.');
     }
     return { line: 'MAIN', mergeCheckCommand: null, locked: false };
   }
@@ -644,12 +1011,17 @@ export async function startProjectLine(
         ...(settings.line === 'PROJECT_BRANCH' && settings.projectBranchName !== undefined
           ? { projectBranchName: settings.projectBranchName }
           : {}),
+        ...(settings.upstreamRef !== undefined ? { upstreamRef: settings.upstreamRef } : {}),
         mergeCheckCommand,
       },
   });
   const written = (await readProjectCodebase(tx, projectId))!;
   const line = decidedLine(written)!;
-  const stands = { mergeCheckCommand: written.mergeCheckCommand, locked };
+  const stands = {
+    upstreamRef: written.upstreamRef,
+    mergeCheckCommand: written.mergeCheckCommand,
+    locked,
+  };
   return line === 'PROJECT_BRANCH'
     ? { line, projectBranchName: written.integrationRef, ...stands }
     : { line, ...stands };

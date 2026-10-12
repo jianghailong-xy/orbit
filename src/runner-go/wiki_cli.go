@@ -177,6 +177,19 @@ Options:
 An op is one of add / reinforce / amend / supersede / retire / challenge, and cites the records it
 came from. Record only what someone could not read from the code; a claim you cannot cite is not
 ready. What this writes waits for the owner — do not tell the user it is saved.
+
+A source is {"kind": KIND, "ref": REF, "quote": TEXT}, and what REF is depends on the kind:
+  turn, event, task, task_comment, approval, merge_receipt, note
+                   the record's id: its UUID, or the short id Orbit shows. A turn of this session
+                   is {"kind":"turn","session":"self"} and takes no ref
+  owner_decision   the id of the project blocker the owner resolved with a note
+  tool_call        the tool call's id, or the tool_use_id its engine gave the call (toolu_…,
+                   call_…): this session's own call first, else the one session of the owner's
+                   that made it
+  commit           the commit's full sha
+  evidence, criterion, url
+                   cannot be cited yet
+A ref that names nothing is refused, naming the source as ops[i].sources[j].ref.
 `,
 	"verify": `orbit wiki verify — have the local model verify what this session proposed into an automatic space
 
@@ -313,6 +326,11 @@ the commit, and its lines are where it was found; the server checks a record's q
 document's overview is written last, from its other sections as they are written. The command stops at
 the first 401 from the model's endpoint, and exits non-zero when any section it took up was left
 unwritten. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
+
+For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or canary with the
+account on its list) the server answers WIKI_SERVER_EXECUTES instead: its wiki worker builds the
+documents when the owner confirms a plan, with the deployment's System model. The command then asks no
+model, says so and exits 0 — a build task's run too, made before the switch: its job ends with its task.
 `,
 	"articles": `orbit wiki articles — have the local model write the articles of a space's changed topics, as its Wiki maintenance run
 
@@ -339,6 +357,11 @@ entry of the topic, deletes a sentence left without one, cuts what passes ` + fm
 writes nothing for a topic whose entries did not change. The command stops at the first 401 from
 the model's endpoint, and exits non-zero when any topic it took up was left unwritten. Any session
 but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
+
+For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or canary with the
+account on its list) the server answers WIKI_SERVER_EXECUTES instead: its wiki worker writes the
+articles after a maintenance run, with the deployment's System model. The command then asks no model,
+says so and exits 0.
 `,
 }
 

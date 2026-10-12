@@ -12,7 +12,7 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
-import { normalizeRuntimeProvider } from '../common/runtime-provider';
+import { sessionEngine } from '../providers/session-engine';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
@@ -153,6 +153,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         status: true,
         provider: true,
         providerBuiltin: true,
+        engine: true,
+        ownerId: true,
         runtimeSessionId: true,
         lastTurnAt: true,
         cancelRequestedAt: true,
@@ -285,15 +287,19 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
           continue;
         }
-        // Session.provider is NOT NULL, so there is nothing to inherit here — and a workspace
-        // holds no provider to inherit from (workspace-provider.ts).
-        const provider = normalizeRuntimeProvider(s.provider, s.providerBuiltin);
+        // The engine the session runs on — its own (Session.engine), not the one its slug reads as:
+        // a Codex, Kimi, OpenCode, Antigravity or Harness session on a key or a pool initializes its
+        // runtime the same way the built-in one does, and stalls the same way. One nobody can place
+        // (its credential gone before an engine was recorded) is not judged here.
+        const provider =
+          s.status === RunStatus.RUNNING && !s.runtimeSessionId ? await sessionEngine(this.prisma, s) : null;
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
         const runtimeStartupGrace =
           provider === AgentProvider.CODEX
             ? CODEX_SHARED_STATE_STARTUP_GRACE_MS
             : DYNAMIC_RUNTIME_STARTUP_GRACE_MS;
         if (
+          provider &&
           initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&

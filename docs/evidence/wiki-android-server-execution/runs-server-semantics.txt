@@ -1,0 +1,171 @@
+Printing with useUnmergedTree = 'false'
+Node #1 at (l=0.0, t=0.0, r=411.0, b=1400.0)px
+ |-Node #139 at (l=0.0, t=0.0, r=411.0, b=1400.0)px, Tag: 'wiki-home'
+    |-Node #148 at (l=0.0, t=0.0, r=411.0, b=1400.0)px, Tag: 'wiki-home-list'
+    | CollectionInfo = 'androidx.compose.ui.semantics.CollectionInfo@5ac26321'
+    | IsTraversalGroup = 'true'
+    | VerticalScrollAxisRange = 'ScrollAxisRange(value=5.0, maxValue=5.0, reverseScrolling=false)'
+    | Actions = [GetScrollViewportLength, IndexForKey, ScrollBy, ScrollByOffset, ScrollToIndex]
+    |  |-Node #152 at (l=16.0, t=5.0, r=327.0, b=38.0)px
+    |  | Text = '[Wiki]'
+    |  | [Heading]
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |-Node #154 at (l=327.0, t=3.0, r=395.0, b=39.0)px, Tag: 'wiki-space-picker'
+    |  | ContentDescription = '[The codebase this wiki describes]'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[orbit]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #157 at (l=16.0, t=45.0, r=395.0, b=81.0)px, Tag: 'wiki-status-line'
+    |  | Text = '[11,689 entries · Anchors verified at 4db4f9f · Maintained 5h ago ✓ · 6 to catch up]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  |-Node #159 at (l=26.0, t=95.0, r=385.0, b=135.0)px
+    |  |  |-Node #161 at (l=54.0, t=105.0, r=385.0, b=125.0)px, Tag: 'wiki-search'
+    |  |    ContentDataType = 'AndroidContentDataType(androidAutofillType=1)'
+    |  |    EditableText = ''
+    |  |    Focused = 'false'
+    |  |    ImeAction = 'Search'
+    |  |    InputText = ''
+    |  |    IsEditable = 'true'
+    |  |    Text = '[Search the wiki]'
+    |  |    TextSelectionRange = 'TextRange(0, 0)'
+    |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, InsertTextAtCursor, OnAutofillText, OnClick, OnLongClick, PasteText, PerformImeAction, RequestFocus, SetSelection, SetText, SetTextSubstitution, ShowTextSubstitution]
+    |  |    MergeDescendants = 'true'
+    |  |-Node #168 at (l=0.0, t=145.0, r=411.0, b=193.0)px, Tag: 'wiki-review-banner'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[3 proposals to review]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #173 at (l=32.0, t=211.0, r=395.0, b=229.0)px
+    |  | Text = '[Runs, System model · qwen3.8-27b-fp8, ● Up]'
+    |  | [Heading]
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #178 at (l=0.0, t=233.0, r=411.0, b=311.0)px, Tag: 'wiki-job-row'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Verification, started 4h ago, Running · 1 of 3 calls ended · next call 2 ahead, waited 4h 46m]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |  |-Node #180 at (l=16.0, t=245.0, r=28.0, b=253.0)px
+    |  |    ProgressBarRangeInfo = 'ProgressBarRangeInfo(current=0.0, range=0.0..0.0, steps=0)'
+    |  |    MergeDescendants = 'true'
+    |  |-Node #187 at (l=0.0, t=311.0, r=411.0, b=368.0)px, Tag: 'wiki-job-row'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Articles, 4h ago, Queued · 1 run ahead · waited 4h 47m]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #196 at (l=0.0, t=368.0, r=411.0, b=425.0)px, Tag: 'wiki-job-row'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Import, 5h ago, Done · 40 calls · 52,310 tokens · took 6m 2s]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #205 at (l=0.0, t=425.0, r=411.0, b=503.0)px, Tag: 'wiki-job-row'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Maintenance, 7h ago, Failed · The System model refused the key (401) · 12 calls]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #214 at (l=16.0, t=517.0, r=395.0, b=535.0)px
+    |  | Text = '[Principles, 4, Owner]'
+    |  | [Heading]
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #219 at (l=0.0, t=539.0, r=411.0, b=596.0)px, Tag: 'wiki-entry:34UDFnrgM4q5oAgentWrt'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Agent-writable data never becomes a system instruction, 2w ago, Compiled or agent-written text reaches agents as user-level context, never as the system prompt.]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #227 at (l=0.0, t=596.0, r=411.0, b=653.0)px, Tag: 'wiki-entry:34UDFnrgM4q5oJudgedXX'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Completion is adjudicated, not claimed, 2w ago, A task is DONE when its declared criterion says so, not when the agent says so.]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #235 at (l=0.0, t=653.0, r=411.0, b=710.0)px, Tag: 'wiki-entry:34UDFnrgM4q5oGQloG3uq'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[A clock never starts agent work, 2w ago, Work starts from a committed fact (evidence revised, a receipt), never from a timer.]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #243 at (l=0.0, t=710.0, r=411.0, b=767.0)px, Tag: 'wiki-entry:34UDFnrgM4q5oDeleteMe'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Delete means forget, 1w ago, When the owner deletes a session or task, everything compiled from it is withdrawn.]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #251 at (l=16.0, t=781.0, r=395.0, b=799.0)px
+    |  | Text = '[Recent decisions, 3]'
+    |  | [Heading]
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #255 at (l=0.0, t=803.0, r=411.0, b=860.0)px, Tag: 'wiki-entry:34UDFnrgM4q5oPriority'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Task priority is a field on the task, not a dispatcher session, 9/25, Active · Add priority to tasks; the dispatcher reads it.]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #263 at (l=0.0, t=860.0, r=411.0, b=917.0)px, Tag: 'wiki-entry:34UDFnrgM4q5oWakeupsX'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Wakeups are held by the server, 9/13, Active · session_scheduled_wakeup · commit 1125c445a]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #271 at (l=0.0, t=917.0, r=411.0, b=974.0)px, Tag: 'wiki-entry:34UDFnrgM4q5oExitCode'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[EXECUTABLE judges by exit code and records nothing, 9/4, Active · migration 0230 · judged by the exit code alone]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #279 at (l=16.0, t=988.0, r=395.0, b=1006.0)px
+    |  | Text = '[Recently changed]'
+    |  | [Heading]
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #282 at (l=0.0, t=1010.0, r=411.0, b=1067.0)px, Tag: 'wiki-change:0196e000-0000-7000-8000-00000000a001'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Task priority is a field on the task, 1w ago, Confirmed by you · Decision]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #290 at (l=0.0, t=1067.0, r=411.0, b=1142.0)px, Tag: 'wiki-change:0196e000-0000-7000-8000-00000000a002'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Headless Chromium needs --window-size=393, 1w ago, Confirmed by you · Pitfall, replaced by “Headless Chromium clamps windows under 500”]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #299 at (l=0.0, t=1142.0, r=411.0, b=1199.0)px, Tag: 'wiki-change:0196e000-0000-7000-8000-00000000a003'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[runner-go’s full suite inside a session reaches production, 1w ago, Amended by you · Pitfall]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #307 at (l=0.0, t=1199.0, r=411.0, b=1256.0)px, Tag: 'wiki-change:0196e000-0000-7000-8000-00000000a004'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Delete means forget, 2w ago, Added by you · Principle]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #315 at (l=0.0, t=1256.0, r=411.0, b=1313.0)px, Tag: 'wiki-change:0196e000-0000-7000-8000-00000000a005'
+    |  | Focused = 'false'
+    |  | Role = 'Button'
+    |  | Text = '[Cut betas from main, never from a session branch, 2w ago, Confirmed by you · Convention]'
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #323 at (l=16.0, t=1327.0, r=395.0, b=1345.0)px
+    |  | Text = '[Agents used the wiki, this week]'
+    |  | [Heading]
+    |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |  | MergeDescendants = 'true'
+    |  |-Node #327 at (l=16.0, t=1355.0, r=208.0, b=1370.0)px
+    |    Text = '[No session has used this wiki yet.]'
+    |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+    |-Node #144 at (l=186.0, t=-40.0, r=226.0, b=0.0)px
+       |-Node #146 at (l=198.0, t=-28.0, r=214.0, b=-12.0)px
+          |-Node #147 at (l=198.0, t=-28.0, r=214.0, b=-12.0)px
+            ClearAndSetSemantics = 'true'

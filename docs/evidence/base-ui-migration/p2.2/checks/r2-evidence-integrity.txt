@@ -1,0 +1,112 @@
+{
+  "full": {
+    "startTime": "2026-10-04T09:04:38.692Z",
+    "duration": 1378854.386,
+    "expected": 492,
+    "skipped": 0,
+    "unexpected": 4,
+    "flaky": 0
+  },
+  "motion": {
+    "startTime": "2026-10-04T09:28:17.098Z",
+    "duration": 463849.664,
+    "expected": 192,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "repeat": {
+    "startTime": "2026-10-04T09:36:14.542Z",
+    "duration": 19497.726,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "openValue": {
+    "startTime": "2026-10-04T09:42:38.431Z",
+    "duration": 328245.045,
+    "expected": 112,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "validatedCases": 520,
+  "networkFailures": {
+    "chromium-light-phone--account-matches-the-current-surface-density-and-option-states": [
+      "http://127.0.0.1:4177/src/components/ui/Input.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Dialog.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Overlay.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Menu.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Popover.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Tooltip.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Select.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Combobox.tsx",
+      "http://127.0.0.1:4177/src/components/ui/MultiSelect.tsx",
+      "http://127.0.0.1:4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+      "http://127.0.0.1:4177/node_modules/.vite/deps/rolldown-runtime-DC62tzP2.js?v=146aa806",
+      "http://127.0.0.1:4177/node_modules/.vite/deps/react-dom.js?v=146aa806"
+    ],
+    "chromium-light-phone--search-matches-the-current-surface-density-and-option-states": [
+      "http://127.0.0.1:4177/src/components/ui/Dialog.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Overlay.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Menu.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Popover.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Tooltip.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Select.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Combobox.tsx",
+      "http://127.0.0.1:4177/src/components/ui/MultiSelect.tsx",
+      "http://127.0.0.1:4177/src/components/ui/__fixtures__/ChoicesFixture.css"
+    ]
+  },
+  "recoveredOriginalManifestRefs": 4,
+  "verifiedManifestArtifacts": 2428,
+  "unchangedHistoricalFiles": 1923,
+  "indexedFiles": 2508,
+  "mobile": {
+    "chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json": {
+      "height": 240.953125,
+      "fontSize": "17px",
+      "labelStarts": [
+        55,
+        55,
+        55,
+        55,
+        55
+      ]
+    },
+    "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json": {
+      "height": 240.953125,
+      "fontSize": "17px",
+      "labelStarts": [
+        55,
+        55,
+        55,
+        55,
+        55
+      ]
+    },
+    "webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json": {
+      "height": 240.953125,
+      "fontSize": "17px",
+      "labelStarts": [
+        55,
+        55,
+        55,
+        55,
+        55
+      ]
+    },
+    "webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json": {
+      "height": 240.953125,
+      "fontSize": "17px",
+      "labelStarts": [
+        55,
+        55,
+        55,
+        55,
+        55
+      ]
+    }
+  }
+}

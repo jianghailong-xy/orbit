@@ -17,10 +17,13 @@
  *       revision arrives is not handed it;
  *   (7) a dispatching session in Trash: the card moves to the task's run, decided in the dispatching
  *       session's name;
- *   (8) a send-back leaves the task open, and the next revision is delivered and held again;
+ *   (8) a send-back leaves the task open, its note is handed to the run that submitted the
+ *       revision, and the next revision is delivered and held again;
  *   (9) a task in no project that no session dispatched: its card is in its run from the start,
  *       counted there, and only the owner's own press in the app decides it from there;
- *  (10) a dispatching session deleted for good: the same, at once — no 30 minutes.
+ *  (10) a dispatching session deleted for good: the same, at once — no 30 minutes;
+ *  (11) a dispatching session running a turn is handed the revision inside that turn, as a steer
+ *       carrying the same block, rather than behind it where the hold ran out unread.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable guarded database with
  * current migrations applied:
@@ -40,7 +43,7 @@ import {
   type Prisma,
 } from '@prisma/client';
 import { Client } from 'pg';
-import { uuidToBase62 } from '@orbit/shared';
+import { SESSION_CURRENT_WORK_ROUTING_V1, uuidToBase62 } from '@orbit/shared';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -478,18 +481,43 @@ suite('outside a project the dispatching session settles the evidence, and the o
       });
 
     // (8) -------------------------------------------------------------------------------------------
-    await t.test('(8) a send-back leaves the task open, and the next revision is delivered and held again',
+    await t.test('(8) a send-back leaves the task open, its note is handed to the run, and the next revision is held again',
       async () => {
         const reviewer = await conversation('files work and sends it back');
         const again = await dispatched('migrate the wiki images', reviewer);
         await submit(again, 'migrated');
-        await evidence.decide(ownerId, again.taskId, agent, {
+        const sentBack = await evidence.decide(ownerId, again.taskId, agent, {
           decidingSessionId: reviewer, evidenceRevision: '1', decision: 'SEND_BACK',
           note: 'show the count of images before and after',
         });
         assert.equal(await status(again.taskId), TaskStatus.OPEN);
         assert.equal(await cardIn(reviewer, again.taskId, new Date(Date.now() + 2 * WINDOW_MS)), null,
           'an answered revision is nobody’s question');
+
+        // The note is handed to the run that submitted the revision, as a platform turn of its own:
+        // until 2026-10-09 it went nowhere, and a send-back read as a stall.
+        const notices = await db.conversationTurn.findMany({
+          where: { sessionId: again.run, clientTurnId: `evidence-send-back:v1:${sentBack.id}` },
+        });
+        assert.equal(notices.length, 1, 'the run was handed the reason its evidence came back');
+        const [notice] = notices;
+        assert.equal(notice.status, 'PENDING');
+        assert.equal(notice.senderSessionId, null, 'the platform’s words, not another session’s');
+        assert.match(notice.content ?? '', new RegExp(
+          `<orbit-evidence-send-back task="${uuidToBase62(again.taskId)}" revision="1">`,
+        ));
+        assert.match(notice.content ?? '', /sent back by the session that reviewed it/);
+        assert.ok((notice.content ?? '').includes('show the count of images before and after'));
+        assert.ok((notice.content ?? '').includes('the task “migrate the wiki images”'));
+        assert.throws(() => assertClientTurnIdNotReserved(notice.clientTurnId), BadRequestException,
+          'no caller takes the delivery’s key');
+
+        // And the decision is on the revision for any session to read, note included.
+        const [listed] = await evidence.list(ownerId, again.taskId);
+        assert.equal(listed.decision?.decision, 'SEND_BACK');
+        assert.equal(listed.decision?.note, 'show the count of images before and after');
+        assert.equal(listed.decision?.decidedByType, CreatorType.AGENT);
+
         await submit(again, 'migrated: 412 before, 412 after');
         const second = await latestEvidence(again.taskId);
         assert.equal(second.revision, 2n);
@@ -602,5 +630,39 @@ suite('outside a project the dispatching session settles the evidence, and the o
         }, inTheApp);
         assert.equal(await status(orphan.taskId), TaskStatus.DONE, 'the owner’s press settled it');
         assert.equal(await waitingOn(orphan.run), 0, 'and the row goes dark');
+      });
+
+    // (11) ----------------------------------------------------------------------------------------
+    await t.test('(11) a dispatching session running a turn is handed the revision inside it, as a steer',
+      async () => {
+        const routing = [SESSION_CURRENT_WORK_ROUTING_V1];
+        await db.runner.update({ where: { id: runnerId }, data: { capabilities: routing, capabilitiesReportedAt: new Date() } });
+        const busy = await conversation('watching the work it filed, (11)', { status: RunStatus.RUNNING });
+        const running = await db.conversationTurn.create({
+          data: {
+            sessionId: busy, seq: 2, clientTurnId: 'watching-the-tasks', kind: 'message', content: 'watch them',
+            status: 'IN_FLIGHT', deliveredAt: new Date(), leaseDeadlineAt: new Date(Date.now() + 120_000),
+          },
+        });
+        const watched = await dispatched('compact the thumbnails', busy);
+        await submit(watched, 'compacted 9,400 thumbnails');
+        const revision = await latestEvidence(watched.taskId);
+
+        const [steer] = await deliveredTo(busy);
+        assert.equal(steer.clientTurnId, `${PREFIX}${revision.id}`);
+        assert.equal(steer.kind, 'steer', 'written into the running turn, not queued behind it');
+        assert.equal(steer.sendIntent, 'CURRENT_WORK');
+        assert.equal(steer.targetTurnId, running.id);
+        assert.equal(await cardIn(busy, watched.taskId), null, 'held: the owner is not asked');
+
+        const handed = await (runnerApi as unknown as {
+          dequeueTurn(sessionId: string, runnerId: string, leaseGeneration: null, acceptsSteer: boolean,
+            declaredCapabilities: readonly string[]): Promise<{ turnId: string; kind: string; content?: string } | null>;
+        }).dequeueTurn(busy, runnerId, null, true, routing);
+        assert.equal(handed?.turnId, steer.id);
+        assert.equal(handed?.kind, 'steer');
+        assert.equal(handed?.content, await queuedConfirmationReviewContent(db, steer.clientTurnId),
+          'the steer carries the review block');
+        assert.match(handed?.content ?? '', /<orbit-evidence-review task=/);
       });
   });

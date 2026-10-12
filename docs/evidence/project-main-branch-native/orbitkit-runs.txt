@@ -1,0 +1,27 @@
+OrbitKit swift test (swift:6.1, /mnt/data/mb-ios/bin/okx.sh on a copy of each tree; full logs on HPC /mnt/data/mb-ios/logs)
+
+== base-29c7132a7
+start 2026-10-10T17:07:55Z memAvailableMB=5798 copy=/mnt/data/mb-ios/base args=test
+Test Suite 'All tests' passed at 2026-10-10 17:09:17.595
+	 Executed 3671 tests, with 5 tests skipped and 0 failures (0 unexpected) in 35.269 (35.269) seconds
+failed cases: 0
+
+== full-829c17c86
+start 2026-10-10T17:31:32Z memAvailableMB=6101 copy=/mnt/data/mb-ios/copy args=test
+Test Suite 'All tests' passed at 2026-10-10 17:32:47.029
+	 Executed 3722 tests, with 5 tests skipped and 0 failures (0 unexpected) in 36.624 (36.624) seconds
+failed cases: 0
+
+== merged-428087dc7
+start 2026-10-10T17:34:32Z memAvailableMB=6070 copy=/mnt/data/mb-ios/merged args=test
+Test Suite 'All tests' passed at 2026-10-10 17:36:03.375
+	 Executed 3722 tests, with 5 tests skipped and 0 failures (0 unexpected) in 30.106 (30.106) seconds
+failed cases: 0
+
+== the main-branch suites on the delivery (from full-829c17c86)
+Test Suite 'ProjectMainBranchCopyParityTests' passed at 2026-10-10 17:32:24.865
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.113 (0.113) seconds
+Test Suite 'ProjectMainBranchSitesCopyParityTests' passed at 2026-10-10 17:32:24.982
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.116 (0.116) seconds
+Test Suite 'ProjectMainBranchTests' passed at 2026-10-10 17:32:25.085
+	 Executed 21 tests, with 0 failures (0 unexpected) in 0.103 (0.103) seconds

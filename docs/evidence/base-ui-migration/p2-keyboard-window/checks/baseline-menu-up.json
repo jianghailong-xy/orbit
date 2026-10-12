@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && NO_COLOR=1 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep \" menu-up-\"",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_f44e9f3dfa8e",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "25309143fa5b571bb85c0f634cb04f339c9c3ccd",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T21:53:08.314517+00:00",
+ "exitCode": 1,
+ "outputSha256": "4de68eeb4cf1e92baae47809808f2ca8a86126b2dd3e07a5eb80655d1d651bfd",
+ "outputBytes": 67655,
+ "note": "359 passed / 1 failed, delivered tree: orbit-menu menu-up-enter burst sample 10 never mounted the fixture; its trace (baseline-menu-up-traces.json) shows 12 module requests aborted with net::ERR_NETWORK_CHANGED, and the last actions are newPage, goto and the theme expect, before any key. Rerun in baseline-menu-up-rerun."
+}

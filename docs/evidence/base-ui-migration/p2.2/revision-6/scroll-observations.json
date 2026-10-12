@@ -1,0 +1,36 @@
+{
+  "no-preference": {
+    "samples": 8,
+    "closedAfterMs": [
+      232,
+      291
+    ],
+    "readyAfterCloseMs": [
+      0,
+      0
+    ],
+    "firstReadLocked": 0,
+    "trustedScrollSamples": 8,
+    "scrollMovedAfterMs": [
+      8,
+      31
+    ]
+  },
+  "reduce": {
+    "samples": 8,
+    "closedAfterMs": [
+      27,
+      52.70000001788139
+    ],
+    "readyAfterCloseMs": [
+      0,
+      15.5
+    ],
+    "firstReadLocked": 1,
+    "trustedScrollSamples": 8,
+    "scrollMovedAfterMs": [
+      14,
+      31.80000001192093
+    ]
+  }
+}

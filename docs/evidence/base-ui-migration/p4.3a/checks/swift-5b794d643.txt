@@ -1,0 +1,997 @@
+Test Suite 'All tests' started at 2026-10-09 02:12:00.111
+Test Suite 'debug.xctest' started at 2026-10-09 02:12:00.112
+Test Suite 'AcceptanceConfirmationCopyParityTests' started at 2026-10-09 02:12:00.112
+Test Suite 'AcceptanceConfirmationCopyParityTests' passed at 2026-10-09 02:12:00.643
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.531 (0.531) seconds
+Test Suite 'AcceptanceConfirmationReceiptTests' started at 2026-10-09 02:12:00.643
+Test Suite 'AcceptanceConfirmationReceiptTests' passed at 2026-10-09 02:12:00.741
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.098 (0.098) seconds
+Test Suite 'AccessTokensAPIClientTests' started at 2026-10-09 02:12:00.741
+Test Suite 'AccessTokensAPIClientTests' passed at 2026-10-09 02:12:00.748
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'AccessTokensListTests' started at 2026-10-09 02:12:00.748
+Test Suite 'AccessTokensListTests' passed at 2026-10-09 02:12:00.750
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'AccessTokensWiringTests' started at 2026-10-09 02:12:00.750
+Test Suite 'AccessTokensWiringTests' passed at 2026-10-09 02:12:01.316
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.566 (0.566) seconds
+Test Suite 'AccountPauseAPIClientTests' started at 2026-10-09 02:12:01.316
+Test Suite 'AccountPauseAPIClientTests' passed at 2026-10-09 02:12:01.418
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'AccountPauseTests' started at 2026-10-09 02:12:01.418
+Test Suite 'AccountPauseTests' passed at 2026-10-09 02:12:01.421
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'AgentDefaultsTests' started at 2026-10-09 02:12:01.421
+Test Suite 'AgentDefaultsTests' passed at 2026-10-09 02:12:01.524
+	 Executed 55 tests, with 0 failures (0 unexpected) in 0.103 (0.103) seconds
+Test Suite 'AgentListLogicTests' started at 2026-10-09 02:12:01.524
+Test Suite 'AgentListLogicTests' passed at 2026-10-09 02:12:01.524
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AgentWriteCodableTests' started at 2026-10-09 02:12:01.524
+Test Suite 'AgentWriteCodableTests' passed at 2026-10-09 02:12:01.630
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.106 (0.106) seconds
+Test Suite 'AgentsStackWiringTests' started at 2026-10-09 02:12:01.630
+Test Suite 'AgentsStackWiringTests' passed at 2026-10-09 02:12:02.308
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.677 (0.677) seconds
+Test Suite 'AntigravityAccountsTests' started at 2026-10-09 02:12:02.308
+Test Suite 'AntigravityAccountsTests' passed at 2026-10-09 02:12:02.661
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.353 (0.353) seconds
+Test Suite 'AntigravityGoogleClientTests' started at 2026-10-09 02:12:02.661
+Test Suite 'AntigravityGoogleClientTests' passed at 2026-10-09 02:12:02.961
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.301 (0.301) seconds
+Test Suite 'AppLogicTests' started at 2026-10-09 02:12:02.961
+Test Suite 'AppLogicTests' passed at 2026-10-09 02:12:02.962
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'AppSectionTests' started at 2026-10-09 02:12:02.962
+Test Suite 'AppSectionTests' passed at 2026-10-09 02:12:02.962
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'ApprovalRememberParityTests' started at 2026-10-09 02:12:02.962
+Test Suite 'ApprovalRememberParityTests' passed at 2026-10-09 02:12:03.166
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.203 (0.203) seconds
+Test Suite 'ApprovalReviewCloseWiringTests' started at 2026-10-09 02:12:03.166
+Test Suite 'ApprovalReviewCloseWiringTests' passed at 2026-10-09 02:12:03.212
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.046 (0.046) seconds
+Test Suite 'ApprovalReviewDraftsTests' started at 2026-10-09 02:12:03.212
+Test Suite 'ApprovalReviewDraftsTests' passed at 2026-10-09 02:12:03.313
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'ArtifactByteCacheTests' started at 2026-10-09 02:12:03.313
+Test Suite 'ArtifactByteCacheTests' passed at 2026-10-09 02:12:03.314
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AttachmentLinkTests' started at 2026-10-09 02:12:03.314
+Test Suite 'AttachmentLinkTests' passed at 2026-10-09 02:12:03.315
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'AutoRetryLogicTests' started at 2026-10-09 02:12:03.315
+Test Suite 'AutoRetryLogicTests' passed at 2026-10-09 02:12:03.317
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'BackgroundJobsCopyParityTests' started at 2026-10-09 02:12:03.317
+Test Suite 'BackgroundJobsCopyParityTests' passed at 2026-10-09 02:12:03.772
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.455 (0.455) seconds
+Test Suite 'BackgroundJobsTests' started at 2026-10-09 02:12:03.772
+Test Suite 'BackgroundJobsTests' passed at 2026-10-09 02:12:03.776
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'BackgroundJobsWiringTests' started at 2026-10-09 02:12:03.776
+Test Suite 'BackgroundJobsWiringTests' passed at 2026-10-09 02:12:03.827
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.051 (0.051) seconds
+Test Suite 'BackgroundTaskCardTests' started at 2026-10-09 02:12:03.827
+Test Suite 'BackgroundTaskCardTests' passed at 2026-10-09 02:12:03.827
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'BackgroundWakeCopyParityTests' started at 2026-10-09 02:12:03.827
+Test Suite 'BackgroundWakeCopyParityTests' passed at 2026-10-09 02:12:03.938
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.11 (0.11) seconds
+Test Suite 'BackgroundWakeTests' started at 2026-10-09 02:12:03.938
+Test Suite 'BackgroundWakeTests' passed at 2026-10-09 02:12:04.045
+	 Executed 22 tests, with 0 failures (0 unexpected) in 0.107 (0.107) seconds
+Test Suite 'BatchReviewTests' started at 2026-10-09 02:12:04.045
+Test Suite 'BatchReviewTests' passed at 2026-10-09 02:12:04.046
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'BatchReviewWiringTests' started at 2026-10-09 02:12:04.046
+Test Suite 'BatchReviewWiringTests' passed at 2026-10-09 02:12:04.379
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.333 (0.333) seconds
+Test Suite 'BatchTreeTests' started at 2026-10-09 02:12:04.379
+Test Suite 'BatchTreeTests' passed at 2026-10-09 02:12:04.480
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'BottomSearchRevealTests' started at 2026-10-09 02:12:04.480
+Test Suite 'BottomSearchRevealTests' passed at 2026-10-09 02:12:04.480
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'CoalescedRefreshQueueTests' started at 2026-10-09 02:12:04.480
+Test Suite 'CoalescedRefreshQueueTests' passed at 2026-10-09 02:12:04.481
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'CodexAccountsTests' started at 2026-10-09 02:12:04.481
+Test Suite 'CodexAccountsTests' passed at 2026-10-09 02:12:04.526
+	 Executed 27 tests, with 0 failures (0 unexpected) in 0.045 (0.045) seconds
+Test Suite 'CodexLoginAPIClientTests' started at 2026-10-09 02:12:04.526
+Test Suite 'CodexLoginAPIClientTests' passed at 2026-10-09 02:12:04.527
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'CodexLoginPoolTests' started at 2026-10-09 02:12:04.527
+Test Suite 'CodexLoginPoolTests' passed at 2026-10-09 02:12:04.532
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+Test Suite 'CodexPoolPageTests' started at 2026-10-09 02:12:04.532
+Test Suite 'CodexPoolPageTests' passed at 2026-10-09 02:12:04.536
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'CodexRateLimitResetAPIClientTests' started at 2026-10-09 02:12:04.536
+Test Suite 'CodexRateLimitResetAPIClientTests' passed at 2026-10-09 02:12:04.537
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'CodexSignInCopyParityTests' started at 2026-10-09 02:12:04.537
+Test Suite 'CodexSignInCopyParityTests' passed at 2026-10-09 02:12:05.135
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.598 (0.598) seconds
+Test Suite 'CommitResultMessageTests' started at 2026-10-09 02:12:05.135
+Test Suite 'CommitResultMessageTests' passed at 2026-10-09 02:12:05.136
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ComposerHandoffWiringTests' started at 2026-10-09 02:12:05.136
+Test Suite 'ComposerHandoffWiringTests' passed at 2026-10-09 02:12:05.255
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.12 (0.12) seconds
+Test Suite 'ComposerMenuCopyParityTests' started at 2026-10-09 02:12:05.255
+Test Suite 'ComposerMenuCopyParityTests' passed at 2026-10-09 02:12:05.592
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.336 (0.336) seconds
+Test Suite 'ComposerSendRetryTests' started at 2026-10-09 02:12:05.592
+Test Suite 'ComposerSendRetryTests' passed at 2026-10-09 02:12:05.592
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'ConfirmationStyleWiringTests' started at 2026-10-09 02:12:05.592
+Test Suite 'ConfirmationStyleWiringTests' passed at 2026-10-09 02:12:06.297
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.705 (0.705) seconds
+Test Suite 'ConsoleRunnerRefreshWiringTests' started at 2026-10-09 02:12:06.297
+Test Suite 'ConsoleRunnerRefreshWiringTests' passed at 2026-10-09 02:12:06.302
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'ControlEventCodableTests' started at 2026-10-09 02:12:06.302
+Test Suite 'ControlEventCodableTests' passed at 2026-10-09 02:12:06.607
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.304 (0.304) seconds
+Test Suite 'CreateCardCopyParityTests' started at 2026-10-09 02:12:06.607
+Test Suite 'CreateCardCopyParityTests' passed at 2026-10-09 02:12:06.774
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.167 (0.167) seconds
+Test Suite 'CreatedTasksWiringTests' started at 2026-10-09 02:12:06.774
+Test Suite 'CreatedTasksWiringTests' passed at 2026-10-09 02:12:06.945
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.17 (0.17) seconds
+Test Suite 'CriteriaChangeCardCopyParityTests' started at 2026-10-09 02:12:06.945
+Test Suite 'CriteriaChangeCardCopyParityTests' passed at 2026-10-09 02:12:06.990
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.045 (0.045) seconds
+Test Suite 'CriteriaChangeTests' started at 2026-10-09 02:12:06.990
+Test Suite 'CriteriaChangeTests' passed at 2026-10-09 02:12:06.992
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'CriteriaDecisionCopyParityTests' started at 2026-10-09 02:12:06.992
+Test Suite 'CriteriaDecisionCopyParityTests' passed at 2026-10-09 02:12:07.067
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.075 (0.075) seconds
+Test Suite 'CriteriaDecisionFixtureTests' started at 2026-10-09 02:12:07.067
+Test Suite 'CriteriaDecisionFixtureTests' passed at 2026-10-09 02:12:07.230
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.163 (0.163) seconds
+Test Suite 'CriteriaDecisionTests' started at 2026-10-09 02:12:07.230
+Test Suite 'CriteriaDecisionTests' passed at 2026-10-09 02:12:07.233
+	 Executed 41 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'CriteriaDecisionWiringTests' started at 2026-10-09 02:12:07.233
+Test Suite 'CriteriaDecisionWiringTests' passed at 2026-10-09 02:12:08.201
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.967 (0.967) seconds
+Test Suite 'DeepSeekBalanceCopyParityTests' started at 2026-10-09 02:12:08.201
+Test Suite 'DeepSeekBalanceCopyParityTests' passed at 2026-10-09 02:12:08.411
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.211 (0.211) seconds
+Test Suite 'DeepSeekBalanceTests' started at 2026-10-09 02:12:08.411
+Test Suite 'DeepSeekBalanceTests' passed at 2026-10-09 02:12:08.413
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'DeliveredMessageTests' started at 2026-10-09 02:12:08.413
+Test Suite 'DeliveredMessageTests' passed at 2026-10-09 02:12:08.417
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'DshRuntimeTests' started at 2026-10-09 02:12:08.417
+Test Suite 'DshRuntimeTests' passed at 2026-10-09 02:12:08.763
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.346 (0.346) seconds
+Test Suite 'EngineAuthTests' started at 2026-10-09 02:12:08.763
+Test Suite 'EngineAuthTests' passed at 2026-10-09 02:12:08.764
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'EngineErrorsParityTests' started at 2026-10-09 02:12:08.764
+Test Suite 'EngineErrorsParityTests' passed at 2026-10-09 02:12:08.767
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'EngineErrorsTests' started at 2026-10-09 02:12:08.767
+Test Suite 'EngineErrorsTests' passed at 2026-10-09 02:12:08.767
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'EvidenceDecisionCopyParityTests' started at 2026-10-09 02:12:08.767
+Test Suite 'EvidenceDecisionCopyParityTests' passed at 2026-10-09 02:12:08.778
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.011 (0.011) seconds
+Test Suite 'EvidenceDecisionDoorTests' started at 2026-10-09 02:12:08.778
+Test Suite 'EvidenceDecisionDoorTests' passed at 2026-10-09 02:12:08.780
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'EvidenceDecisionTests' started at 2026-10-09 02:12:08.780
+Test Suite 'EvidenceDecisionTests' passed at 2026-10-09 02:12:08.781
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'EvidenceDecisionWiringTests' started at 2026-10-09 02:12:08.781
+Test Suite 'EvidenceDecisionWiringTests' passed at 2026-10-09 02:12:09.018
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.237 (0.237) seconds
+Test Suite 'ExceptionCardPlacementTests' started at 2026-10-09 02:12:09.018
+Test Suite 'ExceptionCardPlacementTests' passed at 2026-10-09 02:12:09.119
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'ExceptionCardsTests' started at 2026-10-09 02:12:09.119
+Test Suite 'ExceptionCardsTests' passed at 2026-10-09 02:12:09.272
+	 Executed 22 tests, with 0 failures (0 unexpected) in 0.153 (0.153) seconds
+Test Suite 'ExceptionCardsWiringTests' started at 2026-10-09 02:12:09.272
+Test Suite 'ExceptionCardsWiringTests' passed at 2026-10-09 02:12:09.546
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.274 (0.274) seconds
+Test Suite 'FailureReasonTests' started at 2026-10-09 02:12:09.546
+Test Suite 'FailureReasonTests' passed at 2026-10-09 02:12:09.766
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.22 (0.22) seconds
+Test Suite 'FollowingRunnersAdminWiringTests' started at 2026-10-09 02:12:09.766
+Test Suite 'FollowingRunnersAdminWiringTests' passed at 2026-10-09 02:12:10.095
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.329 (0.329) seconds
+Test Suite 'GeminiEntryParityTests' started at 2026-10-09 02:12:10.095
+Test Suite 'GeminiEntryParityTests' passed at 2026-10-09 02:12:10.267
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.171 (0.171) seconds
+Test Suite 'GoogleSignInTests' started at 2026-10-09 02:12:10.267
+Test Suite 'GoogleSignInTests' passed at 2026-10-09 02:12:10.371
+	 Executed 22 tests, with 0 failures (0 unexpected) in 0.104 (0.104) seconds
+Test Suite 'GoogleSignInWiringTests' started at 2026-10-09 02:12:10.371
+Test Suite 'GoogleSignInWiringTests' passed at 2026-10-09 02:12:10.735
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.364 (0.364) seconds
+Test Suite 'ImageViewerGeometryTests' started at 2026-10-09 02:12:10.735
+Test Suite 'ImageViewerGeometryTests' passed at 2026-10-09 02:12:10.836
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'InteractionCardsFixtureTests' started at 2026-10-09 02:12:10.836
+Test Suite 'InteractionCardsFixtureTests' passed at 2026-10-09 02:12:10.847
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.011 (0.011) seconds
+Test Suite 'InterruptAndSendTests' started at 2026-10-09 02:12:10.847
+Test Suite 'InterruptAndSendTests' passed at 2026-10-09 02:12:10.847
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'KimiAccountsTests' started at 2026-10-09 02:12:10.847
+Test Suite 'KimiAccountsTests' passed at 2026-10-09 02:12:11.180
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.333 (0.333) seconds
+Test Suite 'KimiSiteTests' started at 2026-10-09 02:12:11.180
+Test Suite 'KimiSiteTests' passed at 2026-10-09 02:12:11.234
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.054 (0.054) seconds
+Test Suite 'LaunchSnapshotTests' started at 2026-10-09 02:12:11.234
+Test Suite 'LaunchSnapshotTests' passed at 2026-10-09 02:12:11.363
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.128 (0.128) seconds
+Test Suite 'LaunchdPlistMigrationTests' started at 2026-10-09 02:12:11.363
+Test Suite 'LaunchdPlistMigrationTests' passed at 2026-10-09 02:12:11.364
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'LoadFailureLogicTests' started at 2026-10-09 02:12:11.364
+Test Suite 'LoadFailureLogicTests' passed at 2026-10-09 02:12:11.464
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'LoginFailureTests' started at 2026-10-09 02:12:11.464
+Test Suite 'LoginFailureTests' passed at 2026-10-09 02:12:11.852
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.387 (0.387) seconds
+Test Suite 'LoginTokenStorageTests' started at 2026-10-09 02:12:11.852
+Test Suite 'LoginTokenStorageTests' passed at 2026-10-09 02:12:11.854
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'MarkdownCheckboxWiringTests' started at 2026-10-09 02:12:11.854
+Test Suite 'MarkdownCheckboxWiringTests' passed at 2026-10-09 02:12:11.855
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MarkdownFileRefTests' started at 2026-10-09 02:12:11.855
+Test Suite 'MarkdownFileRefTests' passed at 2026-10-09 02:12:11.857
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'MarkdownTests' started at 2026-10-09 02:12:11.857
+Test Suite 'MarkdownTests' passed at 2026-10-09 02:12:12.061
+	 Executed 23 tests, with 0 failures (0 unexpected) in 0.204 (0.204) seconds
+Test Suite 'MergeRecoveryTests' started at 2026-10-09 02:12:12.061
+Test Suite 'MergeRecoveryTests' passed at 2026-10-09 02:12:12.065
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'MergeRecoveryWiringTests' started at 2026-10-09 02:12:12.065
+Test Suite 'MergeRecoveryWiringTests' passed at 2026-10-09 02:12:12.073
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'ModelRoutingLogicTests' started at 2026-10-09 02:12:12.073
+Test Suite 'ModelRoutingLogicTests' passed at 2026-10-09 02:12:12.077
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'ModelsCodableTests' started at 2026-10-09 02:12:12.077
+Test Suite 'ModelsCodableTests' passed at 2026-10-09 02:12:12.078
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MonospaceOutputLayoutTests' started at 2026-10-09 02:12:12.078
+Test Suite 'MonospaceOutputLayoutTests' passed at 2026-10-09 02:12:12.133
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.054 (0.054) seconds
+Test Suite 'NavigationEntrancesWiringTests' started at 2026-10-09 02:12:12.133
+Test Suite 'NavigationEntrancesWiringTests' passed at 2026-10-09 02:12:12.297
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.165 (0.165) seconds
+Test Suite 'NavigationTests' started at 2026-10-09 02:12:12.297
+Test Suite 'NavigationTests' passed at 2026-10-09 02:12:12.400
+	 Executed 31 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'NeedsYouLogicTests' started at 2026-10-09 02:12:12.400
+Test Suite 'NeedsYouLogicTests' passed at 2026-10-09 02:12:12.401
+	 Executed 22 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'NeedsYouOwnerDecisionTests' started at 2026-10-09 02:12:12.401
+Test Suite 'NeedsYouOwnerDecisionTests' passed at 2026-10-09 02:12:12.403
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'OpenItemDeliveryCopyParityTests' started at 2026-10-09 02:12:12.403
+Test Suite 'OpenItemDeliveryCopyParityTests' passed at 2026-10-09 02:12:12.452
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.049 (0.049) seconds
+Test Suite 'OpenItemDeliveryTests' started at 2026-10-09 02:12:12.452
+Test Suite 'OpenItemDeliveryTests' passed at 2026-10-09 02:12:12.457
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'OpenListDeltaTests' started at 2026-10-09 02:12:12.457
+Test Suite 'OpenListDeltaTests' passed at 2026-10-09 02:12:12.563
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.106 (0.106) seconds
+Test Suite 'OpenListETagAPIClientTests' started at 2026-10-09 02:12:12.563
+Test Suite 'OpenListETagAPIClientTests' passed at 2026-10-09 02:12:12.564
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'OpenListRowUpdateTests' started at 2026-10-09 02:12:12.564
+Test Suite 'OpenListRowUpdateTests' passed at 2026-10-09 02:12:15.208
+	 Executed 12 tests, with 0 failures (0 unexpected) in 2.644 (2.644) seconds
+Test Suite 'OrbitAskPreviewTests' started at 2026-10-09 02:12:15.208
+Test Suite 'OrbitAskPreviewTests' passed at 2026-10-09 02:12:15.209
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'OrbitLinkCopyParityTests' started at 2026-10-09 02:12:15.209
+Test Suite 'OrbitLinkCopyParityTests' passed at 2026-10-09 02:12:15.432
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.222 (0.222) seconds
+Test Suite 'OrbitLinkDestinationTests' started at 2026-10-09 02:12:15.432
+Test Suite 'OrbitLinkDestinationTests' passed at 2026-10-09 02:12:15.536
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.104 (0.104) seconds
+Test Suite 'OrbitLinkTests' started at 2026-10-09 02:12:15.536
+Test Suite 'OrbitLinkTests' passed at 2026-10-09 02:12:15.856
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.319 (0.319) seconds
+Test Suite 'OrbitWriteToolDisplayTests' started at 2026-10-09 02:12:15.856
+Test Suite 'OrbitWriteToolDisplayTests' passed at 2026-10-09 02:12:15.957
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'OwnerConfirmationBoxesWiringTests' started at 2026-10-09 02:12:15.957
+Test Suite 'OwnerConfirmationBoxesWiringTests' passed at 2026-10-09 02:12:15.962
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'OwnerConfirmationCopyParityTests' started at 2026-10-09 02:12:15.962
+Test Suite 'OwnerConfirmationCopyParityTests' passed at 2026-10-09 02:12:16.575
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.612 (0.612) seconds
+Test Suite 'OwnerConfirmationDoorTests' started at 2026-10-09 02:12:16.575
+Test Suite 'OwnerConfirmationDoorTests' passed at 2026-10-09 02:12:16.784
+	 Executed 23 tests, with 0 failures (0 unexpected) in 0.209 (0.209) seconds
+Test Suite 'OwnerConfirmationIfConfirmedTests' started at 2026-10-09 02:12:16.784
+Test Suite 'OwnerConfirmationIfConfirmedTests' passed at 2026-10-09 02:12:16.801
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.016 (0.016) seconds
+Test Suite 'OwnerConfirmationPlacementTests' started at 2026-10-09 02:12:16.801
+Test Suite 'OwnerConfirmationPlacementTests' passed at 2026-10-09 02:12:16.812
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.012 (0.012) seconds
+Test Suite 'OwnerConfirmationReviewTests' started at 2026-10-09 02:12:16.812
+Test Suite 'OwnerConfirmationReviewTests' passed at 2026-10-09 02:12:16.923
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.11 (0.11) seconds
+Test Suite 'OwnerItemCardsTests' started at 2026-10-09 02:12:16.923
+Test Suite 'OwnerItemCardsTests' passed at 2026-10-09 02:12:16.949
+	 Executed 21 tests, with 0 failures (0 unexpected) in 0.027 (0.027) seconds
+Test Suite 'PendingSessionOperationsTests' started at 2026-10-09 02:12:16.949
+Test Suite 'PendingSessionOperationsTests' passed at 2026-10-09 02:12:16.949
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'PendingSessionOperationsWiringTests' started at 2026-10-09 02:12:16.950
+Test Suite 'PendingSessionOperationsWiringTests' passed at 2026-10-09 02:12:16.966
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.016 (0.016) seconds
+Test Suite 'PerfBaselineTests' started at 2026-10-09 02:12:16.966
+src/macos/OrbitKit/Tests/OrbitKitTests/PerfBaselineTests.swift:23: PerfBaselineTests.testMarkdownParse : Test skipped: required false value but got true - perf baseline harness — set ORBIT_PERF=1 to run
+Test Case 'PerfBaselineTests.testMarkdownParse' skipped (0.0 seconds)
+src/macos/OrbitKit/Tests/OrbitKitTests/PerfBaselineTests.swift:23: PerfBaselineTests.testResidentMemoryOfCachedConsoles : Test skipped: required false value but got true - perf baseline harness — set ORBIT_PERF=1 to run
+Test Case 'PerfBaselineTests.testResidentMemoryOfCachedConsoles' skipped (0.0 seconds)
+src/macos/OrbitKit/Tests/OrbitKitTests/PerfBaselineTests.swift:23: PerfBaselineTests.testRowsBuild : Test skipped: required false value but got true - perf baseline harness — set ORBIT_PERF=1 to run
+Test Case 'PerfBaselineTests.testRowsBuild' skipped (0.0 seconds)
+src/macos/OrbitKit/Tests/OrbitKitTests/PerfBaselineTests.swift:23: PerfBaselineTests.testSnapshotWriteAmplification : Test skipped: required false value but got true - perf baseline harness — set ORBIT_PERF=1 to run
+Test Case 'PerfBaselineTests.testSnapshotWriteAmplification' skipped (0.0 seconds)
+src/macos/OrbitKit/Tests/OrbitKitTests/PerfBaselineTests.swift:23: PerfBaselineTests.testStreamingTurnMainThreadCost : Test skipped: required false value but got true - perf baseline harness — set ORBIT_PERF=1 to run
+Test Case 'PerfBaselineTests.testStreamingTurnMainThreadCost' skipped (0.0 seconds)
+Test Suite 'PerfBaselineTests' passed at 2026-10-09 02:12:16.966
+	 Executed 5 tests, with 5 tests skipped and 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'Phase2LogicTests' started at 2026-10-09 02:12:16.966
+Test Suite 'Phase2LogicTests' passed at 2026-10-09 02:12:16.974
+	 Executed 35 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'Phase3LogicTests' started at 2026-10-09 02:12:16.974
+Test Suite 'Phase3LogicTests' passed at 2026-10-09 02:12:16.976
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'Phase4LogicTests' started at 2026-10-09 02:12:16.976
+Test Suite 'Phase4LogicTests' passed at 2026-10-09 02:12:17.129
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.153 (0.153) seconds
+Test Suite 'PinnedCacheTests' started at 2026-10-09 02:12:17.129
+Test Suite 'PinnedCacheTests' passed at 2026-10-09 02:12:17.129
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'PoolAccessCopyParityTests' started at 2026-10-09 02:12:17.129
+Test Suite 'PoolAccessCopyParityTests' passed at 2026-10-09 02:12:17.458
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.329 (0.329) seconds
+Test Suite 'PreferencesCodableTests' started at 2026-10-09 02:12:17.458
+Test Suite 'PreferencesCodableTests' passed at 2026-10-09 02:12:17.459
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProfileAPIClientTests' started at 2026-10-09 02:12:17.459
+Test Suite 'ProfileAPIClientTests' passed at 2026-10-09 02:12:17.561
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'ProjectAPIClientTests' started at 2026-10-09 02:12:17.561
+Test Suite 'ProjectAPIClientTests' passed at 2026-10-09 02:12:17.564
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'ProjectAttentionCopyParityTests' started at 2026-10-09 02:12:17.564
+Test Suite 'ProjectAttentionCopyParityTests' passed at 2026-10-09 02:12:17.844
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.28 (0.28) seconds
+Test Suite 'ProjectAttentionTests' started at 2026-10-09 02:12:17.844
+Test Suite 'ProjectAttentionTests' passed at 2026-10-09 02:12:17.853
+	 Executed 57 tests, with 0 failures (0 unexpected) in 0.009 (0.009) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' started at 2026-10-09 02:12:17.853
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-09 02:12:17.984
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.131 (0.131) seconds
+Test Suite 'ProjectCrossingsDoorTests' started at 2026-10-09 02:12:17.984
+Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-09 02:12:17.992
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'ProjectCrossingsTests' started at 2026-10-09 02:12:17.992
+Test Suite 'ProjectCrossingsTests' passed at 2026-10-09 02:12:17.993
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsWiringTests' started at 2026-10-09 02:12:17.993
+Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-09 02:12:18.292
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.299 (0.299) seconds
+Test Suite 'ProjectDoneConversationTests' started at 2026-10-09 02:12:18.292
+Test Suite 'ProjectDoneConversationTests' passed at 2026-10-09 02:12:18.393
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'ProjectDoneCopyParityTests' started at 2026-10-09 02:12:18.393
+Test Suite 'ProjectDoneCopyParityTests' passed at 2026-10-09 02:12:19.079
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.686 (0.686) seconds
+Test Suite 'ProjectDoneTests' started at 2026-10-09 02:12:19.079
+Test Suite 'ProjectDoneTests' passed at 2026-10-09 02:12:19.185
+	 Executed 23 tests, with 0 failures (0 unexpected) in 0.106 (0.106) seconds
+Test Suite 'ProjectDoneWiringTests' started at 2026-10-09 02:12:19.185
+Test Suite 'ProjectDoneWiringTests' passed at 2026-10-09 02:12:19.335
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.151 (0.151) seconds
+Test Suite 'ProjectGraphLayoutTests' started at 2026-10-09 02:12:19.335
+Test Suite 'ProjectGraphLayoutTests' passed at 2026-10-09 02:12:19.640
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.304 (0.304) seconds
+Test Suite 'ProjectMergeCardTests' started at 2026-10-09 02:12:19.640
+Test Suite 'ProjectMergeCardTests' passed at 2026-10-09 02:12:19.642
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'ProjectMergeCopyParityTests' started at 2026-10-09 02:12:19.642
+Test Suite 'ProjectMergeCopyParityTests' passed at 2026-10-09 02:12:19.660
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.018 (0.018) seconds
+Test Suite 'ProjectPageCopyParityTests' started at 2026-10-09 02:12:19.660
+Test Suite 'ProjectPageCopyParityTests' passed at 2026-10-09 02:12:20.379
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.718 (0.718) seconds
+Test Suite 'ProjectPageSectionsCopyParityTests' started at 2026-10-09 02:12:20.379
+Test Suite 'ProjectPageSectionsCopyParityTests' passed at 2026-10-09 02:12:21.120
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.741 (0.741) seconds
+Test Suite 'ProjectPageSectionsTests' started at 2026-10-09 02:12:21.120
+Test Suite 'ProjectPageSectionsTests' passed at 2026-10-09 02:12:21.323
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.202 (0.202) seconds
+Test Suite 'ProjectPageTests' started at 2026-10-09 02:12:21.323
+Test Suite 'ProjectPageTests' passed at 2026-10-09 02:12:21.961
+	 Executed 40 tests, with 0 failures (0 unexpected) in 0.638 (0.638) seconds
+Test Suite 'ProjectPlanCodableTests' started at 2026-10-09 02:12:21.961
+Test Suite 'ProjectPlanCodableTests' passed at 2026-10-09 02:12:22.066
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.105 (0.105) seconds
+Test Suite 'ProjectRunSettingsCopyParityTests' started at 2026-10-09 02:12:22.066
+Test Suite 'ProjectRunSettingsCopyParityTests' passed at 2026-10-09 02:12:22.355
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.289 (0.289) seconds
+Test Suite 'ProjectRunSettingsTests' started at 2026-10-09 02:12:22.355
+Test Suite 'ProjectRunSettingsTests' passed at 2026-10-09 02:12:22.458
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'ProjectStartedCopyParityTests' started at 2026-10-09 02:12:22.458
+Test Suite 'ProjectStartedCopyParityTests' passed at 2026-10-09 02:12:22.589
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.131 (0.131) seconds
+Test Suite 'ProjectStartedTests' started at 2026-10-09 02:12:22.589
+Test Suite 'ProjectStartedTests' passed at 2026-10-09 02:12:22.822
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.233 (0.233) seconds
+Test Suite 'ProjectWhyNotDoneGateTests' started at 2026-10-09 02:12:22.822
+Test Suite 'ProjectWhyNotDoneGateTests' passed at 2026-10-09 02:12:22.968
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.147 (0.147) seconds
+Test Suite 'ProjectsCodableTests' started at 2026-10-09 02:12:22.968
+Test Suite 'ProjectsCodableTests' passed at 2026-10-09 02:12:23.032
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.064 (0.064) seconds
+Test Suite 'ProjectsWiringTests' started at 2026-10-09 02:12:23.032
+Test Suite 'ProjectsWiringTests' passed at 2026-10-09 02:12:23.602
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.569 (0.569) seconds
+Test Suite 'PromotionPlacementTests' started at 2026-10-09 02:12:23.602
+Test Suite 'PromotionPlacementTests' passed at 2026-10-09 02:12:23.779
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.178 (0.178) seconds
+Test Suite 'PromptSuggestionTests' started at 2026-10-09 02:12:23.779
+Test Suite 'PromptSuggestionTests' passed at 2026-10-09 02:12:24.169
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.389 (0.389) seconds
+Test Suite 'ProviderPoolsParityTests' started at 2026-10-09 02:12:24.169
+Test Suite 'ProviderPoolsParityTests' passed at 2026-10-09 02:12:24.891
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.722 (0.722) seconds
+Test Suite 'ProviderPoolsTests' started at 2026-10-09 02:12:24.891
+Test Suite 'ProviderPoolsTests' passed at 2026-10-09 02:12:25.244
+	 Executed 31 tests, with 0 failures (0 unexpected) in 0.353 (0.353) seconds
+Test Suite 'ProvidersFixLinkWiringTests' started at 2026-10-09 02:12:25.244
+Test Suite 'ProvidersFixLinkWiringTests' passed at 2026-10-09 02:12:25.788
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.543 (0.543) seconds
+Test Suite 'PublicIDTests' started at 2026-10-09 02:12:25.788
+Test Suite 'PublicIDTests' passed at 2026-10-09 02:12:25.890
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'QueuedSessionReplyTests' started at 2026-10-09 02:12:25.890
+Test Suite 'QueuedSessionReplyTests' passed at 2026-10-09 02:12:26.026
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.136 (0.136) seconds
+Test Suite 'QueuedTurnCardsTests' started at 2026-10-09 02:12:26.026
+Test Suite 'QueuedTurnCardsTests' passed at 2026-10-09 02:12:26.446
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.42 (0.42) seconds
+Test Suite 'QueuedTurnRestoreTests' started at 2026-10-09 02:12:26.446
+Test Suite 'QueuedTurnRestoreTests' passed at 2026-10-09 02:12:26.854
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.408 (0.408) seconds
+Test Suite 'RealtimeRecoveryFixtureTests' started at 2026-10-09 02:12:26.854
+Test Suite 'RealtimeRecoveryFixtureTests' passed at 2026-10-09 02:12:26.894
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.04 (0.04) seconds
+Test Suite 'RecentsLogicTests' started at 2026-10-09 02:12:26.894
+Test Suite 'RecentsLogicTests' passed at 2026-10-09 02:12:27.199
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.305 (0.305) seconds
+Test Suite 'ReconnectPolicyTests' started at 2026-10-09 02:12:27.199
+Test Suite 'ReconnectPolicyTests' passed at 2026-10-09 02:12:27.199
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'ReferencedTaskCopyParityTests' started at 2026-10-09 02:12:27.199
+Test Suite 'ReferencedTaskCopyParityTests' passed at 2026-10-09 02:12:27.775
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.576 (0.576) seconds
+Test Suite 'ReferencedTaskTests' started at 2026-10-09 02:12:27.775
+Test Suite 'ReferencedTaskTests' passed at 2026-10-09 02:12:28.140
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.365 (0.365) seconds
+Test Suite 'ReferencedTaskWiringTests' started at 2026-10-09 02:12:28.140
+Test Suite 'ReferencedTaskWiringTests' passed at 2026-10-09 02:12:28.141
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'RefreshControlClearanceTests' started at 2026-10-09 02:12:28.141
+Test Suite 'RefreshControlClearanceTests' passed at 2026-10-09 02:12:28.169
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.028 (0.028) seconds
+Test Suite 'RelativeTimeTests' started at 2026-10-09 02:12:28.169
+Test Suite 'RelativeTimeTests' passed at 2026-10-09 02:12:28.288
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.119 (0.119) seconds
+Test Suite 'RetryRouteTests' started at 2026-10-09 02:12:28.288
+Test Suite 'RetryRouteTests' passed at 2026-10-09 02:12:28.604
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.316 (0.316) seconds
+Test Suite 'RetrySendWiringTests' started at 2026-10-09 02:12:28.604
+Test Suite 'RetrySendWiringTests' passed at 2026-10-09 02:12:29.362
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.758 (0.758) seconds
+Test Suite 'RowSwipeGeometryTests' started at 2026-10-09 02:12:29.362
+Test Suite 'RowSwipeGeometryTests' passed at 2026-10-09 02:12:29.564
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.201 (0.201) seconds
+Test Suite 'RunRequestTokenTests' started at 2026-10-09 02:12:29.564
+Test Suite 'RunRequestTokenTests' passed at 2026-10-09 02:12:34.731
+	 Executed 11 tests, with 0 failures (0 unexpected) in 5.166 (5.166) seconds
+Test Suite 'RunnerArtifactWiringTests' started at 2026-10-09 02:12:34.731
+Test Suite 'RunnerArtifactWiringTests' passed at 2026-10-09 02:12:35.216
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.485 (0.485) seconds
+Test Suite 'RunnerAttentionCasesTests' started at 2026-10-09 02:12:35.216
+Test Suite 'RunnerAttentionCasesTests' passed at 2026-10-09 02:12:35.733
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.517 (0.517) seconds
+Test Suite 'RunnerDownloadTests' started at 2026-10-09 02:12:35.733
+Test Suite 'RunnerDownloadTests' passed at 2026-10-09 02:12:36.572
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.837 (0.837) seconds
+Test Suite 'RunnerPageAPIClientTests' started at 2026-10-09 02:12:36.572
+Test Suite 'RunnerPageAPIClientTests' passed at 2026-10-09 02:12:36.724
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.152 (0.152) seconds
+Test Suite 'RunnerPageCopyParityTests' started at 2026-10-09 02:12:36.724
+Test Suite 'RunnerPageCopyParityTests' passed at 2026-10-09 02:12:36.856
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.132 (0.132) seconds
+Test Suite 'RunnerPageDTOTests' started at 2026-10-09 02:12:36.856
+Test Suite 'RunnerPageDTOTests' passed at 2026-10-09 02:12:36.881
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.025 (0.025) seconds
+Test Suite 'RunnerPageFormatTests' started at 2026-10-09 02:12:36.881
+Test Suite 'RunnerPageFormatTests' passed at 2026-10-09 02:12:37.092
+	 Executed 31 tests, with 0 failures (0 unexpected) in 0.21 (0.21) seconds
+Test Suite 'RunnerSelfUpdateTests' started at 2026-10-09 02:12:37.092
+Test Suite 'RunnerSelfUpdateTests' passed at 2026-10-09 02:12:37.390
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.298 (0.298) seconds
+Test Suite 'RunnerWriteCodableTests' started at 2026-10-09 02:12:37.390
+Test Suite 'RunnerWriteCodableTests' passed at 2026-10-09 02:12:37.522
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.133 (0.133) seconds
+Test Suite 'RunnersPageWiringTests' started at 2026-10-09 02:12:37.522
+Test Suite 'RunnersPageWiringTests' passed at 2026-10-09 02:12:37.865
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.343 (0.343) seconds
+Test Suite 'RunningSubagentStatusTests' started at 2026-10-09 02:12:37.865
+Test Suite 'RunningSubagentStatusTests' passed at 2026-10-09 02:12:37.995
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.13 (0.13) seconds
+Test Suite 'SSEFrameParserTests' started at 2026-10-09 02:12:37.995
+Test Suite 'SSEFrameParserTests' passed at 2026-10-09 02:12:38.398
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.403 (0.403) seconds
+Test Suite 'ScrubRailGeometryTests' started at 2026-10-09 02:12:38.398
+Test Suite 'ScrubRailGeometryTests' passed at 2026-10-09 02:12:38.399
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'SessionCreateCodableTests' started at 2026-10-09 02:12:38.399
+Test Suite 'SessionCreateCodableTests' passed at 2026-10-09 02:12:38.414
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.015 (0.015) seconds
+Test Suite 'SessionCreatedTasksCopyParityTests' started at 2026-10-09 02:12:38.414
+Test Suite 'SessionCreatedTasksCopyParityTests' passed at 2026-10-09 02:12:38.462
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.049 (0.049) seconds
+Test Suite 'SessionCreatedTasksTests' started at 2026-10-09 02:12:38.462
+Test Suite 'SessionCreatedTasksTests' passed at 2026-10-09 02:12:38.463
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionDetailCacheTests' started at 2026-10-09 02:12:38.463
+Test Suite 'SessionDetailCacheTests' passed at 2026-10-09 02:12:38.465
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SessionFolderAPIClientTests' started at 2026-10-09 02:12:38.465
+Test Suite 'SessionFolderAPIClientTests' passed at 2026-10-09 02:12:38.469
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'SessionFolderCodableTests' started at 2026-10-09 02:12:38.469
+Test Suite 'SessionFolderCodableTests' passed at 2026-10-09 02:12:38.792
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.323 (0.323) seconds
+Test Suite 'SessionFolderCopyTests' started at 2026-10-09 02:12:38.792
+Test Suite 'SessionFolderCopyTests' passed at 2026-10-09 02:12:38.793
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'SessionFolderGroupingTests' started at 2026-10-09 02:12:38.793
+Test Suite 'SessionFolderGroupingTests' passed at 2026-10-09 02:12:38.917
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.124 (0.124) seconds
+Test Suite 'SessionFolderNavigationTests' started at 2026-10-09 02:12:38.917
+Test Suite 'SessionFolderNavigationTests' passed at 2026-10-09 02:12:39.019
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'SessionFolderPageWiringTests' started at 2026-10-09 02:12:39.019
+Test Suite 'SessionFolderPageWiringTests' passed at 2026-10-09 02:12:40.053
+	 Executed 10 tests, with 0 failures (0 unexpected) in 1.033 (1.033) seconds
+Test Suite 'SessionFolderUpsertTests' started at 2026-10-09 02:12:40.053
+Test Suite 'SessionFolderUpsertTests' passed at 2026-10-09 02:12:40.155
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'SessionHeaderTests' started at 2026-10-09 02:12:40.155
+Test Suite 'SessionHeaderTests' passed at 2026-10-09 02:12:40.374
+	 Executed 28 tests, with 0 failures (0 unexpected) in 0.219 (0.219) seconds
+Test Suite 'SessionLifecycleAPIClientTests' started at 2026-10-09 02:12:40.374
+Test Suite 'SessionLifecycleAPIClientTests' passed at 2026-10-09 02:12:40.378
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'SessionLinePlainPreviewTests' started at 2026-10-09 02:12:40.378
+Test Suite 'SessionLinePlainPreviewTests' passed at 2026-10-09 02:12:40.480
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'SessionLineTests' started at 2026-10-09 02:12:40.480
+Test Suite 'SessionLineTests' passed at 2026-10-09 02:12:40.481
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionListHeaderBandWiringTests' started at 2026-10-09 02:12:40.481
+Test Suite 'SessionListHeaderBandWiringTests' passed at 2026-10-09 02:12:40.803
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.322 (0.322) seconds
+Test Suite 'SessionListSearchWiringTests' started at 2026-10-09 02:12:40.803
+Test Suite 'SessionListSearchWiringTests' passed at 2026-10-09 02:12:40.813
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.01 (0.01) seconds
+Test Suite 'SessionListingMemoTests' started at 2026-10-09 02:12:40.813
+Test Suite 'SessionListingMemoTests' passed at 2026-10-09 02:12:40.958
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.144 (0.144) seconds
+Test Suite 'SessionMessageCopyParityTests' started at 2026-10-09 02:12:40.958
+Test Suite 'SessionMessageCopyParityTests' passed at 2026-10-09 02:12:40.985
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.027 (0.027) seconds
+Test Suite 'SessionMessageTests' started at 2026-10-09 02:12:40.985
+Test Suite 'SessionMessageTests' passed at 2026-10-09 02:12:41.087
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'SessionMessageWiringTests' started at 2026-10-09 02:12:41.087
+Test Suite 'SessionMessageWiringTests' passed at 2026-10-09 02:12:41.321
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.234 (0.234) seconds
+Test Suite 'SessionMoveLogicTests' started at 2026-10-09 02:12:41.321
+Test Suite 'SessionMoveLogicTests' passed at 2026-10-09 02:12:41.323
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SessionMoveWiringTests' started at 2026-10-09 02:12:41.323
+Test Suite 'SessionMoveWiringTests' passed at 2026-10-09 02:12:41.741
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.419 (0.419) seconds
+Test Suite 'SessionPreviewImagesTests' started at 2026-10-09 02:12:41.741
+Test Suite 'SessionPreviewImagesTests' passed at 2026-10-09 02:12:41.854
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.113 (0.113) seconds
+Test Suite 'SessionProjectAPIClientTests' started at 2026-10-09 02:12:41.854
+Test Suite 'SessionProjectAPIClientTests' passed at 2026-10-09 02:12:41.855
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionProjectCodableTests' started at 2026-10-09 02:12:41.855
+Test Suite 'SessionProjectCodableTests' passed at 2026-10-09 02:12:42.161
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.306 (0.306) seconds
+Test Suite 'SessionProjectCopyParityTests' started at 2026-10-09 02:12:42.161
+Test Suite 'SessionProjectCopyParityTests' passed at 2026-10-09 02:12:42.365
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.204 (0.204) seconds
+Test Suite 'SessionProjectCopyTests' started at 2026-10-09 02:12:42.365
+Test Suite 'SessionProjectCopyTests' passed at 2026-10-09 02:12:42.366
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'SessionProjectGroupingTests' started at 2026-10-09 02:12:42.366
+Test Suite 'SessionProjectGroupingTests' passed at 2026-10-09 02:12:42.392
+	 Executed 25 tests, with 0 failures (0 unexpected) in 0.026 (0.026) seconds
+Test Suite 'SessionProjectLandingLineTests' started at 2026-10-09 02:12:42.392
+Test Suite 'SessionProjectLandingLineTests' passed at 2026-10-09 02:12:42.396
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'SessionProjectMembersTests' started at 2026-10-09 02:12:42.396
+Test Suite 'SessionProjectMembersTests' passed at 2026-10-09 02:12:42.397
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionProjectNavigationTests' started at 2026-10-09 02:12:42.397
+Test Suite 'SessionProjectNavigationTests' passed at 2026-10-09 02:12:42.397
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionProjectPageWiringTests' started at 2026-10-09 02:12:42.397
+Test Suite 'SessionProjectPageWiringTests' passed at 2026-10-09 02:12:42.779
+	 Executed 22 tests, with 0 failures (0 unexpected) in 0.382 (0.382) seconds
+Test Suite 'SessionProjectRefreshWiringTests' started at 2026-10-09 02:12:42.779
+Test Suite 'SessionProjectRefreshWiringTests' passed at 2026-10-09 02:12:42.783
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'SessionProjectSessionsAPIClientTests' started at 2026-10-09 02:12:42.783
+Test Suite 'SessionProjectSessionsAPIClientTests' passed at 2026-10-09 02:12:42.785
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SessionProjectUpsertTests' started at 2026-10-09 02:12:42.785
+Test Suite 'SessionProjectUpsertTests' passed at 2026-10-09 02:12:42.786
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+Test Suite 'SessionProviderChoicesTests' started at 2026-10-09 02:12:42.786
+Test Suite 'SessionProviderChoicesTests' passed at 2026-10-09 02:12:42.910
+	 Executed 54 tests, with 0 failures (0 unexpected) in 0.124 (0.124) seconds
+Test Suite 'SessionRequestCopyParityTests' started at 2026-10-09 02:12:42.910
+Test Suite 'SessionRequestCopyParityTests' passed at 2026-10-09 02:12:42.912
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SessionRequestTests' started at 2026-10-09 02:12:42.912
+Test Suite 'SessionRequestTests' passed at 2026-10-09 02:12:42.918
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+Test Suite 'SessionRequestWiringTests' started at 2026-10-09 02:12:42.918
+Test Suite 'SessionRequestWiringTests' passed at 2026-10-09 02:12:43.021
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.103 (0.103) seconds
+Test Suite 'SessionRunStartCopyParityTests' started at 2026-10-09 02:12:43.021
+Test Suite 'SessionRunStartCopyParityTests' passed at 2026-10-09 02:12:43.605
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.583 (0.583) seconds
+Test Suite 'SessionRunStartTests' started at 2026-10-09 02:12:43.605
+Test Suite 'SessionRunStartTests' passed at 2026-10-09 02:12:43.606
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionSearchCodableTests' started at 2026-10-09 02:12:43.606
+Test Suite 'SessionSearchCodableTests' passed at 2026-10-09 02:12:43.707
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'SessionSearchHighlightTests' started at 2026-10-09 02:12:43.707
+Test Suite 'SessionSearchHighlightTests' passed at 2026-10-09 02:12:43.708
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionStatusGlyphTests' started at 2026-10-09 02:12:43.708
+Test Suite 'SessionStatusGlyphTests' passed at 2026-10-09 02:12:43.710
+	 Executed 24 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SessionTagsTests' started at 2026-10-09 02:12:43.710
+Test Suite 'SessionTagsTests' passed at 2026-10-09 02:12:43.711
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionTaskCardTests' started at 2026-10-09 02:12:43.711
+Test Suite 'SessionTaskCardTests' passed at 2026-10-09 02:12:43.815
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.104 (0.104) seconds
+Test Suite 'SessionTimeGroupingTests' started at 2026-10-09 02:12:43.815
+Test Suite 'SessionTimeGroupingTests' passed at 2026-10-09 02:12:44.017
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.201 (0.201) seconds
+Test Suite 'SessionUpsertTests' started at 2026-10-09 02:12:44.017
+Test Suite 'SessionUpsertTests' passed at 2026-10-09 02:12:44.018
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SessionViewsTests' started at 2026-10-09 02:12:44.018
+Test Suite 'SessionViewsTests' passed at 2026-10-09 02:12:44.020
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SessionWatchingTests' started at 2026-10-09 02:12:44.020
+Test Suite 'SessionWatchingTests' passed at 2026-10-09 02:12:44.162
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.143 (0.143) seconds
+Test Suite 'SessionWorkspaceMoveTests' started at 2026-10-09 02:12:44.162
+Test Suite 'SessionWorkspaceMoveTests' passed at 2026-10-09 02:12:44.187
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.024 (0.024) seconds
+Test Suite 'SessionWorkspaceMoveWiringTests' started at 2026-10-09 02:12:44.187
+Test Suite 'SessionWorkspaceMoveWiringTests' passed at 2026-10-09 02:12:44.397
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.21 (0.21) seconds
+Test Suite 'SettingsCopyParityTests' started at 2026-10-09 02:12:44.397
+Test Suite 'SettingsCopyParityTests' passed at 2026-10-09 02:12:44.976
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.579 (0.579) seconds
+Test Suite 'SettingsHomeTests' started at 2026-10-09 02:12:44.976
+Test Suite 'SettingsHomeTests' passed at 2026-10-09 02:12:44.980
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'SettingsStackWiringTests' started at 2026-10-09 02:12:44.980
+Test Suite 'SettingsStackWiringTests' passed at 2026-10-09 02:12:45.925
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.945 (0.945) seconds
+Test Suite 'ShareCodableTests' started at 2026-10-09 02:12:45.925
+Test Suite 'ShareCodableTests' passed at 2026-10-09 02:12:45.926
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ShareEntriesWiringTests' started at 2026-10-09 02:12:45.926
+Test Suite 'ShareEntriesWiringTests' passed at 2026-10-09 02:12:45.988
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.062 (0.062) seconds
+Test Suite 'ShareLinksAPIClientTests' started at 2026-10-09 02:12:45.988
+Test Suite 'ShareLinksAPIClientTests' passed at 2026-10-09 02:12:45.992
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'ShareMarkdownTests' started at 2026-10-09 02:12:45.992
+Test Suite 'ShareMarkdownTests' passed at 2026-10-09 02:12:46.022
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.03 (0.03) seconds
+Test Suite 'SharePanelCopyParityTests' started at 2026-10-09 02:12:46.022
+Test Suite 'SharePanelCopyParityTests' passed at 2026-10-09 02:12:46.656
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.634 (0.634) seconds
+Test Suite 'SharePanelTests' started at 2026-10-09 02:12:46.656
+Test Suite 'SharePanelTests' passed at 2026-10-09 02:12:46.759
+	 Executed 24 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'SharePanelWiringTests' started at 2026-10-09 02:12:46.759
+Test Suite 'SharePanelWiringTests' passed at 2026-10-09 02:12:47.178
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.419 (0.419) seconds
+Test Suite 'SharedPoolAdapterTests' started at 2026-10-09 02:12:47.178
+Test Suite 'SharedPoolAdapterTests' passed at 2026-10-09 02:12:47.280
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'SharedPoolCopyParityTests' started at 2026-10-09 02:12:47.280
+Test Suite 'SharedPoolCopyParityTests' passed at 2026-10-09 02:12:47.491
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.21 (0.21) seconds
+Test Suite 'SharedPoolsTests' started at 2026-10-09 02:12:47.491
+Test Suite 'SharedPoolsTests' passed at 2026-10-09 02:12:48.165
+	 Executed 27 tests, with 0 failures (0 unexpected) in 0.674 (0.674) seconds
+Test Suite 'SkillsLogicTests' started at 2026-10-09 02:12:48.165
+Test Suite 'SkillsLogicTests' passed at 2026-10-09 02:12:48.523
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.358 (0.358) seconds
+Test Suite 'StartProjectCardCopyParityTests' started at 2026-10-09 02:12:48.523
+Test Suite 'StartProjectCardCopyParityTests' passed at 2026-10-09 02:12:48.762
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.239 (0.239) seconds
+Test Suite 'StartProjectTests' started at 2026-10-09 02:12:48.762
+Test Suite 'StartProjectTests' passed at 2026-10-09 02:12:49.708
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.945 (0.945) seconds
+Test Suite 'StartProjectWiringTests' started at 2026-10-09 02:12:49.708
+Test Suite 'StartProjectWiringTests' passed at 2026-10-09 02:12:50.218
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.51 (0.51) seconds
+Test Suite 'SteerDeliveryTests' started at 2026-10-09 02:12:50.218
+Test Suite 'SteerDeliveryTests' passed at 2026-10-09 02:12:51.320
+	 Executed 24 tests, with 0 failures (0 unexpected) in 1.102 (1.102) seconds
+Test Suite 'StickyQuestionHoldTests' started at 2026-10-09 02:12:51.320
+Test Suite 'StickyQuestionHoldTests' passed at 2026-10-09 02:12:51.611
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.291 (0.291) seconds
+Test Suite 'StickySummaryTests' started at 2026-10-09 02:12:51.611
+Test Suite 'StickySummaryTests' passed at 2026-10-09 02:12:51.953
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.341 (0.341) seconds
+Test Suite 'SubagentTranscriptTests' started at 2026-10-09 02:12:51.953
+Test Suite 'SubagentTranscriptTests' passed at 2026-10-09 02:12:52.432
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.479 (0.479) seconds
+Test Suite 'TagChipColorTests' started at 2026-10-09 02:12:52.432
+Test Suite 'TagChipColorTests' passed at 2026-10-09 02:12:52.705
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.273 (0.273) seconds
+Test Suite 'TailPinningTests' started at 2026-10-09 02:12:52.705
+Test Suite 'TailPinningTests' passed at 2026-10-09 02:12:52.706
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'TailPinningWiringTests' started at 2026-10-09 02:12:52.706
+Test Suite 'TailPinningWiringTests' passed at 2026-10-09 02:12:52.916
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.21 (0.21) seconds
+Test Suite 'TaskAPIClientTests' started at 2026-10-09 02:12:52.916
+Test Suite 'TaskAPIClientTests' passed at 2026-10-09 02:12:53.207
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.29 (0.29) seconds
+Test Suite 'TaskDetailCopyParityTests' started at 2026-10-09 02:12:53.207
+Test Suite 'TaskDetailCopyParityTests' passed at 2026-10-09 02:12:53.852
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.645 (0.645) seconds
+Test Suite 'TaskDetailLogicTests' started at 2026-10-09 02:12:53.852
+Test Suite 'TaskDetailLogicTests' passed at 2026-10-09 02:12:54.947
+	 Executed 27 tests, with 0 failures (0 unexpected) in 1.094 (1.094) seconds
+Test Suite 'TaskDetailWiringTests' started at 2026-10-09 02:12:54.947
+Test Suite 'TaskDetailWiringTests' passed at 2026-10-09 02:12:55.392
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.443 (0.443) seconds
+Test Suite 'TaskJudgmentCopyParityTests' started at 2026-10-09 02:12:55.392
+Test Suite 'TaskJudgmentCopyParityTests' passed at 2026-10-09 02:12:55.504
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.111 (0.111) seconds
+Test Suite 'TaskJudgmentTests' started at 2026-10-09 02:12:55.504
+Test Suite 'TaskJudgmentTests' passed at 2026-10-09 02:12:55.605
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'TaskListCopyParityTests' started at 2026-10-09 02:12:55.605
+Test Suite 'TaskListCopyParityTests' passed at 2026-10-09 02:12:56.129
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.524 (0.524) seconds
+Test Suite 'TaskListLogicTests' started at 2026-10-09 02:12:56.129
+Test Suite 'TaskListLogicTests' passed at 2026-10-09 02:12:56.134
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+Test Suite 'TaskListRulesTests' started at 2026-10-09 02:12:56.134
+Test Suite 'TaskListRulesTests' passed at 2026-10-09 02:12:56.139
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+Test Suite 'TaskPageIncrementalReducerTests' started at 2026-10-09 02:12:56.139
+Test Suite 'TaskPageIncrementalReducerTests' passed at 2026-10-09 02:12:56.143
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'TaskProgressCopyParityTests' started at 2026-10-09 02:12:56.143
+Test Suite 'TaskProgressCopyParityTests' passed at 2026-10-09 02:12:56.274
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.132 (0.132) seconds
+Test Suite 'TaskReopenTests' started at 2026-10-09 02:12:56.274
+Test Suite 'TaskReopenTests' passed at 2026-10-09 02:12:56.483
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.208 (0.208) seconds
+Test Suite 'TaskRunHandoffCopyParityTests' started at 2026-10-09 02:12:56.483
+Test Suite 'TaskRunHandoffCopyParityTests' passed at 2026-10-09 02:12:56.748
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.265 (0.265) seconds
+Test Suite 'TaskRunHandoffTests' started at 2026-10-09 02:12:56.748
+Test Suite 'TaskRunHandoffTests' passed at 2026-10-09 02:12:56.959
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.205 (0.205) seconds
+Test Suite 'TaskRunHandoffWiringTests' started at 2026-10-09 02:12:56.959
+Test Suite 'TaskRunHandoffWiringTests' passed at 2026-10-09 02:12:57.110
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.151 (0.151) seconds
+Test Suite 'TaskStartCopyParityTests' started at 2026-10-09 02:12:57.110
+Test Suite 'TaskStartCopyParityTests' passed at 2026-10-09 02:12:57.288
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.178 (0.178) seconds
+Test Suite 'TaskStartTests' started at 2026-10-09 02:12:57.288
+Test Suite 'TaskStartTests' passed at 2026-10-09 02:12:57.393
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.105 (0.105) seconds
+Test Suite 'TasksCodableTests' started at 2026-10-09 02:12:57.393
+Test Suite 'TasksCodableTests' passed at 2026-10-09 02:12:57.422
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.029 (0.029) seconds
+Test Suite 'TasksStackWiringTests' started at 2026-10-09 02:12:57.422
+Test Suite 'TasksStackWiringTests' passed at 2026-10-09 02:12:57.795
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.372 (0.372) seconds
+Test Suite 'TextFilePreviewTests' started at 2026-10-09 02:12:57.795
+Test Suite 'TextFilePreviewTests' passed at 2026-10-09 02:12:58.026
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.232 (0.232) seconds
+Test Suite 'ThinkingSummaryTests' started at 2026-10-09 02:12:58.026
+Test Suite 'ThinkingSummaryTests' passed at 2026-10-09 02:12:58.204
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.178 (0.178) seconds
+Test Suite 'ToastFeedTests' started at 2026-10-09 02:12:58.204
+Test Suite 'ToastFeedTests' passed at 2026-10-09 02:12:58.310
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.106 (0.106) seconds
+Test Suite 'ToastHostWiringTests' started at 2026-10-09 02:12:58.310
+Test Suite 'ToastHostWiringTests' passed at 2026-10-09 02:12:58.561
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.251 (0.251) seconds
+Test Suite 'ToolDisplayTests' started at 2026-10-09 02:12:58.562
+Test Suite 'ToolDisplayTests' passed at 2026-10-09 02:12:58.683
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.122 (0.122) seconds
+Test Suite 'ToolGroupSummaryTests' started at 2026-10-09 02:12:58.683
+Test Suite 'ToolGroupSummaryTests' passed at 2026-10-09 02:12:58.684
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'TopInsetClearOfRefreshWiringTests' started at 2026-10-09 02:12:58.684
+Test Suite 'TopInsetClearOfRefreshWiringTests' passed at 2026-10-09 02:12:58.731
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.047 (0.047) seconds
+Test Suite 'TranscriptDeepLinkTests' started at 2026-10-09 02:12:58.731
+Test Suite 'TranscriptDeepLinkTests' passed at 2026-10-09 02:12:58.912
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.181 (0.181) seconds
+Test Suite 'TranscriptReadOnceTests' started at 2026-10-09 02:12:58.912
+Test Suite 'TranscriptReadOnceTests' passed at 2026-10-09 02:12:58.996
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.085 (0.085) seconds
+Test Suite 'TranscriptReducerTests' started at 2026-10-09 02:12:58.996
+Test Suite 'TranscriptReducerTests' passed at 2026-10-09 02:12:59.405
+	 Executed 103 tests, with 0 failures (0 unexpected) in 0.407 (0.407) seconds
+Test Suite 'TranscriptRowsTests' started at 2026-10-09 02:12:59.405
+Test Suite 'TranscriptRowsTests' passed at 2026-10-09 02:12:59.625
+	 Executed 25 tests, with 0 failures (0 unexpected) in 0.22 (0.22) seconds
+Test Suite 'TranscriptScrollWiringTests' started at 2026-10-09 02:12:59.625
+Test Suite 'TranscriptScrollWiringTests' passed at 2026-10-09 02:12:59.853
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.228 (0.228) seconds
+Test Suite 'TranscriptStoreTests' started at 2026-10-09 02:12:59.853
+Test Suite 'TranscriptStoreTests' passed at 2026-10-09 02:13:00.016
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.163 (0.163) seconds
+Test Suite 'TranscriptThinkingTests' started at 2026-10-09 02:13:00.016
+Test Suite 'TranscriptThinkingTests' passed at 2026-10-09 02:13:00.136
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.119 (0.119) seconds
+Test Suite 'TurnEndOutcomeTests' started at 2026-10-09 02:13:00.136
+Test Suite 'TurnEndOutcomeTests' passed at 2026-10-09 02:13:00.157
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.021 (0.021) seconds
+Test Suite 'TypingFoldWiringTests' started at 2026-10-09 02:13:00.157
+Test Suite 'TypingFoldWiringTests' passed at 2026-10-09 02:13:00.308
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.151 (0.151) seconds
+Test Suite 'UnifiedDiffTests' started at 2026-10-09 02:13:00.308
+Test Suite 'UnifiedDiffTests' passed at 2026-10-09 02:13:00.409
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'UserTurnRowWiringTests' started at 2026-10-09 02:13:00.409
+Test Suite 'UserTurnRowWiringTests' passed at 2026-10-09 02:13:02.111
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.702 (1.702) seconds
+Test Suite 'WatchAPIClientTests' started at 2026-10-09 02:13:02.111
+Test Suite 'WatchAPIClientTests' passed at 2026-10-09 02:13:02.251
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.14 (0.14) seconds
+Test Suite 'WatchCodableTests' started at 2026-10-09 02:13:02.251
+Test Suite 'WatchCodableTests' passed at 2026-10-09 02:13:02.297
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.047 (0.047) seconds
+Test Suite 'WatchContractTests' started at 2026-10-09 02:13:02.297
+Test Suite 'WatchContractTests' passed at 2026-10-09 02:13:02.698
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.4 (0.4) seconds
+Test Suite 'WatchDeepLinkTests' started at 2026-10-09 02:13:02.698
+Test Suite 'WatchDeepLinkTests' passed at 2026-10-09 02:13:02.817
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.119 (0.119) seconds
+Test Suite 'WatchEditingTests' started at 2026-10-09 02:13:02.817
+Test Suite 'WatchEditingTests' passed at 2026-10-09 02:13:02.818
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'WatchProjectionTests' started at 2026-10-09 02:13:02.818
+Test Suite 'WatchProjectionTests' passed at 2026-10-09 02:13:03.340
+	 Executed 25 tests, with 0 failures (0 unexpected) in 0.522 (0.522) seconds
+Test Suite 'WatchStripCopyParityTests' started at 2026-10-09 02:13:03.340
+Test Suite 'WatchStripCopyParityTests' passed at 2026-10-09 02:13:03.748
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.408 (0.408) seconds
+Test Suite 'WatchWakeCopyParityTests' started at 2026-10-09 02:13:03.748
+Test Suite 'WatchWakeCopyParityTests' passed at 2026-10-09 02:13:04.441
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.693 (0.693) seconds
+Test Suite 'WatchWakeTests' started at 2026-10-09 02:13:04.442
+Test Suite 'WatchWakeTests' passed at 2026-10-09 02:13:04.972
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.53 (0.53) seconds
+Test Suite 'WatchWiringTests' started at 2026-10-09 02:13:04.972
+Test Suite 'WatchWiringTests' passed at 2026-10-09 02:13:05.088
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.116 (0.116) seconds
+Test Suite 'WikiAPIClientTests' started at 2026-10-09 02:13:05.088
+Test Suite 'WikiAPIClientTests' passed at 2026-10-09 02:13:05.329
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.242 (0.242) seconds
+Test Suite 'WikiArticlesContractTests' started at 2026-10-09 02:13:05.330
+Test Suite 'WikiArticlesContractTests' passed at 2026-10-09 02:13:05.522
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.192 (0.192) seconds
+Test Suite 'WikiArticlesCopyParityTests' started at 2026-10-09 02:13:05.522
+Test Suite 'WikiArticlesCopyParityTests' passed at 2026-10-09 02:13:06.083
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.561 (0.561) seconds
+Test Suite 'WikiCodableTests' started at 2026-10-09 02:13:06.083
+Test Suite 'WikiCodableTests' passed at 2026-10-09 02:13:06.359
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.276 (0.276) seconds
+Test Suite 'WikiContractTests' started at 2026-10-09 02:13:06.359
+Test Suite 'WikiContractTests' passed at 2026-10-09 02:13:06.857
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.497 (0.497) seconds
+Test Suite 'WikiCopyParityTests' started at 2026-10-09 02:13:06.857
+Test Suite 'WikiCopyParityTests' passed at 2026-10-09 02:13:08.448
+	 Executed 21 tests, with 0 failures (0 unexpected) in 1.59 (1.59) seconds
+Test Suite 'WikiDecisionRefusalTests' started at 2026-10-09 02:13:08.448
+Test Suite 'WikiDecisionRefusalTests' passed at 2026-10-09 02:13:08.450
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'WikiDocsContractTests' started at 2026-10-09 02:13:08.450
+Test Suite 'WikiDocsContractTests' passed at 2026-10-09 02:13:08.496
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.047 (0.047) seconds
+Test Suite 'WikiDocsCopyParityTests' started at 2026-10-09 02:13:08.496
+Test Suite 'WikiDocsCopyParityTests' passed at 2026-10-09 02:13:09.219
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.723 (0.723) seconds
+Test Suite 'WikiHealthCopyParityTests' started at 2026-10-09 02:13:09.219
+Test Suite 'WikiHealthCopyParityTests' passed at 2026-10-09 02:13:09.631
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.412 (0.412) seconds
+Test Suite 'WikiHomeWindowTests' started at 2026-10-09 02:13:09.631
+Test Suite 'WikiHomeWindowTests' passed at 2026-10-09 02:13:09.641
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.01 (0.01) seconds
+Test Suite 'WikiLogicTests' started at 2026-10-09 02:13:09.641
+Test Suite 'WikiLogicTests' passed at 2026-10-09 02:13:10.321
+	 Executed 24 tests, with 0 failures (0 unexpected) in 0.68 (0.68) seconds
+Test Suite 'WikiPlanContractTests' started at 2026-10-09 02:13:10.321
+Test Suite 'WikiPlanContractTests' passed at 2026-10-09 02:13:10.906
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.585 (0.585) seconds
+Test Suite 'WikiPlanCopyParityTests' started at 2026-10-09 02:13:10.906
+Test Suite 'WikiPlanCopyParityTests' passed at 2026-10-09 02:13:12.360
+	 Executed 16 tests, with 0 failures (0 unexpected) in 1.453 (1.453) seconds
+Test Suite 'WikiReviewModeCopyParityTests' started at 2026-10-09 02:13:12.360
+Test Suite 'WikiReviewModeCopyParityTests' passed at 2026-10-09 02:13:12.657
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.297 (0.297) seconds
+Test Suite 'WikiServerExecutionCopyParityTests' started at 2026-10-09 02:13:12.657
+Test Suite 'WikiServerExecutionCopyParityTests' passed at 2026-10-09 02:13:13.028
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.371 (0.371) seconds
+Test Suite 'WikiSpaceLogicTests' started at 2026-10-09 02:13:13.028
+Test Suite 'WikiSpaceLogicTests' passed at 2026-10-09 02:13:13.136
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.108 (0.108) seconds
+Test Suite 'WikiWiringTests' started at 2026-10-09 02:13:13.136
+Test Suite 'WikiWiringTests' passed at 2026-10-09 02:13:13.718
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.582 (0.582) seconds
+Test Suite 'WorkspaceActivityLogicTests' started at 2026-10-09 02:13:13.718
+Test Suite 'WorkspaceActivityLogicTests' passed at 2026-10-09 02:13:13.863
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.146 (0.146) seconds
+Test Suite 'WorktreeBarLogicTests' started at 2026-10-09 02:13:13.863
+Test Suite 'WorktreeBarLogicTests' passed at 2026-10-09 02:13:14.037
+	 Executed 41 tests, with 0 failures (0 unexpected) in 0.174 (0.174) seconds
+Test Suite 'WorktreeCommitToastWiringTests' started at 2026-10-09 02:13:14.037
+Test Suite 'WorktreeCommitToastWiringTests' passed at 2026-10-09 02:13:14.144
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.107 (0.107) seconds
+Test Suite 'WorktreeFileTests' started at 2026-10-09 02:13:14.144
+Test Suite 'WorktreeFileTests' passed at 2026-10-09 02:13:14.146
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'debug.xctest' passed at 2026-10-09 02:13:14.146
+	 Executed 3475 tests, with 5 tests skipped and 0 failures (0 unexpected) in 73.985 (73.985) seconds
+Test Suite 'All tests' passed at 2026-10-09 02:13:14.150
+	 Executed 3475 tests, with 5 tests skipped and 0 failures (0 unexpected) in 73.985 (73.985) seconds

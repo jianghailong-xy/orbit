@@ -90,7 +90,11 @@ func fetchKimiDefaultModel() (string, error) {
 	if kimiUsesEnvModel(nil) {
 		return envValueWithAgentOverride(nil, "KIMI_MODEL_NAME"), nil
 	}
-	home := strings.TrimSpace(os.Getenv("KIMI_CODE_HOME"))
+	// The account the model list is read on (kimiCatalogHome), so the default is one of its models.
+	home := kimiCatalogHome()
+	if home == "" {
+		home = strings.TrimSpace(os.Getenv("KIMI_CODE_HOME"))
+	}
 	if home == "" {
 		if user := userHome(); user != "" {
 			home = filepath.Join(user, ".kimi-code")

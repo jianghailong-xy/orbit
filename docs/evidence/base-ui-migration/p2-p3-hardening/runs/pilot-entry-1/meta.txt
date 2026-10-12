@@ -1,0 +1,12 @@
+label=pilot-entry-1
+head=d6a764624659bfad274e67fce4a8b6dfd15004ad
+branch=orbit/p2-p3-select-menu-tab-3336b7
+status_begin
+  ?? docs/evidence/base-ui-migration/p2-p3-hardening/
+status_end
+command=bash docs/evidence/base-ui-migration/p2-p3-hardening/tools/netns.sh 'cd src/web && env -u FORCE_COLOR NO_COLOR=1 P32_SNAPSHOTS=/var/tmp/p2p3-hardening/pilot-entry-1/shots P32_OUTPUT=/var/tmp/p2p3-hardening/pilot-entry-1/pw P32_PORT=4291 nice -n -10 npx playwright test -c ui-migration/pilot.config.mjs --update-snapshots=all'
+start=2026-10-07T12:19:50Z
+load_start=20.18 17.56 19.43
+end=2026-10-07T12:23:28Z
+load_end=12.05 14.47 17.76
+exit=0

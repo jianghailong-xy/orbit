@@ -1,0 +1,959 @@
+[
+ {
+  "file": "chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+  "differentPixels": 12,
+  "maxChannelDelta": 1,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 12,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 654,
+    "y": 188,
+    "width": 2,
+    "height": 4,
+    "pixels": 6
+   },
+   {
+    "x": 654,
+    "y": 212,
+    "width": 3,
+    "height": 4,
+    "pixels": 6
+   }
+  ]
+ },
+ {
+  "file": "chromium-dark-desktop--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-attention.png",
+  "differentPixels": 24,
+  "maxChannelDelta": 1,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 24,
+  "pillTest": false,
+  "highlightBaseline": 2610,
+  "highlightFix": 2610,
+  "clusters": [
+   {
+    "x": 1182,
+    "y": 814,
+    "width": 6,
+    "height": 6,
+    "pixels": 9
+   },
+   {
+    "x": 1070,
+    "y": 814,
+    "width": 6,
+    "height": 6,
+    "pixels": 8
+   },
+   {
+    "x": 1070,
+    "y": 790,
+    "width": 2,
+    "height": 4,
+    "pixels": 5
+   },
+   {
+    "x": 1186,
+    "y": 793,
+    "width": 2,
+    "height": 1,
+    "pixels": 2
+   }
+  ]
+ },
+ {
+  "file": "chromium-dark-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+  "differentPixels": 471,
+  "maxChannelDelta": 47,
+  "insideNotificationArea": 471,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 1196,
+    "y": 28,
+    "width": 51,
+    "height": 11,
+    "pixels": 266
+   },
+   {
+    "x": 1127,
+    "y": 29,
+    "width": 25,
+    "height": 13,
+    "pixels": 156
+   },
+   {
+    "x": 1167,
+    "y": 31,
+    "width": 9,
+    "height": 11,
+    "pixels": 49
+   }
+  ]
+ },
+ {
+  "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+  "differentPixels": 4314,
+  "maxChannelDelta": 46,
+  "insideNotificationArea": 3808,
+  "outsideNotificationArea": 506,
+  "pillTest": true,
+  "highlightBaseline": 323,
+  "highlightFix": 323,
+  "clusters": [
+   {
+    "x": 1109,
+    "y": 276,
+    "width": 171,
+    "height": 38,
+    "pixels": 2332
+   },
+   {
+    "x": 1177,
+    "y": 404,
+    "width": 87,
+    "height": 22,
+    "pixels": 1843
+   },
+   {
+    "x": 951,
+    "y": 221,
+    "width": 8,
+    "height": 25,
+    "pixels": 31
+   },
+   {
+    "x": 1243,
+    "y": 222,
+    "width": 8,
+    "height": 7,
+    "pixels": 14
+   }
+  ]
+ },
+ {
+  "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+  "differentPixels": 1986,
+  "maxChannelDelta": 46,
+  "insideNotificationArea": 1966,
+  "outsideNotificationArea": 20,
+  "pillTest": true,
+  "highlightBaseline": 323,
+  "highlightFix": 323,
+  "clusters": [
+   {
+    "x": 1190,
+    "y": 268,
+    "width": 74,
+    "height": 22,
+    "pixels": 1557
+   },
+   {
+    "x": 1169,
+    "y": 164,
+    "width": 78,
+    "height": 14,
+    "pixels": 409
+   },
+   {
+    "x": 521,
+    "y": 320,
+    "width": 4,
+    "height": 2,
+    "pixels": 6
+   },
+   {
+    "x": 374,
+    "y": 346,
+    "width": 2,
+    "height": 4,
+    "pixels": 5
+   }
+  ]
+ },
+ {
+  "file": "chromium-dark-desktop--retained-closed-overlays-release-notifications-and-normal-motion-settles-at-the-original-origin--retained-reopened-with-motion.png",
+  "differentPixels": 35,
+  "maxChannelDelta": 2,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 35,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 750,
+    "y": 178,
+    "width": 6,
+    "height": 6,
+    "pixels": 12
+   },
+   {
+    "x": 631,
+    "y": 179,
+    "width": 6,
+    "height": 5,
+    "pixels": 11
+   },
+   {
+    "x": 753,
+    "y": 154,
+    "width": 3,
+    "height": 4,
+    "pixels": 7
+   },
+   {
+    "x": 631,
+    "y": 154,
+    "width": 2,
+    "height": 3,
+    "pixels": 5
+   }
+  ]
+ },
+ {
+  "file": "chromium-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+  "differentPixels": 136,
+  "maxChannelDelta": 45,
+  "insideNotificationArea": 136,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 154,
+    "y": 71,
+    "width": 16,
+    "height": 11,
+    "pixels": 116
+   },
+   {
+    "x": 231,
+    "y": 71,
+    "width": 5,
+    "height": 8,
+    "pixels": 20
+   }
+  ]
+ },
+ {
+  "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+  "differentPixels": 3396,
+  "maxChannelDelta": 2,
+  "insideNotificationArea": 3396,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 355,
+  "highlightFix": 355,
+  "clusters": [
+   {
+    "x": 0,
+    "y": 195,
+    "width": 390,
+    "height": 34,
+    "pixels": 3336
+   },
+   {
+    "x": 24,
+    "y": 346,
+    "width": 3,
+    "height": 20,
+    "pixels": 12
+   },
+   {
+    "x": 125,
+    "y": 320,
+    "width": 20,
+    "height": 3,
+    "pixels": 11
+   },
+   {
+    "x": 24,
+    "y": 386,
+    "width": 6,
+    "height": 6,
+    "pixels": 11
+   }
+  ]
+ },
+ {
+  "file": "chromium-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--folded-warning.png",
+  "differentPixels": 35,
+  "maxChannelDelta": 47,
+  "insideNotificationArea": 35,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 703,
+  "highlightFix": 703,
+  "clusters": [
+   {
+    "x": 178,
+    "y": 71,
+    "width": 6,
+    "height": 8,
+    "pixels": 35
+   }
+  ]
+ },
+ {
+  "file": "chromium-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+  "differentPixels": 9,
+  "maxChannelDelta": 2,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 9,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 406,
+    "y": 301,
+    "width": 4,
+    "height": 3,
+    "pixels": 6
+   },
+   {
+    "x": 512,
+    "y": 302,
+    "width": 4,
+    "height": 2,
+    "pixels": 3
+   }
+  ]
+ },
+ {
+  "file": "chromium-light-desktop--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+  "differentPixels": 474,
+  "maxChannelDelta": 60,
+  "insideNotificationArea": 474,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 1196,
+    "y": 28,
+    "width": 51,
+    "height": 11,
+    "pixels": 268
+   },
+   {
+    "x": 1127,
+    "y": 29,
+    "width": 25,
+    "height": 13,
+    "pixels": 156
+   },
+   {
+    "x": 1167,
+    "y": 31,
+    "width": 9,
+    "height": 11,
+    "pixels": 50
+   }
+  ]
+ },
+ {
+  "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+  "differentPixels": 3078,
+  "maxChannelDelta": 61,
+  "insideNotificationArea": 2598,
+  "outsideNotificationArea": 480,
+  "pillTest": true,
+  "highlightBaseline": 176,
+  "highlightFix": 176,
+  "clusters": [
+   {
+    "x": 1177,
+    "y": 404,
+    "width": 87,
+    "height": 22,
+    "pixels": 1794
+   },
+   {
+    "x": 1169,
+    "y": 280,
+    "width": 107,
+    "height": 34,
+    "pixels": 707
+   },
+   {
+    "x": 1115,
+    "y": 288,
+    "width": 35,
+    "height": 20,
+    "pixels": 351
+   },
+   {
+    "x": 951,
+    "y": 221,
+    "width": 8,
+    "height": 25,
+    "pixels": 38
+   }
+  ]
+ },
+ {
+  "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+  "differentPixels": 1993,
+  "maxChannelDelta": 61,
+  "insideNotificationArea": 1962,
+  "outsideNotificationArea": 31,
+  "pillTest": true,
+  "highlightBaseline": 176,
+  "highlightFix": 176,
+  "clusters": [
+   {
+    "x": 1190,
+    "y": 268,
+    "width": 74,
+    "height": 22,
+    "pixels": 1508
+   },
+   {
+    "x": 1169,
+    "y": 164,
+    "width": 78,
+    "height": 14,
+    "pixels": 410
+   },
+   {
+    "x": 1244,
+    "y": 236,
+    "width": 7,
+    "height": 7,
+    "pixels": 13
+   },
+   {
+    "x": 1245,
+    "y": 215,
+    "width": 6,
+    "height": 7,
+    "pixels": 11
+   }
+  ]
+ },
+ {
+  "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+  "differentPixels": 779,
+  "maxChannelDelta": 2,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 779,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 679,
+    "y": 223,
+    "width": 110,
+    "height": 38,
+    "pixels": 229
+   },
+   {
+    "x": 426,
+    "y": 260,
+    "width": 125,
+    "height": 1,
+    "pixels": 125
+   },
+   {
+    "x": 426,
+    "y": 223,
+    "width": 124,
+    "height": 1,
+    "pixels": 124
+   },
+   {
+    "x": 566,
+    "y": 223,
+    "width": 103,
+    "height": 1,
+    "pixels": 103
+   }
+  ]
+ },
+ {
+  "file": "chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+  "differentPixels": 136,
+  "maxChannelDelta": 60,
+  "insideNotificationArea": 136,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 154,
+    "y": 71,
+    "width": 16,
+    "height": 11,
+    "pixels": 116
+   },
+   {
+    "x": 231,
+    "y": 71,
+    "width": 5,
+    "height": 8,
+    "pixels": 20
+   }
+  ]
+ },
+ {
+  "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+  "differentPixels": 602,
+  "maxChannelDelta": 2,
+  "insideNotificationArea": 602,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 176,
+  "highlightFix": 176,
+  "clusters": [
+   {
+    "x": 353,
+    "y": 199,
+    "width": 33,
+    "height": 24,
+    "pixels": 294
+   },
+   {
+    "x": 4,
+    "y": 199,
+    "width": 33,
+    "height": 24,
+    "pixels": 293
+   },
+   {
+    "x": 294,
+    "y": 389,
+    "width": 4,
+    "height": 3,
+    "pixels": 8
+   },
+   {
+    "x": 294,
+    "y": 360,
+    "width": 4,
+    "height": 3,
+    "pixels": 7
+   }
+  ]
+ },
+ {
+  "file": "chromium-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--folded-warning.png",
+  "differentPixels": 35,
+  "maxChannelDelta": 57,
+  "insideNotificationArea": 35,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 705,
+  "highlightFix": 705,
+  "clusters": [
+   {
+    "x": 178,
+    "y": 71,
+    "width": 6,
+    "height": 8,
+    "pixels": 35
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+  "differentPixels": 2014,
+  "maxChannelDelta": 39,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 2014,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 760,
+    "y": 216,
+    "width": 64,
+    "height": 32,
+    "pixels": 2014
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+  "differentPixels": 1998,
+  "maxChannelDelta": 61,
+  "insideNotificationArea": 1998,
+  "outsideNotificationArea": 0,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 1687,
+  "clusters": [
+   {
+    "x": 954,
+    "y": 69,
+    "width": 145,
+    "height": 14,
+    "pixels": 1998
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--before-exit.png",
+  "differentPixels": 733,
+  "maxChannelDelta": 5,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 733,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 142,
+    "y": 399,
+    "width": 115,
+    "height": 32,
+    "pixels": 733
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+  "differentPixels": 782,
+  "maxChannelDelta": 89,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 782,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 142,
+    "y": 399,
+    "width": 115,
+    "height": 32,
+    "pixels": 782
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+  "differentPixels": 1830,
+  "maxChannelDelta": 33,
+  "insideNotificationArea": 1354,
+  "outsideNotificationArea": 476,
+  "pillTest": true,
+  "highlightBaseline": 326,
+  "highlightFix": 326,
+  "clusters": [
+   {
+    "x": 1169,
+    "y": 404,
+    "width": 87,
+    "height": 22,
+    "pixels": 1830
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+  "differentPixels": 1543,
+  "maxChannelDelta": 33,
+  "insideNotificationArea": 1543,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 326,
+  "highlightFix": 326,
+  "clusters": [
+   {
+    "x": 1182,
+    "y": 268,
+    "width": 74,
+    "height": 22,
+    "pixels": 1543
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+  "differentPixels": 153,
+  "maxChannelDelta": 3,
+  "insideNotificationArea": 153,
+  "outsideNotificationArea": 0,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 0,
+    "y": 116,
+    "width": 11,
+    "height": 12,
+    "pixels": 40
+   },
+   {
+    "x": 349,
+    "y": 117,
+    "width": 11,
+    "height": 11,
+    "pixels": 39
+   },
+   {
+    "x": 0,
+    "y": 0,
+    "width": 10,
+    "height": 12,
+    "pixels": 37
+   },
+   {
+    "x": 350,
+    "y": 0,
+    "width": 10,
+    "height": 12,
+    "pixels": 37
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+  "differentPixels": 899168,
+  "maxChannelDelta": 19,
+  "insideNotificationArea": 118712,
+  "outsideNotificationArea": 780456,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 0,
+    "y": 0,
+    "width": 1272,
+    "height": 743,
+    "pixels": 899168
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+  "differentPixels": 77,
+  "maxChannelDelta": 3,
+  "insideNotificationArea": 77,
+  "outsideNotificationArea": 0,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 0,
+    "y": 116,
+    "width": 11,
+    "height": 12,
+    "pixels": 40
+   },
+   {
+    "x": 0,
+    "y": 0,
+    "width": 10,
+    "height": 12,
+    "pixels": 37
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+  "differentPixels": 869009,
+  "maxChannelDelta": 19,
+  "insideNotificationArea": 30449,
+  "outsideNotificationArea": 838560,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 0,
+    "y": 0,
+    "width": 977,
+    "height": 900,
+    "pixels": 869009
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+  "differentPixels": 1998,
+  "maxChannelDelta": 61,
+  "insideNotificationArea": 1998,
+  "outsideNotificationArea": 0,
+  "pillTest": false,
+  "highlightBaseline": 1687,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 74,
+    "y": 109,
+    "width": 145,
+    "height": 14,
+    "pixels": 1998
+   }
+  ]
+ },
+ {
+  "file": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+  "differentPixels": 4059,
+  "maxChannelDelta": 167,
+  "insideNotificationArea": 4059,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 87,
+    "y": 45,
+    "width": 212,
+    "height": 74,
+    "pixels": 4059
+   }
+  ]
+ },
+ {
+  "file": "webkit-light-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+  "differentPixels": 2016,
+  "maxChannelDelta": 41,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 2016,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 760,
+    "y": 216,
+    "width": 64,
+    "height": 32,
+    "pixels": 2016
+   }
+  ]
+ },
+ {
+  "file": "webkit-light-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+  "differentPixels": 2005,
+  "maxChannelDelta": 55,
+  "insideNotificationArea": 2005,
+  "outsideNotificationArea": 0,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 1710,
+  "clusters": [
+   {
+    "x": 954,
+    "y": 69,
+    "width": 145,
+    "height": 14,
+    "pixels": 2005
+   }
+  ]
+ },
+ {
+  "file": "webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--before-exit.png",
+  "differentPixels": 785,
+  "maxChannelDelta": 118,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 785,
+  "pillTest": false,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 142,
+    "y": 399,
+    "width": 115,
+    "height": 32,
+    "pixels": 785
+   }
+  ]
+ },
+ {
+  "file": "webkit-light-desktop--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-attention.png",
+  "differentPixels": 758,
+  "maxChannelDelta": 3,
+  "insideNotificationArea": 0,
+  "outsideNotificationArea": 758,
+  "pillTest": false,
+  "highlightBaseline": 2641,
+  "highlightFix": 2641,
+  "clusters": [
+   {
+    "x": 1070,
+    "y": 785,
+    "width": 118,
+    "height": 32,
+    "pixels": 758
+   }
+  ]
+ },
+ {
+  "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+  "differentPixels": 1820,
+  "maxChannelDelta": 16,
+  "insideNotificationArea": 1345,
+  "outsideNotificationArea": 475,
+  "pillTest": true,
+  "highlightBaseline": 178,
+  "highlightFix": 178,
+  "clusters": [
+   {
+    "x": 1169,
+    "y": 404,
+    "width": 87,
+    "height": 22,
+    "pixels": 1820
+   }
+  ]
+ },
+ {
+  "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+  "differentPixels": 1534,
+  "maxChannelDelta": 16,
+  "insideNotificationArea": 1534,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 178,
+  "highlightFix": 178,
+  "clusters": [
+   {
+    "x": 1182,
+    "y": 268,
+    "width": 74,
+    "height": 22,
+    "pixels": 1534
+   }
+  ]
+ },
+ {
+  "file": "webkit-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+  "differentPixels": 5152,
+  "maxChannelDelta": 224,
+  "insideNotificationArea": 5152,
+  "outsideNotificationArea": 0,
+  "pillTest": true,
+  "highlightBaseline": 0,
+  "highlightFix": 0,
+  "clusters": [
+   {
+    "x": 85,
+    "y": 42,
+    "width": 216,
+    "height": 80,
+    "pixels": 5152
+   }
+  ]
+ }
+]

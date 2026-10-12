@@ -39,6 +39,7 @@ import {
   checkpointLandingGate,
 } from '../projects/task-checkpoint.service';
 import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
+import { retireCandidatesLandedByReceipt } from '../projects/project-promotion.service';
 
 export interface RecordMergeReceiptInput {
   result: MergeReceiptResult;
@@ -407,6 +408,11 @@ export class MergeReceiptService {
         where: checkpointId ? { checkpointId, idempotencyKey } : { sessionId, idempotencyKey },
       });
       if (existing) {
+        // A replay ends what the first recording would have ended (M-T13), so a candidate left
+        // standing beside this receipt — by a build older than the rule — is retired by recording
+        // the same merge again. Only candidates older than the receipt: a replay never answers a
+        // question asked after the merge.
+        await retireCandidatesLandedByReceipt(db, existing);
         return { receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow), created: false };
       }
 
@@ -457,6 +463,10 @@ export class MergeReceiptService {
           },
         });
       }
+
+      // §3.3 M-T13: a merge made outside the merge card answers the candidate that was offering
+      // this branch, so the card stops asking — in the transaction that recorded it.
+      await retireCandidatesLandedByReceipt(db, created);
 
       return { receipt: mergeReceiptRow(created as unknown as MergeReceiptRow), created: true };
     };
@@ -573,6 +583,21 @@ export class MergeReceiptService {
       ],
       skipDuplicates: true,
     });
+    // §3.3 M-T13, as `record` does it: the Merge button put this branch on its target, so a
+    // candidate offering the same branch there is answered. Only a landed merge of a project's task
+    // can answer one; read back by the key the row was written under, so a redelivered result is
+    // judged by the time of the first one.
+    if (args.projectId && args.taskId && resultLanded(args.result)) {
+      const recorded = await tx.sessionMergeReceipt.findFirst({
+        where: args.checkpointId
+          ? { checkpointId: args.checkpointId, idempotencyKey }
+          : { sessionId: args.sessionId, idempotencyKey },
+        select: {
+          projectId: true, taskId: true, result: true, sourceBranch: true, targetBranch: true, createdAt: true,
+        },
+      });
+      if (recorded) await retireCandidatesLandedByReceipt(tx, recorded);
+    }
   }
 
   /**

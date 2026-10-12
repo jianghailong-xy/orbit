@@ -1,0 +1,21 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 3c550f375..f7bceb105 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -260,6 +260,7 @@ body {
+   width: 360px;
+   max-width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+   pointer-events: none;
++  will-change: transform;
+ }
+ .toast-viewport--narrow {
+   top: calc(env(safe-area-inset-top, 0px) + 56px);
+@@ -293,8 +294,6 @@ body {
+   font-size: 14px;
+   line-height: 20px;
+   text-align: start;
+-  /* Keep the original card's rasterization when its host enters the top layer. */
+-  will-change: transform;
+ }
+ :root[data-theme='dark'] .toast {
+   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);

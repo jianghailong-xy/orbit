@@ -1,0 +1,89 @@
+head: b5a39dd48c1a72a96afa45edeef3926eb3dc5792
+?? ui-migration/p32-reference.config.mjs
+P0 expected screenshots: 88 P0.2 originals, 152 main drift references, 12 accepted migration differences.
+
+Running 24 tests using 1 worker
+
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-profile-photo.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (999ms)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-approved.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.2s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-error.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (2.1s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-profile-photo.png, writing actual.
+  ✓   4 [chromium-light-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.2s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-approved.png, writing actual.
+  ✓   5 [chromium-light-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.2s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-error.png, writing actual.
+  ✓   6 [chromium-light-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.6s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-profile-photo.png, writing actual.
+  ✓   7 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.2s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-approved.png, writing actual.
+  ✓   8 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.5s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-error.png, writing actual.
+  ✓   9 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.9s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-profile-photo.png, writing actual.
+  ✓  10 [chromium-dark-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.1s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-approved.png, writing actual.
+  ✓  11 [chromium-dark-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.1s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-error.png, writing actual.
+  ✓  12 [chromium-dark-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.5s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-profile-photo.png, writing actual.
+  ✓  13 [webkit-light-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.7s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-approved.png, writing actual.
+  ✓  14 [webkit-light-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.7s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-error.png, writing actual.
+  ✓  15 [webkit-light-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (2.6s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-profile-photo.png, writing actual.
+  ✓  16 [webkit-light-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.3s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-approved.png, writing actual.
+  ✓  17 [webkit-light-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.3s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-error.png, writing actual.
+  ✓  18 [webkit-light-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (2.0s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-profile-photo.png, writing actual.
+  ✓  19 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.4s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-approved.png, writing actual.
+  ✓  20 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.7s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-error.png, writing actual.
+  ✓  21 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (2.4s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-profile-photo.png, writing actual.
+  ✓  22 [webkit-dark-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.4s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-approved.png, writing actual.
+  ✓  23 [webkit-dark-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.5s)
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-error.png, writing actual.
+  ✓  24 [webkit-dark-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (2.3s)
+
+  24 passed (42.6s)
+exit=0

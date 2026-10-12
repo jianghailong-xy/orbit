@@ -1,0 +1,81 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-09",
+ "task": "34blYpxEcHMAf4oafuC2W",
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-09",
+  "questions": [
+   "firstPageStylesheet.test.ts"
+  ]
+ },
+ "scan": {
+  "commit": "74517607b476861c12f9cb10068ce32170f9f669",
+  "scopeHash": "f161bd3eb2dc9c744334f136fc798eee3799185a02bca4bfd5d4e9db7fc78a48",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 755,
+   "productionFiles": 377,
+   "testFiles": 376,
+   "antdProductionFiles": 42,
+   "antdTestFiles": 60,
+   "antSelectorTestFiles": 27,
+   "antClassTestFiles": 28,
+   "iconProductionFiles": 111,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 238,
+   "hitLines": {
+    "ant-class": 209,
+    "ant-design-support": 19,
+    "ant-selector": 202,
+    "antd-reference": 222,
+    "icon-class": 82,
+    "icon-reference": 122,
+    "imperative-confirm": 11,
+    "imperative-feedback": 221,
+    "internal-ref": 4,
+    "provider": 73,
+    "rc-support": 233,
+    "ref-focus": 28,
+    "theme": 2,
+    "use-app": 6,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 137
+  }
+ },
+ "files": {
+  "src/web/src/firstPageStylesheet.test.ts": {
+   "status": "new",
+   "category": "test",
+   "types": [],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "3e5ee31207f37ba4047a33e059d79b65c5fb0213",
+     "short": "3e5ee3120",
+     "date": "2026-10-09",
+     "subject": "fix(web): one first-page stylesheet in import order, overlays ahead of index.css as before (P4.3b)",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "这个测试钉住首屏唯一样式表的顺序，期望里写着 antd/dist/reset.css（位于 main.tsx 先导入的三份样式与 index.css 之间），审计把这个名字记为 antd 引用；不是 antd 依赖。P6 从 main.tsx 去掉 antd reset 时，同时去掉期望里的这一项。",
+   "basis": "协调者 2026-10-09 判定，按 2026-10-07c.json 中 ProjectDoneConversation.test.tsx、2026-10-08b.json 中 ui/Empty.tsx（都归 P6）的先例；P4.3b 跟上项目 tip 15b7b5609 并合并 origin/main f1837de8e 后在交付上运行 --check-owners 时报出，P4.3b 报告协调者。"
+  }
+ },
+ "css": [],
+ "summary": {
+  "files": 1,
+  "cssLines": 0,
+  "owners": {
+   "P6": 1
+  }
+ }
+}

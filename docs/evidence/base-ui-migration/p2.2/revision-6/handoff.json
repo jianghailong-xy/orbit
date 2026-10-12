@@ -1,0 +1,32 @@
+{
+  "task": "34Za394q2ZEgr7TKprjkF",
+  "session": "7AupUKjAk7p2723PsPNlOD",
+  "criterion": {
+    "key": "1BvO6hYrlFnU60JqxQPUHt",
+    "text": "P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。"
+  },
+  "priorEvidence": {
+    "revision": 5,
+    "id": "2y9zTSDj1gjynzfXEsO79i",
+    "decision": "CONFIRM",
+    "decisionId": "2NaUXLkFqDaKclaHoNTyMk",
+    "confirmationComment": "34a4vbgnLbjEW09q7m63n",
+    "coordinatorReviewZip": "/root/.orbit/uploads/01a1023e-9bb2-75b0-8a60-7d4b29ba57ed/p22-r5-coordinator-review.zip",
+    "reviewZipSha256": "b68fa0e45bb1fa4a66a97739e78a83e3a24bbfa756de4ea508a6eeaaf2bde14d"
+  },
+  "integrationRequestComment": "34a53QxXhvLwZosgGvcaD",
+  "notificationTask": "34a3I43L28Ca0NpMy6Fe8",
+  "notificationSession": "7NMNsOj46z9JGPukyIjwm",
+  "notificationDelivery": "59c439e47515f15f581a76318df0ecad6b23e53e",
+  "notificationEvidence": "AIROWVvdLwDYVevWiNW4W",
+  "preparationNotes": [
+    "Initial sandbox git fast-forward was refused because worktree Git metadata is read-only; authorized escalated fast-forward succeeded without source edits.",
+    "Initial sandbox remote read failed DNS; authorized remote read succeeded.",
+    "Overlay rejected incompatible shared installation and installed the current lockfile privately; no source manifests changed."
+  ],
+  "notificationDecision": {
+    "decision": "CONFIRM",
+    "id": "6JwsO3z6CPm66tiYVZUrWd",
+    "fixedDelivery": "59c439e47515f15f581a76318df0ecad6b23e53e"
+  }
+}

@@ -1,0 +1,192 @@
+{
+  "signed-out": {
+    "id": "33zx0JhRhJo8rd25d3qAM",
+    "name": "Linux runner \u00b7 signed out",
+    "online": true,
+    "status": "ONLINE",
+    "version": "0.1.210",
+    "lastHeartbeatAt": "2026-10-04T03:00:00Z",
+    "engines": [
+      {
+        "engine": "antigravity",
+        "installed": true,
+        "version": "agy 1.2.16",
+        "auth": "no"
+      }
+    ],
+    "antigravity": {
+      "supported": true,
+      "installed": true,
+      "version": "agy 1.2.16",
+      "envKeyAvailable": false,
+      "authSource": null,
+      "googleLogin": "available"
+    }
+  },
+  "google": {
+    "id": "33zx0JhRhJo8rd25d3qAM",
+    "name": "Linux runner \u00b7 Google account",
+    "online": true,
+    "status": "ONLINE",
+    "version": "0.1.210",
+    "lastHeartbeatAt": "2026-10-04T03:00:00Z",
+    "engines": [
+      {
+        "engine": "antigravity",
+        "installed": true,
+        "version": "agy 1.2.16",
+        "auth": "yes",
+        "authSource": "google",
+        "planUsage": {
+          "provider": "antigravity",
+          "fetchedAt": "2026-10-04T03:00:00Z",
+          "buckets": [
+            {
+              "id": "gemini-weekly",
+              "window": "weekly",
+              "remainingFraction": 0.72,
+              "resetTime": "2026-10-09T03:00:00Z"
+            },
+            {
+              "id": "3p-5h",
+              "window": "5h",
+              "remainingFraction": 0.18,
+              "resetTime": "2026-10-04T08:00:00Z"
+            }
+          ]
+        }
+      }
+    ],
+    "antigravity": {
+      "supported": true,
+      "installed": true,
+      "version": "agy 1.2.16",
+      "envKeyAvailable": true,
+      "authSource": "google",
+      "googleLogin": "available"
+    }
+  },
+  "macos": {
+    "id": "33zx0JhRhJo8rd25d3qAM",
+    "name": "macOS runner",
+    "online": true,
+    "status": "ONLINE",
+    "version": "0.1.210",
+    "lastHeartbeatAt": "2026-10-04T03:00:00Z",
+    "engines": [
+      {
+        "engine": "antigravity",
+        "installed": true,
+        "version": "agy 1.2.16",
+        "auth": "no"
+      }
+    ],
+    "antigravity": {
+      "supported": true,
+      "installed": true,
+      "version": "agy 1.2.16",
+      "envKeyAvailable": false,
+      "authSource": null,
+      "googleLogin": "unsupported_platform"
+    }
+  },
+  "old": {
+    "id": "33zx0JhRhJo8rd25d3qAM",
+    "name": "Older runner",
+    "online": true,
+    "status": "ONLINE",
+    "version": "0.1.210",
+    "lastHeartbeatAt": "2026-10-04T03:00:00Z",
+    "engines": [
+      {
+        "engine": "antigravity",
+        "installed": true,
+        "version": "agy 1.2.16",
+        "auth": "no"
+      }
+    ],
+    "antigravity": {
+      "supported": true,
+      "installed": true,
+      "version": "agy 1.2.16",
+      "envKeyAvailable": false,
+      "authSource": null,
+      "googleLogin": "needs_update"
+    }
+  },
+  "env-key": {
+    "id": "33zx0JhRhJo8rd25d3qAM",
+    "name": "Linux runner \u00b7 env key",
+    "online": true,
+    "status": "ONLINE",
+    "version": "0.1.210",
+    "lastHeartbeatAt": "2026-10-04T03:00:00Z",
+    "engines": [
+      {
+        "engine": "antigravity",
+        "installed": true,
+        "version": "agy 1.2.16",
+        "auth": "yes",
+        "authSource": "env_key"
+      }
+    ],
+    "antigravity": {
+      "supported": true,
+      "installed": true,
+      "version": "agy 1.2.16",
+      "envKeyAvailable": true,
+      "authSource": "env_key",
+      "googleLogin": "available"
+    }
+  },
+  "unknown": {
+    "id": "33zx0JhRhJo8rd25d3qAM",
+    "name": "Linux runner \u00b7 unknown",
+    "online": true,
+    "status": "ONLINE",
+    "version": "0.1.210",
+    "lastHeartbeatAt": "2026-10-04T03:00:00Z",
+    "engines": [
+      {
+        "engine": "antigravity",
+        "installed": true,
+        "version": "agy 1.2.16",
+        "auth": "unknown",
+        "authSource": "google"
+      }
+    ],
+    "antigravity": {
+      "supported": true,
+      "installed": true,
+      "version": "agy 1.2.16",
+      "envKeyAvailable": true,
+      "authSource": "google",
+      "googleLogin": "available"
+    }
+  },
+  "expired": {
+    "id": "33zx0JhRhJo8rd25d3qAM",
+    "name": "Linux runner \u00b7 expired Google sign-in",
+    "online": true,
+    "status": "ONLINE",
+    "version": "0.1.210",
+    "lastHeartbeatAt": "2026-10-04T03:00:00Z",
+    "engines": [
+      {
+        "engine": "antigravity",
+        "installed": true,
+        "version": "agy 1.2.16",
+        "auth": "no",
+        "authSource": "google"
+      }
+    ],
+    "antigravity": {
+      "supported": true,
+      "installed": true,
+      "version": "agy 1.2.16",
+      "envKeyAvailable": false,
+      "authSource": "google",
+      "googleLogin": "available"
+    }
+  }
+}

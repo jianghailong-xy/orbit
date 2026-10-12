@@ -21,6 +21,10 @@ import {
 } from '@prisma/client';
 import {
   AgentProvider,
+  ENGINE_CLI_NAMES,
+  isAccountEngine,
+  isEngine,
+  keyDialect,
   planUsageBlockedUntil,
   planUsageReported,
   RunEventType,
@@ -30,6 +34,7 @@ import {
   uuidToBase62,
   type ControlTaskChanged,
   type PlanUsage,
+  withEnginePlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
 import {
@@ -46,10 +51,12 @@ import {
 } from '../common/transaction-retry';
 import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabledSql } from '../common/model-routing-switch';
+import type { AuthCredential } from '../common/current-user.decorator';
 import {
   DEFAULT_AGENT_PROVIDER,
   agentProviderSeed,
   lastProviderByWorkspace,
+  type AgentProviderSeed,
 } from '../workspaces/workspace-provider';
 import {
   foremanPolicyConflict,
@@ -63,7 +70,9 @@ import {
 } from '../projects/task-aggregation-writer';
 import {
   INTEGRATION_ITEM_KINDS,
+  SESSION_ENDING_SELECT,
   recordTaskFailure,
+  sessionHasEnded,
 } from '../projects/project-open-item';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
@@ -80,6 +89,7 @@ import {
   projectStandsStill,
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
+import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -96,19 +106,29 @@ import {
 import { TaskListPauseProjectorService } from '../task-lists/task-list-pause-projector.service';
 import type { HandoffApproval } from '../projects/project-scope-decision';
 import {
+  decideHandoffAcceptance,
   dependencyCrossingRefusal,
   handoffPayloadDigest,
+  type HandoffProjectFacts,
   type HandoffRequestIdentity,
 } from '../projects/project-handoff';
 import {
   ProjectHandoffService,
+  type HandoffAnswer,
   type HandoffAuthority,
   type HandoffDeclaration,
 } from '../projects/project-handoff.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { storeDerivedProjectStatus } from '../projects/project-done-derived';
+import { completionEvidenceRevisedFact } from '../projects/completion-input';
+import { criterionStandingRefusal, quotedCriterion } from './task-evidence-decision';
 import {
-} from '../projects/completion-input';
+  arrivalMessage,
+  movedEvidenceTurnId,
+  resubmitMessage,
+  resubmitStandard,
+  type MovedEvidence,
+} from './moved-task-evidence';
 import {
   planPreflightRefusalBody,
   planPreflightRefusals,
@@ -152,6 +172,7 @@ import {
   taskWorkRefusal,
 } from './task-supersession';
 import {
+  TASK_FACT_SCOPE_MOVED,
   assertAcceptanceScopeUnmoved,
   cascadedTaskClosure,
   touchesAcceptanceFact,
@@ -204,6 +225,7 @@ import {
   taskAlreadyRunning,
   taskRunFingerprint,
   taskRunInProgress,
+  taskRunEngine,
   taskRunPinConflict,
   taskRunUnsettled,
   TaskRunFenceLost,
@@ -258,9 +280,27 @@ import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
-import { accountEnvVar } from '../providers/account';
+import { ACCOUNT_CHOICE, accountEnvVar } from '../providers/account';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
-import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import {
+  accountPoolRuntime,
+  adminOnlyProviderRefusal,
+  engineIncompatibleMessage,
+  isBuiltinProvider,
+  keyCredential,
+  usableProviderScope,
+  usableProviderSql,
+} from '../providers/custom-provider';
+import {
+  credentialPairLabels,
+  resolvedCredentialEngines,
+  resolveEngineProvider,
+  resolveTaskPin,
+  taskPinCredential,
+  type TaskPinWrite,
+} from '../providers/engine-provider';
+import { sessionEngine } from '../providers/session-engine';
 import {
   criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
@@ -273,6 +313,7 @@ import {
   verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
+import { buildTaskExecutionPrompt } from './task-execution-prompt';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
@@ -340,6 +381,12 @@ type ScopeWriteInput = {
    * and by nothing else — a write that declares no crossing never reaches them.
    */
   approval?: HandoffApproval | null;
+  /**
+   * A move request: whether the task serves one of the criteria of the project it would leave, as
+   * read from its row (`ProjectHandoffService.servesCriterionOf`). Read by R8 for a move out of a
+   * settled project, and by nothing else.
+   */
+  servesSourceCriterion?: boolean;
 };
 
 /** Unit L4: what a write that was allowed under an approval must spend inside its transaction. */
@@ -347,6 +394,15 @@ type HandoffSpend = {
   authority: HandoffAuthority;
   handoffId: string;
 };
+
+/**
+ * Unit L4: what a request to MOVE a task may carry — the destination, the declaration, and the
+ * target project's criterion the task will serve there (account owner, 2026-10-06). `scopeToken`
+ * is the scope claim every write may present (§2 SC3), not a field of the task.
+ */
+const MOVE_REQUEST_FIELDS: ReadonlySet<string> = new Set([
+  'projectId', 'handoff', 'criterionKey', 'scopeToken',
+]);
 
 /**
  * Unit L4: the cross-project prerequisite edges a plan asks for.
@@ -456,116 +512,109 @@ type ScopeWorld = {
   mode: ReturnType<typeof projectScopeMode>;
 };
 
-/** What a planned run needs off a task to dispatch it: its identity, and the provider/model pin
- *  that overrides the assignee workspace's own (null on both = inherit from the workspace). */
+/**
+ * Whether a run on `running` is not what the task is pinned to (docs/provider-engine-contract.md §3.5):
+ * another credential than the provider pin, or another engine than the engine pin. Named for the
+ * refusal by slug, and as `<slug> on <CLI>` where both sides spend the same credential on different
+ * engines; an engine pinned alone is named by its CLI. Null when the run is the pinned one.
+ */
+function pinConflict(
+  task: { engine?: string | null; provider?: string | null },
+  running: { engine: AgentProvider | null; provider: string },
+): { pinned: string; running: string } | null {
+  const pinnedEngine = isEngine(task.engine) ? task.engine : null;
+  const providerMoved = !!task.provider && task.provider !== running.provider;
+  const engineMoved = !!pinnedEngine && !!running.engine && pinnedEngine !== running.engine;
+  if (!providerMoved && !engineMoved) return null;
+  if (!task.provider) {
+    return {
+      pinned: ENGINE_CLI_NAMES[pinnedEngine!],
+      running: running.engine ? `${running.provider} on ${ENGINE_CLI_NAMES[running.engine]}` : running.provider,
+    };
+  }
+  const [pinned, runningLabel] = credentialPairLabels({ engine: pinnedEngine, provider: task.provider }, running);
+  return { pinned, running: runningLabel };
+}
+
+/** The credential a task's next fresh run would spend (dispatchEngines), and whether it is a runner's
+ *  own sign-in to an engine — the one kind of credential a runner reports the quota of. */
+type DispatchCredential = { provider: string; login: boolean };
+
+/**
+ * The credential a task's run spends when nothing routes it (docs/provider-engine-contract.md §1.2): its
+ * provider pin; else, for an engine pinned alone, that engine's own credential — its sign-in, OpenCode's
+ * own configuration, DeepSeek Harness's default key; else the Agent's seed. A runner sign-in is a slug
+ * that names an engine keeping accounts, and — for a seed — the one the session said was built in.
+ */
+function dispatchCredentialOf(
+  pins: { engine: string | null; provider: string | null },
+  seed: { provider: string; providerBuiltin: boolean },
+): DispatchCredential {
+  if (pins.provider) return { provider: pins.provider, login: isAccountEngine(pins.provider) };
+  if (isEngine(pins.engine)) return { provider: pins.engine, login: isAccountEngine(pins.engine) };
+  return { provider: seed.provider, login: seed.providerBuiltin && isAccountEngine(seed.provider) };
+}
+
+/** What a planned run needs off a task to dispatch it: its identity, and the engine/provider/model
+ *  pins that override the assignee workspace's own (null on all = inherit from the workspace). */
 type TaskRunTarget = {
   id: string;
   title: string;
+  /** The engine pin (Task.engine): the CLI the run is created on, beside the credential pin. */
+  engine?: string | null;
   provider?: string | null;
   model?: string | null;
   /** What a fresh Session is created with instead of the pins, when smart selection routed it
-   *  (docs/model-routing-design.md §8.3). The pins stay what a refusal names: nobody pinned these. */
-  routed?: { provider: string; model: string | null; effort: string | null } | null;
+   *  (docs/model-routing-design.md §8.3). The pins stay what a refusal names: nobody pinned these.
+   *  A null provider is the routed engine's own sign-in on the runner. */
+  routed?: { engine: string | null; provider: string | null; model: string | null; effort: string | null } | null;
 };
 
 /**
- * What a run is created with (docs/model-routing-design.md §7.4): the route's provider, model and
- * effort when it is applied — the provider written out rather than left to `sessions.create`, whose
+ * What a run is created with (docs/model-routing-design.md §7.4): the route's engine, credential,
+ * model and effort when it is applied — written out rather than left to `sessions.create`, whose
  * Agent seed may have moved by the time a takeover carries the plan out — and otherwise the task's
  * pins, naming no effort, exactly as before routing.
  */
 function taskRunDispatch(
-  task: { provider?: string | null; model?: string | null },
+  task: { engine?: string | null; provider?: string | null; model?: string | null },
   route: TaskRunRoute | null,
-): Pick<TaskRunExecuteTarget, 'provider' | 'model' | 'effort'> {
+): Pick<TaskRunExecuteTarget, 'engine' | 'provider' | 'model' | 'effort'> {
   return route?.applied
-    ? { provider: route.provider, model: route.model, effort: route.effort }
-    : { provider: task.provider ?? null, model: task.model ?? null, effort: null };
+    ? { engine: route.engine, provider: route.provider, model: route.model, effort: route.effort }
+    : { engine: task.engine ?? null, provider: task.provider ?? null, model: task.model ?? null, effort: null };
 }
 
 /**
  * The task a bound run target carries out. A routed target names what routing chose, not the task's
  * pins, so the pins are read back from the decision: its model is never one — a pinned model is not
- * routed — and its provider is one only when the task pinned it.
+ * routed — and its engine and provider are ones only when the task pinned them.
  */
 function boundRunTask(
-  target: Pick<TaskRunExecuteTarget, 'taskId' | 'title' | 'provider' | 'model' | 'effort' | 'route'>,
+  target: Pick<TaskRunExecuteTarget, 'taskId' | 'title' | 'engine' | 'provider' | 'model' | 'effort' | 'route'>,
 ): TaskRunTarget {
   const { route } = target;
   if (!route?.applied) {
-    return { id: target.taskId, title: target.title, provider: target.provider, model: target.model };
+    return {
+      id: target.taskId, title: target.title, engine: target.engine, provider: target.provider, model: target.model,
+    };
   }
   return {
     id: target.taskId,
     title: target.title,
+    engine: route.baseline.engineSource === 'task-pin' ? target.engine : null,
     provider: route.baseline.providerSource === 'task-pin' ? target.provider : null,
     model: null,
-    routed: { provider: target.provider ?? route.provider, model: target.model, effort: target.effort },
+    routed: {
+      engine: target.engine ?? route.engine,
+      provider: target.provider ?? route.provider,
+      model: target.model,
+      effort: target.effort,
+    },
   };
 }
 
-export function buildTaskExecutionPrompt(task: {
-  title: string;
-  description?: string | null;
-  acceptanceCriteria?: string | null;
-  acceptanceCommand?: string | null;
-  acceptanceExpectedExitCode?: number | null;
-  completionCriterion?: TaskCompletionCriterionValue | null;
-  isForeman?: boolean;
-  verifiesTaskId?: string | null;
-  list?: { instructions?: string | null } | null;
-}): string {
-  const systemRun = task.isForeman === true || task.verifiesTaskId != null;
-  const instructions = systemRun ? undefined : task.list?.instructions?.trim();
-  // What would PROVE this task done, handed to the run that has to argue it is. It used to be
-  // left out, which asked every run to answer "am I finished?" against criteria it had to go and
-  // fetch with `task_get` — so a run that did not fetch them answered against the description
-  // instead, and the description says what to DO and never what would settle it. Not suppressed
-  // for a foreman or a verifier the way the list's instructions are: those describe how the
-  // LIST's work is done and neither of those runs is doing it, whereas a task's own acceptance
-  // criteria are about that task whoever is running it.
-  const acceptance = task.acceptanceCriteria?.trim();
-  const executableAcceptance =
-    task.acceptanceCommand != null && task.acceptanceExpectedExitCode != null;
-  // OWNER_CONFIRMED is settled only by the account owner pressing Confirm done in the app, so a run
-  // of such a task has nothing to submit. Handed the evidence envelope like every other task, its
-  // runs did as told and filed evidence that criterion never reads — often for a task in no
-  // project, with no project_get criterion to copy.
-  const ownerConfirmed = task.completionCriterion === 'OWNER_CONFIRMED';
-  return (
-    `请开始执行任务「${task.title}」。\n\n` +
-    (task.description ? `任务描述：\n${task.description}\n\n` : '') +
-    (acceptance ? `验收标准（判定本任务是否完成的依据）：\n${acceptance}\n\n` : '') +
-    (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
-    `请按以下步骤进行：\n` +
-    `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
-    `2. 执行任务。\n` +
-    (executableAcceptance
-      ? `3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 EXECUTABLE 验收命令` +
-        `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
-        `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
-        ` coordinator 审批这个机械结论。\n`
-      : ownerConfirmed
-        ? `3. 完成后，先用 task_request_confirmation（MCP；CLI 是 \`orbit task request-confirmation\`）`
-          + `声明本次运行已经做完，再在本会话里用一两句话说明做了什么，然后结束本轮。`
-          + `只有这条声明才会让账户所有者收到确认卡；不声明就不会有任何卡片——任务会一直停在 OPEN，`
-          + `只能由所有者在任务面板里确认。卡片要等本次运行真的停下来（队列空、没有在飞的后台作业、`
-          + `没有自己排的唤醒）那一轮结束时才交给所有者。本任务的完成判据是 OWNER_CONFIRMED：`
-          + `由账户所有者在 Orbit app 里确认（Confirm done）或退回（Send back…），任何 agent 会话`
-          + `（包括 coordinator）都无法代为确认；退回的理由会作为下一条消息进入本会话，收到后按理由继续，`
-          + `再次做完时要重新声明一次。不要调用 task_evidence_submit，也不要写 status。\n`
-        : `3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、`
-          + `criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 `
-          + `TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、`
-          + `gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它`
-          + `和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作`
-          + `属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是`
-          + `解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n`) +
-    `4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将` +
-    `状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游` +
-    `当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。`
-  );
-}
+export { buildTaskExecutionPrompt };
 
 // Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
 // Postgres and surface as a 500; we treat it like any unknown task instead.
@@ -587,7 +636,11 @@ type TaskRunHolder = {
   id: string;
   status: RunStatus;
   workspaceId: string | null;
+  /** The engine it runs on (Session.engine), and what the old rules derive it from without one. */
+  engine: string | null;
   provider: string;
+  providerBuiltin: boolean;
+  ownerId: string;
   model: string | null;
   startsTaskWork: boolean;
   cancelRequestedAt: Date | null;
@@ -804,6 +857,7 @@ export const TASK_LIST_SELECT = {
   // Where the row stands in its list's queue, which a coordinator setting it needs to read back
   // from the same page it chose the rows on.
   priority: true,
+  engine: true,
   provider: true,
   model: true,
   modelHint: true,
@@ -1209,8 +1263,9 @@ interface EndedAutoRunMoment {
   deletedAt: Date | null;
   /** The run's own automatic retry (AutoRetryService), when one is armed. */
   retryAt: Date | null;
-  /** The task's provider pin and whether smart selection is on for it (its Agent's switch and its
-   *  account's): which engine a re-run would start on, and so which quota holds it (dispatchEngines). */
+  /** The task's engine and provider pins and whether smart selection is on for it (its Agent's switch
+   *  and its account's): what a re-run would start on, and so which quota holds it (dispatchEngines). */
+  taskEngine: string | null;
   taskProvider: string | null;
   modelRouting: boolean;
 }
@@ -2004,13 +2059,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * QueueModule is global, so Nest always has one.
      */
     @Optional() queue?: QueueService,
+    /**
+     * Hands an idle coordinator the evidence revisions that waited for it while it was paused, on the
+     * reconcile timer (`onModuleInit`). `@Optional()` and last for the same reason as `queue`.
+     */
+    @Optional() evidenceQueue?: CoordinatorEvidenceQueueService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
+    // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
+    // instance that answers it has to be able to reach this one.
+    this.handoffs.bindMoveApplier(this);
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
     this.openItems = openItems;
     this.fuse = fuse;
     this.queue = queue;
+    this.evidenceQueue = evidenceQueue;
   }
 
   private readonly handoffs: ProjectHandoffService;
@@ -2019,6 +2083,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private readonly openItems?: ProjectOpenItemService;
   private readonly fuse?: ProjectFuseService;
   private readonly queue?: QueueService;
+  private readonly evidenceQueue?: CoordinatorEvidenceQueueService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -2409,6 +2474,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         .then(() => this.pauseProjector?.catchUp())
         .catch((e) =>
           this.logger.error(`pause projection sweep failed: ${e instanceof Error ? e.message : e}`),
+        )
+        // The evidence an idle coordinator was not handed while it was paused, on this timer and not
+        // one of its own, for the reason at the top of this block. A coordinator's own turn ending
+        // hands it over too; that is the latency, and this is the guarantee that one which is back and
+        // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
+        .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
+        .catch((e) =>
+          this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
         );
     }, RECONCILE_INTERVAL_MS);
     this.reconcileTimer.unref(); // don't keep the process alive just for this timer
@@ -2433,26 +2506,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * A task may only pin a provider this caller can actually dispatch with: a built-in engine
-   * slug, one of the configured providers visible to them, or one of their own account pools —
-   * one with an account that can run (SessionsService.accountPoolRefusal).
-   * Rejected here rather than at run time, so a typo surfaces on the edit instead of failing every
-   * future run of the task. Mirrors the identical check SessionsService.create runs on an explicit
-   * provider.
+   * A task's engine, provider and model pins as a write stores them (providers/engine-provider.ts
+   * resolveTaskPin, docs/provider-engine-contract.md §3.5). A provider has to be one this caller can
+   * dispatch with — an engine's own sign-in, OpenCode's own config, one of the keys visible to them,
+   * or one of their own account pools with an account that can run (SessionsService.accountPoolRefusal)
+   * — and the engine one that provider runs on. Refused here rather than at run time, so a typo
+   * surfaces on the edit instead of failing every future run of the task. Mirrors the resolution
+   * SessionsService.create runs on what a session names, in a pin's own words (`provider not
+   * available`). `current` is what the task holds now — null for a new task, and for a batch pin, which
+   * checks the pins its selection holds itself (pinnedProvidersRunOn). On a new task (`creating`) an
+   * absent and a null engine both mean none was named; elsewhere null clears the pin.
    */
-  private async assertUsableProvider(ownerId: string, provider?: string | null): Promise<void> {
-    if (!provider) return;
-    if (Object.values(AgentProvider).includes(provider as AgentProvider)) return;
-    const configured = await this.prisma.modelProvider.findFirst({
-      where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
-      select: { slug: true },
-    });
-    if (configured) return;
-    if (!(await accountPoolRuntime(this.prisma, ownerId, provider))) {
-      throw new BadRequestException('provider not available');
-    }
-    const refusal = await this.sessions.accountPoolRefusal(ownerId, provider);
-    if (refusal) throw new BadRequestException(refusal);
+  private resolvePins(
+    ownerId: string,
+    request: { engine?: string | null; provider?: string | null; model?: string | null },
+    current: { engine: string | null; provider: string | null } | null,
+    creating = false,
+  ): Promise<TaskPinWrite> {
+    return resolveTaskPin(
+      // The pool refusal is asked only of a pool, when one is named.
+      { db: this.prisma, poolRefusal: (owner, slug, db) => this.sessions.accountPoolRefusal(owner, slug, db) },
+      ownerId,
+      {
+        engine: creating ? (request.engine ?? undefined) : request.engine,
+        provider: request.provider,
+        model: request.model,
+      },
+      current,
+    );
   }
 
   /** A task may only be filed under a list the same user owns (cf. assertOwnedWorkspace). */
@@ -2821,11 +2902,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async preLockCreatorSessions(
     tx: Prisma.TransactionClient,
+    ownerId: string,
     sessionIds: ReadonlyArray<string | null | undefined>,
     taskIds: ReadonlyArray<string | null | undefined> = [],
   ): Promise<void> {
-    const fromTasks = await creatorSessionsOf(tx, taskIds);
-    await lockCreatorSessions(tx, [...sessionIds, ...fromTasks]);
+    const fromTasks = await creatorSessionsOf(tx, ownerId, taskIds);
+    await lockCreatorSessions(tx, ownerId, [...sessionIds, ...fromTasks]);
   }
 
   /**
@@ -3346,10 +3428,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async lockTaskForSupersessionWrite(
     tx: Prisma.TransactionClient,
+    ownerId: string,
     taskId: string,
   ): Promise<void> {
     try {
-      await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR UPDATE NOWAIT`;
+      // The caller's own task only: a predecessor named from another account is not taken — not even
+      // for the moment before the read that refuses it — and is refused as not found below.
+      await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE NOWAIT`;
     } catch (error) {
       // 55P03 from either side of the fence: this statement's own NOWAIT, or 0130's
       // `task_supersession_project_lock_order` refusing because the project is being reconciled.
@@ -3404,7 +3489,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     now: Date,
   ): Promise<void> {
     // NOWAIT, then read. See `lockTaskForSupersessionWrite` for the cycle this refuses to join.
-    await this.lockTaskForSupersessionWrite(tx, predecessorId);
+    await this.lockTaskForSupersessionWrite(tx, ownerId, predecessorId);
     const [predecessor] = await tx.$queryRaw<Array<{
       id: string; status: string; projectId: string | null;
       supersededByTaskId: string | null; terminalReason: string | null;
@@ -3573,7 +3658,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
+  /**
+   * `credential` is the user credential the request came in through, given by the user door only:
+   * the task is still the user's (`creator` stays unset), and the credential is recorded beside it
+   * in `activity` — see `recordTasksCreated`.
+   */
+  async create(
+    ownerId: string,
+    dto: CreateTaskDto,
+    creator?: Creator,
+    creatorSessionId?: string,
+    credential?: AuthCredential,
+  ) {
     if (!dto.title) throw new BadRequestException('title is required');
     // The paired shape: this task and the check that settles it, in one call. Delegated rather than
     // reimplemented, because a second writer is a second thing to keep in step with every column a
@@ -3589,7 +3685,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         );
       }
       return await this.createWithVerifier(
-        ownerId, { ...dto, verification }, creator, creatorSessionId,
+        ownerId, { ...dto, verification }, creator, creatorSessionId, credential,
       );
     }
     const completionCriterion = this.assertCompletionDeclaration(dto);
@@ -3601,7 +3697,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
     await this.assertOwnedProject(ownerId, dto.projectId);
-    await this.assertUsableProvider(ownerId, dto.provider);
+    // The engine, provider and model pins, resolved together and stored as resolved: a provider alone
+    // carries the engine it runs on by default, a retired name its key, an old OpenCode model its key.
+    dto = { ...dto, ...(await this.resolvePins(ownerId, dto, null, true)) };
     // Link to the originating session only when it's one this owner has (the runner
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
     // would otherwise fail the FK insert.
@@ -3825,7 +3923,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // same ordered rank-30 statement (lock-order.ts, I2): a task row written twice in one
           // transaction re-runs `task_creator_session_id_fkey` and takes FOR KEY SHARE on it.
           await lockTaskLists(tx, [dto.listId]);
-          await this.preLockCreatorSessions(tx, [sessionId], [dto.supersedesTaskId]);
+          await this.preLockCreatorSessions(tx, ownerId, [sessionId], [dto.supersedesTaskId]);
           // §13.6 SU7 + AE6-a's lock order, stated rather than left to the triggers.
           //
           // Two things in this transaction reach `project_acceptance_reopen`, and both take the
@@ -3926,6 +4024,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               { id: created.id, projectId: created.projectId }, new Date(),
             );
           }
+          await this.recordTasksCreated(tx, ownerId, credential, [created.id]);
           return created;
         },
         this.transientWriteRetry('tasks.create'),
@@ -4015,6 +4114,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     dto: CreateTaskDto & { verification: TaskVerificationDto },
     creator?: Creator,
     creatorSessionId?: string,
+    credential?: AuthCredential,
   ) {
     const { verification, ...subject } = dto;
     const [created, verifier] = await this.createMany(ownerId, {
@@ -4032,10 +4132,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           verifiesRef: VERIFICATION_PAIR_SUBJECT_REF,
         },
       ],
-    }, creator, creatorSessionId);
+    }, creator, creatorSessionId, credential);
     // `ref` is the batch's internal wiring, never stored and never part of this door's receipt.
     const { ref: _wiring, ...row } = created;
     return { ...row, verification: { id: verifier.id, status: verifier.status } };
+  }
+
+  /**
+   * The `activity` rows for tasks a user just created (docs/personal-access-token-design.md §6.4):
+   * one per task, naming the user and the door the request came in through — LOGIN, or a personal
+   * access token by its id. The task is the user's either way (creator USER); this is where the two
+   * doors are told apart.
+   *
+   * Inside the creating transaction, so the record commits with the rows it describes and rolls
+   * back with them. `activity` has no foreign key and no trigger, so the INSERT locks nothing but
+   * its own rows. A create that came in through no user credential — the runner door — is not
+   * recorded.
+   */
+  private async recordTasksCreated(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    credential: AuthCredential | undefined,
+    taskIds: string[],
+  ): Promise<void> {
+    if (!credential || taskIds.length === 0) return;
+    await tx.activity.createMany({
+      data: taskIds.map((taskId) => ({
+        actorId: ownerId,
+        type: 'task.created',
+        payload: { taskId },
+        credentialKind: credential.kind,
+        credentialId: credential.kind === 'PAT' ? credential.tokenId : null,
+      })),
+    });
   }
 
   /**
@@ -4071,15 +4200,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     lock = false,
   ): Promise<void> {
     if (!fixesOpenItemId) return;
+    // Only the writer's own items, locked or read: another account's is the 404 an id that names
+    // nothing gets, never a refusal that says what kind of item it is or what state it is in.
     if (lock) {
       await db.$queryRaw`
         SELECT "id" FROM "project_open_item"
-         WHERE "id" = ${fixesOpenItemId}::uuid
+         WHERE "id" = ${fixesOpenItemId}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR UPDATE`;
     }
-    const item = await db.projectOpenItem.findUnique({
-      where: { id: fixesOpenItemId },
-      select: { id: true, ownerId: true, projectId: true, state: true, kind: true, assignee: true },
+    const item = await db.projectOpenItem.findFirst({
+      where: { id: fixesOpenItemId, ownerId },
+      select: { id: true, projectId: true, state: true, kind: true, assignee: true },
     });
     if (!item) {
       throw new NotFoundException({
@@ -4103,12 +4234,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         code: 'FIXES_OPEN_ITEM_PROJECT_MISMATCH',
         message: 'The fixing task and exception item must belong to the same project',
-      });
-    }
-    if (item.ownerId !== ownerId) {
-      throw new ForbiddenException({
-        code: 'FIXES_OPEN_ITEM_OWNER_MISMATCH',
-        message: 'Only the item owner may file a concrete fix',
       });
     }
     if (item.assignee === 'OWNER') {
@@ -4203,6 +4328,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // created before this column was born NULL.
       runAt: dto.runAt ? new Date(dto.runAt) : undefined,
       labels: dto.labels ? normalizeTaskLabels(dto.labels) : undefined,
+      // The engine pin beside the provider pin (docs/provider-engine-contract.md §1.2), resolved by the
+      // door that called this (resolvePins).
+      engine: dto.engine,
       provider: dto.provider,
       model: dto.model,
       modelHint: dto.modelHint,
@@ -4350,11 +4478,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.assertOwnedList(ownerId, listId);
     for (const projectId of distinct(items.map((item) => item.projectId)))
       await this.assertOwnedProject(ownerId, projectId);
-    for (const provider of distinct(items.map((item) => item.provider)))
-      await this.assertUsableProvider(ownerId, provider);
     const existingPrerequisites = distinct(items.flatMap((item) => item.dependsOnTaskIds ?? []));
     if (existingPrerequisites.length) await this.assertOwnedTasks(ownerId, existingPrerequisites);
-    return items;
+    // Each item's engine, provider and model pins, resolved as a single create resolves them — once per
+    // distinct spelling, and returned as resolved, which is what every later step reads.
+    const pins = new Map<string, Promise<TaskPinWrite>>();
+    const resolved: typeof items = [];
+    for (const item of items) {
+      if (item.engine == null && item.provider == null) {
+        resolved.push(item);
+        continue;
+      }
+      const key = JSON.stringify([item.engine ?? null, item.provider ?? null, item.model ?? null]);
+      if (!pins.has(key)) pins.set(key, this.resolvePins(ownerId, item, null, true));
+      resolved.push({ ...item, ...(await pins.get(key)!) });
+    }
+    return resolved;
   }
 
   /**
@@ -4604,19 +4743,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * may list it in `dependsOnRefs`, so a whole dependency chain lands in a single round-trip
    * instead of one create per node (previously the only way to build one, since each edge needs
    * the id the previous call returned). Returns the created tasks in input order, echoing `ref`.
+   * `credential` is the user door's, as on `create`.
    */
   async createMany(
     ownerId: string,
     dto: CreateTasksBatchDto,
     creator?: Creator,
     creatorSessionId?: string,
+    credential?: AuthCredential,
   ) {
     // `dryRun: false` is what makes this a narrowing rather than a cast: the one branch below that
     // returns a preview instead of rows is the branch this call has just switched off, so the
     // callers of `createMany` keep the return type they have always had and the preview has a door
     // of its own (`previewPlan`).
     const written = await this.createManyPass(
-      ownerId, { ...dto, dryRun: false }, creator, creatorSessionId,
+      ownerId, { ...dto, dryRun: false }, creator, creatorSessionId, credential,
     );
     return written as Exclude<typeof written, PlanPreviewBody>;
   }
@@ -4644,6 +4785,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     dto: CreateTasksBatchDto,
     creator?: Creator,
     creatorSessionId?: string,
+    credential?: AuthCredential,
   ) {
     const validated = await this.assertBatchValid(ownerId, dto);
     // Unit L7. Read once, here, because it changes three things further down and they have to
@@ -4878,6 +5020,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await lockTaskLists(tx, items.map((item) => item.listId));
       await this.preLockCreatorSessions(
         tx,
+        ownerId,
         [sessionId],
         items.map((item) => item.supersedesTaskId),
       );
@@ -4931,6 +5074,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const handoffSpends: Array<{ authority: HandoffAuthority; handoffId: string; taskId: string }> = [];
       const idByRef = new Map<string, string>();
       const rows: Array<Task & { ref?: string }> = [];
+      // The rows this attempt inserted, as distinct from the ones a replay or a within-batch
+      // duplicate found: only a write this call made is recorded as its credential's.
+      const insertedIds: string[] = [];
       for (const [index, item] of items.entries()) {
         // find-or-create by the item's key: a re-run's items already exist (committed by the first
         // run), and a within-batch duplicate resolves to the row this same transaction just wrote.
@@ -4975,6 +5121,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ),
           }));
         if (!existing) {
+          insertedIds.push(task.id);
           await this.assertFixesOpenItem(
             tx, ownerId, task.projectId, item.fixesOpenItemId, creatorSessionId, true,
           );
@@ -5033,6 +5180,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
       }
       await this.handoffs.spendAll(tx, handoffSpends, now);
+      await this.recordTasksCreated(tx, ownerId, credential, insertedIds);
       return rows;
     }, this.transientWriteRetry('tasks.createMany')).catch(async (e) => {
       // §13.1 AG6's activation guard, FIRST and for the same reason `create` puts it first: 0132
@@ -5267,6 +5415,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Whether this session's scope is the project of the task it executes — a run's — rather than
+   * one it coordinates or was woken to judge, which `deriveProjectScope` reads first. Asked only
+   * where that difference decides the answer: a run's scope moves when its task does.
+   */
+  private async scopeFollowsTask(
+    db: ScopeReadClient,
+    ownerId: string,
+    sessionId?: string,
+  ): Promise<boolean> {
+    if (!sessionId) return false;
+    const session = await db.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: {
+        taskId: true,
+        coordinatorForProject: { select: { id: true } },
+        coordinatorWakes: { where: { status: 'SESSION_OPENED' }, select: { projectId: true }, take: 1 },
+      },
+    });
+    return !!session?.taskId && !session.coordinatorForProject
+      && !session.coordinatorWakes?.length;
+  }
+
+  /**
    * §4 R8's world, read fail closed: a project this owner does not have simply is not in the map,
    * and `decideProjectScopeWrite` reads an absent status as NOT open.
    */
@@ -5351,6 +5522,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // What catches an approval that moved is the spend itself: one compare-and-set inside the
       // transaction that writes the task, which fails and takes the task with it.
       approval: write.approval ?? null,
+      servesSourceCriterion: write.servesSourceCriterion,
     };
   }
 
@@ -5731,6 +5903,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         labels: item.labels ? normalizeTaskLabels(item.labels) : [],
         assigneeId: item.assigneeId ?? null,
         listId: item.listId ?? null,
+        engine: item.engine ?? null,
         provider: item.provider ?? null,
         model: item.model ?? null,
         modelHint: item.modelHint ?? null,
@@ -5882,6 +6055,623 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Unit L4 on the edit door: a session asks for an existing task to be MOVED into another project.
+   *
+   * A request, never a write — the account owner decided (2026-10-06) that a move is theirs to
+   * confirm and an agent's only to ask for. So this always refuses, and the refusal is the answer:
+   * the question it filed (`CROSS_PROJECT_APPROVAL_REQUIRED`, R10) or the one already waiting for
+   * this task and destination (`APPROVAL_PENDING`, R11), named by `handoffId` in the same body a
+   * declared filing gets. The task is not touched.
+   *
+   * In order:
+   *   1. the request is the move and nothing else. Another field would be a second edit riding on a
+   *      question, applied or not by an answer that was never about it (400);
+   *   2. §4 against no answer, as for a declared filing: R2/R3/R5, R6 for a session that holds
+   *      neither end, R8 for a settled end — except a settled source giving up a task none of its
+   *      criteria count, and R8B for one that serves one of them. Only R10 goes on;
+   *   3. a criterion it names is one the TARGET states (400);
+   *   4. a question already waiting for this move answers it, whoever asked; an earlier answer to
+   *      this same request is decided on (R12, R13), and a yes to it moves nothing here — applying a
+   *      move is the account owner's confirmation, not a re-sent request;
+   *   5. with nothing standing, what would make the move impossible is refused before anybody is
+   *      asked: the task's own landing in flight, and the hierarchy rules every move of it meets;
+   *   6. the question is filed.
+   */
+  private async requestMove(
+    ownerId: string,
+    task: {
+      id: string;
+      title: string;
+      projectId: string;
+      parentTaskId: string | null;
+      verifiesTaskId: string | null;
+      criterionDefinitionId: string | null;
+    },
+    dto: UpdateTaskDto,
+    sessionId: string,
+  ): Promise<never> {
+    const from = task.projectId;
+    const to = dto.projectId as string;
+    const extra = Object.entries(dto)
+      .filter(([field, value]) => value !== undefined && !MOVE_REQUEST_FIELDS.has(field))
+      .map(([field]) => field)
+      .sort();
+    if (extra.length) {
+      throw new BadRequestException({
+        code: 'MOVE_TASK_EXTRA_FIELDS',
+        fields: extra,
+        message:
+          'a request to move a task carries projectId, handoff and optionally criterionKey, and '
+          + `nothing else; this one also sent ${extra.join(', ')}. Nothing was written — send those `
+          + 'in a separate task_update, before the move is asked for or after it is answered.',
+      });
+    }
+    const criterionKey = typeof dto.criterionKey === 'string' ? dto.criterionKey.trim() : null;
+    if (criterionKey === '') {
+      throw new BadRequestException(this.criterionUnknown('""',
+        'a blank key names no criterion. Leave criterionKey out to ask for the move without one, '
+        + 'or pass one of the keys project_get returns for the project the task would move into.'));
+    }
+    await this.assertOwnedProject(ownerId, to);
+
+    const write: ScopeWriteInput = {
+      operation: 'HANDOFF_TASK',
+      taskId: task.id,
+      requestedProjectId: to,
+      currentProjectId: from,
+      scopeToken: dto.scopeToken,
+      // What a settled source asks of the task before it lets it go (R8/R8B), read from its row
+      // here and again under the locks the question is filed and confirmed under.
+      servesSourceCriterion: await this.handoffs.servesCriterionOf(
+        this.prisma, ownerId, task.id, from,
+      ),
+    };
+    const world = await this.projectScopeWorld(this.prisma, ownerId, sessionId, [write]);
+    const refusal = (admission: ScopeAdmission, row: HandoffAnswer['row'] | null) =>
+      new ForbiddenException({
+        ...scopeRefusalBody(admission.outcome!, task.id),
+        handoffId: row?.id ?? null,
+        handoffState: row?.state ?? null,
+      });
+    const unasked = this.decideScopedWrite(world, write);
+    if (unasked.outcome?.code !== 'CROSS_PROJECT_APPROVAL_REQUIRED' || !world.scope) {
+      throw refusal(unasked, null);
+    }
+    // Resolved in the target and nowhere else, by the rule every declaration is resolved by, and
+    // refused as the malformed request it is rather than as an authority refusal.
+    const criterion = criterionKey
+      ? (await this.resolveCriterionDeclarations(ownerId, [{ projectId: to, criterionKey }])
+          .catch((error: unknown) => {
+            if (error instanceof ForbiddenException) throw new BadRequestException(error.getResponse());
+            throw error;
+          })).get(0) ?? null
+      : null;
+
+    // Who asked, derived from the session exactly as a filing's source is, and checked again under
+    // the locks `declare` takes.
+    const origin = await this.resolveOwnedSession(ownerId, sessionId);
+    const declaration: HandoffDeclaration = {
+      fromProjectId: from,
+      toProjectId: to,
+      kind: 'MOVE_TASK',
+      subjectTaskId: task.id,
+      requestedCriterionDefinitionId: criterion?.criterionDefinitionId ?? null,
+      identity: {
+        plan: { title: task.title },
+        source: {
+          projectId: origin?.discoveredFromProjectId ?? null,
+          taskId: origin?.sourceTaskId ?? null,
+          sessionId: origin?.sessionId ?? null,
+          triggerEvent: origin?.triggerEvent ?? null,
+        },
+      },
+      title: task.title,
+      reason: dto.handoff?.reason ?? null,
+      requestedBySessionId: sessionId,
+    };
+    const now = new Date();
+    const answered = (answer: HandoffAnswer) => {
+      write.approval = answer.approval;
+      const decided = this.decideScopedWrite(world, write);
+      if (decided.outcome?.decision !== 'ALLOW') return refusal(decided, answer.row);
+      // R14: this very request has a yes. Re-sending it is not what applies a move.
+      return new ConflictException({
+        code: 'MOVE_TASK_ALREADY_APPROVED',
+        taskId: task.id,
+        handoffId: answer.row.id,
+        handoffState: answer.row.state,
+        message: answer.row.state === 'APPLIED'
+          ? `this request was approved and applied once already (handoff ${uuidToBase62(answer.row.id)}`
+            + '), and an answer is spent once — nothing was written. Ask with a different '
+            + 'criterionKey, or ask the account owner to move the task.'
+          : `the account owner has approved this move (handoff ${uuidToBase62(answer.row.id)}); it `
+            + 'is applied by their confirmation, not by sending the request again — nothing was '
+            + 'written.',
+      });
+    };
+    const standing = (await this.handoffs.pendingMove(
+      this.prisma, ownerId, { fromProjectId: from, toProjectId: to, subjectTaskId: task.id }, now,
+    )) ?? (await this.handoffs.answerFor(
+      this.prisma, this.handoffs.authorityOf(ownerId, declaration), now,
+    ));
+    if (standing) throw answered(standing);
+
+    await this.handoffs.assertMoveNotLanding(this.prisma, ownerId, task.id);
+    // The rules any move of this task meets, against the project it would land in. The criterion
+    // it declares today is not one of them: the move takes it back, and the card says so.
+    await this.assertHierarchyConsistent(this.prisma, ownerId, task.id, {
+      projectId: from,
+      parentTaskId: task.parentTaskId,
+      verifiesTaskId: task.verifiesTaskId,
+      criterionDefinitionId: task.criterionDefinitionId,
+    }, { projectId: to, criterionKey });
+
+    const filed = await this.handoffs.declare(ownerId, declaration, {
+      projectId: world.scope.projectId,
+      generation: world.scope.generation,
+    }, now);
+    throw filed.filed ? refusal(unasked, filed.row) : answered(filed);
+  }
+
+  /**
+   * A request to move a task that is already where it asks to go: the request, sent again after
+   * the account owner's confirmation applied it.
+   *
+   * From inside the project the task is in now — the target's coordinator, or the task's own run,
+   * whose scope moved with it — that is an ordinary update, and this answers null so `update`
+   * treats it as one. From the project the task LEFT it is not: the asker no longer holds the task,
+   * and the ordinary rules would refuse it R6 for asking again for something that has happened. So
+   * when THIS request — this session, this criterion, out of the asker's project into the task's —
+   * is the one that was applied to this task, the answer is the task as it stands, with nothing
+   * written and nothing filed. Anything else is not this request, and gets the ordinary rules.
+   */
+  private async appliedMoveReplay(
+    ownerId: string,
+    task: { id: string; title: string; projectId: string },
+    dto: UpdateTaskDto,
+    sessionId: string,
+  ): Promise<Task | null> {
+    if (Object.entries(dto).some(([field, value]) =>
+      value !== undefined && !MOVE_REQUEST_FIELDS.has(field))) {
+      return null;
+    }
+    const scope = await this.deriveProjectScope(this.prisma, ownerId, sessionId);
+    if (!scope || scope.projectId === task.projectId) return null;
+    const criterionKey = typeof dto.criterionKey === 'string' ? dto.criterionKey.trim() : '';
+    const criterion = criterionKey
+      ? (await this.resolveCriterionDeclarations(ownerId, [{ projectId: task.projectId, criterionKey }])
+          .catch(() => null))?.get(0) ?? null
+      : null;
+    if (criterionKey && !criterion) return null;
+    // The request's identity, derived exactly as `requestMove` derived it when it was asked.
+    const origin = await this.resolveOwnedSession(ownerId, sessionId);
+    const authority = this.handoffs.authorityOf(ownerId, {
+      fromProjectId: scope.projectId,
+      toProjectId: task.projectId,
+      kind: 'MOVE_TASK',
+      subjectTaskId: task.id,
+      requestedCriterionDefinitionId: criterion?.criterionDefinitionId ?? null,
+      identity: {
+        plan: { title: task.title },
+        source: {
+          projectId: origin?.discoveredFromProjectId ?? null,
+          taskId: origin?.sourceTaskId ?? null,
+          sessionId: origin?.sessionId ?? null,
+          triggerEvent: origin?.triggerEvent ?? null,
+        },
+      },
+      title: task.title,
+      requestedBySessionId: sessionId,
+    });
+    const answer = await this.handoffs.answerFor(this.prisma, authority, new Date()).catch(() => null);
+    if (answer?.row.state !== 'APPLIED' || answer.row.appliedTaskId !== task.id) return null;
+    return this.prisma.task.findFirst({ where: { id: task.id, ownerId } });
+  }
+
+  /**
+   * Unit L4's APPLY for a move: the account owner confirms a MOVE_TASK request, and the confirmation
+   * is the move (account owner, 2026-10-06 — "确认了就好了"). Reached only through
+   * `ProjectHandoffService.decide`, which only the account owner reaches (§7 RB2): nothing a session
+   * sends ends here, and the agent that asked sends nothing more.
+   *
+   * ONE transaction, in the canonical order (`common/lock-order.ts`) and the order the owner's own
+   * move in `update` takes: the owner graph mutex (10) — the task's place in a hierarchy is judged
+   * and rewritten, as on a re-parenting —, both projects FOR NO KEY UPDATE, sorted (40), the task
+   * FOR UPDATE NOWAIT (50, for the reason `lockTaskForSupersessionWrite` gives), and then the
+   * request itself (60).
+   *
+   * Under those locks everything that made the move legal when it was asked is asked again, because
+   * the answer can come days later: the task is still in the project the request moves it out of,
+   * the target is open and the source either open or giving up a task none of its criteria count
+   * (HP1, `decideHandoffAcceptance`, the rule R8 held the request to), its landing is not queued or
+   * running, the criterion the request names is
+   * still one the target states, and the move leaves no subtask, verification, parent, verified
+   * subject or supersession link on the other side of the line. When any of that no longer holds the
+   * confirmation is refused with its own code and NOTHING is written — not the yes either — so the
+   * request stays as it was, to be confirmed again once the obstacle is gone, or denied.
+   *
+   * Then, in this order: the yes (PENDING → APPROVED, this person, this moment); the task, moved —
+   * declaring the target criterion the request named at that criterion's revision now, and taking
+   * back whatever it declared of the source's; the spend (APPROVED → APPLIED on this task, `spend`'s
+   * compare-and-set, 0155's guard behind it); and an `activity` row recording the move as this
+   * person's, naming the request. A run in progress goes with the task (the same decision), so its
+   * live claim does not refuse the move: 0389 lets exactly this transaction, named by the
+   * transaction-local `orbit.move_task_handoff_id`, through `task_claimed_project_move_guard`.
+   * So does evidence nobody has decided, which the target decides from then on: handed over after
+   * the commit (`handOverMovedEvidence`).
+   */
+  async applyMoveApproval(
+    ownerId: string,
+    userId: string,
+    handoffId: string,
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<void> {
+    // Which rows to lock. The two ends and the task are frozen on the request (0155), and the
+    // request is read again under its own lock below before anything is decided on it.
+    const { row: asked } = await this.handoffs.get(ownerId, handoffId, now);
+    const taskId = asked.subjectTaskId;
+    if (asked.kind !== 'MOVE_TASK' || !taskId) {
+      throw new Error(`handoff approval ${handoffId} is a ${asked.kind}, not a move`);
+    }
+    const from = asked.fromProjectId;
+    const to = asked.toProjectId;
+    const moved = await withTransactionRetry(this.prisma, async (tx) => {
+      await this.lockDependencyGraph(tx, ownerId);
+      const projectIds = orderedIds([from, to]);
+      await tx.$queryRaw`
+        SELECT "id" FROM "project"
+         WHERE "id" = ANY(${projectIds}::uuid[])
+         ORDER BY "id"
+         FOR NO KEY UPDATE`;
+      try {
+        await tx.$queryRaw`
+          SELECT "id" FROM "task"
+           WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR UPDATE NOWAIT`;
+      } catch (error) {
+        if (!isLockNotAvailable(error)) throw error;
+        throw new ConflictException({
+          code: 'MOVE_TASK_BUSY',
+          requiredAction: 'CONFIRM_AGAIN',
+          taskId,
+          handoffId,
+          message:
+            `task ${uuidToBase62(taskId)} is being written by a run starting on it right now — `
+            + 'nothing was written, and the request is still waiting; confirm it again in a moment',
+        });
+      }
+      const row = await this.handoffs.lockMoveForConfirmation(tx, ownerId, handoffId, now);
+      const refuse = (code: string, requiredAction: string, why: string) => new ConflictException({
+        code,
+        requiredAction,
+        taskId,
+        handoffId: row.id,
+        handoffState: row.state,
+        message: `${why} — nothing was written, and the request is still waiting for an answer`,
+      });
+
+      const task = await tx.task.findFirst({
+        where: { id: taskId, ownerId },
+        select: {
+          id: true,
+          projectId: true,
+          parentTaskId: true,
+          verifiesTaskId: true,
+          criterionDefinitionId: true,
+          supersededByTaskId: true,
+        },
+      });
+      if (!task) {
+        throw refuse('MOVE_TASK_SUBJECT_MOVED', 'DENY_THE_REQUEST',
+          `task ${uuidToBase62(taskId)} no longer exists, so there is nothing left to move`);
+      }
+      if (task.projectId !== from) {
+        throw refuse('MOVE_TASK_SUBJECT_MOVED', 'DENY_THE_REQUEST',
+          `task ${uuidToBase62(taskId)} is no longer in project ${uuidToBase62(from)}, which this `
+          + 'request moves it out of'
+          + (task.projectId ? ` (it is in ${uuidToBase62(task.projectId)} now)` : ''));
+      }
+      // §4 R8, as the request was held to it, asked of the answer (HP1): a settled project takes no
+      // work, and gives up only a task none of its criteria count. What the task serves is read
+      // under this transaction's lock on it, so a declaration made while the request waited counts.
+      const ends = await tx.project.findMany({
+        where: { id: { in: [from, to] }, ownerId },
+        select: { id: true, status: true },
+      });
+      // A project this read does not find is not open: fail closed, as R8 does.
+      const statusOf = (id: string): HandoffProjectFacts =>
+        ({ status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' });
+      const acceptance = decideHandoffAcceptance(statusOf(from), statusOf(to), {
+        servesSourceCriterion: await this.handoffs.servesCriterionOf(tx, ownerId, taskId, from),
+      });
+      if (acceptance.refusal) {
+        throw refuse(acceptance.refusal, 'REOPEN_PROJECT_FIRST',
+          acceptance.refusal === 'MOVE_TASK_SERVES_SETTLED_CRITERION'
+            ? `task ${uuidToBase62(taskId)} serves an acceptance criterion of project `
+              + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
+              + 'none of its criteria count'
+            : `project ${uuidToBase62(to)} is not open, and a settled project takes no work until `
+              + 'it is reopened');
+      }
+      await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
+        handoffId: row.id,
+        handoffState: row.state,
+      });
+      // What the task will declare over there: the criterion the request named, at its revision
+      // NOW — the same snapshot `resolveCriterionDeclarations` takes — read under the target's lock.
+      const criterion = row.requestedCriterionDefinitionId
+        ? await tx.projectAcceptanceCriterionDefinition.findFirst({
+            where: { id: row.requestedCriterionDefinitionId, projectId: to, project: { ownerId } },
+            select: { id: true, revision: true },
+          })
+        : null;
+      if (row.requestedCriterionDefinitionId && !criterion) {
+        throw refuse('MOVE_TASK_CRITERION_GONE', 'DENY_THE_REQUEST',
+          `the criterion this request would have the task serve in project ${uuidToBase62(to)} `
+          + `(${criterionKeyOf(row.requestedCriterionDefinitionId)}) is no longer one that project `
+          + 'states');
+      }
+      // The hierarchy rules every move meets, with the source's criterion taken back
+      // (`criterionKey`), so only the structure is judged here.
+      try {
+        await this.assertHierarchyConsistent(tx, ownerId, taskId, task, {
+          projectId: to,
+          criterionKey: criterion ? criterionKeyOf(criterion.id) : null,
+        } as UpdateTaskDto);
+      } catch (error) {
+        if (!(error instanceof BadRequestException) && !(error instanceof NotFoundException)) throw error;
+        throw refuse('MOVE_TASK_HIERARCHY_CONFLICT', 'RESOLVE_THE_HIERARCHY_OR_DENY', error.message);
+      }
+      // §13.6 SU3 from both ends of the link, as `update` asks it of a move (0128 and 0130 refuse
+      // the same rows, in a constraint's words): an attempt this task replaced, and the attempt that
+      // replaced it, stay in the project it is in.
+      const replaced = await tx.task.findMany({
+        where: { ownerId, supersededByTaskId: taskId, NOT: { projectId: to } },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      const successor = task.supersededByTaskId
+        ? await tx.task.findFirst({
+            where: { id: task.supersededByTaskId, ownerId },
+            select: { id: true, projectId: true },
+          })
+        : null;
+      if (replaced.length || (successor && successor.projectId !== to)) {
+        throw refuse('MOVE_TASK_HIERARCHY_CONFLICT', 'RESOLVE_THE_HIERARCHY_OR_DENY',
+          `task ${uuidToBase62(taskId)} is linked by supersession to `
+          + [...replaced.map((other) => other.id), ...(successor ? [successor.id] : [])]
+            .map((id) => uuidToBase62(id)).join(', ')
+          + ', and a replacement stays in the project of the attempt it replaced');
+      }
+
+      const authority = await this.handoffs.approveMoveForConfirmation(tx, row, userId, now);
+      await tx.$queryRaw`SELECT set_config('orbit.move_task_handoff_id', ${row.id}, true)`;
+      const written = await tx.task.updateMany({
+        where: { id: taskId, ownerId, projectId: from },
+        data: {
+          projectId: to,
+          criterionDefinitionId: criterion?.id ?? null,
+          criterionRevision: criterion?.revision ?? null,
+        },
+      });
+      await tx.$queryRaw`SELECT set_config('orbit.move_task_handoff_id', '', true)`;
+      if (written.count !== 1) {
+        throw new Error(`task ${taskId} moved underneath the lock this confirmation holds`);
+      }
+      await this.handoffs.spend(tx, authority, row.id, taskId, now);
+      await tx.activity.create({
+        data: {
+          actorId: userId,
+          type: 'task.moved',
+          payload: {
+            taskId,
+            fromProjectId: from,
+            toProjectId: to,
+            handoffId: row.id,
+            requestedBySessionId: row.requestedBySessionId,
+            criterionDefinitionId: criterion?.id ?? null,
+            withdrawnCriterionDefinitionId: task.criterionDefinitionId,
+          },
+          credentialKind: credential?.kind ?? null,
+          credentialId: credential?.kind === 'PAT' ? credential.tokenId : null,
+        },
+      });
+      return task;
+    }, this.transientWriteRetry('tasks.applyMoveApproval')).catch((error) => {
+      const fenced = taskFenceConflictMessage(error);
+      if (fenced) throw new ConflictException(fenced);
+      throw error;
+    });
+    // After the commit, what the owner's own move in `update` delivers: the task's row, and both
+    // projects — either can be left settled, or holding a criterion that just became ready.
+    await this.publishAffectedTaskRows(
+      ownerId, [taskId, moved.parentTaskId], [taskId, moved.verifiesTaskId],
+    );
+    await this.deliverSettledProjects([from, to]);
+    await this.deliverReadyCriteria([from, to]);
+    await this.deliverUnlandedCriteria([from, to]);
+    await this.deliverTaskExceptions([taskId]);
+    await this.openItems?.resolveByFact([taskId]);
+    await this.openItems?.deliverForTasks([taskId]);
+    // And the evidence it brought along, which the project it is in now decides (the same decision
+    // that moves the run with it): handed to that project's decider, or — when the move left it
+    // quoting a standard the task is no longer held to — sent back to be filed again.
+    await this.handOverMovedEvidence(ownerId, {
+      taskId,
+      fromProjectId: from,
+      toProjectId: to,
+      withdrawnCriterionDefinitionId: moved.criterionDefinitionId,
+    });
+  }
+
+  /**
+   * A confirmed move's evidence hand-over (`moved-task-evidence.ts` says what and why), after the
+   * move's commit and from the rows it committed, the way every other delivery of that edge is.
+   *
+   * Nothing is said when there is nothing undecided: a task that is not EVIDENCE_JUDGMENT, one that
+   * has settled, one with no evidence, and one whose latest revision is answered. Nor when the task
+   * is no longer where this move put it — a later move hands over its own.
+   *
+   * A revision the decision door would take in the target is routed through the evidence door again,
+   * keyed with the target (`completionEvidenceRevisedFact`'s `movedFromProjectId`). One it would
+   * refuse is sent back: each live run of the task is told what to quote instead, written into the
+   * turn it is running where it can be, and an Automatic target's live coordinator is told the task
+   * arrived owing a new revision. Each message is keyed by the revision and the target, so a repeat
+   * says nothing twice; neither revives a conversation that has ended.
+   *
+   * Like every delivery on this edge, a failure is logged and never reported as a failed move: the
+   * move committed. What a failed hand-over leaves is the state before this unit existed — the
+   * revision on the target owner's card, or on the run's own waiting-on-you list.
+   */
+  private async handOverMovedEvidence(
+    ownerId: string,
+    move: {
+      taskId: string;
+      fromProjectId: string;
+      toProjectId: string;
+      withdrawnCriterionDefinitionId: string | null;
+    },
+  ): Promise<void> {
+    try {
+      const task = await this.prisma.task.findFirst({
+        where: {
+          id: move.taskId,
+          ownerId,
+          projectId: move.toProjectId,
+          completionCriterion: 'EVIDENCE_JUDGMENT',
+          status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+        },
+        select: {
+          id: true,
+          title: true,
+          projectId: true,
+          criterionDefinitionId: true,
+          criterionRevision: true,
+          acceptanceCriteria: true,
+          completionEvidence: {
+            orderBy: { revision: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              revision: true,
+              criterionRevision: true,
+              evidenceDigest: true,
+              evidence: true,
+              decisions: { select: { id: true }, take: 1 },
+            },
+          },
+        },
+      });
+      const [latest] = task?.completionEvidence ?? [];
+      if (!task || !latest || latest.decisions.length > 0) return;
+
+      // The door's own predicate, asked of the task as it stands in the target.
+      if ((await criterionStandingRefusal(this.prisma, task, latest.evidence)) === null) {
+        await this.completionInputs?.routeCompletionEvidence(completionEvidenceRevisedFact({
+          projectId: move.toProjectId,
+          taskId: task.id,
+          revision: latest.revision.toString(),
+          criterionRevision: latest.criterionRevision,
+          evidenceDigest: latest.evidenceDigest,
+          movedFromProjectId: move.fromProjectId,
+        }));
+        return;
+      }
+
+      const projects = await this.prisma.project.findMany({
+        where: { id: { in: [move.fromProjectId, move.toProjectId] }, ownerId },
+        select: {
+          id: true,
+          title: true,
+          coordinatorEnabled: true,
+          coordinatorSessionId: true,
+          coordinatorSession: { select: SESSION_ENDING_SELECT },
+        },
+      });
+      const from = projects.find((project) => project.id === move.fromProjectId);
+      const to = projects.find((project) => project.id === move.toProjectId);
+      if (!from || !to) return;
+      const declared = task.criterionDefinitionId
+        ? await this.prisma.projectAcceptanceCriterionDefinition.findFirst({
+            where: { id: task.criterionDefinitionId, projectId: move.toProjectId },
+            select: { id: true, text: true },
+          })
+        : null;
+      const moved: MovedEvidence = {
+        taskId: task.id,
+        title: task.title,
+        revision: latest.revision.toString(),
+        from: { id: from.id, title: from.title },
+        to: { id: to.id, title: to.title },
+        quoted: quotedCriterion(latest.evidence),
+        withdrawnCriterionDefinitionId: move.withdrawnCriterionDefinitionId,
+        standard: resubmitStandard({ id: task.id, acceptanceCriteria: task.acceptanceCriteria, declared }),
+      };
+
+      const runs = (await this.prisma.session.findMany({
+        where: { ownerId, taskId: task.id },
+        select: { id: true, ...SESSION_ENDING_SELECT },
+        orderBy: { id: 'asc' },
+      })).filter((run) => !sessionHasEnded(run));
+      const told: string[] = [];
+      for (const run of runs) {
+        if (await this.tellMovedEvidence(ownerId, run.id, {
+          clientTurnId: movedEvidenceTurnId('run', latest.id, move.toProjectId),
+          content: resubmitMessage(moved),
+          steerIfLive: true,
+        })) told.push(run.id);
+      }
+      // The coordinator of an Automatic target, as the evidence door itself would reach it: a project
+      // whose switch is off is told no evidence fact, and an ended conversation is not revived.
+      if (to.coordinatorEnabled && to.coordinatorSessionId && to.coordinatorSession
+        && !sessionHasEnded(to.coordinatorSession)) {
+        await this.tellMovedEvidence(ownerId, to.coordinatorSessionId, {
+          clientTurnId: movedEvidenceTurnId('coordinator', latest.id, move.toProjectId),
+          content: arrivalMessage(moved, told),
+          steerIfLive: false,
+        });
+      }
+    } catch (error) {
+      this.logger.warn(`evidence of task ${move.taskId} was not handed over to project `
+        + `${move.toProjectId} after its move: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /**
+   * One message of the hand-over above, as a platform turn under a key derived from the revision.
+   * True when it is on the conversation; false when the conversation refused it for a state of the
+   * world (gone, ended, busy being written, unable to run) — the refusals every delivery here takes
+   * as such. A fault is raised to the caller, which logs it.
+   */
+  private async tellMovedEvidence(
+    ownerId: string,
+    sessionId: string,
+    turn: { clientTurnId: string; content: string; steerIfLive: boolean },
+  ): Promise<boolean> {
+    try {
+      await this.sessions.createTurn(ownerId, sessionId, {
+        clientTurnId: turn.clientTurnId,
+        content: turn.content,
+        intent: 'NEXT_TURN',
+      }, turn.steerIfLive ? { steerIfLive: true } : undefined);
+      return true;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException
+        || error instanceof ConflictException
+        || error instanceof ForbiddenException
+        || error instanceof BadRequestException
+      ) {
+        this.logger.log(`moved-evidence message to session ${sessionId} was not written: `
+          + `${error.message}`);
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
    * The cross-project prerequisite edges a plan asks for, and the answer that exists for each.
    *
    * An edge does not move a task between projects, so L1's write decision never sees it as a
@@ -6003,10 +6793,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           })
         : Promise.resolve([]),
       providerSlugs.length
-        ? this.prisma.modelProvider.findMany({
-            where: { slug: { in: providerSlugs }, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+        ? usableProviderScope(this.prisma, ownerId).then((usable) => this.prisma.modelProvider.findMany({
+            where: { slug: { in: providerSlugs }, enabled: true, ...usable },
             select: { slug: true },
-          })
+          }))
         : Promise.resolve([]),
     ]);
     const facts: PlanFacts = {
@@ -6213,7 +7003,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await tx.$queryRaw`
         SELECT "id" FROM "model_provider"
         WHERE "slug" = ANY(${slugs}::text[])
-          AND ("owner_id" IS NULL OR "owner_id" = ${ownerId}::uuid)
+          AND ${usableProviderSql('"model_provider"', Prisma.sql`${ownerId}::uuid`)}
         ORDER BY "id"
         FOR SHARE`;
     }
@@ -6278,7 +7068,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: {
           slug: { in: snapshot.providerSlugs },
           enabled: true,
-          OR: [{ ownerId: null }, { ownerId }],
+          ...(await usableProviderScope(tx, ownerId)),
         },
         select: { slug: true },
       });
@@ -6561,6 +7351,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // pass with the fence's — because the caller is the owner, or because it had none of its own.
     if (!fenced.length || admitted.principal === 'USER') return;
     const scope = await this.deriveProjectScope(tx, ownerId, actingSessionId);
+    // A run's scope is the project of the task it executes, so a task MOVED between the admission
+    // and this lock — the account owner confirming a MOVE_TASK, which takes its run with it (unit
+    // L4) — moves the run's scope with it. Nothing was taken over, and R3's "yield, do not retry"
+    // would tell a run that still holds its task to stop. It is the stale snapshot
+    // TASK_FACT_SCOPE_MOVED names instead: nothing was written, and the same write sent again is
+    // admitted under the scope the run holds now. A coordinator's or a judgment's scope that moved
+    // is still R3's below.
+    if (admitted.scope && scope && scope.projectId !== admitted.scope.projectId
+      && await this.scopeFollowsTask(tx, ownerId, actingSessionId)) {
+      throw new ConflictException({
+        code: TASK_FACT_SCOPE_MOVED,
+        requiredAction: 'RETRY',
+        message:
+          'the task this session is executing was moved into another project while this write was '
+          + 'being prepared — nothing was written; send it again',
+      });
+    }
     const projectStatus = await this.projectScopeStatuses(tx, ownerId, [
       ...projectIds,
       scope?.projectId,
@@ -6635,8 +7442,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
   }
 
-  async list(ownerId: string, query: Pick<ListTasksPageQuery, 'creatorSessionId'> = {}) {
+  /** `assignedTo`: the workspaces a token confined to them may see (`workspaceConfinement`). */
+  async list(
+    ownerId: string,
+    query: Pick<ListTasksPageQuery, 'creatorSessionId'> = {},
+    assignedTo?: readonly string[],
+  ) {
     const where: Prisma.TaskWhereInput = { ownerId };
+    if (assignedTo) where.assigneeId = { in: [...assignedTo] };
     // The paged list's scope of the same name, for the native task list, which reads this one.
     if (query.creatorSessionId) {
       if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');
@@ -8299,6 +9112,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         jobId: null,
         checksRunningForMs: null,
         landTask: null,
+        // A task in no project lands on no project's main branch.
+        mainBranch: null,
       },
       ...supersession,
     };
@@ -8487,6 +9302,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `written directly by a person, coordinator or execution session; ${remedy.instruction}. ` +
           'A task run may still write FAILED as its conservative outcome.',
       });
+    }
+    // Unit L4, the edit door's crossing: a session that sends another project WITH a `handoff` is
+    // asking for this task to be moved, and a request is not a write — it files the question (or
+    // finds the one already waiting) and moves nothing. Only a session asks: the owner's own move
+    // is §4 R1's and goes on below exactly as before, `handoff` or not. Only from a project, since
+    // a move leaves one. And only while the contract is enforced: in `observe` nothing is refused,
+    // so the write proceeds as it did before this door existed.
+    if (actingSessionId && dto.handoff != null && typeof dto.projectId === 'string'
+      && before.projectId && dto.projectId !== before.projectId
+      && projectScopeMode() === 'enforce') {
+      return this.requestMove(ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId);
+    }
+    // ...and the same request once the account owner's confirmation has moved the task: it is
+    // already where it asked to go. See `appliedMoveReplay`; anything it does not recognise as that
+    // request goes on below as the ordinary update it is.
+    if (actingSessionId && dto.handoff != null && typeof dto.projectId === 'string'
+      && before.projectId && dto.projectId === before.projectId
+      && projectScopeMode() === 'enforce') {
+      const replayed = await this.appliedMoveReplay(
+        ownerId, { ...before, projectId: before.projectId }, dto, actingSessionId,
+      );
+      if (replayed) return replayed;
     }
     const acceptanceCommand = dto.acceptanceCommand === undefined
       ? before.acceptanceCommand
@@ -8686,7 +9523,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
-    if (dto.provider) await this.assertUsableProvider(ownerId, dto.provider);
+    // The engine, provider and model pins as this write leaves them — each three-state; a provider
+    // alone carries the engine it runs on by default, and an engine alone is checked against the
+    // provider pin the task keeps (docs/provider-engine-contract.md §3.5).
+    const pins = dto.engine !== undefined || dto.provider !== undefined || dto.model !== undefined
+      ? await this.resolvePins(ownerId, dto, { engine: before.engine, provider: before.provider })
+      : {};
     // Unit L3 §4. An update never re-files a task on its own — a write that does not mention the
     // project leaves it exactly where it is — so this binds nothing and only refuses: it is what
     // stops a coordinator editing work inside another project's goal (R6), moving work across the
@@ -8799,9 +9641,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // A merge would leave no way to remove one.
       labels: dto.labels === undefined ? undefined : normalizeTaskLabels(dto.labels),
       // Three-state like the FKs above, except these are plain columns: omitted keeps the current
-      // pin, null goes back to inheriting the assignee's provider/model.
-      provider: dto.provider === undefined ? undefined : (dto.provider ?? null),
-      model: dto.model === undefined ? undefined : (dto.model ?? null),
+      // pin, null goes back to inheriting the assignee's engine/provider/model (resolved above).
+      engine: pins.engine,
+      provider: pins.provider,
+      model: pins.model,
       modelHint: dto.modelHint,
       modelHintReason: dto.modelHintReason,
       acceptanceCriteria:
@@ -9021,9 +9864,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const projectAfter =
         dto.projectId === undefined ? before.projectId : (dto.projectId ?? null);
       const successorId = supersededByTaskIdAfter;
+      // The writer's own tasks only: another account's is not found, rather than refused in words
+      // that say it exists and whose it is.
       const successor = successorId
         ? await this.prisma.task.findFirst({
-            where: { id: successorId },
+            where: { id: successorId, ownerId },
             select: { id: true, ownerId: true, projectId: true },
           })
         : null;
@@ -9186,7 +10031,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // writes the task row and the supersession statement writes it a second time, which
             // re-runs every one of its foreign keys.
             await lockTaskLists(tx, [dto.listId]);
-            if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);
+            if (rewritesTaskRow) await this.preLockCreatorSessions(tx, ownerId, [], [id]);
             // Compatibility pre-lock for the task/acceptance triggers retired by 0178. It remains
             // during the rolling-upgrade window and preserves the established rank-40 ordering,
             // but it no longer expresses acceptance semantics: no task column below enters the
@@ -9266,7 +10111,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // this row with an ordinary blocking lock, so a move that skipped this would hold two
             // projects and then WAIT for a task — the cycle, assembled out of the very locks taken
             // to avoid it.
-            if (supersession || movesProject) await this.lockTaskForSupersessionWrite(tx, id);
+            if (supersession || movesProject) await this.lockTaskForSupersessionWrite(tx, ownerId, id);
             // A verifier request decides two Task rows: its own verdict carrier and its subject.
             // Lock both at rank 50 in UUID order before reading the rank-60 request, so concurrent
             // verdicts and evidence supersession cannot take the same pair backwards.
@@ -9284,10 +10129,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                  FOR UPDATE`;
             }
             if (consumesVerificationRequest && verifiesTaskId) {
+              // The caller's own rows: a subject named from another account is not waited for or
+              // held here — the hierarchy check below refuses it as not found.
               const taskIds = orderedIds([id, verifiesTaskId]);
               await tx.$queryRaw`
                 SELECT "id" FROM "task"
-                 WHERE "id" = ANY(${taskIds}::uuid[])
+                 WHERE "id" = ANY(${taskIds}::uuid[]) AND "owner_id" = ${ownerId}::uuid
                  ORDER BY "id" FOR UPDATE`;
             }
             if (attachesVerifier) {
@@ -9560,8 +10407,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.recordListEvent(
         before.listId,
         'completion_reverted',
-        `任务「${before.title}」(${uuidToBase62(id)}) 从 DONE 被退回 ${dto.status}` +
-          (checks > 0 ? `，此前有 ${checks} 次验收记录` : '，此前没有验收记录'),
+        `Task “${before.title}” (${uuidToBase62(id)}) was reverted from DONE to ${dto.status}` +
+          (checks > 0 ? `; ${checks} verification(s) were on record before` : '; no verification was on record before'),
       );
     }
     // Last, after auto-dispatch and aggregate recomputation, so the fetched overlays reflect the
@@ -10238,6 +11085,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dispatchEpoch: bigint | null;
         priority: number;
         projectId: string | null;
+        taskEngine: string | null;
         taskProvider: string | null;
         modelRouting: boolean | null;
       }[]
@@ -10245,7 +11093,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
-             t.project_id AS "projectId", t.provider AS "taskProvider",
+             t.project_id AS "projectId", t.engine AS "taskEngine", t.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
@@ -10304,11 +11152,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
-             c.project_id AS "projectId", c.provider AS "taskProvider",
+             c.project_id AS "projectId", c.engine AS "taskEngine", c.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
       FROM (
         SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority, t.project_id,
-               t.provider,
+               t.engine, t.provider,
                -- The project's own budget, so this scan offers no project more than it has room
                -- for; the loop below spends that same budget across both candidate sets
                -- (projectBudgetSpent), and takeBudget the RUNNER's cap and a paused list's. Ranked
@@ -10347,7 +11195,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       id: row.id,
       ownerId: row.ownerId,
       assignee: {
-        provider: engines.get(row.id)!,
+        provider: engines.get(row.id)!.provider,
+        login: engines.get(row.id)!.login,
         runnerId: row.runnerId,
         workspaceId: row.workspaceId,
       },
@@ -10508,22 +11357,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         await this.recordListEvent(
           listId,
           'quota_hold',
-          `${e.quota} 个就绪任务被配额挡住` +
-            (e.resumesAt ? `，最早 ${e.resumesAt.toISOString()} 恢复` : '，没有拿到恢复时间'),
+          `${e.quota} ready task(s) held back by quota` +
+            (e.resumesAt ? `, resuming at ${e.resumesAt.toISOString()} at the earliest` : ', with no resume time given'),
         );
       }
       if (e.disk > 0) {
         await this.recordListEvent(
           listId,
           'disk_hold',
-          `${e.disk} 个就绪任务被磁盘下限挡住 —— 空间要由人来腾，不会自己恢复`,
+          `${e.disk} ready task(s) held back by the disk floor — a person has to free up space; it does not recover on its own`,
         );
       }
       if (e.cap > 0) {
         await this.recordListEvent(
           listId,
           'cap_hold',
-          `${e.cap} 个就绪任务因为本列表已到并发上限而没被物化 —— auto-run 要等队列消化到上限以下才恢复`,
+          `${e.cap} ready task(s) not materialised because this list is at its concurrency cap — auto-run resumes only once the queue drains below the cap`,
         );
       }
     }
@@ -10806,7 +11655,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       try {
         const task = await this.prisma.task.create({
           data: {
-            title: `[FOREMAN] ${list.title} — 停滞 ${list.minutes} 分钟`.slice(0, 200),
+            title: `[FOREMAN] ${list.title} — stalled ${list.minutes} min`.slice(0, 200),
             description: this.buildForemanBrief(list.title, list.minutes),
             ownerId: list.ownerId,
             listId: list.id,
@@ -10846,7 +11695,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         await this.recordListEvent(
           list.id,
           'foreman_filed',
-          `停滞约 ${list.minutes} 分钟，已自动派出协调任务 ${uuidToBase62(task.id)} 去诊断`,
+          `Stalled for about ${list.minutes} min; coordinating task ${uuidToBase62(task.id)} was dispatched automatically to diagnose it`,
         );
       } catch (e) {
         this.logger.warn(
@@ -10898,34 +11747,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private buildForemanBrief(title: string, minutes: number): string {
     return (
-      `任务列表「${title}」已停滞约 ${minutes} 分钟：仍有未完成的任务，但没有任何任务在运行，也没有新的运行被发起。\n\n` +
-      `请诊断原因并处理，然后结束本次运行。这是一次性的协调任务，不要保持长时间运行或轮询。\n\n` +
-      `建议的排查顺序：\n` +
-      `1. 用 tasklist_get / task_list 查看该列表的任务状态分布，找出卡在哪一层。` +
-      `**先看 failuresByCause**：它把已发生的失败按"真正坏了什么"归了类（quota / infrastructure / ` +
-      `contentFilter / unattributed）。这几类没有一类是靠改作业指导能修的——先看归因，再决定动哪个杠杆，` +
-      `不要一上来就怀疑 prompt 写得不好。\n` +
-      `2. 常见原因：前置任务永远不会完成、负责的 workspace 未绑定 runner、provider 配额耗尽、磁盘低于下限、上一次运行的会话仍占着任务却已无进展。\n` +
-      `3. 能在列表策略层面解决的（并发上限、暂停、作业指导），直接调整；需要改任务或依赖的，用 task_update / 依赖相关工具处理。\n` +
-      `4. 如果原因不在系统内（例如需要人清理磁盘、重新登录、补充配额），用 task_comment 写清结论和所需的人工动作。\n\n` +
-      `完成后请用 task_evidence_submit 提交判断与所做改动的证据信封（claim / criterion / checks / gaps，`
-      + `checks 至少一条要能解析到本任务会话下的行）；不要用评论代替证据，也不要写 ` +
-      `status=DONE，本任务的 status 由它声明的 completionCriterion 求值产生。`
+      `Task list “${title}” has been stalled for about ${minutes} min: it still has unfinished tasks, but none of them is running and no new run has been started.\n\n` +
+      `Diagnose why and deal with it, then end this run. This is a one-off coordinating task: do not keep running or polling.\n\n` +
+      `Suggested order:\n` +
+      `1. Use tasklist_get / task_list to see how the list's tasks are spread across statuses and find the layer where they are stuck. ` +
+      `**Read failuresByCause first**: it sorts the failures that have happened by "what actually broke" (quota / infrastructure / ` +
+      `contentFilter / unattributed). Not one of these is fixed by changing the instructions — read the attribution first, then decide which lever to pull; ` +
+      `do not start by suspecting the prompt is badly written.\n` +
+      `2. Common causes: a prerequisite that will never finish, an assigned workspace with no runner bound, an exhausted provider quota, disk below the floor, a session from the last run still holding the task while making no progress.\n` +
+      `3. Whatever can be fixed at the list's policy level (concurrency cap, pause, instructions), adjust directly; whatever needs a task or a dependency changed, handle with task_update / the dependency tools.\n` +
+      `4. If the cause lies outside the system (for example a person has to clean up disk, sign in again or top up quota), write the conclusion and the manual action needed with task_comment.\n\n` +
+      `When you are done, submit an evidence envelope of your judgment and the changes you made with task_evidence_submit (claim / criterion / checks / gaps; `
+      + `at least one check has to resolve to a row under this task's sessions). Do not use a comment in place of evidence, and do not write ` +
+      `status=DONE: this task's status is derived from the completionCriterion it declares.`
     );
   }
 
   /**
-   * The engine each task's next fresh run would be created on, as dispatch plans it — what the
-   * sweep's quota gate judges, so that it holds back the engine a run will spend and not another
-   * (docs/model-routing-design.md §6). The routed engine when the task's Agent has smart selection
-   * on and routing applies; otherwise the task's provider pin, else the Agent's seed (the project's
-   * last interactive session, migration 0088), which `sessions.create` falls back to.
+   * The engine and the credential each task's next fresh run would be created on, as dispatch plans it
+   * — what the sweep's quota gate judges, so that it holds back the quota a run will spend and not
+   * another (docs/model-routing-design.md §6, docs/provider-engine-contract.md §4.5). The routed pair
+   * when the task's Agent has smart selection on and routing applies; otherwise the task's pins, else
+   * the Agent's seed (the project's last interactive session, migration 0088), which `sessions.create`
+   * falls back to — resolved as `sessions.create` resolves them (routeEnvironment).
    *
-   * The pin and the switch ride on the scan that found the candidates — on only where both the
+   * The pins and the switch ride on the scan that found the candidates — on only where both the
    * Agent's switch and its account's are (common/model-routing-switch.ts). Routing is planned only
-   * there: anywhere else a route is never applied, so it could not move the engine, and nothing more
-   * is read. A route that cannot be worked out leaves the run on the pins, exactly as dispatch does
-   * (routeFreshRun).
+   * there: anywhere else a route is never applied, so it could not move the engine. A route that cannot
+   * be worked out leaves the run on the pins, exactly as dispatch does (routeFreshRun).
    */
   private async dispatchEngines(
     candidates: Array<{
@@ -10933,11 +11782,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ownerId: string;
       workspaceId: string;
       runnerId: string | null;
+      taskEngine?: string | null;
       taskProvider?: string | null;
       modelRouting?: boolean | null;
     }>,
-  ): Promise<Map<string, string>> {
-    const engines = new Map<string, string>();
+  ): Promise<Map<string, DispatchCredential>> {
+    const engines = new Map<string, DispatchCredential>();
     if (candidates.length === 0) return engines;
     // One batched lookup for the whole sweep rather than one per row.
     const seeds = await lastProviderByWorkspace(this.prisma, candidates.map((c) => c.workspaceId));
@@ -10949,7 +11799,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const chunk = await this.prisma.task.findMany({
         where: { id: { in: taskIds.slice(offset, offset + TASK_ID_QUERY_CHUNK) } },
         select: {
-          id: true, provider: true, model: true, modelHint: true, modelHintReason: true,
+          id: true, engine: true, provider: true, model: true, modelHint: true, modelHintReason: true,
           completionCriterion: true, acceptanceCommand: true, verifiesTaskId: true, isForeman: true,
         },
       });
@@ -10959,15 +11809,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const reads = new Map<string, TaskRouteReads>();
     for (const c of candidates) {
       const task = tasks.get(c.id);
-      let engine = c.taskProvider ?? (seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider;
+      let credential = dispatchCredentialOf(
+        { engine: c.taskEngine ?? null, provider: c.taskProvider ?? null },
+        seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
+      );
       if (task && c.runnerId) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
         const route = await this.routeFreshRun(
           reads.get(c.ownerId)!, task, { id: c.workspaceId, runnerId: c.runnerId }, '',
         );
-        if (route?.applied) engine = route.provider;
+        // The routed engine and the credential it runs on: the baseline's, or that engine's own sign-in.
+        if (route?.applied && route.provider) {
+          credential = {
+            provider: route.provider,
+            login: route.provider === route.engine && isAccountEngine(route.provider),
+          };
+        }
       }
-      engines.set(c.id, engine);
+      engines.set(c.id, credential);
     }
     return engines;
   }
@@ -10978,7 +11837,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * the provider's own "usage limit" error, so the only effect is a failed session per sweep until
    * the window resets (a weekly limit means days of them).
    *
-   * `assignee.provider` is the engine the run would be created on (dispatchEngines).
+   * `assignee` is the engine and credential the run would be created on (dispatchEngines). A run on a
+   * key spends the key's own quota, which no runner reports: it is never held here, and an API key is
+   * never blind (docs/provider-engine-contract.md §4.5) — the slug of a key is in no runner's snapshot,
+   * so judged like a sign-in it read as a quota nobody reports, and every usage-limit failure damped it.
+   * A key holding a Claude subscription token is the exception: it has the subscription's windows and
+   * prints its "hit your … limit" like a sign-in, so with nothing reporting them it is blind.
    *
    * The quota is the one the task's run would spend: its runner's for its provider, because one
    * runner can host workspaces on several runtimes and only some of their quotas may be spent — and
@@ -11001,7 +11865,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     tasks: Array<{
       id: string;
       ownerId: string;
-      assignee: { provider: string; runnerId: string | null; workspaceId: string } | null;
+      assignee: { provider: string; login?: boolean; runnerId: string | null; workspaceId: string } | null;
     }>,
   ): Promise<{ blocked: Map<string, Date>; blind: Set<string> }> {
     const runnerIds = [
@@ -11032,13 +11896,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : (
             await this.prisma.workspace.findMany({
               where: { id: { in: accountWorkspaceIds } },
-              select: { id: true, env: true, codexAccount: true, claudeAccount: true },
+              select: { id: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
             })
           ).map((w) => [w.id, w]),
     );
     const now = this.now();
-    // One pool read per owner's slug per pass.
+    // One pool read per owner's slug per pass, and one key read: null for a slug that is no key.
     const pools = new Map<string, Date | null>();
+    const keys = new Map<string, { subscription: boolean } | null>();
     for (const t of tasks) {
       const assignee = t.assignee;
       if (!assignee?.runnerId) continue;
@@ -11051,23 +11916,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         if (poolResumesAt > now) blocked.set(t.id, poolResumesAt);
         continue;
       }
+      // What the runner reports is its own sign-ins' quota. A run on a key spends the key's own, which
+      // no runner sees: it is never held by the runner's numbers (docs/provider-engine-contract.md
+      // §4.5). An API key is not blind for the want of them either: it is metered per token and has no
+      // window to run out. A Claude subscription token has the subscription's, and hits them like a
+      // sign-in does, so it is blind: a usage limit it hits holds the task off the way one on a sign-in
+      // nobody reports does (QUOTA_BLIND_RETRY_BACKOFF_MS), rather than the sweep re-dispatching it
+      // every minute until the window resets. Asked only of a credential that is no sign-in and no pool
+      // with something to go by — a pool that reports nothing stays blind, as it always was.
+      if (assignee.login === false) {
+        const key = `${t.ownerId}:${assignee.provider}`;
+        if (!keys.has(key)) keys.set(key, await this.keyQuota(t.ownerId, assignee.provider));
+        const quota = keys.get(key);
+        if (quota) {
+          if (quota.subscription) blind.add(t.id);
+          continue;
+        }
+      }
       const runner = runnerById.get(assignee.runnerId);
-      const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
+      // Antigravity's quota travels with its engine health, and is weighed with the rest here.
+      const usage = withEnginePlanUsage(
+        runner?.planUsage as unknown as PlanUsage | null | undefined,
+        sanitizeRunnerEngines(runner?.engines),
+      );
       const workspace = workspaceById.get(assignee.workspaceId);
-      // A Codex or Claude task on a workspace that leaves the account to Orbit gets its session started
-      // on the runner's account whose quota resets soonest (automaticAccount), so that is the quota it
-      // waits on.
-      const automatic =
-        assignee.provider === 'codex' || assignee.provider === 'claude'
-          ? automaticAccount(assignee.provider, workspace, runner?.engines, usage, now)
-          : null;
+      // A task on an engine that keeps accounts, on a workspace that leaves the account to Orbit, gets
+      // its session started on the runner's account whose quota resets soonest (automaticAccount), so
+      // that is the quota it waits on.
+      const engine = isAccountEngine(assignee.provider) ? assignee.provider : null;
+      const automatic = engine ? automaticAccount(engine, workspace, runner?.engines, usage, now) : null;
       const account = runAccount(
         assignee.provider,
         workspace?.env,
-        workspace &&
-          (assignee.provider === 'claude'
-            ? { ...workspace, claudeAccount: automatic ?? workspace.claudeAccount }
-            : { ...workspace, codexAccount: automatic ?? workspace.codexAccount }),
+        workspace && engine ? { ...workspace, [ACCOUNT_CHOICE[engine]]: automatic ?? workspace[ACCOUNT_CHOICE[engine]] } : workspace,
         runner?.engines,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);
@@ -11075,6 +11956,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (until) blocked.set(t.id, until);
     }
     return { blocked, blind };
+  }
+
+  /**
+   * The key `slug` names for `ownerId`, as the quota gate weighs it: whether it holds a Claude
+   * subscription token, or null when the slug is no key of theirs. The compatibility table's own
+   * judgment (keyCredential, shared providerEngines.ts), which needs the key decrypted — so it is
+   * decrypted only for a key on Anthropic's protocol, the one protocol a subscription token runs on.
+   */
+  private async keyQuota(ownerId: string, slug: string): Promise<{ subscription: boolean } | null> {
+    const row = await this.prisma.modelProvider.findFirst({
+      where: { slug, OR: [{ ownerId }, { ownerId: null }] },
+      select: { runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
+    });
+    if (!row) return null;
+    if (keyDialect(row.runtime) !== 'anthropic') return { subscription: false };
+    const credential = keyCredential(row);
+    return { subscription: credential.kind === 'key' && credential.subscriptionToken };
   }
 
   /**
@@ -11090,8 +11988,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * permanently un-runnable after one quota outage — exactly the tasks that should pick
    * themselves back up once the window resets.
    *
-   * `quotaBlindTaskIds` are the ones whose runner reports no quota snapshot to judge by. Only
-   * those get the flat QUOTA_BLIND_RETRY_BACKOFF_MS hold after a usage-limit failure. A task
+   * `quotaBlindTaskIds` are the ones whose quota nothing reports a snapshot of to judge by: a
+   * sign-in its runner reports nothing for, a pool with nothing to go by, or a key holding a Claude
+   * subscription token (quotaGate).
+   * Only those get the flat QUOTA_BLIND_RETRY_BACKOFF_MS hold after a usage-limit failure. A task
    * whose runner *does* report a healthy quota is dispatched at once instead: that report is
    * positive evidence the window reset, and delaying it would be the very "un-runnable fleet"
    * this exemption exists to prevent.
@@ -11223,7 +12123,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
              receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
              run.end_reason AS "endReason", run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
-             run.retry_at AS "retryAt", t.provider AS "taskProvider",
+             run.retry_at AS "retryAt", t.engine AS "taskEngine", t.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
         FROM task t
         JOIN workspace a ON a.id = t.assignee_id
@@ -11274,7 +12174,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       id: moment.id,
       ownerId: moment.ownerId,
       assignee: {
-        provider: engines.get(moment.id)!,
+        provider: engines.get(moment.id)!.provider,
+        login: engines.get(moment.id)!.login,
         runnerId: moment.runnerId,
         workspaceId: moment.workspaceId,
       },
@@ -11771,6 +12672,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           'mention nobody can be given',
       );
     }
+    // The run this comment came from (migration 0416). The runner sends its own session, so this is
+    // a guard, not a trust boundary, as on a task create: an id this owner does not have, or one the
+    // header middleware could not decode, is dropped rather than refused. The attempt is kept only
+    // when it is one of THIS task's — a session running another task names its session here, never
+    // that task's attempt.
+    const run = actingSessionId && UUID_RE.test(actingSessionId)
+      ? await this.prisma.session.findFirst({
+          where: { id: actingSessionId, ownerId },
+          select: { id: true, attempt: { select: { id: true, taskId: true } } },
+        })
+      : null;
     const comment = await this.prisma.taskComment.create({
       data: {
         taskId: id,
@@ -11784,6 +12696,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // predating the ledger keeps the old inline contract and is not delivered twice by a sweep
         // that knows nothing about it.
         mentionDeliveryVersion: TASK_COMMENT_MENTION_DELIVERY_VERSION,
+        sessionId: run?.id ?? null,
+        attemptId: run?.attempt && run.attempt.taskId === id ? run.attempt.id : null,
       },
     });
     // A new comment changes only this task's list-row count and detail. Owner scope also covers
@@ -11918,11 +12832,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const holder = await this.prisma.session.findFirst({
           where: { taskId: task.id, deletedAt: null, status: { in: TASK_OCCUPYING } },
           select: {
-            id: true, status: true, workspaceId: true, provider: true, model: true,
-            startsTaskWork: true, cancelRequestedAt: true,
+            id: true, status: true, workspaceId: true, engine: true, provider: true, providerBuiltin: true,
+            ownerId: true, model: true, startsTaskWork: true, cancelRequestedAt: true,
           },
         });
-        if (holder) throw this.foreignClaimRefusal(task, workspace, holder);
+        if (holder) {
+          throw this.foreignClaimRefusal(task, workspace, {
+            ...holder,
+            engine: await sessionEngine(this.prisma, holder),
+          });
+        }
         // 3. The insert collided and neither row is there now — the claim was released, or the id
         // this request derives was briefly taken by something that has since gone. Nothing of this
         // request is running, and saying so is the only honest answer: adopting a row would report a
@@ -12044,6 +12963,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * settle it with the primary key rather than with an exception that would abort whatever
    * transaction they were in.
    */
+  /** Whether this caller has already pressed with this token, whatever became of what it pressed on. */
+  private async hasRunReceipt(ownerId: string, actionKind: string, requestToken: string): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<Array<{ status: string }>>`
+      SELECT "status" FROM "task_run_request"
+       WHERE "owner_id" = ${ownerId}::uuid
+         AND "action_kind" = ${actionKind}
+         AND "request_token" = ${requestToken}`;
+    return rows.length > 0;
+  }
+
   private async leaseRunRequest(
     ownerId: string,
     actionKind: string,
@@ -12292,6 +13221,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       id: string;
       status?: RunStatus;
       workspaceId?: string | null;
+      /** The engine the holder runs on, recorded or derived; null when nobody can tell. */
+      engine?: AgentProvider | null;
       provider?: string | null;
       model?: string | null;
       startsTaskWork?: boolean;
@@ -12300,14 +13231,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   ): ConflictException {
     const taskPublicId = uuidToBase62(task.id);
     const sessionPublicId = uuidToBase62(holder.id);
-    // A run's provider is fixed for its lifetime, so a holder on another one is not this task's
-    // work being done — it is the previous pin still running. This deployment has shipped a
+    // A run's engine and provider are fixed for its lifetime, so a holder on another pair is not this
+    // task's work being done — it is the previous pin still running. This deployment has shipped a
     // provider mix-up before; reporting that as success is how it happens again. Its own code,
-    // because the remedy differs: waiting fixes it, and so does clearing the pin.
-    if (task.provider && holder.provider != null && holder.provider !== task.provider) {
+    // because the remedy differs: waiting fixes it, and so does clearing the pin. Compared as the pair
+    // (docs/provider-engine-contract.md §3.5): the same key under another engine is another run.
+    const conflict = holder.provider != null
+      ? pinConflict(task, { engine: holder.engine ?? null, provider: holder.provider })
+      : null;
+    if (conflict) {
       return taskRunPinConflict({
         taskPublicId, sessionPublicId, field: 'provider',
-        pinned: task.provider, running: holder.provider,
+        pinned: conflict.pinned, running: conflict.running,
       });
     }
     if (task.model != null && holder.model !== undefined && holder.model !== task.model) {
@@ -12674,10 +13609,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // still failed.
     const publicTaskId = uuidToBase62(delivery.taskId);
     const prompt =
-      `你在任务「${comment.taskTitle}」(${publicTaskId}) 的评论区被 @ 提到。\n\n` +
-      `评论内容：\n${comment.body}\n\n` +
-      `请用 task_get(taskId: "${publicTaskId}") 查看该任务的完整信息与历史评论，` +
-      `并用 task_comment(taskId: "${publicTaskId}", body: ...) 在该任务下回复。`;
+      `You were @-mentioned in the comments of task “${comment.taskTitle}” (${publicTaskId}).\n\n` +
+      `The comment:\n${comment.body}\n\n` +
+      `Use task_get(taskId: "${publicTaskId}") to read the task in full with its comment history, ` +
+      `and task_comment(taskId: "${publicTaskId}", body: ...) to reply under the task.`;
 
     // Step 0: where this is going. A remembered binding wins, then the agent's own live run on the
     // task, then a new conversation.
@@ -12825,11 +13760,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const configured = await this.prisma.modelProvider.findFirst({
         where: {
           slug: seed.provider, enabled: true,
-          OR: [{ ownerId: null }, { ownerId: delivery.ownerId }],
+          ...(await usableProviderScope(this.prisma, delivery.ownerId)),
         },
         select: { slug: true },
       });
       const usable = configured ?? (await accountPoolRuntime(this.prisma, delivery.ownerId, seed.provider));
+      // A shared provider runs an admin's sessions only: answered on it, the comment would hand its key to
+      // this agent's runner. Promoted, or moved onto a provider of their own, the mention delivers itself.
+      if (!usable && (await adminOnlyProviderRefusal(this.prisma, delivery.ownerId, seed.provider))) {
+        throw new MentionUndeliverable(
+          'PROVIDER_UNAVAILABLE',
+          `this agent runs on "${seed.provider}", which is available to admins only`,
+          true,
+          'ask an admin to add you to a shared pool, or point this agent at a provider of your own; ' +
+            'the mention then delivers itself',
+        );
+      }
       if (!usable) {
         throw new MentionUndeliverable(
           'PROVIDER_UNAVAILABLE',
@@ -12883,22 +13829,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     prompt: string,
     taskTitle: string,
-    seed: { provider: string },
+    seed: AgentProviderSeed,
     model: string | null,
   ): Promise<void> {
+    // The seed's engine and credential, re-checked as a new session re-checks a seed: a credential
+    // its engine no longer runs gives way to that credential's own default engine (engine-provider.ts).
+    const resolved = await resolveEngineProvider(
+      { db: this.prisma, poolRefusal: (owner, slug, db) => this.sessions.accountPoolRefusal(owner, slug, db) },
+      { ownerId: delivery.ownerId, door: 'session', seed: async () => seed },
+    );
     await this.sessions.create(
       delivery.ownerId,
       {
         prompt,
         workspaceId: delivery.workspaceId,
-        title: `回应评论：${taskTitle}`,
+        title: `Comment reply: ${taskTitle}`,
         // The MENTIONED AGENT's own seed, never the task's. This session is not running the task,
         // and pinning it to the task's engine would answer a comment on a runtime the agent was
         // never configured for.
         //
         // A workspace holds no provider column (migration 0088): the seed is derived from that
-        // agent's own last session, which is exactly what the New Session screen shows for it.
-        ...(seed ? { provider: seed.provider } : {}),
+        // agent's own last session, which is exactly what the New Session screen shows for it — the
+        // engine it ran on and the credential it spent, both carried.
+        engine: resolved.engine,
+        provider: resolved.provider,
         ...(model != null ? { model } : {}),
       } as never,
       {
@@ -13043,7 +13997,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // way identically rather than one of them guessing.
     const [occupying] = await this.prisma.$queryRaw<TaskRunHolder[]>(Prisma.sql`
       SELECT s."id", s."status"::text AS "status", s."workspace_id" AS "workspaceId",
-             s."provider", s."model", s."starts_task_work" AS "startsTaskWork",
+             s."engine", s."provider", s."provider_builtin" AS "providerBuiltin",
+             s."owner_id"::text AS "ownerId", s."model", s."starts_task_work" AS "startsTaskWork",
              s."cancel_requested_at" AS "cancelRequestedAt"
         FROM "session" s
        WHERE s."task_id" = ${task.id}::uuid
@@ -13069,7 +14024,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       // The SAME refusal the post-conflict path gives, from the same builder. Two doors onto one
       // fact answered in two shapes is how a client ends up parsing English to tell them apart.
-      throw this.foreignClaimRefusal(task, workspace, occupying);
+      throw this.foreignClaimRefusal(task, workspace, {
+        ...occupying,
+        engine: await sessionEngine(this.prisma, occupying),
+      });
     }
     // A CONVERSATION session on this task is not a reason to refuse: since 0130 the execution claim
     // covers work sessions only, so it holds nothing and a run can start beside it. That is what
@@ -13094,8 +14052,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // carrying the task, and is never handed the prompt: it is excluded here by the same predicate
     // the read above refuses on, so a wake source that appeared between the two reads cannot turn
     // that refusal into a delivery.
-    const [latest] = await this.prisma.$queryRaw<Array<{ id: string; provider: string }>>(Prisma.sql`
-      SELECT s."id", s."provider"
+    const [latest] = await this.prisma.$queryRaw<Array<{
+      id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
+    }>>(Prisma.sql`
+      SELECT s."id", s."engine", s."provider", s."provider_builtin" AS "providerBuiltin",
+             s."owner_id"::text AS "ownerId"
         FROM "session" s
        WHERE s."task_id" = ${task.id}::uuid
          AND s."workspace_id" = ${workspace.id}::uuid
@@ -13126,14 +14087,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // resuming instead would silently keep running the previous provider forever. A model change
     // needs no such split: the paused run is moved onto the pinned model before the prompt is
     // handed to it (`applyWorkspaceRun`).
-    if (latest && task.provider && task.provider !== latest.provider) {
+    // Compared as the pair a run is fixed to — its engine and its credential (docs/provider-engine-
+    // contract.md §3.5) — so a task re-pinned onto another engine with the same key is a re-pin too.
+    const paused = latest
+      ? { engine: await sessionEngine(this.prisma, latest), provider: latest.provider }
+      : null;
+    const repinned = paused && pinConflict(task, paused);
+    if (repinned) {
       // A session's provider is fixed for its lifetime, and the task has since been re-pinned. The
       // old behaviour fell through to create() — which, now that the execution claim covers all
       // four live statuses, cannot succeed: the paused run still holds the task. Say so instead of
       // failing on a unique index.
       throw new ConflictException(
-        `task ${uuidToBase62(task.id)} has a paused run on ${latest.provider} and is now pinned to ` +
-          `${task.provider}; a run cannot change provider. Let that run reach a terminal status of ` +
+        `task ${uuidToBase62(task.id)} has a paused run on ${repinned.running} and is now pinned to ` +
+          `${repinned.pinned}; a run cannot change provider. Let that run reach a terminal status of ` +
           'its own, and the next attempt will start on the new provider',
       );
     }
@@ -13228,7 +14195,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.clearStaleDispatchRefusal(task.id, plan.sessionId);
       return plan.sessionId;
     }
-    const created = task.routed ?? { provider: task.provider, model: task.model, effort: null };
+    const created = task.routed
+      ?? { engine: task.engine ?? null, provider: task.provider ?? null, model: task.model, effort: null };
     const session = await this.createTaskSessionOrReadWinner(
       ownerId,
       task,
@@ -13241,8 +14209,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
         // Unpinned (null) fields are left off entirely so the session keeps inheriting the
-        // workspace's provider/model/effort, exactly as before these columns existed. A routed run
+        // workspace's engine/provider/model/effort, exactly as before these columns existed — and an
+        // engine pinned alone runs on that engine's own credential (engine-provider.ts). A routed run
         // names what routing chose (model routing §8.3).
+        ...(created.engine != null ? { engine: created.engine } : {}),
         ...(created.provider != null ? { provider: created.provider } : {}),
         ...(created.model != null ? { model: created.model } : {}),
         ...(created.effort != null ? { effort: created.effort } : {}),
@@ -13341,6 +14311,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // never named. Stable artifact ids cannot fix that, because the door refuses before it reaches
     // them. So a request that has already been answered is answered from its answer.
     const runRequestToken = requestToken ?? randomUUID();
+    // Except a press on a task the caller does not have — another account's, or none at all. The
+    // receipt is the caller's own row, but a request about something it cannot see leaves nothing
+    // behind (the tenant isolation census, docs/google-sign-in-design.md §11 T1), and what it would
+    // be answered below is this same 404. A token already pressed is still answered from its receipt,
+    // whatever has become of the task since.
+    if (
+      !(await this.prisma.task.findFirst({ where: { id, ownerId }, select: { id: true } }))
+      && !(requestToken && (await this.hasRunReceipt(ownerId, TASK_RUN_ACTION.execute, requestToken)))
+    ) {
+      throw new NotFoundException('task not found');
+    }
     const recordAnswer = async (answer: TaskRunAnswer): Promise<TaskRunAnswer> => answer;
     const lease = await this.leaseRunRequest(
       ownerId, TASK_RUN_ACTION.execute, runRequestToken, taskRunFingerprint.execute(id),
@@ -13475,6 +14456,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         acceptanceCommand: true,
         acceptanceExpectedExitCode: true,
         projectId: true,
+        engine: true,
         provider: true,
         model: true,
         // The suggested tier, which routing reads for a fresh run.
@@ -13697,11 +14679,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       )
       : null;
     const frozen: TaskRunExecuteTarget = {
-      v: 2,
+      v: 3,
       kind: 'RUN',
       plan: planned,
       taskId: task.id,
-      title: `执行任务：${task.title}`,
+      title: `Task: ${task.title}`,
       prompt,
       workspaceId: task.assignee!.id,
       runnerId: task.assignee!.runnerId!,
@@ -13731,6 +14713,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * planned it and by a takeover that read it off the receipt — which is what makes "the same
    * request, the same answer" a property of the code rather than of timing.
    */
+  /**
+   * A bound target with the engine its run is created on (docs/provider-engine-contract.md §6.4). A v3
+   * target names one, or names none on purpose; one bound before targets carried an engine
+   * (`fromVersion`) reads as none, which `sessions.create` resolves from its provider alone — except
+   * where an older replica bound it in the mixed window for a task whose provider pin it names and
+   * whose engine is pinned too: that run takes the engine pin (taskRunEngine).
+   */
+  private async withReceiptEngine<T extends { taskId: string; engine: string | null; provider: string | null }>(
+    target: T,
+    fromVersion: number | undefined,
+  ): Promise<T> {
+    if (!fromVersion || target.engine || !target.provider) return target;
+    const task = await this.prisma.task.findUnique({
+      where: { id: target.taskId },
+      select: { engine: true, provider: true },
+    });
+    return { ...target, engine: taskRunEngine(target, task) };
+  }
+
   private async applyExecuteTarget(
     lease: Extract<TaskRunLease, { held: true }>,
     frozen: TaskRunExecuteTarget,
@@ -13743,8 +14744,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!bound) throw taskRunInProgress(lease.claim.actionKind, requestToken);
     // The plan in force may not be the one this call computed — a takeover may have bound its own —
     // and it may not even be a run. Both are read off the row rather than assumed.
-    const target = readExecuteTarget(bound);
-    if (!target) throw taskRunUnreadableTarget(lease.claim.actionKind, requestToken);
+    const read = readExecuteTarget(bound);
+    if (!read) throw taskRunUnreadableTarget(lease.claim.actionKind, requestToken);
+    const target = await this.withReceiptEngine(read, read.fromVersion);
     const task = boundRunTask(target);
     // The BOUND plan's decision, so a takeover records the one that is being carried out.
     await this.recordRouteDecision(ownerId, target.taskId, requestToken, target.plan, target.route);
@@ -14048,6 +15050,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         acceptanceCommand: true,
         acceptanceExpectedExitCode: true,
         projectId: true,
+        engine: true,
         provider: true,
         model: true,
         // The suggested tier, which routing reads for a fresh run, as the single Run does.
@@ -14212,7 +15215,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // mutable. Re-classifying is how a repeat reports `dispatched: 0, skipped: N` about work the
     // press itself started.
     const planned: TaskRunBatchPlan = {
-      v: 2,
+      v: 3,
       kind: 'BATCH',
       batchId: batch?.id ?? null,
       maxConcurrent: maxConcurrent ?? null,
@@ -14235,7 +15238,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : null;
       planned.items.push({
         taskId: t.id,
-        title: `执行任务：${t.title}`,
+        title: `Task: ${t.title}`,
         prompt,
         workspaceId: workspace.id,
         runnerId: workspace.runnerId,
@@ -14275,7 +15278,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!(await this.renewRunRequest(lease.claim))) {
         throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
       }
-      const task = boundRunTask(item);
+      const task = boundRunTask(await this.withReceiptEngine(item, plan.fromVersion));
       // Under this item's own request name, which is what its run is named by too.
       await this.recordRouteDecision(
         ownerId, item.taskId, TASK_RUN_TRIGGER.batch(pressToken, item.taskId), item, item.route,
@@ -14531,12 +15534,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * operation.
    */
   async pinMany(ownerId: string, dto: BatchPinTasksDto) {
-    const writesProvider = dto.provider !== undefined;
-    const writesModel = dto.model !== undefined;
-    if (!writesProvider && !writesModel) {
+    if (dto.engine === undefined && dto.provider === undefined && dto.model === undefined) {
       throw new BadRequestException({
         code: 'PIN_BATCH_NOTHING_TO_WRITE',
-        message: 'name provider and/or model; a batch pin that changes neither writes nothing',
+        message: 'name engine, provider and/or model; a batch pin that changes none of them writes nothing',
       });
     }
     const selectors: Prisma.Sql[] = [Prisma.sql`"owner_id" = ${ownerId}::uuid`];
@@ -14554,19 +15555,36 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           'selector would mean every task this owner has',
       });
     }
+    // What the pins become, resolved once for the whole batch (docs/provider-engine-contract.md §3.5):
+    // a provider — with its engine, or the one it runs on by default — does not depend on what each task
+    // holds, so it is checked here, before anything is written. An engine written alone keeps each
+    // task's provider pin, so every provider pin the selection holds is checked against it first.
+    const pins = await this.resolvePins(ownerId, dto, null);
+    const selector = Prisma.join(selectors, ' AND ');
+    const keeps = dto.engine !== undefined && dto.provider === undefined && pins.engine
+      ? await this.pinnedProvidersRunOn(ownerId, selector, pins.engine)
+      : null;
     const assignments: Prisma.Sql[] = [];
     const differs: Prisma.Sql[] = [];
-    if (writesProvider) {
-      assignments.push(Prisma.sql`"provider" = ${dto.provider}`);
-      differs.push(Prisma.sql`"provider" IS DISTINCT FROM ${dto.provider}`);
+    if (dto.engine !== undefined || pins.engine !== undefined) {
+      assignments.push(Prisma.sql`"engine" = ${pins.engine ?? null}`);
+      differs.push(Prisma.sql`"engine" IS DISTINCT FROM ${pins.engine ?? null}`);
     }
-    if (writesModel) {
-      assignments.push(Prisma.sql`"model" = ${dto.model}`);
-      differs.push(Prisma.sql`"model" IS DISTINCT FROM ${dto.model}`);
+    if (pins.provider !== undefined) {
+      assignments.push(Prisma.sql`"provider" = ${pins.provider}`);
+      differs.push(Prisma.sql`"provider" IS DISTINCT FROM ${pins.provider}`);
+    }
+    if (pins.model !== undefined) {
+      assignments.push(Prisma.sql`"model" = ${pins.model}`);
+      differs.push(Prisma.sql`"model" IS DISTINCT FROM ${pins.model}`);
     }
     // OR, not AND: a row whose provider differs still needs writing when its model does not.
     const difference = Prisma.join(differs, ' OR ');
-    const selector = Prisma.join(selectors, ' AND ');
+    // An engine written alone only onto rows whose provider pin was checked against it: a row re-pinned
+    // to another provider after that scan is left alone rather than written past the check.
+    const checked = keeps
+      ? Prisma.sql`AND ("provider" IS NULL OR "provider" = ANY(${keeps}::text[]))`
+      : Prisma.empty;
     // Keyset pagination, and it is not a detail. `ORDER BY "id" LIMIT n` with no lower bound reads
     // from the first id every time, so chunk k re-reads everything the previous chunks already
     // wrote and skipped — measured on the fixture, walking one project in 500-row chunks that way
@@ -14583,6 +15601,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 WHERE ${selector}
                   ${after ? Prisma.sql`AND "id" > ${after}::uuid` : Prisma.empty}
                   AND (${difference})
+                  ${checked}
                 ORDER BY "id"
                 LIMIT ${TASK_BATCH_PIN_CHUNK}
              )
@@ -14613,6 +15632,43 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // which is not a list this side ever held.
     if (changed > 0) this.publishTaskResync(ownerId);
     return { changed };
+  }
+
+  /**
+   * The provider pins a batch-pin selection holds, each checked against the `engine` it is about to be
+   * pinned to (docs/provider-engine-contract.md §3.5): the whole batch is refused when any of them
+   * cannot run there, naming each such provider and how many of the selected tasks pin it. Read once
+   * over the selection rather than per row — a batch can be a hundred thousand tasks — and returned as
+   * the set the write may then apply to. A pin naming nothing any more is no reason to refuse; its
+   * run is refused with its own reason.
+   */
+  private async pinnedProvidersRunOn(ownerId: string, selector: Prisma.Sql, engine: AgentProvider): Promise<string[]> {
+    const pinned = await this.prisma.$queryRaw<Array<{ provider: string; tasks: number }>>(Prisma.sql`
+      SELECT "provider", count(*)::int AS "tasks"
+        FROM "public"."task"
+       WHERE ${selector} AND "provider" IS NOT NULL
+       GROUP BY "provider"`);
+    const refused: Array<{ provider: string; tasks: number; engines: AgentProvider[] }> = [];
+    for (const { provider, tasks } of pinned) {
+      const credential = await taskPinCredential(this.prisma, ownerId, provider);
+      const engines = credential ? resolvedCredentialEngines(credential) : null;
+      if (engines && !engines.includes(engine)) refused.push({ provider, tasks, engines });
+    }
+    if (refused.length > 0) {
+      throw new BadRequestException({
+        code: 'PROVIDER_ENGINE_INCOMPATIBLE',
+        message: refused
+          .map((row) =>
+            `${engineIncompatibleMessage(row.provider, engine, row.engines)} ` +
+            `(${row.tasks} of the selected tasks pin it)`)
+          .join('; ') + '; nothing was written',
+        engine,
+        provider: refused[0].provider,
+        engines: refused[0].engines,
+        incompatible: refused,
+      });
+    }
+    return pinned.map((row) => row.provider);
   }
 
   async removeComment(ownerId: string, id: string, commentId: string) {

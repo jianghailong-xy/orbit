@@ -61,7 +61,35 @@ export interface SessionStateSource {
   engineStartedAt?: string | null;
   /** What that engine is doing while engineStartedAt is still null. See startingTitle. */
   enginePhase?: string | null;
+  /** The run's SOURCE (project-source-contract §6.1). See sessionSourceRefused. */
+  sourceState?: string | null;
+  sourceRefusalCode?: string | null;
 }
+
+/**
+ * Whether this run's SOURCE was refused — the run never became one.
+ *
+ * Terminal (SR34): the pin is closed to a second resolution and the recovery is a NEW run, so
+ * nothing about this one will ever move. A session can carry this while its row still says RUNNING
+ * — the run's own status is settled by the control plane a moment later, and rows predating that
+ * fix are still out there — and every surface that would otherwise say "Starting" (the engine is
+ * coming up) or "Running" (it is working) about such a session is saying something untrue, about a
+ * wait nobody is in. So this is read wherever a session's STATE is worded or drawn, and such a run
+ * wears the words a failed one wears.
+ *
+ * Both spellings count: the refusal is frozen as `sourceState` REFUSED with the code beside it, and
+ * a payload from between the two (or a projection that carries only one of the columns) names the
+ * same fact.
+ */
+export const sessionSourceRefused = (session: {
+  sourceState?: string | null;
+  sourceRefusalCode?: string | null;
+}): boolean =>
+  (session.sourceState ?? '').toUpperCase() === 'REFUSED' || (session.sourceRefusalCode ?? '') !== '';
+
+/** The state a row, a header or a glyph should READ for this session (see sessionSourceRefused). */
+export const sessionReadingState = (session: SessionStateSource): SessionRunState =>
+  sessionSourceRefused(session) ? 'FAILED' : sessionRunStateOf(session);
 
 const SESSION_RUN_STATE_SET = new Set<string>(SESSION_RUN_STATES);
 const SESSION_LIFECYCLE_STATE_SET = new Set<string>(SESSION_LIFECYCLE_STATES);

@@ -77,8 +77,11 @@ struct WorktreeBar: View {
         // never reliably reaches `.running` on a cold open of an already-running session (no durable
         // "running" event is replayed), which left Commit enabled — and Merge shown — mid-turn. Fall
         // back to the reconciled stream status only until the session record loads (fresh deep link).
-        let turnActive = (app.session(id: console.sessionID)?.effectiveRunStatus
-            ?? console.sessionStatus) == .running
+        // A message on its way counts before either status says so — see `WorktreeBarLogic.turnActive`.
+        let session = app.session(id: console.sessionID)
+        let turnActive = WorktreeBarLogic.turnActive(status: session?.effectiveRunStatus ?? console.sessionStatus,
+                                                     runningSubagents: session?.runningSubagentCount,
+                                                     sending: console.sending || console.awaitingReply)
         let primary = WorktreeBarLogic.primary(worktreeDirty: d.worktreeDirty,
                                                 committed: committed, turnActive: turnActive)
         let add = files.reduce(0) { $0 + max(0, $1.additions) }

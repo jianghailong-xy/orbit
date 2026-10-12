@@ -1,6 +1,7 @@
 import { Body, Controller, Headers, Param, Post, UseGuards } from '@nestjs/common';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { DeclineDoneRequestDto } from './dto';
@@ -24,6 +25,7 @@ export class ProjectDoneNotYetController {
    * An acting session is passed through so the service applies the same owner-only rule as
    * `POST /projects/:id/done`.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/done-requests/:itemId/decline')
   decline(
     @CurrentUser() user: AuthUser,

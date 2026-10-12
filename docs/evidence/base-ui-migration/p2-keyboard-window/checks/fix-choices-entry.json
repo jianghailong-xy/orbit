@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits\"'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_52635e4bdcd9",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T05:07:45.748430+00:00",
+ "exitCode": 0,
+ "outputSha256": "baf8e0376752a901a592d3d51146bbc593e6c5cefa03a07078dcb025f8fd50d3",
+ "outputBytes": 5730,
+ "note": "Fixed tree: the choices original entry (Dialog/legacy Modal ownership, top-layer Escape, Tab, theme, composition, outside dismissal, submenu Escape, keyboard clear, Dialog Popover Select exits with normal and reduced motion) in all eight environments, own network namespace: 32 passed, as on the baseline and delivered trees."
+}

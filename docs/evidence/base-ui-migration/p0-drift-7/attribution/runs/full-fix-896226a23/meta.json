@@ -1,0 +1,24 @@
+{
+ "app": "/mnt/data/tmp/34cswWfvNasFTq8kDM0Q4/trees/896226a23",
+ "commit": "896226a23bc38c8d2dbae1e29769201499de3e04",
+ "runner": "/mnt/data/tmp/34cswWfvNasFTq8kDM0Q4/runners/fix",
+ "runnerCommit": "f9fd37defb75ed792ec0c510946cbf7328032b06",
+ "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+ "started": "2026-10-09T16:27:21Z",
+ "finished": "2026-10-09T16:32:52Z",
+ "exit": 0,
+ "environment": "p0.2",
+ "stats": {
+  "expected": 76,
+  "unexpected": 0,
+  "flaky": 0,
+  "skipped": 4
+ },
+ "screenshots": 252,
+ "evidence": {
+  "tests": 80,
+  "withUnhandled": 0,
+  "unhandled": {},
+  "withPageErrors": 0
+ }
+}

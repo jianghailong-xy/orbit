@@ -3,7 +3,7 @@ import type { TaskStartCard, TaskStartCriterion } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { isAutomaticTaskRunToken, taskRunResumeToken } from './task-run-identity';
-import { buildTaskExecutionPrompt } from './tasks.service';
+import { buildTaskExecutionPrompt } from './task-execution-prompt';
 
 /**
  * The card a task run's opening turn is drawn as (`TaskStartCard`), or null for every other turn.

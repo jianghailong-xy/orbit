@@ -1,0 +1,17 @@
+{
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "commit": "f162a2f9de3cb4bdea8e9a6120dd28a8e2184328",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-08T03:19:26Z",
+ "endedAt": "2026-10-08T03:24:58+00:00",
+ "loadAverage": {
+  "start": "13.92 16.25 17.14",
+  "end": [
+   "27.50",
+   "22.45",
+   "19.42"
+  ]
+ },
+ "exitCode": 0
+}

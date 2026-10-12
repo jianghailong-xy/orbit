@@ -1,0 +1,901 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T13:59:22.155Z",
+  "duration": 49169.312999999995,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 24,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1854,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b96c064e68331f469ca576251caa750f4972e6d29237fa5d20e67c66bd866cd"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-desktop/error-context.md",
+       "sha256": "9851a0646e6b158c689d32943bb30c6c8cd4c52854f9ff0c7edff1b05a0f7541"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-desktop/trace.zip",
+       "sha256": "64f0b3022caef989f0e0e72bc3578ce0621126b3b3f58d67005cbd0b21cde2f7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1615,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7721b2502a217eac99b3dc63246ed55d5a941284ee111a70bfcbb43e3a62c8c"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-desktop/error-context.md",
+       "sha256": "6c9dc139736a65499f06750ba7dc1e088838908219044d6807b73da7921b3e7a"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-desktop/trace.zip",
+       "sha256": "1fbbb520c7a429c8c755e9a5fdc5d733580436d6f97cd56db6522bb3ed609a89"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1547,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"file\"\u001b[39m\nReceived: \u001b[31m\"command\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0d1a9ebebd7b603a4b4b8dd3c487859cd8d56e7ea6ef31d7a049cd08d75a17"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-desktop/error-context.md",
+       "sha256": "19265b92bec6f50452d2712c4c9f1d59da36779243a3963f5c586c11573deba3"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-desktop/trace.zip",
+       "sha256": "a485f2fd01e1fbc561292a36750fdb33a02ee9586b5ecc4866f4122db99a7120"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1701,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b96c064e68331f469ca576251caa750f4972e6d29237fa5d20e67c66bd866cd"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-phone/error-context.md",
+       "sha256": "9b07fa4741552cf815c717cb091bfa1c216f0298c5b5a6670b9a899d1662a922"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-light-phone/trace.zip",
+       "sha256": "ee83097cd54aa9520a1a17e4c8acad1034fdab405b8d7f6dafc1645aeca73845"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1567,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7721b2502a217eac99b3dc63246ed55d5a941284ee111a70bfcbb43e3a62c8c"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-phone/error-context.md",
+       "sha256": "f4592a2a44187e94232b133c5f6601156eafbc4bb434e9ad5bdbbd2f4cb16f54"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-light-phone/trace.zip",
+       "sha256": "b64e3a42d37d1b5de214460103114edd089acc9e62151b1d04a102fd1d0f45dc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-light-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1489,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"file\"\u001b[39m\nReceived: \u001b[31m\"command\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0d1a9ebebd7b603a4b4b8dd3c487859cd8d56e7ea6ef31d7a049cd08d75a17"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-phone/error-context.md",
+       "sha256": "6832378f2b29d7296447a8c808839aab034f242245cbde1aed43342b5e08b5cc"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-light-phone/trace.zip",
+       "sha256": "61789d2e53fb5a9337c403afcf589f3d7a0f992d6bccde12026939e8f9068934"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 2080,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b96c064e68331f469ca576251caa750f4972e6d29237fa5d20e67c66bd866cd"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-desktop/error-context.md",
+       "sha256": "e326126982dc1e04fdf8544a80bf40a9466c5e42f6341bd5339f7a4305244cbe"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-desktop/trace.zip",
+       "sha256": "fa405e0d568c92717c965eb05ac2e8d4d7223e696c072e41849891b0398808a1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1696,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7721b2502a217eac99b3dc63246ed55d5a941284ee111a70bfcbb43e3a62c8c"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-desktop/error-context.md",
+       "sha256": "700657ad170eb1273f2722fdc65c5bad718a0450ab59549918bf6d9d3a79d2f4"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-desktop/trace.zip",
+       "sha256": "705fb2279511da7fe5c45b8430b24a5ef4e6b90050def6707fc017b3353851de"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1579,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"file\"\u001b[39m\nReceived: \u001b[31m\"command\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0d1a9ebebd7b603a4b4b8dd3c487859cd8d56e7ea6ef31d7a049cd08d75a17"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-desktop/error-context.md",
+       "sha256": "7666146690adb0816434bf0d0a6a941b99cb4509300d57b52454be1260ecd5b3"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-desktop/trace.zip",
+       "sha256": "416fceafda0b73d104512f05eb8139c0970def7969f5352ca30ea13dec97ff13"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1458,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b96c064e68331f469ca576251caa750f4972e6d29237fa5d20e67c66bd866cd"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-phone/error-context.md",
+       "sha256": "dd3f6541176eee2a450cf931fbbdee073c254a7fe407367f3e46a41d4e87c54b"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-chromium-dark-phone/trace.zip",
+       "sha256": "29b6567493a8785633c5bc6f8aeb3184f603ab3dc5954f21fda61d394ff8a1fa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1726,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7721b2502a217eac99b3dc63246ed55d5a941284ee111a70bfcbb43e3a62c8c"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-phone/error-context.md",
+       "sha256": "1503501044e0c367c77fa1ea531f98c0a8de7d54745979f606a8d547e032dd61"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-chromium-dark-phone/trace.zip",
+       "sha256": "7d088437ac1acba8fcc82755dd9ecc0a3e5d80e4656e8a54a176d7d09e0b47fc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "chromium-dark-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1728,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"file\"\u001b[39m\nReceived: \u001b[31m\"command\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0d1a9ebebd7b603a4b4b8dd3c487859cd8d56e7ea6ef31d7a049cd08d75a17"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-phone/error-context.md",
+       "sha256": "9d0304a0687265969cd6682e04d380a51ecdbc0805bbdbaa4462822d898868c7"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-chromium-dark-phone/trace.zip",
+       "sha256": "9b9b9802abcf342a8691dcd7c6f60d5d813399cc950b1c9b7c53b7c48c878854"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 2184,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b96c064e68331f469ca576251caa750f4972e6d29237fa5d20e67c66bd866cd"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-desktop/error-context.md",
+       "sha256": "9851a0646e6b158c689d32943bb30c6c8cd4c52854f9ff0c7edff1b05a0f7541"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-desktop/trace.zip",
+       "sha256": "b2a6eddf0dae582783d09e774f6029e0a5ed9644d02d53100a6182b7308e252e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1467,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7721b2502a217eac99b3dc63246ed55d5a941284ee111a70bfcbb43e3a62c8c"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-desktop/error-context.md",
+       "sha256": "6c9dc139736a65499f06750ba7dc1e088838908219044d6807b73da7921b3e7a"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-desktop/trace.zip",
+       "sha256": "f3dad030d8a606881306245503543327296ea4da48db29091b2b1dccfcfd55ac"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1411,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"file\"\u001b[39m\nReceived: \u001b[31m\"command\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0d1a9ebebd7b603a4b4b8dd3c487859cd8d56e7ea6ef31d7a049cd08d75a17"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-desktop/error-context.md",
+       "sha256": "19265b92bec6f50452d2712c4c9f1d59da36779243a3963f5c586c11573deba3"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-desktop/trace.zip",
+       "sha256": "a41e1bc65380538f0b34db092b9530325933036aa46bd191442feb4cf1500420"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1450,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b96c064e68331f469ca576251caa750f4972e6d29237fa5d20e67c66bd866cd"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-phone/error-context.md",
+       "sha256": "9b07fa4741552cf815c717cb091bfa1c216f0298c5b5a6670b9a899d1662a922"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-light-phone/trace.zip",
+       "sha256": "7cc6a647400a47f6bc62402fa10213a2cd4a1f3b235a87ad052961131f549911"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1569,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7721b2502a217eac99b3dc63246ed55d5a941284ee111a70bfcbb43e3a62c8c"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-phone/error-context.md",
+       "sha256": "f4592a2a44187e94232b133c5f6601156eafbc4bb434e9ad5bdbbd2f4cb16f54"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-light-phone/trace.zip",
+       "sha256": "210923d552a1b70bf81f83a1764a2597b1364857d087963e777acc43e4d45bda"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1485,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"file\"\u001b[39m\nReceived: \u001b[31m\"command\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0d1a9ebebd7b603a4b4b8dd3c487859cd8d56e7ea6ef31d7a049cd08d75a17"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-phone/error-context.md",
+       "sha256": "6832378f2b29d7296447a8c808839aab034f242245cbde1aed43342b5e08b5cc"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-light-phone/trace.zip",
+       "sha256": "d1e8204144fdc908462bd28219b43edd73b4f44f4eb16bb86fa942342b4734a9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1605,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b96c064e68331f469ca576251caa750f4972e6d29237fa5d20e67c66bd866cd"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-desktop/error-context.md",
+       "sha256": "e326126982dc1e04fdf8544a80bf40a9466c5e42f6341bd5339f7a4305244cbe"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-desktop/trace.zip",
+       "sha256": "6c03f95cb9890430ca3668cf6533aa95e4dfca42805c5e6673a0d4ab6b54e2ad"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1562,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7721b2502a217eac99b3dc63246ed55d5a941284ee111a70bfcbb43e3a62c8c"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-desktop/error-context.md",
+       "sha256": "700657ad170eb1273f2722fdc65c5bad718a0450ab59549918bf6d9d3a79d2f4"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-desktop/trace.zip",
+       "sha256": "7bc46689bb7e4a1f298de935bccf80de815ac00625eba9928f7c338d993bf420"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-dark-desktop",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1498,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"file\"\u001b[39m\nReceived: \u001b[31m\"command\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0d1a9ebebd7b603a4b4b8dd3c487859cd8d56e7ea6ef31d7a049cd08d75a17"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-desktop/error-context.md",
+       "sha256": "7666146690adb0816434bf0d0a6a941b99cb4509300d57b52454be1260ecd5b3"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-desktop/trace.zip",
+       "sha256": "30bf79782667877f7483685e3455a5477a12b7f56e1f44003c811c9a855f8563"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1448,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b96c064e68331f469ca576251caa750f4972e6d29237fa5d20e67c66bd866cd"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-phone/error-context.md",
+       "sha256": "dd3f6541176eee2a450cf931fbbdee073c254a7fe407367f3e46a41d4e87c54b"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-⏎-End-⏎-with-frames-held-webkit-dark-phone/trace.zip",
+       "sha256": "341c498f6a4cdbcdb728d5647a917010d801c4be34857fcf609868ac35831e0d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1719,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"command\"\u001b[39m\nReceived: \u001b[31m\"file\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "d7721b2502a217eac99b3dc63246ed55d5a941284ee111a70bfcbb43e3a62c8c"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-phone/error-context.md",
+       "sha256": "1503501044e0c367c77fa1ea531f98c0a8de7d54745979f606a8d547e032dd61"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↓-End-⏎-with-frames-held-webkit-dark-phone/trace.zip",
+       "sha256": "39ff35b432b26378cf5429635187ea88fca5d326bebf5232770d44a69ec98cbe"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "unexpected",
+   "results": [
+    {
+     "status": "failed",
+     "duration": 1508,
+     "retry": 0,
+     "errors": [
+      "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"file\"\u001b[39m\nReceived: \u001b[31m\"command\"\u001b[39m\n\n  135 |     if ('output' in expected) {\n  136 |       const [label, text] = expected.output ?? [];\n> 137 |       if (label) expect(after.outputs[label]).toBe(text);\n      |                                               ^\n  138 |       else expect(after.outputs).toEqual(before.outputs);\n  139 |     }\n  140 |     if (expected.answer) expect(after.outputs.Answer).toBe(expected.answer);\n    at /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs:137:47"
+     ],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4a0d1a9ebebd7b603a4b4b8dd3c487859cd8d56e7ea6ef31d7a049cd08d75a17"
+      },
+      {
+       "name": "error-context",
+       "contentType": "text/markdown",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-phone/error-context.md",
+       "sha256": "9d0304a0687265969cd6682e04d380a51ecdbc0805bbdbaa4462822d898868c7"
+      },
+      {
+       "name": "trace",
+       "contentType": "application/zip",
+       "path": "/var/tmp/kw2-246921c8/runs/fix-held-frames-before-home-end/held-frames-2.browser.mjs-menu-↑-Home-⏎-with-frames-held-webkit-dark-phone/trace.zip",
+       "sha256": "73c4cc96bd6333abee6bb104053e9f953d0508449a6fc5961efc45b3278bbddb"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

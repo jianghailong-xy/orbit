@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && npm run test:ui-choices -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_83013e48b124",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "fb8ea5e9eb6efe9b8744a25d071ed5a775ca312c",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T13:59:06.370479+00:00",
+ "exitCode": 1,
+ "outputSha256": "289eb0d223224e220ce8ff2ac87b44a7f5660842e1fc9758caa7e2000563c2ba",
+ "outputBytes": 84043,
+ "note": "519 passed / 1 failed: chromium-dark-phone \"email tags support controlled typing, separators, composition, Enter, blur and deletion\" never mounted the fixture in beforeEach; its trace (regression-choices-full-first-traces.json) shows 11 module requests aborted with net::ERR_NETWORK_CHANGED, and the last actions are newPage, goto and the theme expect, before the test body. The matrix was run again in full (regression-choices-full)."
+}

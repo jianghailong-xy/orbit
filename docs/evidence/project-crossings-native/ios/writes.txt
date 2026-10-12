@@ -1,0 +1,5 @@
+19:26:37 "POST /__reset HTTP/1.1" 200 -
+19:27:51 BODY /api/projects/P1/handoffs/X1/decision {"acknowledgedCrossingKey":"8f3c1d2e8f3c1d2e8f3c1d2e8f3c1d2e8f3c1d2e8f3c1d2e8f3c1d2e8f3c1d2e","decision":"APPROVE"}
+19:27:51 "POST /api/projects/P1/handoffs/X1/decision HTTP/1.1" 201 -
+19:29:49 BODY /api/projects/P1/handoffs/X2/decision {"decision":"APPROVE","acknowledgedCrossingKey":"51ab9e0751ab9e0751ab9e0751ab9e0751ab9e0751ab9e0751ab9e0751ab9e07"}
+19:29:50 "POST /api/projects/P1/handoffs/X2/decision HTTP/1.1" 409 -

@@ -1,0 +1,53 @@
+argv: env TREE=del npx playwright test --config ui-migration/probes-v2.config.mjs
+tree: /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del
+head: 822c00ff04b3f00af6d983e043b4275ad2f025c0
+uncommitted:
+?? src/web/ui-migration/probe-always-allowed.browser.mjs
+?? src/web/ui-migration/probe-dialog-gutter.browser.mjs
+?? src/web/ui-migration/probe-dialog-scroll.browser.mjs
+?? src/web/ui-migration/probe-switch-widths.browser.mjs
+?? src/web/ui-migration/probes-v2.config.mjs
+load: 25.22 27.65 32.91 11/5341 50132
+disk: / 85487M available, TMPDIR /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/tmp
+started: 2026-10-08T12:13:27Z
+
+
+Running 32 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/probe-always-allowed.browser.mjs:7:1 › always allowed: loading and loaded heights (1.3s)
+  ✓   2 [chromium-light-desktop] › ui-migration/probe-dialog-gutter.browser.mjs:8:1 › dialog scrollbar gutter along the Claude pool steps (4.0s)
+  ✓   3 [chromium-light-desktop] › ui-migration/probe-dialog-scroll.browser.mjs:8:1 › dialog scroll lock along the Codex pool steps (4.3s)
+  ✓   4 [chromium-light-desktop] › ui-migration/probe-switch-widths.browser.mjs:7:1 › switch widths (717ms)
+  ✓   5 [chromium-light-phone] › ui-migration/probe-always-allowed.browser.mjs:7:1 › always allowed: loading and loaded heights (912ms)
+  ✓   6 [chromium-light-phone] › ui-migration/probe-dialog-gutter.browser.mjs:8:1 › dialog scrollbar gutter along the Claude pool steps (3.9s)
+  ✓   7 [chromium-light-phone] › ui-migration/probe-dialog-scroll.browser.mjs:8:1 › dialog scroll lock along the Codex pool steps (4.1s)
+  ✓   8 [chromium-light-phone] › ui-migration/probe-switch-widths.browser.mjs:7:1 › switch widths (932ms)
+  ✓   9 [chromium-dark-desktop] › ui-migration/probe-always-allowed.browser.mjs:7:1 › always allowed: loading and loaded heights (865ms)
+  ✓  10 [chromium-dark-desktop] › ui-migration/probe-dialog-gutter.browser.mjs:8:1 › dialog scrollbar gutter along the Claude pool steps (3.8s)
+  ✓  11 [chromium-dark-desktop] › ui-migration/probe-dialog-scroll.browser.mjs:8:1 › dialog scroll lock along the Codex pool steps (4.5s)
+  ✓  12 [chromium-dark-desktop] › ui-migration/probe-switch-widths.browser.mjs:7:1 › switch widths (694ms)
+  ✓  13 [chromium-dark-phone] › ui-migration/probe-always-allowed.browser.mjs:7:1 › always allowed: loading and loaded heights (1.9s)
+  ✓  14 [chromium-dark-phone] › ui-migration/probe-dialog-gutter.browser.mjs:8:1 › dialog scrollbar gutter along the Claude pool steps (4.6s)
+  ✓  15 [chromium-dark-phone] › ui-migration/probe-dialog-scroll.browser.mjs:8:1 › dialog scroll lock along the Codex pool steps (5.2s)
+  ✓  16 [chromium-dark-phone] › ui-migration/probe-switch-widths.browser.mjs:7:1 › switch widths (1.6s)
+  ✓  17 [webkit-light-desktop] › ui-migration/probe-always-allowed.browser.mjs:7:1 › always allowed: loading and loaded heights (1.7s)
+  ✓  18 [webkit-light-desktop] › ui-migration/probe-dialog-gutter.browser.mjs:8:1 › dialog scrollbar gutter along the Claude pool steps (4.3s)
+  ✓  19 [webkit-light-desktop] › ui-migration/probe-dialog-scroll.browser.mjs:8:1 › dialog scroll lock along the Codex pool steps (4.7s)
+  ✓  20 [webkit-light-desktop] › ui-migration/probe-switch-widths.browser.mjs:7:1 › switch widths (937ms)
+  ✓  21 [webkit-light-phone] › ui-migration/probe-always-allowed.browser.mjs:7:1 › always allowed: loading and loaded heights (890ms)
+  ✓  22 [webkit-light-phone] › ui-migration/probe-dialog-gutter.browser.mjs:8:1 › dialog scrollbar gutter along the Claude pool steps (4.1s)
+  ✓  23 [webkit-light-phone] › ui-migration/probe-dialog-scroll.browser.mjs:8:1 › dialog scroll lock along the Codex pool steps (4.7s)
+  ✓  24 [webkit-light-phone] › ui-migration/probe-switch-widths.browser.mjs:7:1 › switch widths (986ms)
+  ✓  25 [webkit-dark-desktop] › ui-migration/probe-always-allowed.browser.mjs:7:1 › always allowed: loading and loaded heights (1.0s)
+  ✓  26 [webkit-dark-desktop] › ui-migration/probe-dialog-gutter.browser.mjs:8:1 › dialog scrollbar gutter along the Claude pool steps (4.2s)
+  ✓  27 [webkit-dark-desktop] › ui-migration/probe-dialog-scroll.browser.mjs:8:1 › dialog scroll lock along the Codex pool steps (4.9s)
+  ✓  28 [webkit-dark-desktop] › ui-migration/probe-switch-widths.browser.mjs:7:1 › switch widths (944ms)
+  ✓  29 [webkit-dark-phone] › ui-migration/probe-always-allowed.browser.mjs:7:1 › always allowed: loading and loaded heights (1.5s)
+  ✓  30 [webkit-dark-phone] › ui-migration/probe-dialog-gutter.browser.mjs:8:1 › dialog scrollbar gutter along the Claude pool steps (4.6s)
+  ✓  31 [webkit-dark-phone] › ui-migration/probe-dialog-scroll.browser.mjs:8:1 › dialog scroll lock along the Codex pool steps (5.4s)
+  ✓  32 [webkit-dark-phone] › ui-migration/probe-switch-widths.browser.mjs:7:1 › switch widths (1.1s)
+
+  32 passed (1.7m)
+exit=0
+load: 30.48 28.79 32.73 10/5481 67352
+ended: 2026-10-08T12:15:18Z

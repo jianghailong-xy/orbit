@@ -22,8 +22,12 @@ public enum CoordinatorQuestionStanding: Equatable, Sendable {
     case unread
     /// The question, as the owner's own read publishes it.
     case open(ProjectOpenItemRow)
-    /// The read came back and this question is not in it: answered here, answered elsewhere, or
-    /// withdrawn. The card stays on screen saying so — it is the only thing that can explain it.
+    /// It has ended — answered, here or elsewhere, or withdrawn — and the read says how: the card
+    /// is drawn as that record (`closedQuestions`, §5.2 R10, R12).
+    case closed(ProjectClosedQuestion)
+    /// The read came back and this question is in neither group: a server that predates the
+    /// records, or one too old for the read's 50. The card stays on screen saying so — it is the
+    /// only thing that can explain it.
     case gone
 }
 
@@ -46,8 +50,8 @@ public enum CoordinatorQuestions {
     public static let sendAnswer = "Send answer"
     public static let recommended = "Recommended"
     public static let answeredHeading = "Answered"
-    public static let deliveredToCoordinator = "delivered to the current coordinator"
-    public static let waitingForCoordinator = "waiting for this project’s next coordinator"
+    public static let deliveredToCoordinator = "Delivered to the current coordinator"
+    public static let waitingForCoordinator = "Waiting for this project’s next coordinator"
     /// What a card whose question the read no longer carries says about itself.
     public static let gone = "This question is no longer open."
     public static let unreadable = "Couldn’t read this question — pull to retry."
@@ -67,8 +71,9 @@ public enum CoordinatorQuestions {
     /// Where one question stands, by the address the card was delivered under.
     public static func standing(items: ProjectOpenItemsView?, itemId: String) -> CoordinatorQuestionStanding {
         guard let items else { return .unread }
-        guard let row = open(items).first(where: { $0.itemId == itemId }) else { return .gone }
-        return .open(row)
+        if let row = open(items).first(where: { $0.itemId == itemId }) { return .open(row) }
+        if let record = items.closedQuestions.first(where: { $0.itemId == itemId }) { return .closed(record) }
+        return .gone
     }
 
     /// Whether this card is still a question waiting on the reader — what the "open questions
@@ -117,22 +122,175 @@ public enum CoordinatorQuestions {
         return OwnerAnswerRequest(option: optionIndex(chosen), text: trimmed.isEmpty ? nil : trimmed)
     }
 
-    /// What the owner chose, in the words the card showed it in — the receipt's own line.
-    public static func answerInWords(question: CoordinatorQuestion, option: Int?, text: String) -> String {
-        let chosen = option.flatMap { question.options.indices.contains($0) ? question.options[$0].label : nil }
-        let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = [chosen, typed.isEmpty ? nil : typed].compactMap { $0 }
-        return parts.isEmpty ? "(no answer given)" : parts.joined(separator: " — ")
-    }
-
     /// `asked 2h ago`, the card's footnote — the web's `ago`, so the two agree on the rounding.
     public static func askedLine(since: String, now: Date = Date()) -> String {
         "asked \(RelativeTime.ago(since, now: now) ?? "just now")"
     }
 
-    /// The receipt's second line: who answered, and whether anybody has been told yet (R11).
-    public static func receiptLine(delivered: Bool) -> String {
-        "by you · \(delivered ? deliveredToCoordinator : waitingForCoordinator)"
+    // MARK: the record a question becomes (§5.2 R10, R12; `docs/mocks/coordinator-question-answered/`)
+
+    public static let withdrawnHeading = "Withdrawn"
+    /// The record's sheet footer, first line, before its time.
+    public static let answeredByYou = "Answered by you"
+    public static let withdrawnByCoordinator = "Withdrawn by the coordinator"
+    public static let withdrawnByYou = "Withdrawn by you"
+    /// The withdrawn card's line above its reason.
+    public static let coordinatorWithdrew = "The coordinator withdrew it"
+    public static let youWithdrew = "You withdrew it"
+    /// Over the words the owner wrote beside the option they chose.
+    public static let yourNote = "Your note"
+    /// The card's last row.
+    public static let viewDetails = "View details"
+
+    /// The records the read carries, as the conversation draws them: each at the moment it ended.
+    public struct Receipt: Equatable, Sendable, Identifiable {
+        public let record: ProjectClosedQuestion
+
+        public init(record: ProjectClosedQuestion) {
+            self.record = record
+        }
+
+        /// The moment it was answered or withdrawn — where the record is drawn
+        /// (`ReceiptAnchor.place`), the same rule as every other record in the conversation.
+        public var moment: String { record.resolvedAt }
+
+        /// Beside the question card's id rather than equal to it (`question-<itemId>`): while the
+        /// question is being let go of both rows can be on screen, and a duplicate id costs the List
+        /// its diff.
+        public var id: String { "question-record-\(record.itemId)" }
+    }
+
+    /// Oldest first — the read is newest first — because records that ended between the same two
+    /// rows are drawn after the same row in the order they are adopted, and read top-down in the
+    /// order they happened.
+    public static func receipts(_ items: ProjectOpenItemsView?) -> [Receipt] {
+        let oldestFirst = (items?.closedQuestions ?? []).reversed().enumerated()
+            .map { (offset: $0.offset, record: $0.element, at: ThinkingSummary.date($0.element.resolvedAt)) }
+        return oldestFirst
+            .sorted { a, b in
+                if ReceiptAnchor.ascending(a.at, b.at) { return true }
+                if ReceiptAnchor.ascending(b.at, a.at) { return false }
+                return a.offset < b.offset
+            }
+            .map { Receipt(record: $0.record) }
+    }
+
+    /// The answer THIS device just sent, as the record the read will publish: what was asked, what
+    /// was chosen and written, and where the door says it went — drawn from the press until the read
+    /// comes back, so the card never stands empty in between.
+    public static func answeredHere(row: ProjectOpenItemRow, question: CoordinatorQuestion,
+                                    request: OwnerAnswerRequest, receipt: OwnerAnswerReceipt,
+                                    at: Date = Date()) -> ProjectClosedQuestion {
+        let moment = ISO8601DateFormatter().string(from: at)
+        return ProjectClosedQuestion(
+            itemId: row.itemId, question: question, askedAt: row.waitingSince,
+            resolution: "ANSWERED", resolvedBy: "USER", resolvedAt: moment,
+            answer: .init(option: request.option, text: request.text),
+            delivery: receipt.delivery.map { .init(sessionId: $0.sessionId, at: moment) })
+    }
+
+    /// The record's heading.
+    public static func recordHeading(_ record: ProjectClosedQuestion) -> String {
+        record.withdrawn ? withdrawnHeading : answeredHeading
+    }
+
+    /// The question's opening as one run of plain text — the Markdown's marks gone, its lines
+    /// joined — which the card cuts at two lines. The browser's `markdownToPlainText`.
+    public static func lead(_ question: CoordinatorQuestion) -> String {
+        OwnerConfirmations.plainText(question.question)
+            .replacingOccurrences(of: "(?m)^[ \\t]*(?:•|[0-9]{1,9}[.)])[ \\t]+", with: "",
+                                  options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The option the owner chose, when it is one the question offered.
+    public static func chosenOption(_ record: ProjectClosedQuestion) -> Int? {
+        guard let option = record.answer?.option, record.question.options.indices.contains(option)
+        else { return nil }
+        return option
+    }
+
+    /// What the owner wrote, trimmed; nil when they wrote nothing.
+    static func words(_ record: ProjectClosedQuestion) -> String? {
+        guard let text = record.answer?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return nil }
+        return text
+    }
+
+    /// The card's answer line: the option's label — or, when no option was chosen (the Other row,
+    /// or a question asked without options), the owner's own words in quotes. Nil when withdrawn.
+    public static func answerLine(_ record: ProjectClosedQuestion) -> String? {
+        if record.withdrawn { return nil }
+        if let option = chosenOption(record) { return record.question.options[option].label }
+        return words(record).map { "“\($0)”" }
+    }
+
+    /// The note under the answer line, in quotes: what the owner wrote beside the option they chose.
+    public static func noteLine(_ record: ProjectClosedQuestion) -> String? {
+        guard !record.withdrawn, chosenOption(record) != nil, let note = words(record) else { return nil }
+        return "“\(note)”"
+    }
+
+    /// The orange line an answer carries while no coordinator has had it (R11).
+    public static func waitingLine(_ record: ProjectClosedQuestion) -> String? {
+        record.withdrawn || record.delivery != nil ? nil : waitingForCoordinator
+    }
+
+    /// The withdrawn card's line above its reason: who took the question back.
+    public static func withdrewLine(_ record: ProjectClosedQuestion) -> String? {
+        guard record.withdrawn else { return nil }
+        return record.resolvedBy == "USER" ? youWithdrew : coordinatorWithdrew
+    }
+
+    /// The reason a question was withdrawn with, in quotes.
+    public static func withdrawReasonLine(_ record: ProjectClosedQuestion) -> String? {
+        guard record.withdrawn,
+              let reason = record.withdrawReason?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reason.isEmpty else { return nil }
+        return "“\(reason)”"
+    }
+
+    /// When it ended, on the card's heading row: the clock on the day, the date as well after — the
+    /// receipts' own rule (`OwnerConfirmations.receiptTime`).
+    public static func time(_ record: ProjectClosedQuestion, now: Date = Date()) -> String? {
+        OwnerConfirmations.receiptTime(record.resolvedAt, now: now)
+    }
+
+    /// The sheet's line beside FROM COORDINATOR: `asked 08:10`.
+    public static func askedAtLine(_ record: ProjectClosedQuestion, now: Date = Date()) -> String? {
+        OwnerConfirmations.receiptTime(record.askedAt, now: now).map { "asked \($0)" }
+    }
+
+    /// Whether the sheet ticks the Other row: words alone, on a question that offered options.
+    public static func choseOther(_ record: ProjectClosedQuestion) -> Bool {
+        !record.withdrawn && !record.question.options.isEmpty && chosenOption(record) == nil
+            && words(record) != nil
+    }
+
+    /// The note the sheet puts inside the chosen option, under `Your note`.
+    public static func note(_ record: ProjectClosedQuestion) -> String? {
+        chosenOption(record) != nil && !record.withdrawn ? words(record) : nil
+    }
+
+    /// The words the sheet puts under the ticked Other row, or in the read-only `Your answer` box of
+    /// a question asked without options.
+    public static func ownWords(_ record: ProjectClosedQuestion) -> String? {
+        chosenOption(record) == nil && !record.withdrawn ? words(record) : nil
+    }
+
+    /// The sheet footer's first line, where Send answer was: who ended it, and when.
+    public static func footerLine(_ record: ProjectClosedQuestion, now: Date = Date()) -> String {
+        let who = record.withdrawn
+            ? (record.resolvedBy == "USER" ? withdrawnByYou : withdrawnByCoordinator)
+            : answeredByYou
+        return time(record, now: now).map { "\(who) · \($0)" } ?? who
+    }
+
+    /// The footer's second line: where the answer went, or the reason it was withdrawn with.
+    public static func footerDetail(_ record: ProjectClosedQuestion) -> String? {
+        if record.withdrawn { return withdrawReasonLine(record) }
+        return record.delivery != nil ? deliveredToCoordinator : waitingForCoordinator
     }
 }
 
@@ -152,6 +310,11 @@ public enum PromotionStage: Equatable, Sendable {
 
 public enum PromotionCards {
     public static let mergeToMain = "Merge to main"
+    /// The same press, said of the branch the candidate merges into: the project's main branch, by
+    /// name — web's `mergeTo`.
+    public static func mergeTo(_ main: String) -> String {
+        "Merge to \(main)"
+    }
     public static let notNow = "Not now"
     public static let merging = "Merging…"
     public static let cancel = "Cancel"
@@ -163,6 +326,13 @@ public enum PromotionCards {
     /// the only place the owner learns the Automatic setting merged it (§3.3 M-T11), so it says so
     /// first.
     public static let mergedAutomaticallyHeading = "✓ Merged into main automatically"
+    /// The two headings above, said of the branch the candidate merged into.
+    public static func mergedHeading(_ main: String) -> String {
+        "✓ Merged into \(main)"
+    }
+    public static func mergedAutomaticallyHeading(_ main: String) -> String {
+        "✓ Merged into \(main) automatically"
+    }
     /// Who merged it, where a pressed merge says "by you" — web's `UNDER_AUTOMATIC`.
     public static let underAutomatic = "under your Automatic setting"
     /// What a card whose candidate the read no longer publishes says about itself: a newer
@@ -208,14 +378,15 @@ public enum PromotionCards {
     /// The card's heading, per state.
     public static func title(_ view: ProjectPromotionView) -> String {
         let branch = shortRef(view.sourceRef)
-        let into = shortRef(view.upstreamRef)
+        let into = RunSettings.mainBranchName(view.upstreamRef)
         switch stage(view) {
         case .merging:
             if view.execution?.state == "QUEUED" { return "Merge queued: \(branch) into \(into)" }
             if view.execution?.state != "RUNNING" { return "Merge confirmed: \(branch) into \(into)" }
             if view.execution?.phase == "CHECK" { return "Re-checking \(branch) before merging into \(into)…" }
             return "Merging \(branch) into \(into)…"
-        case .merged: return view.merged?.automatic == true ? mergedAutomaticallyHeading : mergedHeading
+        case .merged:
+            return view.merged?.automatic == true ? mergedAutomaticallyHeading(into) : mergedHeading(into)
         case .blocked: return "\(branch) can’t merge into \(into) yet"
         default: return "Merge \(branch) into \(into)?"
         }
@@ -223,7 +394,7 @@ public enum PromotionCards {
 
     /// The transcript preview keeps the branch on its own line, outside the heading.
     public static func previewTitle(_ view: ProjectPromotionView) -> String {
-        let into = shortRef(view.upstreamRef)
+        let into = RunSettings.mainBranchName(view.upstreamRef)
         switch stage(view) {
         case .askingYou: return "Merge to \(into)"
         case .merging: return "\(mergingActionLabel(view)) · \(into)"
@@ -251,7 +422,8 @@ public enum PromotionCards {
     public static func branchLine(_ view: ProjectPromotionView) -> String {
         let branch = shortRef(view.sourceRef)
         guard let ahead = view.commitsAhead else { return branch }
-        return "\(branch) · \(ahead) commit\(ahead == 1 ? "" : "s") ahead of \(shortRef(view.upstreamRef))"
+        let into = RunSettings.mainBranchName(view.upstreamRef)
+        return "\(branch) · \(ahead) commit\(ahead == 1 ? "" : "s") ahead of \(into)"
     }
 
     /// `4 landed on the branch` — how much this merge would carry.
@@ -278,7 +450,8 @@ public enum PromotionCards {
     public static func upstreamLine(_ view: ProjectPromotionView) -> String {
         guard view.conflicts.isEmpty else {
             let n = view.conflicts.count
-            return "\(n) file\(n == 1 ? "" : "s") conflict with \(shortRef(view.upstreamRef))"
+            let into = RunSettings.mainBranchName(view.upstreamRef)
+            return "\(n) file\(n == 1 ? "" : "s") conflict with \(into)"
         }
         return "no conflicts"
     }
@@ -301,7 +474,7 @@ public enum PromotionCards {
     /// B's status row: the upstream moved after the check, so the combined tree is being checked
     /// again — and nobody has to press anything for that.
     public static func mergingStatusLine(_ view: ProjectPromotionView) -> String {
-        let into = shortRef(view.upstreamRef)
+        let into = RunSettings.mainBranchName(view.upstreamRef)
         if view.execution?.state == "QUEUED" { return "confirmed — queued to merge into \(into)" }
         guard view.execution?.state == "RUNNING" else { return "confirmed — waiting for merge execution" }
         switch view.execution?.phase {
@@ -341,13 +514,56 @@ public enum PromotionCards {
         return merged.revert
     }
 
+    /// The word the card prints before `blockedByLine`'s sentence. Web's `BLOCKED_BY`.
+    public static let blockedByLabel = "Blocked by"
+
+    /// WHO IS IN FRONT OF THIS MERGE, when the project's own line is busy — the sentence that turns
+    /// "Coordinator is resolving it" into an answer.
+    ///
+    /// A blocked candidate says why IT cannot merge (`blockedLine`); this says what the platform is
+    /// doing about the branch until it can. The landings a project has in flight are the project's own
+    /// read (`ProjectIntegrationView.landTasks`), and one of them is holding the line this merge has
+    /// to go through — it targets either the branch the candidate merges FROM or the branch it merges
+    /// INTO. Its `blockingReason` is the server's sentence about what holds THAT landing, and it names
+    /// the job or the task in front of it, so the chain is read off two rows rather than inferred
+    /// here: nothing in this function looks at a clock, a heartbeat or a task status.
+    ///
+    /// Nil when the line is doing nothing on those branches: a card with nothing to name says
+    /// nothing, rather than inventing a step to point at. Web's `promotionBlockedBy`.
+    public static func blockedByLine(_ view: ProjectPromotionView, landings: [ProjectLandTask]) -> String? {
+        guard let holding = landings.first(where: { landing in
+            guard let job = landing.landTask, job.state == "QUEUED" || job.state == "RUNNING" else {
+                return false
+            }
+            // `refs/heads/x` and `x` are the same branch, and which spelling arrives is the server's.
+            return shortRef(job.targetRef) == shortRef(view.sourceRef)
+                || shortRef(job.targetRef) == shortRef(view.upstreamRef)
+        }), let job = holding.landTask else { return nil }
+        let phases = ProjectPage.integrationPhaseWords(RunSettings.mainBranchName(view.upstreamRef))
+        let state = job.state == "RUNNING" ? (job.phase.flatMap { phases[$0] } ?? "running") : "queued"
+        let parts = ["“\(holding.taskTitle)” is landing on the project line", state,
+                     job.blockingReason?.summary].compactMap { $0 }
+        return parts.joined(separator: " · ")
+    }
+
     /// D's first row: why it cannot merge, in the files that say so.
+    ///
+    /// The reason the job gave comes first (`blockedReason`, migration 0409): a candidate whose
+    /// branch is already on main, and one whose job errored, are blocked with no checks and no
+    /// conflicts, and reading those two arrays said a check had failed when none had run. A block
+    /// recorded before the reason was is read off the arrays as it always was. Web's
+    /// `promotionBlockedLine`.
     public static func blockedLine(_ view: ProjectPromotionView) -> String {
+        let into = RunSettings.mainBranchName(view.upstreamRef)
+        if view.blockedReason == "ALREADY_LANDED" {
+            return "nothing to merge — \(shortRef(view.sourceRef)) is already on \(into)"
+        }
+        if view.blockedReason == "ERROR" { return "the merge stopped on an error — no check failed" }
         guard !view.conflicts.isEmpty else { return "the checks on the combined tree did not pass" }
         let n = view.conflicts.count
         let files = view.conflicts.prefix(3).joined(separator: ", ")
         let more = n > 3 ? " and \(n - 3) more" : ""
-        return "\(n) file\(n == 1 ? "" : "s") conflict with \(shortRef(view.upstreamRef)): \(files)\(more)"
+        return "\(n) file\(n == 1 ? "" : "s") conflict with \(into): \(files)\(more)"
     }
 
     /// D's press, which reads rather than acts: who has the branch, and for how long. It moved onto
@@ -360,10 +576,31 @@ public enum PromotionCards {
     /// `IT_IS_YOURS`.
     public static let itIsYours = "It is yours"
 
+    /// Who holds a blocked candidate, off the project's open items (both groups): `.unread` until
+    /// the read has come back, the item that names this candidate, or `.gone` when the read came
+    /// back without one.
+    ///
+    /// Gone is nobody. The coordinator closed the exception and nothing else holds the branch — on
+    /// 2026-10-09 because the work was already on main (project 34b78EQPNkVF8kM3ki7Ch) — and a
+    /// press that said "Coordinator is resolving it" then, with its mark turning, named somebody who
+    /// was not there.
+    public static func holder(of promotionID: String, in items: ProjectOpenItemsView?) -> OwnerItemStanding {
+        guard let items else { return .unread }
+        let row = (items.needsYou + items.withCoordinator).first { $0.promotionId == promotionID }
+        return row.map(OwnerItemStanding.open) ?? .gone
+    }
+
     /// D's press, as one line: `Coordinator is resolving it · 2h` — or, once the item is the
-    /// reader's own, `It is yours · waiting 2h`. A row that has not been read, or whose instant
-    /// cannot be read, says who state D means and stops, exactly as the row did without one.
-    public static func resolvingLine(_ row: ProjectOpenItemRow?, now: Date = Date()) -> String {
+    /// reader's own, `It is yours · waiting 2h`. An item that has not been read, or whose instant
+    /// cannot be read, says who state D means and stops, exactly as the row did without one. Nil
+    /// when nobody holds it (`.gone`): the press is not drawn, rather than naming somebody.
+    public static func resolvingLine(_ holder: OwnerItemStanding, now: Date = Date()) -> String? {
+        let row: ProjectOpenItemRow?
+        switch holder {
+        case .gone: return nil
+        case .unread: row = nil
+        case .open(let held): row = held
+        }
         let waited = row.flatMap { RelativeTime.parse($0.waitingSince) }
             .map { RelativeTime.span(now.timeIntervalSince($0)) }
         guard row?.assignee == .owner else { return resolving + (waited.map { " · \($0)" } ?? "") }
@@ -372,9 +609,19 @@ public enum PromotionCards {
 
     /// Whether the mark over that press turns. It is the card's one moving part, and it says
     /// somebody else is working on the branch — so it has no business turning over work that is
-    /// waiting on the reader.
-    public static func resolvingSpins(_ row: ProjectOpenItemRow?) -> Bool {
-        row?.assignee != .owner
+    /// waiting on the reader, nor over a press nobody holds.
+    public static func resolvingSpins(_ holder: OwnerItemStanding) -> Bool {
+        switch holder {
+        case .gone: return false
+        case .unread: return true
+        case .open(let row): return row.assignee != .owner
+        }
+    }
+
+    /// Whether that press is the reader's own: the item the clock handed them.
+    public static func resolvingIsYours(_ holder: OwnerItemStanding) -> Bool {
+        if case .open(let row) = holder { return row.assignee == .owner }
+        return false
     }
 
     /// `asked 2h 10m ago`, A's footnote.
@@ -445,6 +692,185 @@ public enum PromotionCards {
     /// of the window when the moment is above it.
     public static func receipts(merged: [ProjectPromotionView]) -> [Receipt] {
         merged.compactMap(Receipt.init)
+    }
+
+    // MARK: the project's sessions page, and the conversation's one line
+
+    /// The merge card's heading on the project's sessions page (owner decision 2026-10-06: the
+    /// merge lives there, not in the coordinator's conversation). The branch is the line under it —
+    /// the page is the project's own, so the heading says only what is being asked of main. Web's
+    /// `promotionPageTitle`.
+    public static func pageTitle(_ view: ProjectPromotionView) -> String {
+        let into = RunSettings.mainBranchName(view.upstreamRef)
+        switch stage(view) {
+        case .askingYou: return "Merge into \(into)?"
+        case .merging:
+            if view.execution?.state == "QUEUED" { return "Merge into \(into) queued" }
+            if view.execution?.state != "RUNNING" { return "Merge into \(into) confirmed" }
+            if view.execution?.phase == "CHECK" { return "Re-checking before merging into \(into)…" }
+            return "Merging into \(into)…"
+        case .merged: return title(view)
+        case .blocked: return "Can’t merge into \(into) yet"
+        case .none: return supersededTitle
+        }
+    }
+
+    /// `2 tasks · 10 files` — what the card carries, under the branch line that already says how
+    /// many commits.
+    public static func pageCounts(_ view: ProjectPromotionView) -> String {
+        let tasks = taskCount(view)
+        guard let files = view.filesChanged else { return tasks }
+        return "\(tasks) · \(files) file\(files == 1 ? "" : "s")"
+    }
+
+    /// The titles of the tasks a candidate carries, at most `limit` of them, and how many more
+    /// there are. A task the read did not name (a server older than `tasks`) is still counted in
+    /// `more`, so the card never says it carries less than it does.
+    public static func taskTitles(_ view: ProjectPromotionView, limit: Int = 3) -> (shown: [String], more: Int) {
+        let shown = view.tasks.prefix(Swift.max(0, limit)).map(\.title)
+        return (shown, Swift.max(view.taskIds.count, view.tasks.count) - shown.count)
+    }
+
+    /// `+2 more`, under the titles — nil when they were all named.
+    public static func moreTasks(_ more: Int) -> String? {
+        more > 0 ? "+\(more) more" : nil
+    }
+
+    /// The trailing word on the conversation's line while the candidate is asking.
+    public static let review = "Review"
+    /// The page card's badge while it asks — the compact card's own word for the same state.
+    public static let needsYouBadge = "Needs you"
+    /// The page card's way into the full review.
+    public static let details = "Details"
+    /// B's sentence on the page card, where it stands alone rather than as the `You` row's value.
+    public static let pageNothingToDo =
+        "Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t."
+
+    /// How the conversation's line is drawn: orange only while it waits on the reader, which is
+    /// the one state the needs-you bar counts.
+    public enum EventTone: Equatable, Sendable { case needsYou, working, blocked, quiet }
+
+    /// The coordinator conversation's one line for a candidate, in place of the card it used to
+    /// draw there. Same states, same words as the page's card, so the line and the card cannot say
+    /// two things about one merge. Web's `promotionEventLine`.
+    public static func eventLine(_ view: ProjectPromotionView?) -> (text: String, tone: EventTone) {
+        guard let view, let stage = stage(view) else { return (supersededTitle, .quiet) }
+        switch stage {
+        case .askingYou:
+            return ("Merge into \(RunSettings.mainBranchName(view.upstreamRef)) is waiting for you", .needsYou)
+        case .merging: return (pageTitle(view), .working)
+        case .blocked: return ("\(pageTitle(view)) · \(blockedReason(view))", .blocked)
+        case .merged: return (receiptLine(view), .quiet)
+        }
+    }
+
+    /// D's reason in a few words, for a line too short for the files: `2 files conflict`, or
+    /// `checks failed` — the job's own reason first, as in `blockedLine`. Web's
+    /// `promotionBlockedReason`.
+    public static func blockedReason(_ view: ProjectPromotionView) -> String {
+        if view.blockedReason == "ALREADY_LANDED" { return "nothing to merge" }
+        if view.blockedReason == "ERROR" { return "check errored" }
+        guard !view.conflicts.isEmpty else { return "checks failed" }
+        let n = view.conflicts.count
+        return "\(n) file\(n == 1 ? "" : "s") conflict"
+    }
+
+    /// The record's one line in the conversation: `✓ Merged into main · 8d5a868 · 2 tasks`, and
+    /// ` · automatically` when nobody pressed Merge — the receipt is still the only place that says
+    /// so (§3.3 M-T11).
+    public static func receiptLine(_ view: ProjectPromotionView) -> String {
+        var parts = ["✓ Merged into \(RunSettings.mainBranchName(view.upstreamRef))"]
+        if let sha = view.merged?.sha { parts.append(String(sha.prefix(7))) }
+        parts.append(taskCount(view))
+        if view.merged?.automatic == true { parts.append("automatically") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The timeline row's heading on the sessions page. The check mark is the row's icon there.
+    public static func timelineTitle(_ view: ProjectPromotionView) -> String {
+        "Merged into \(RunSettings.mainBranchName(view.upstreamRef))"
+    }
+
+    /// The timeline row's second line: `8d5a868 · 2 tasks · by you`, or `· automatically`.
+    public static func timelineDetail(_ view: ProjectPromotionView) -> String {
+        let who = view.merged?.automatic == true ? "automatically" : "by you"
+        return [view.merged.map { String($0.sha.prefix(7)) }, taskCount(view), who]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// The receipt's `Now on main` row. The request's `4 landed on the branch` answered "how much
+    /// would this carry"; read on a receipt it said nothing about what is now on main.
+    public static func nowOnMainLine(_ view: ProjectPromotionView) -> String {
+        taskCount(view)
+    }
+
+    /// That row's label: the branch the candidate merged into, by name — `Now on main` for a
+    /// project on main.
+    public static func nowOnLabel(_ view: ProjectPromotionView) -> String {
+        "Now on \(RunSettings.mainBranchName(view.upstreamRef))"
+    }
+
+    /// `5 commits · 10 files` — the receipt's size row, nil when the read gave neither.
+    public static func changesLine(_ view: ProjectPromotionView) -> String? {
+        let parts = [view.commitsAhead.map { "\($0) commit\($0 == 1 ? "" : "s")" },
+                     view.filesChanged.map { "\($0) file\($0 == 1 ? "" : "s")" }].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    static func taskCount(_ view: ProjectPromotionView) -> String {
+        let n = view.taskIds.count
+        return "\(n) task\(n == 1 ? "" : "s")"
+    }
+}
+
+/// What the project's sessions page draws under its progress card about main: the candidate's own
+/// card while it asks, merges or is blocked, and the merge check's live line before any of that.
+/// Nothing at all when none of them applies — the page is then what it was before (§ owner
+/// decision 2026-10-06).
+public enum ProjectMergeCard {
+    public enum Shape: Equatable, Sendable {
+        /// The merge check is running on the combined tree; nobody is being asked anything yet.
+        case checking
+        case asking
+        case merging
+        case blocked
+    }
+
+    /// The two job kinds that are about main. Their live line belongs to the merge card; a task
+    /// landing on the project branch keeps the progress card's line.
+    public static let mergeJobKinds: Set<String> = ["CHECK_PROMOTION", "LAND_PROMOTION"]
+
+    public static func isMergeJob(_ inFlight: ProjectIntegrationInFlight?) -> Bool {
+        inFlight?.kind.map(mergeJobKinds.contains) == true
+    }
+
+    public static func shape(promotion: ProjectPromotionView?,
+                             integration: ProjectIntegrationView?) -> Shape? {
+        switch promotion.flatMap(PromotionCards.stage) {
+        case .askingYou: return .asking
+        case .merging: return .merging
+        case .blocked: return .blocked
+        case .merged, .none:
+            return isMergeJob(integration?.inFlight) ? .checking : nil
+        }
+    }
+
+    /// A task landing on the project branch, as the card the sessions page draws under its progress
+    /// card — `ProjectPage.landingCard`, minus a merge job: that one is drawn in the merge card
+    /// (owner decision 2026-10-11, docs/mocks/project-landing-card).
+    public static func taskLandingCard(_ view: ProjectIntegrationView, now: Date = Date(),
+                                       updatedAt: Date? = nil,
+                                       refreshFailed: Bool = false) -> ProjectPage.LandingCard? {
+        guard !isMergeJob(view.inFlight) else { return nil }
+        return ProjectPage.landingCard(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+    }
+
+    /// The merge job's live line, for the merge card — nil when the job in flight is not one.
+    public static func mergeLandingLine(_ view: ProjectIntegrationView, now: Date = Date(),
+                                        updatedAt: Date? = nil,
+                                        refreshFailed: Bool = false) -> ProjectPage.LandingLine? {
+        guard isMergeJob(view.inFlight) else { return nil }
+        return ProjectPage.landingLine(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
     }
 }
 

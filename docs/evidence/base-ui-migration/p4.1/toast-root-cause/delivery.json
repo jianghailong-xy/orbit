@@ -1,0 +1,207 @@
+{
+"steps":
+[
+ {
+  "label": "loaded",
+  "scrollHeight": 844,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": null,
+  "pill": null
+ },
+ {
+  "label": "name typed",
+  "scrollHeight": 844,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": null,
+  "pill": null
+ },
+ {
+  "label": "Name saved shown",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": [
+   16,
+   358
+  ],
+  "pill": [
+   127.140625,
+   135.71875
+  ]
+ },
+ {
+  "label": "password errors shown",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": [
+   16,
+   358
+  ],
+  "pill": [
+   127.140625,
+   135.71875
+  ]
+ }
+]
+,
+"readsBetween":
+{
+ "reads": [
+  "== screen-reader region appended",
+  "== toast column inserted"
+ ],
+ "after": {
+  "label": "after",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": [
+   16,
+   358
+  ],
+  "pill": [
+   127.140625,
+   135.71875
+  ]
+ }
+}
+,
+"forcedRead":
+{
+ "as is": {
+  "label": "Name saved shown",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": [
+   16,
+   358
+  ],
+  "pill": [
+   127.140625,
+   135.71875
+  ]
+ },
+ "with one forced read": {
+  "label": "Name saved shown",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   382
+  ],
+  "column": [
+   16,
+   350
+  ],
+  "pill": [
+   123.140625,
+   135.71875
+  ]
+ }
+}
+,
+"delayed":
+{
+ "0ms": {
+  "label": "Name saved shown",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": [
+   16,
+   358
+  ],
+  "pill": [
+   127.140625,
+   135.71875
+  ]
+ },
+ "20ms": {
+  "label": "Name saved shown",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": [
+   16,
+   358
+  ],
+  "pill": [
+   127.140625,
+   135.71875
+  ]
+ },
+ "50ms": {
+  "label": "Name saved shown",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": [
+   16,
+   358
+  ],
+  "pill": [
+   127.140625,
+   135.71875
+  ]
+ },
+ "100ms": {
+  "label": "Name saved shown",
+  "scrollHeight": 845,
+  "innerHeight": 844,
+  "clientWidth": 390,
+  "layer": [
+   0,
+   390
+  ],
+  "column": [
+   16,
+   358
+  ],
+  "pill": [
+   127.140625,
+   135.71875
+  ]
+ }
+}
+}

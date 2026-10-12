@@ -12,7 +12,7 @@ export const ANTIGRAVITY_GOOGLE_LOGIN_TOO_OLD =
 
 /** The refusal for a runner on another platform: the runner's own words for it (login.go), so the
  *  card reads the same whichever side refused. */
-export const ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY = 'Antigravity 的 Google 登录暂时只支持 Linux runner';
+export const ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY = 'Signing Antigravity in with Google works only on a Linux runner for now.';
 
 export function hasGeminiEnvKey(env: unknown): boolean {
   if (!env || typeof env !== 'object' || Array.isArray(env)) return false;
@@ -64,8 +64,12 @@ export function antigravityState(runner: { capabilities?: readonly string[]; eng
     installed: health?.installed ?? null,
     version: health?.version ?? null,
     // A Google sign-in the probe could not read still counts: only a definite `no` takes it away,
-    // as only a definite `no` refuses a session (signedOutEngineRefusal).
-    envKeyAvailable: health?.auth === 'yes' || (health?.auth === 'unknown' && authSource === 'google'),
+    // as only a definite `no` refuses a session (signedOutEngineRefusal). So does any Google account
+    // the runner added: a session can start on it (automaticAccount) whatever Default's says.
+    envKeyAvailable:
+      health?.auth === 'yes' ||
+      (health?.auth === 'unknown' && authSource === 'google') ||
+      (health?.accounts ?? []).some((account) => account.id !== 'default' && account.auth !== 'no'),
     authSource,
     googleLogin: antigravityGoogleLogin(runner),
   };

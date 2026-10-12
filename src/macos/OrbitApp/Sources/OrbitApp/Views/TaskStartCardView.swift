@@ -25,6 +25,9 @@ struct TaskStartCardView: View {
     /// Whatever else delivery appended to the same turn (a `controlPlaneNote`), as its own folded
     /// entry — the control plane's words stay in the card rather than in a bubble in the owner's name.
     var attached: (kind: String, text: String)?
+    /// Withdraws a resumed run's brief while it is still queued behind the running turn; nil once a
+    /// runner has taken it (the queue's own line, drawn at the card's foot as the other cards draw it).
+    var onCancelQueued: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
     /// Where the project row goes: the app's own link door, which reads for the conversation that
@@ -44,6 +47,7 @@ struct TaskStartCardView: View {
     #endif
 
     private var folded: Bool { !showingDetails && TaskStartCard.foldsDescription(card) }
+    private var queued: Bool { onCancelQueued != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -86,12 +90,30 @@ struct TaskStartCardView: View {
             }
             raw
             if let attached { AttachedNoteEntry(attached: attached) }
+            if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.tint.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.tint.opacity(0.28), lineWidth: 1))
+        // Dashed while it is still queued, as the control plane's other cards are.
+        .overlay(
+            RoundedRectangle(cornerRadius: 8).strokeBorder(
+                .tint.opacity(0.28),
+                style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
+        )
+    }
+
+    /// The queue's own line at the card's foot, in the words a queued message already uses.
+    private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            Button("Cancel") { cancel() }
+                .buttonStyle(.plain)
+                .font(.orbitMeta)
+                .foregroundStyle(.tint)
+                .contentShape(Rectangle())
+        }
     }
 
     /// "▶ Task started · Auto-started" — what this turn is, before what it is about.

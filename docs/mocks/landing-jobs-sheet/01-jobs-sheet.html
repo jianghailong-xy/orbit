@@ -1,0 +1,131 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<!-- 2026-10-07 · Landing · 2 jobs 点开看是哪几个作业。外壳与部件沿用 project-merge-sessions-page 的 kit。 -->
+<link rel="stylesheet" href="../project-merge-sessions-page/kit.css">
+<script src="../project-merge-sessions-page/kit.js"></script>
+<style>
+  @font-face { font-family: "Inter"; src: url("file:///tmp/mockfonts/Inter.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "Noto Sans SC"; src: url("file:///tmp/mockfonts/NotoSansSC.ttf"); font-weight: 100 900; }
+  body { font-family: -apple-system, "Inter", "Noto Sans SC", sans-serif; }
+
+  /* 进度卡里的落地行（ProjectLandingRow + 右侧箭头），按截图 */
+  .lj-card { background: rgba(120,120,128,.1); border-radius: 13px; margin-top: 8px; }
+  .lj-card .prog { padding: 13px 13px 12px; }
+  .lj-div { height: .5px; background: rgba(60,60,67,.18); margin-left: 12px; }
+  .lj-lw { display: flex; align-items: center; gap: 8px; padding: 9px 12px 10px; }
+  .lj-lr { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+  .lj-l1 { display: flex; align-items: center; gap: 8px; }
+  .lj-l1 b { font-size: 15px; font-weight: 600; color: var(--l2); }
+  .lj-l1 b.on { color: var(--tint); }
+  .lj-l1 .st { margin-left: auto; font-size: 13px; color: var(--l2); white-space: nowrap; }
+  .lj-w { font-size: 15px; line-height: 1.38; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .lj-l3 { display: flex; font-size: 13px; color: var(--l2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lj-l3 b { font-weight: 650; color: var(--l2); margin-left: 4px; }
+  .lj-l3 b.on { color: var(--tint); }
+  .lj-l3 .u { margin-left: auto; }
+  .lj-nochev { width: 13px; flex: none; }
+
+  /* 合入卡 · 排队中（与截图同一张） */
+  .lj-mq { border-radius: 16px; margin-top: 12px; padding: 13px 14px 12px; background: #F2F5FE; box-shadow: inset 0 0 0 1px rgba(62,105,246,.22); }
+  .lj-mq .mh { display: flex; align-items: center; gap: 9px; }
+  .lj-mq .tile { width: 28px; height: 28px; border-radius: 8px; background: rgba(62,105,246,.14); display: flex; align-items: center; justify-content: center; flex: none; }
+  .lj-mq .mh b { font-size: 17px; font-weight: 650; color: var(--tint); letter-spacing: -.01em; }
+  .lj-mq .s1 { font-size: 15px; margin-top: 8px; }
+  .lj-mq .s2 { font-size: 13px; color: var(--l2); margin-top: 6px; line-height: 1.42; }
+  .lj-mq .ft { display: flex; justify-content: flex-end; margin-top: 9px; }
+  .lj-mq .ft span { font-size: 15px; font-weight: 600; color: var(--tint); background: rgba(62,105,246,.12); border-radius: 999px; padding: 6px 15px; }
+
+  /* sheet 里的作业清单 */
+  .lj-sh { padding: 0 16px; }
+  .lj-list { background: rgba(120,120,128,.08); border-radius: 13px; }
+  .lj-list .lj-lw { padding: 11px 12px 12px; }
+  .lj-list .lj-div { margin-left: 33px; }
+
+  /* 图注右侧的说明栏 */
+  .lj-notes { width: 560px; flex: none; }
+  .lj-notes .panel { padding: 20px 24px 18px; margin-bottom: 18px; }
+  .lj-notes .panel h2 { font-size: 16.5px; margin-bottom: 8px; }
+  .lj-notes .panel ol, .lj-notes .panel ul { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.62; color: #3c3c44; }
+  .lj-notes .panel li { margin: 4px 0; }
+  .lj-notes .panel li b { color: #16161a; }
+  .lj-notes .tl { font: 12px/1.65 "DejaVu Sans Mono", monospace; background: #f4f4f7; border-radius: 8px; padding: 9px 11px; margin: 6px 0 4px; color: #2c2c33; white-space: pre; }
+  .lj-notes .warn h2 { color: var(--amber-ink); }
+</style>
+<body>
+<h1>Landing · 2 jobs：点开看是哪几个作业</h1>
+<p class="lede" style="max-width:1900px">现在这一行只写 “2 jobs”。点它会进项目页，可项目页 Work overview 里画的还是同一行，iOS 上没有地方列出这两个作业。web 项目页有 “Current landings”，但它只列任务落地，不含合入 main。<br>
+根子在数据：<code>GET /projects/:id/integration</code> 只返回最老的那个作业（<code>inFlight</code>）和两个计数。<b>方案：服务端把在途作业整个列出来，点这一行弹出一张 sheet，每个作业一行，行的样子就是这一行本身。</b>下面是你 21:57 那一屏的真实数据，两个作业的排队时长是示意。</p>
+<div class="row" id="figs"></div>
+<script>
+IC.grid = '<rect x="4" y="4" width="6.6" height="6.6" rx="1.7"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.7"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.7"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.7"/>';
+const TITLE = 'Kubernetes 托管默认 Runner 与跨节点持久存储';
+const C5 = 'C5 · 登录后开通默认托管 runner 与 workspace（假实现验证）';
+const nav = () => `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div>
+<div class="ttl"><b>${TITLE}</b><span>Project · 14 sessions</span></div><div class="circ">${ic('grid', 23, '#000', 1.7)}</div></div>`;
+
+// ProjectLandingRow：词 · 状态 / 名字 / 时钟 · Updated，右边一个箭头（chev=false 时留空位）
+const landRow = ({ word, state, what, label, clock, updated, on = false, chevron = true }) => `<div class="lj-lw"><div class="lj-lr">
+<div class="lj-l1">${ic('ring', 14, on ? 'var(--tint)' : 'var(--l2)', 2.3)}<b class="${on ? 'on' : ''}">${word}</b><span class="st">${state}</span></div>
+${what ? `<div class="lj-w">${what}</div>` : ''}
+<div class="lj-l3"><span>${label}</span><b class="${on ? 'on' : ''}">${clock}</b><span class="u">${updated}</span></div></div>
+${chevron ? chev('var(--l3)', 14) : '<span class="lj-nochev"></span>'}</div>`;
+
+const ROW_NOW = { word: 'Landing', state: 'Update unavailable', what: '2 jobs', label: 'Elapsed', clock: '0m 0s', updated: 'Updated 110m ago' };
+const JOB_C5 = { word: 'Landing', state: 'Update unavailable', what: C5, label: 'Elapsed', clock: '0m 0s', updated: 'Updated 110m ago' };
+const JOB_MERGE = { word: 'Merge to main', state: 'queued', label: 'Queued for', clock: '41m 08s', updated: 'Updated just now', chevron: false };
+
+const progLanding = (landing) => `<div class="lj-card"><div class="prog"><span class="meter"><i style="width:${7 / 17 * 100}%;background:var(--green)"></i><i style="width:${2 / 17 * 100}%;background:var(--red)"></i></span><span class="pmeta">7/17 done · 0 running</span></div>
+<div class="lj-div"></div>${landing}</div>`;
+const mergeQueued = () => `<div class="lj-mq"><div class="mh"><span class="tile">${ic('merge', 17, 'var(--tint)', 2.3)}</span><b>Merge into main queued</b></div>
+<div class="s1">confirmed — queued to merge into main</div>
+<div class="s2">Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t.</div>
+<div class="ft"><span>Cancel</span></div></div>`;
+const rows = () => [
+  sessRow({ t: TITLE, tm: '1h ago', chip: 'Coordinator', eye: true, sub: 'Watching C2b · 托管 runner 单活保护：实例代际鉴权…' }),
+].join('');
+const today = () => [
+  { t: `执行任务：${C5}`, tm: '1h ago', sub: '第 2 版证据已提交，新版本号是 2，evidence id 5DV…' },
+  { t: '执行任务：同步项目线与 main：解开迁移台账冲突（0393/0394）', tm: '2h ago', sub: '项目线已和 main 同步，完成证据已提交，等协调会话审阅。' },
+  { t: '执行任务：C2b · 托管 runner 单活保护：实例代际鉴权、单 Pod 准入与 fencing 门', tm: '6h ago', sub: '正在补 fencing 门的单测…' },
+].map(sessRow).join('');
+const merge = (marked) => (marked
+  ? mk(mergeQueued().replace('class="lj-mq"', 'class="lj-mq" style="margin-top:0"'), 2, 'margin-top:12px;border-radius:16px')
+  : mergeQueued());
+const page = ({ landing, markMerge = false }) => `${statusBar('9:57', 46)}${nav()}<div class="list">${landing}${merge(markMerge)}${sh('Coordinator')}${rows()}${sh('Today')}${today()}</div>`;
+
+// a · 现在
+const a = phone(page({ landing: progLanding(mk(landRow(ROW_NOW), 1, 'margin:2px 4px;border-radius:10px')), markMerge: true }));
+
+// b · 方案：点这一行弹出清单
+const list = `<div class="lj-sh"><div class="lj-list">${mk(landRow(JOB_C5), 1, 'border-radius:12px')}<div class="lj-div"></div>${mk(landRow(JOB_MERGE), 2, 'border-radius:12px')}</div></div>`;
+const b = phone(`${page({ landing: progLanding(landRow(ROW_NOW)) })}${sheet({ title: '2 jobs in flight', body: list }).replace('class="sheet"', 'class="sheet" style="top:452px"')}`);
+
+document.getElementById('figs').innerHTML = [
+  fig('now', '现在 · 项目 sessions 页（21:57）', a, `<b>只有一个数字</b><ol>
+<li>${n(1)}“2 jobs” 是运行中的加上排队的（<code>integratingCount + queuedCount</code>），任务落地、合入检查、合入 main 三种作业都算在内。名字位只在恰好一个作业时写任务名。</li>
+<li>点这一行会进项目页，项目页 Work overview 里还是这一行，没有清单可看。</li>
+<li>${n(2)}其实另一个作业就是这张卡：排队中的合入 main。卡已经画出来了，但它也算进了上面的 “2 jobs”，所以这一行说不清另一个是谁。</li></ol>`),
+  fig('after', '方案 · 点这一行', b, `<b>弹出作业清单</b><ol>
+<li>每个在途作业一行，用的就是这一行本身（<code>ProjectLandingRow</code>）：用词、状态、时钟、Updated 都和外面一样，行里不新造文案。排序同 <code>inFlight</code>：运行中的在前，后面按排队顺序，所以第一行就是外面那一行说的那个作业。</li>
+<li>${n(1)}任务落地写任务标题，点开进任务页。这一行就是卡住的 C5，见右边。</li>
+<li>${n(2)}合入 main 不指向任何任务，所以只有词、状态和时钟，也没有箭头，因为它的卡就在这一页上。</li>
+<li>项目页 Work overview 的同一行也改成可点，弹出同一张清单。web 的会话页和项目页照做。</li></ol>`),
+  `<div class="lj-notes">
+<div class="panel"><h2>要改的数据（小）</h2><ul>
+<li><code>GET /projects/:id/integration</code> 加 <code>inFlightJobs</code>，列出全部 RUNNING / QUEUED 作业。每条沿用 <code>inFlight</code> 已有的字段（kind、phase、state、taskTitle、startedAt、heartbeatAt），另加 <code>jobId</code> 和 <code>taskId</code>。<code>inFlight</code> 和两个计数不动，旧客户端照旧。</li>
+<li>落地会话设计（<code>docs/landing-session-design.md</code> §3）原本就打算给 inFlight 加 jobId 和 taskId，这次先只做这一步，不做落地会话。</li>
+<li>iOS 和 macOS：OrbitKit 负责解码，再加一个 <code>ProjectPage.landingJobs</code> 在 Linux 上测，SwiftUI 只管画 sheet。web 的 <code>LandingRow</code> 走同一份数据。</li>
+</ul></div>
+<div class="panel"><h2>想请你定的一点</h2><ul>
+<li><b>只有一个作业时点这一行</b>，推荐也弹同一张清单（只有一行），这样不管几个作业，同一行点下去都是同一个地方，项目页由右上角 ⊞ 进。另一种是保持现在的行为，直接进项目页。</li>
+</ul></div>
+<div class="panel warn"><h2>顺带发现：C5 这次落地卡住了</h2><ul>
+<li>20:07:04 服务端在一次心跳里把这个作业派给了 runner，可那次心跳在 runner 端 15 s 超时了。那几分钟 orbitd.io 很慢，心跳一直报 <code>context deadline exceeded</code>，所以 runner 没收到这个作业。</li>
+<li>领取规则只允许<b>别的进程</b>接管静默超过 10 分钟的作业（<code>claim_lease_owner IS DISTINCT FROM</code> 自己）。同一个 runner 进程永远不会再领它，作业就一直停在 RUNNING · fetching，直到 runner 重启。</li>
+<li>外面那一行显示的 “Update unavailable · Elapsed 0m 0s · Updated 110m ago” 就是这个。协调会话还以为 C5 在正常落地。</li></ul>
+<div class="tl">12:06:58Z  runner → POST /runner/heartbeat（15 s 超时）
+12:07:04Z  服务端：C5 LAND_TASK → RUNNING · FETCH
+12:07:13Z  runner：heartbeat failed: context deadline exceeded
+12:21Z 起   runner 照常领别的项目的落地，C5 不在其中</div></div>
+</div>`,
+].join('');
+</script>

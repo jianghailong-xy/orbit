@@ -1,0 +1,113 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices-motion.browser.mjs --project=chromium-light-desktop --grep normal bottom.*(popover|tooltip)
+
+[WebServer] (node:3104741) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:3104815) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches popover (2.4s)
+(node:3105114) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches tooltip (2.6s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches popover 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,9 +1,9 @@
+      Array [
+        Object {
+          "duration": 200,
+    -     "filter": "drop-shadow(rgba(0, 0, 0, 0.08) 0px 6px 16px) drop-shadow(rgba(0, 0, 0, 0.12) 0px 3px 6px) drop-shadow(rgba(0, 0, 0, 0.05) 0px 9px 28px)",
+    +     "filter": "none",
+          "frames": Array [
+            Object {
+              "composite": "auto",
+              "computedOffset": 0,
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+
+      68 |   for (const phase of ['enter', 'exit']) {
+      69 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))
+    > 70 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })));
+         |        ^
+      71 |   }
+      72 | }
+      73 |
+        at compare (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:70:8)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:100:5
+
+    Error Context: .choices-results/choices-motion.browser.mjs-4288b-exit-motion-matches-popover-chromium-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-motion.browser.mjs-4288b-exit-motion-matches-popover-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-motion.browser.mjs-4288b-exit-motion-matches-popover-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches tooltip 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,9 +1,9 @@
+      Array [
+        Object {
+          "duration": 100,
+    -     "filter": "drop-shadow(rgba(0, 0, 0, 0.08) 0px 6px 16px) drop-shadow(rgba(0, 0, 0, 0.12) 0px 3px 6px) drop-shadow(rgba(0, 0, 0, 0.05) 0px 9px 28px)",
+    +     "filter": "none",
+          "frames": Array [
+            Object {
+              "composite": "auto",
+              "computedOffset": 0,
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+
+      68 |   for (const phase of ['enter', 'exit']) {
+      69 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))
+    > 70 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })));
+         |        ^
+      71 |   }
+      72 | }
+      73 |
+        at compare (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:70:8)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:100:5
+
+    Error Context: .choices-results/choices-motion.browser.mjs-d4495-exit-motion-matches-tooltip-chromium-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-motion.browser.mjs-d4495-exit-motion-matches-tooltip-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-motion.browser.mjs-d4495-exit-motion-matches-tooltip-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches popover 
+    [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:80:3 › normal bottom entrance and exit motion matches tooltip 
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs choices-motion.browser.mjs --project=chromium-light-desktop --grep 'normal bottom.*(popover|tooltip)'

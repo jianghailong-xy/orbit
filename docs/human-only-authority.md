@@ -75,6 +75,26 @@ must be read per authenticated door:
 | One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY`** — for carrying a session at all, not for its origin | allowed since N26 | **refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE`**, `DONE`, `CANCELLED` and `OPEN` alike |
 | Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed; it names no actor — the row records the account owner | allowed | allowed; writes the column directly |
 | Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed, and indistinguishable from the owner REST row |
+| Personal access token (`orbit_pat_…`) | `NON_JUDGMENT`, as the owner REST row, but the request carries `credentialKind=PAT` | **refused whole with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`**; a new project's first criteria, sent with `POST /projects`, are written | **refused with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`** — the confirmation door and `start` alike | allowed with `tasks:write` | **refused whole with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`** — `status` on `PATCH /projects/:id`, `DONE`, `CANCELLED` and `OPEN` alike, and `POST /projects/:id/done` |
+
+The personal access token row is `docs/personal-access-token-design.md` §5, and it is wider than
+its three refusal cells: a token is refused on every owner-channel action, not only on these
+columns. Every route in `src/apiserver/src/auth/pat-owner-channel-routes.ts` —
+task confirmation-card answers, evidence decisions, approval answers, the standard-set confirmation,
+criteria-change decisions, promotion and handoff answers, start / done / pause / resume, the open
+items and the fuse put to the owner, the integration line, and the wiki's owner channel — is
+`@PatForbidden('OWNER_INTERACTIVE')`, and answers a token 403 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`
+with `requiredAction: OPEN_ORBIT` before anything is read. On the routes a token does reach with its
+scope, the fields that are the owner's own decision are refused the same way and the request with
+them, so nothing it carried is written: `status`, `integration` and `acceptanceCriteriaItems` on
+`PATCH /projects/:id`, `integration` on `POST /projects`, the project's authorization set and
+coordinator (`automatic`, `coordinatorEnabled`, `maxConcurrentTasks`, `sessionBudgetPerDay`,
+`coordinatorAgentId`) on both, `maintenance` on `POST /wiki/spaces`, `reviewMode`, `maintenance` and
+`automaticSpotChecks` on `PATCH /wiki/spaces/:id`, and `permissionMode` — to any value — on
+`PATCH /sessions/:id/config`, `POST /sessions/:id/resume` and `POST /sessions`.
+The rule turns on the credential, not on a session: the user door carries no acting session, so the
+session conditions below never see a token, and a login on the same doors is answered exactly as the
+owner REST row says.
 
 The project standard-set confirmation row is the N22 addition, and since migration 0245 gave the
 action its one writer, the rule it states is no longer about a role.
@@ -149,7 +169,14 @@ Tests lock most of this matrix in `coordinator-authority-boundary.spec.ts`:
   project updates only: `PROJECT_WRITES` (`:170-173`) has had a single entry since 0229 left one
   authoring shape;
 - the two `an owner JWT minted with the shared secret ...` cases for the owner REST API — editing
-  the criteria (`:285`) and writing `status=DONE` (`:299`).
+  the criteria (`:285`) and writing `status=DONE` (`:299`);
+- and, for the personal access token row, `auth/pat-owner-channel.pg.spec.ts` against the production
+  apiserver: one case per route in `pat-owner-channel-routes.ts` — a token holding every scope is
+  refused `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED` and the same request with a login is answered by
+  the door, doing the door's work where the spec can stand it up (the standard-set confirmation,
+  start, done, pause and resume among them) — and one case per scoped route that carries owner
+  fields, where those fields are refused whole for the token with nothing written while a login
+  writes them. `auth/pat-route-coverage.spec.ts` holds the decorators to that list, both ways.
 
 Two things here described the N26 server until 2026-09-09. This list named three cases 0229 had
 deleted along with the surface they exercised — two for the criterion column and a third
@@ -181,6 +208,13 @@ Short token lifetimes, a distinct HTTP route, a hidden button, or a second click
 assumption. A principal that can mint the token can mint a fresh short-lived token and call the
 same route. A symmetric JWT also provides no human non-repudiation: the verifier and every party
 with the shared signing secret can create the same signature.
+
+Personal access tokens do not change this conclusion. A token is one more bearer secret: it is
+opaque rather than signed, so nobody can mint one from `JWT_SECRET`, but whoever holds it is the
+account, exactly as with a borrowed JWT. What the token row in the matrix adds is a distinction the
+server can draw — `credentialKind` says whether a request came with a login or with a token — which
+keeps the official scripting path off the owner channel. It says nothing about who holds either: a
+request that came with a login is still no proof that a person sent it.
 
 ## What HUMAN_ONLY actually provides
 

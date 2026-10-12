@@ -6,7 +6,8 @@
  *   where type='user' and payload->>'controlPlaneNote' like '%<referenced-task%';
  *
  * 26 notes carrying 33 blocks on 2026-09-17. Each is stamped with the row it came from; none of it
- * is typed out by hand.
+ * is typed out by hand. All of them are Chinese, as the block was written until 2026-10; the one
+ * English note (`IN_ENGLISH`, at the end) is the server's own output rather than a row's.
  */
 
 /** One reference, the shape 25 of this deployment's 26 notes have. (run_event 01a0a2e1-2bc8-76b6-8cde-02a1227751ea) */
@@ -124,3 +125,25 @@ export const WITH_BACKGROUND_JOBS = `<referenced-task id="34NPZIL9Hfavd9uqJ8tjD"
   这是控制面替你记下的，不是用户说的。输出文件由 runner 持有，engine 换过也还在。
   用 mcp__orbit__bg_output 按 id 读输出，mcp__orbit__bg_list 取完整清单。
 </background-jobs>`;
+
+/**
+ * Two references as `describeTask` has written them since the block became English (2026-10-10): a
+ * verification task that ran, and a task nothing has run, unassigned and in no list. No row held the
+ * English form when it was added, so this note is not a copy of one: apiserver
+ * tasks/reference-expansion.spec.ts writes these two blocks and compares them to this text.
+ */
+export const IN_ENGLISH = `<referenced-task id="34DH29mTc7OQ6AwxAFIJu">
+  Title    Claude QA: verify the Watch core backend and its recovery semantics
+  Status   DONE · verification task
+  List     (no list) · assignee orbit
+  Runs     1 in total, 1 of them took a turn; last: SUCCEEDED, 144 turns
+  For the details, fetch them yourself with task_get.
+</referenced-task>
+
+<referenced-task id="349vy0HknpSjHwdwJ31O1">
+  Title    P0 | Review and publish the docs and the community baseline
+  Status   OPEN
+  List     (no list) · assignee (unassigned)
+  Runs     0 in total, 0 of them took a turn; last: never run
+  For the details, fetch them yourself with task_get.
+</referenced-task>`;

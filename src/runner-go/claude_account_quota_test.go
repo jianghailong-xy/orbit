@@ -504,6 +504,33 @@ func TestClaudeAccountQuotaReportsAZombieLoginSignedOut(t *testing.T) {
 	}
 }
 
+// TestClaudeTokenRefreshRunsInPrivateProbeDirectory: the refresh is a whole CLI start, so it runs
+// where the model-catalog probes do — the runner's private probe directory — and not in the
+// directory the runner itself runs in.
+func TestClaudeTokenRefreshRunsInPrivateProbeDirectory(t *testing.T) {
+	machine := privateOrbitHome(t)
+	pwd := filepath.Join(t.TempDir(), "pwd")
+	t.Setenv("CAPTURE_PWD", pwd)
+	dir := t.TempDir()
+	writeFakeBin(t, dir, "claude", `pwd -P > "$CAPTURE_PWD"`)
+	t.Setenv("PATH", dir)
+
+	if err := refreshClaudeToken(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(pwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(filepath.Join(machine, claudeProbeDirName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cwd := strings.TrimSpace(string(got)); cwd != want {
+		t.Fatalf("the refresh ran in %q, want the private probe directory %q", cwd, want)
+	}
+}
+
 // TestClaudeTokenRefreshRunsOncePerDirectory: one directory never has two refresh runs at once — a
 // second ask while the first is under way is turned away, not queued — while another directory's
 // goes ahead. And a refresh is not cut off with the read that asked for it: stopped once the server

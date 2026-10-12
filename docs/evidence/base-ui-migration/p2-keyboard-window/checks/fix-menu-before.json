@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/before && unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep \" menu-\"'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_9ad5e4ce72d0",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T05:01:43.206910+00:00",
+ "exitCode": 0,
+ "outputSha256": "236b27ed37ce4dd4f33df096796e02cbd188f7f2ae941942266ee0426538b389",
+ "outputBytes": 242029,
+ "note": "Before-fix tree (temporary worktree at 46a418fba, clean), all 11 menu sequences of the unchanged keyboard-window probe on its three targets, 20 burst + 20 paced each: 1320 passed (47.9 min), no page failed to mount. Run in its own network namespace at the same time as fix-menu-after; archived as fix-menu-before with collect-choice-evidence.mjs."
+}

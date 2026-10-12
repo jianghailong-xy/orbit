@@ -14,6 +14,8 @@
 
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 
 import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
@@ -38,6 +40,16 @@ import {
 
 const URL = process.env.COORDINATOR_PG_URL;
 const SHA = (c: string) => c.repeat(40);
+
+/**
+ * The deploy-time repair for the shells the old refusal path left, byte for byte the file
+ * `prisma migrate deploy` applies. Read rather than re-typed: the assertions below are about what
+ * that migration does, and a copy of its SQL in this file would be a second thing to keep in step.
+ */
+const REPAIR_SQL = readFileSync(
+  path.resolve(__dirname, '../../prisma/migrations/0394_close_refused_running_shells/migration.sql'),
+  'utf8',
+);
 
 interface World {
   ownerId: string;
@@ -442,6 +454,209 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
     assert.equal(late.wonRace, false);
     assert.equal(late.state, 'REFUSED');
     assert.equal(late.baseSha, undefined);
+  });
+
+  await t.test('a refused run is closed, not left RUNNING with its claim held', async () => {
+    await emptyWorld(client);
+    const w = await world(db, 'running-refusal');
+    const sessionId = await createSession(db, w, w.taskId);
+    const prisma = db as unknown as PrismaService;
+    const actor = { sessionId, runnerId: w.runnerId, ownerId: w.ownerId };
+
+    // The incident's shape, which is the ordinary one: the runner claimed the run before it could
+    // resolve the ref, so the row it refuses is RUNNING and holds the claim its owner handed it.
+    const leaseOwner = randomUUID();
+    const generation = randomUUID();
+    await db.session.update({
+      where: { id: sessionId },
+      data: {
+        status: RunStatus.RUNNING,
+        runClaimedAt: new Date(),
+        inboxLeaseOwner: leaseOwner,
+        inboxLeaseGeneration: generation,
+        numTurns: 0,
+      },
+    });
+    await db.inboxLeaseGeneration.create({
+      data: { generation, sessionId, leaseOwner },
+    });
+    const stderr = "fatal: couldn't find remote ref refs/heads/project/34bZ3i4AvgJaaoaw5E9tH";
+    const before = new Date();
+
+    const refused = await freezeSessionSourcePin(prisma, actor, {
+      refusal: {
+        code: 'BASE_REF_NOT_FOUND',
+        detail: { ref: 'refs/heads/project/34bZ3i4AvgJaaoaw5E9tH', stderr, remoteName: 'origin' },
+      },
+    });
+    assert.equal(refused.wonRace, true);
+    assert.equal(refused.state, 'REFUSED');
+    const after = new Date();
+
+    // The run is OVER: not RUNNING, and carrying the same `<code>: <reason>` sentence a checkout
+    // refusal leaves in `error` — the runner's own words, not a second spelling of the code.
+    const row = await db.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: {
+        status: true, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
+        inboxLeaseGeneration: true, numTurns: true, sourceState: true,
+      },
+    });
+    assert.equal(row.status, RunStatus.FAILED, 'a refused run was left running');
+    assert.equal(row.error, `BASE_REF_NOT_FOUND: ${stderr}`);
+    assert.ok(row.finishedAt instanceof Date && row.finishedAt >= before && row.finishedAt <= after);
+    assert.equal(row.numTurns, 0, 'the refused run reported turns');
+    assert.equal(row.sourceState, 'REFUSED');
+
+    // And the execution authority is released: the claim's clocks and owner are gone, and the
+    // inbox generation the runner held is retired — the tombstone a revive has to find.
+    assert.equal(row.runClaimedAt, null, 'the refused run still holds its claim clock');
+    assert.equal(row.inboxLeaseOwner, null, 'the refused run still holds an inbox owner');
+    const retired = await db.inboxLeaseGeneration.findUniqueOrThrow({
+      where: { generation },
+      select: { retiredAt: true },
+    });
+    assert.ok(retired.retiredAt instanceof Date, 'the refused run left its lease generation open');
+
+    // A refusal that LOSES the compare-and-set closes nothing: the row is the winner's, and a
+    // runner re-issuing a request whose response it never saw must not rewrite it either way.
+    const late = await freezeSessionSourcePin(prisma, actor, {
+      refusal: { code: 'BASE_REF_NOT_FOUND', detail: { ref: 'refs/heads/project/x', stderr: 'other' } },
+    });
+    assert.equal(late.wonRace, false);
+    const untouched = await db.session.findUniqueOrThrow({
+      where: { id: sessionId }, select: { error: true, finishedAt: true },
+    });
+    assert.equal(untouched.error, row.error);
+    assert.deepEqual(untouched.finishedAt, row.finishedAt);
+  });
+
+  await t.test('the shells an earlier refusal left RUNNING are closed by the deploy backfill, once', async () => {
+    await emptyWorld(client);
+    const w = await world(db, 'shell-backfill');
+
+    // The shell the old code left: the refusal frozen onto the session and nothing else — still
+    // RUNNING, `num_turns` 0, and the claim its owner handed it. The door cannot produce this any
+    // more (the refusal now closes the run in the same transaction), which is exactly why the
+    // historical half is a migration and why this state has to be stated rather than driven.
+    const shell = await createSession(db, w, w.taskId);
+    // The ref the run was told to start from — the selector frozen at create, which is what the
+    // refusal's own detail names and what the item's key is built from (the live path reads it off
+    // the SELECTED row too, rather than off anything the runner said).
+    const ref = (await db.session.findUniqueOrThrow({
+      where: { id: shell }, select: { sourceRef: true },
+    })).sourceRef!;
+    const stderr = `fatal: couldn't find remote ref ${ref}`;
+    const refusalDetail = { ref, stderr, remoteName: 'origin', fixAction: 'FIX_REF' };
+    const shellLeaseOwner = randomUUID();
+    const shellGeneration = randomUUID();
+    await db.session.update({
+      where: { id: shell },
+      data: {
+        sourceState: 'REFUSED',
+        sourceRefusalCode: 'BASE_REF_NOT_FOUND',
+        sourceRefusalDetail: refusalDetail,
+        status: RunStatus.RUNNING,
+        runClaimedAt: new Date(),
+        inboxLeaseOwner: shellLeaseOwner,
+        inboxLeaseGeneration: shellGeneration,
+      },
+    });
+    await db.inboxLeaseGeneration.create({
+      data: { generation: shellGeneration, sessionId: shell, leaseOwner: shellLeaseOwner },
+    });
+
+    // And one whose task is in no project: no project for an item to hang on, so this one must be
+    // closed like the other and file nothing. Inserted whole rather than driven — a session in no
+    // project resolves no SOURCE, so its selector and its refusal are stated together with the row
+    // (0231's freeze guard refuses a second statement that writes the selector at all).
+    const orphanTask = await db.task.create({
+      data: {
+        ownerId: w.ownerId, title: 'a task in no project', creatorType: 'USER', creatorId: w.ownerId,
+        completionCriterion: 'EVIDENCE_JUDGMENT',
+      },
+      select: { id: true },
+    });
+    const orphanShell = randomUUID();
+    await db.session.create({
+      data: {
+        id: orphanShell, ownerId: w.ownerId, creatorId: w.ownerId, taskId: orphanTask.id,
+        workspaceId: w.workspaceId, assignedRunnerId: w.runnerId,
+        title: 'refused without a project', prompt: 'do the thing', provider: 'claude',
+        providerBuiltin: true, status: RunStatus.RUNNING,
+        sourceState: 'REFUSED', sourceKind: 'PROJECT_UPSTREAM',
+        sourceCodebaseId: w.codebaseId, sourceRepoUrl: 'https://github.com/acme/widgets',
+        sourceRef: ref, sourceRefAuthority: 'REMOTE', sourceConfigRevision: 0n,
+        sourceRequiredContains: [],
+        sourceRefusalCode: 'SOURCE_AUTHORITY_UNREACHABLE',
+        sourceRefusalDetail: { ref, stderr, fixAction: 'RETRY_OR_FIX_CREDENTIALS' },
+        runClaimedAt: new Date(), inboxLeaseOwner: randomUUID(),
+      },
+    });
+
+    await client.query(REPAIR_SQL);
+
+    // The run is over, in the same columns the live path writes, with the runner's own words.
+    const closed = await db.session.findUniqueOrThrow({
+      where: { id: shell },
+      select: {
+        status: true, error: true, finishedAt: true, runClaimedAt: true, inboxLeaseOwner: true,
+        sourceState: true, updatedAt: true,
+      },
+    });
+    assert.equal(closed.status, RunStatus.FAILED);
+    assert.equal(closed.error, `BASE_REF_NOT_FOUND: ${stderr}`);
+    assert.ok(closed.finishedAt instanceof Date, 'the closed shell has no finished_at');
+    assert.equal(closed.runClaimedAt, null, 'the closed shell still holds its claim clock');
+    assert.equal(closed.inboxLeaseOwner, null, 'the closed shell still holds an inbox owner');
+    assert.equal(closed.sourceState, 'REFUSED', 'the repair moved the SOURCE state');
+    const tombstone = await db.inboxLeaseGeneration.findUniqueOrThrow({
+      where: { generation: shellGeneration }, select: { retiredAt: true },
+    });
+    assert.ok(tombstone.retiredAt instanceof Date, 'the closed shell left its lease generation open');
+    const closedOrphan = await db.session.findUniqueOrThrow({
+      where: { id: orphanShell }, select: { status: true, error: true, runClaimedAt: true },
+    });
+    assert.equal(closedOrphan.status, RunStatus.FAILED);
+    assert.equal(closedOrphan.error, `SOURCE_AUTHORITY_UNREACHABLE: ${stderr}`);
+    assert.equal(closedOrphan.runClaimedAt, null);
+
+    // The project is told, once, under the key the live path builds: the ref and the code, which is
+    // what a person has to change. The project-less shell contributes nothing.
+    const blockers = await db.projectBlocker.findMany({
+      where: { projectId: w.projectId },
+      select: {
+        id: true, kind: true, owner: true, recovery: true, subjectType: true, subjectId: true,
+        detail: true, dedupeKey: true, requiredAction: true, lifecycleGeneration: true,
+        firstSeenAt: true, lastSeenAt: true,
+      },
+    });
+    assert.equal(blockers.length, 1, 'the backfill raised no item, or more than one');
+    const [item] = blockers;
+    assert.equal(item.kind, 'SOURCE_UNRESOLVED');
+    assert.equal(item.owner, 'USER');
+    assert.equal(item.recovery, 'HUMAN');
+    assert.equal(item.subjectType, 'PROJECT');
+    assert.equal(item.subjectId, w.projectId);
+    assert.equal(item.dedupeKey, `SOURCE_UNRESOLVED:BASE_REF_NOT_FOUND:${ref}`);
+    assert.deepEqual(item.detail, {
+      code: 'BASE_REF_NOT_FOUND', fixAction: 'FIX_REF', ref, taskIds: [w.taskId],
+    });
+    assert.ok(item.requiredAction.includes('BASE_REF_NOT_FOUND'));
+    assert.equal(await db.projectBlocker.count(), 1, 'a project-less shell filed an item somewhere');
+
+    // Idempotent: the same file again is a no-op, which is what makes it safe to re-apply.
+    await client.query(REPAIR_SQL);
+    const again = await db.projectBlocker.findMany({
+      where: { projectId: w.projectId }, select: { id: true, firstSeenAt: true, lifecycleGeneration: true },
+    });
+    assert.deepEqual(again, [{ id: item.id, firstSeenAt: item.firstSeenAt, lifecycleGeneration: item.lifecycleGeneration }]);
+    assert.equal(await db.projectBlocker.count(), 1);
+    const untouched = await db.session.findUniqueOrThrow({
+      where: { id: shell }, select: { updatedAt: true, finishedAt: true },
+    });
+    assert.deepEqual(untouched.updatedAt, closed.updatedAt, 'a second repair rewrote the closed shell');
+    assert.deepEqual(untouched.finishedAt, closed.finishedAt);
   });
 
   await t.test('the pin route refuses what would make the row say two things at once', async () => {

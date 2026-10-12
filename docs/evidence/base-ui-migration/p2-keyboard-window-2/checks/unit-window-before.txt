@@ -1,0 +1,455 @@
+0594f6d2c test(web): pin keys pressed before focus enters an open submenu, menu, select or dialog
+b12625256d13a586b91846f64d759f384a90d8ca
+
+ RUN  v5.0.2 /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370/src/web
+
+ ✓ src/components/ui/Menu.test.tsx (18 tests) 467ms
+ ❯ src/components/ui/keyboardWindow.test.tsx (52 tests | 23 failed) 1154ms
+   ❯ a submenu opened from the keyboard (18)
+     ✓ ["ArrowRight","Enter"] with focus in the submenu (the reference) 182ms
+     ✓ ["ArrowRight","ArrowDown","Enter"] with focus in the submenu (the reference) 50ms
+     ✓ ["ArrowRight","ArrowUp","Enter"] with focus in the submenu (the reference) 42ms
+     ✓ ["ArrowRight","Home","Enter"] with focus in the submenu (the reference) 37ms
+     ✓ ["ArrowRight","End","Enter"] with focus in the submenu (the reference) 40ms
+     ✓ ["ArrowRight","Space"] with focus in the submenu (the reference) 34ms
+     ✓ ["ArrowRight","ArrowLeft"] with focus in the submenu (the reference) 38ms
+     ✓ ["Enter","Enter"] with focus in the submenu (the reference) 36ms
+     ✓ ["Enter","ArrowDown","Enter"] with focus in the submenu (the reference) 36ms
+     × ["ArrowRight","Enter"] before focus enters the submenu runs no parent item and ends as the reference 34ms
+     × ["ArrowRight","ArrowDown","Enter"] before focus enters the submenu runs no parent item and ends as the reference 31ms
+     × ["ArrowRight","ArrowUp","Enter"] before focus enters the submenu runs no parent item and ends as the reference 33ms
+     × ["ArrowRight","Home","Enter"] before focus enters the submenu runs no parent item and ends as the reference 30ms
+     × ["ArrowRight","End","Enter"] before focus enters the submenu runs no parent item and ends as the reference 31ms
+     × ["ArrowRight","Space"] before focus enters the submenu runs no parent item and ends as the reference 29ms
+     × ["ArrowRight","ArrowLeft"] before focus enters the submenu runs no parent item and ends as the reference 29ms
+     × ["Enter","Enter"] before focus enters the submenu runs no parent item and ends as the reference 28ms
+     × ["Enter","ArrowDown","Enter"] before focus enters the submenu runs no parent item and ends as the reference 29ms
+   ❯ Tab and Shift+Tab after a menu opened from the keyboard (8)
+     ✓ ["Enter","Tab"] with focus in the menu (the reference) 17ms
+     ✓ ["Enter","Tab","Enter"] with focus in the menu (the reference) 18ms
+     ✓ ["Enter","Shift+Tab"] with focus in the menu (the reference) 17ms
+     ✓ ["ArrowDown","Tab"] with focus in the menu (the reference) 18ms
+     × ["Enter","Tab"] before focus enters the menu ends as the reference 15ms
+     × ["Enter","Tab","Enter"] before focus enters the menu ends as the reference 19ms
+     × ["Enter","Shift+Tab"] before focus enters the menu ends as the reference 17ms
+     × ["ArrowDown","Tab"] before focus enters the menu ends as the reference 18ms
+   ❯ Tab and Shift+Tab after a select opened from the keyboard (6)
+     ✓ ["ArrowDown","Tab"] with focus in the list (the reference) 38ms
+     ✓ ["Enter","Tab"] with focus in the list (the reference) 23ms
+     ✓ ["ArrowDown","Shift+Tab"] with focus in the list (the reference) 18ms
+     × ["ArrowDown","Tab"] before focus enters the list ends as the reference 15ms
+     × ["Enter","Tab"] before focus enters the list ends as the reference 19ms
+     × ["ArrowDown","Shift+Tab"] before focus enters the list ends as the reference 17ms
+   ❯ keys after a dialog opened from the keyboard (20)
+     ✓ Dialog ["Enter","Enter"] with focus in the dialog (the reference) 8ms
+     ✓ Dialog ["Enter","Tab"] with focus in the dialog (the reference) 6ms
+     ✓ Dialog ["Enter","Tab","Enter"] with focus in the dialog (the reference) 9ms
+     ✓ Dialog ["Enter","Shift+Tab"] with focus in the dialog (the reference) 8ms
+     ✓ Dialog ["Enter","Escape"] with focus in the dialog (the reference) 7ms
+     ✓ Dialog ["Enter","Enter"] before the next frame ends as the reference 6ms
+     × Dialog ["Enter","Tab"] before the next frame ends as the reference 5ms
+     × Dialog ["Enter","Tab","Enter"] before the next frame ends as the reference 6ms
+     × Dialog ["Enter","Shift+Tab"] before the next frame ends as the reference 6ms
+     ✓ Dialog ["Enter","Escape"] before the next frame ends as the reference 5ms
+     ✓ ConfirmDialog ["Enter","Enter"] with focus in the dialog (the reference) 5ms
+     ✓ ConfirmDialog ["Enter","Space"] with focus in the dialog (the reference) 3ms
+     ✓ ConfirmDialog ["Enter","Tab"] with focus in the dialog (the reference) 5ms
+     ✓ ConfirmDialog ["Enter","Tab","Enter"] with focus in the dialog (the reference) 10ms
+     ✓ ConfirmDialog ["Enter","Escape"] with focus in the dialog (the reference) 5ms
+     × ConfirmDialog ["Enter","Enter"] before the next frame ends as the reference 5ms
+     × ConfirmDialog ["Enter","Space"] before the next frame ends as the reference 4ms
+     × ConfirmDialog ["Enter","Tab"] before the next frame ends as the reference 4ms
+     × ConfirmDialog ["Enter","Tab","Enter"] before the next frame ends as the reference 5ms
+     ✓ ConfirmDialog ["Enter","Escape"] before the next frame ends as the reference 4ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["ArrowRight","Enter"] before focus enters the submenu runs no parent item and ends as the reference
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["ArrowRight","Space"] before focus enters the submenu runs no parent item and ends as the reference
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["Enter","Enter"] before focus enters the submenu runs no parent item and ends as the reference
+AssertionError: expected [] to deeply equal [ 'codex' ]
+
+- Expected
++ Received
+
+- [
+-   "codex",
+- ]
++ []
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:194:24
+    192|     });
+    193|     expect(result.ran.filter((key) => PARENT.includes(key))).toEqual([…
+    194|     expect(result.ran).toEqual(runs);
+       |                        ^
+    195|     expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+    196|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["ArrowRight","ArrowDown","Enter"] before focus enters the submenu runs no parent item and ends as the reference
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["Enter","ArrowDown","Enter"] before focus enters the submenu runs no parent item and ends as the reference
+AssertionError: expected [ 'group' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "group",
++ ]
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:193:62
+    191|       expect(focus()).toBe('menuitem:Provider');
+    192|     });
+    193|     expect(result.ran.filter((key) => PARENT.includes(key))).toEqual([…
+       |                                                              ^
+    194|     expect(result.ran).toEqual(runs);
+    195|     expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["ArrowRight","ArrowUp","Enter"] before focus enters the submenu runs no parent item and ends as the reference
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["ArrowRight","Home","Enter"] before focus enters the submenu runs no parent item and ends as the reference
+AssertionError: expected [ 'default' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "default",
++ ]
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:193:62
+    191|       expect(focus()).toBe('menuitem:Provider');
+    192|     });
+    193|     expect(result.ran.filter((key) => PARENT.includes(key))).toEqual([…
+       |                                                              ^
+    194|     expect(result.ran).toEqual(runs);
+    195|     expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["ArrowRight","End","Enter"] before focus enters the submenu runs no parent item and ends as the reference
+AssertionError: expected [ 'delete' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "delete",
++ ]
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:193:62
+    191|       expect(focus()).toBe('menuitem:Provider');
+    192|     });
+    193|     expect(result.ran.filter((key) => PARENT.includes(key))).toEqual([…
+       |                                                              ^
+    194|     expect(result.ran).toEqual(runs);
+    195|     expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > a submenu opened from the keyboard > ["ArrowRight","ArrowLeft"] before focus enters the submenu runs no parent item and ends as the reference
+AssertionError: expected { ran: [], focus: 'menuitem:Codex' } to deeply equal { ran: [], focus: 'menuitem:Provider' }
+
+- Expected
++ Received
+
+  {
+-   "focus": "menuitem:Provider",
++   "focus": "menuitem:Codex",
+    "ran": [],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:195:26
+    193|     expect(result.ran.filter((key) => PARENT.includes(key))).toEqual([…
+    194|     expect(result.ran).toEqual(runs);
+    195|     expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+       |                          ^
+    196|   });
+    197| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > Tab and Shift+Tab after a menu opened from the keyboard > ["Enter","Tab"] before focus enters the menu ends as the reference
+ FAIL  src/components/ui/keyboardWindow.test.tsx > Tab and Shift+Tab after a menu opened from the keyboard > ["ArrowDown","Tab"] before focus enters the menu ends as the reference
+AssertionError: expected { ran: [], …(2) } to deeply equal { Object (ran, focus, ...) }
+
+- Expected
++ Received
+
+  {
+    "after": {
+-     "focus": "button:After",
++     "focus": "menuitem:File",
+      "ran": [],
+    },
+-   "focus": "button:After",
++   "focus": "menuitem:File",
+    "ran": [],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:234:20
+    232|       expect(focus()).toBe('button:Add attachment');
+    233|     });
+    234|     expect(result).toEqual({ ran: runs, focus: focusAfter, after: { ra…
+       |                    ^
+    235|     expect(shown('menu')).toBe(0);
+    236|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > Tab and Shift+Tab after a menu opened from the keyboard > ["Enter","Tab","Enter"] before focus enters the menu ends as the reference
+AssertionError: expected { ran: [ 'file' ], …(2) } to deeply equal { ran: [ 'after' ], …(2) }
+
+- Expected
++ Received
+
+  {
+    "after": {
+-     "focus": "button:After",
++     "focus": "button:Add attachment",
+      "ran": [
+-       "after",
++       "file",
+      ],
+    },
+-   "focus": "button:After",
++   "focus": "button:Add attachment",
+    "ran": [
+-     "after",
++     "file",
+    ],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:234:20
+    232|       expect(focus()).toBe('button:Add attachment');
+    233|     });
+    234|     expect(result).toEqual({ ran: runs, focus: focusAfter, after: { ra…
+       |                    ^
+    235|     expect(shown('menu')).toBe(0);
+    236|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > Tab and Shift+Tab after a menu opened from the keyboard > ["Enter","Shift+Tab"] before focus enters the menu ends as the reference
+AssertionError: expected { ran: [], focus: 'body', …(1) } to deeply equal { ran: [], …(2) }
+
+- Expected
++ Received
+
+  {
+    "after": {
+-     "focus": "button:Add attachment",
++     "focus": "body",
+      "ran": [],
+    },
+-   "focus": "button:Add attachment",
++   "focus": "body",
+    "ran": [],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:234:20
+    232|       expect(focus()).toBe('button:Add attachment');
+    233|     });
+    234|     expect(result).toEqual({ ran: runs, focus: focusAfter, after: { ra…
+       |                    ^
+    235|     expect(shown('menu')).toBe(0);
+    236|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > Tab and Shift+Tab after a select opened from the keyboard > ["ArrowDown","Tab"] before focus enters the list ends as the reference
+ FAIL  src/components/ui/keyboardWindow.test.tsx > Tab and Shift+Tab after a select opened from the keyboard > ["Enter","Tab"] before focus enters the list ends as the reference
+AssertionError: expected { ran: [], …(2) } to deeply equal { Object (ran, focus, ...) }
+
+- Expected
++ Received
+
+  {
+    "after": {
+-     "focus": "button:After",
++     "focus": "button:Clear selection",
+      "ran": [],
+    },
+-   "focus": "button:After",
++   "focus": "button:Clear selection",
+    "ran": [],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:270:20
+    268|       expect(focus()).toBe('combobox:Expires');
+    269|     });
+    270|     expect(result).toEqual({ ran: [], focus: focusAfter, after: { ran:…
+       |                    ^
+    271|     expect(expanded()).toBe('false');
+    272|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > Tab and Shift+Tab after a select opened from the keyboard > ["ArrowDown","Shift+Tab"] before focus enters the list ends as the reference
+AssertionError: expected { ran: [], …(2) } to deeply equal { ran: [], …(2) }
+
+- Expected
++ Received
+
+  {
+    "after": {
+-     "focus": "combobox:Expires",
++     "focus": "button:Before",
+      "ran": [],
+    },
+-   "focus": "combobox:Expires",
++   "focus": "button:Before",
+    "ran": [],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:270:20
+    268|       expect(focus()).toBe('combobox:Expires');
+    269|     });
+    270|     expect(result).toEqual({ ran: [], focus: focusAfter, after: { ran:…
+       |                    ^
+    271|     expect(expanded()).toBe('false');
+    272|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > keys after a dialog opened from the keyboard > Dialog ["Enter","Tab"] before the next frame ends as the reference
+AssertionError: expected { ran: [], focus: 'dialog' } to deeply equal { ran: [], focus: 'button:Close' }
+
+- Expected
++ Received
+
+  {
+-   "focus": "button:Close",
++   "focus": "dialog",
+    "ran": [],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:320:28
+    318|       const result = await play(keys, true, () => expect(shown(kind ==…
+    319|       expect(result.ran).toEqual(runs);
+    320|       expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+       |                            ^
+    321|     });
+    322|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > keys after a dialog opened from the keyboard > Dialog ["Enter","Tab","Enter"] before the next frame ends as the reference
+AssertionError: expected [ 'next' ] to deeply equal [ 'closed' ]
+
+- Expected
++ Received
+
+  [
+-   "closed",
++   "next",
+  ]
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:319:26
+    317|       button('Open')!.focus();
+    318|       const result = await play(keys, true, () => expect(shown(kind ==…
+    319|       expect(result.ran).toEqual(runs);
+       |                          ^
+    320|       expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+    321|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > keys after a dialog opened from the keyboard > Dialog ["Enter","Shift+Tab"] before the next frame ends as the reference
+AssertionError: expected { ran: [], focus: 'button:Close' } to deeply equal { ran: [], focus: 'button:Save' }
+
+- Expected
++ Received
+
+  {
+-   "focus": "button:Save",
++   "focus": "button:Close",
+    "ran": [],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:320:28
+    318|       const result = await play(keys, true, () => expect(shown(kind ==…
+    319|       expect(result.ran).toEqual(runs);
+    320|       expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+       |                            ^
+    321|     });
+    322|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > keys after a dialog opened from the keyboard > ConfirmDialog ["Enter","Enter"] before the next frame ends as the reference
+ FAIL  src/components/ui/keyboardWindow.test.tsx > keys after a dialog opened from the keyboard > ConfirmDialog ["Enter","Space"] before the next frame ends as the reference
+AssertionError: expected [] to deeply equal [ 'cancelled' ]
+
+- Expected
++ Received
+
+- [
+-   "cancelled",
+- ]
++ []
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:319:26
+    317|       button('Open')!.focus();
+    318|       const result = await play(keys, true, () => expect(shown(kind ==…
+    319|       expect(result.ran).toEqual(runs);
+       |                          ^
+    320|       expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+    321|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > keys after a dialog opened from the keyboard > ConfirmDialog ["Enter","Tab"] before the next frame ends as the reference
+AssertionError: expected { ran: [], focus: 'button:Cancel' } to deeply equal { ran: [], focus: 'button:Delete' }
+
+- Expected
++ Received
+
+  {
+-   "focus": "button:Delete",
++   "focus": "button:Cancel",
+    "ran": [],
+  }
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:320:28
+    318|       const result = await play(keys, true, () => expect(shown(kind ==…
+    319|       expect(result.ran).toEqual(runs);
+    320|       expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+       |                            ^
+    321|     });
+    322|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  src/components/ui/keyboardWindow.test.tsx > keys after a dialog opened from the keyboard > ConfirmDialog ["Enter","Tab","Enter"] before the next frame ends as the reference
+AssertionError: expected [ 'next' ] to deeply equal [ 'confirmed' ]
+
+- Expected
++ Received
+
+  [
+-   "confirmed",
++   "next",
+  ]
+
+ ❯ src/components/ui/keyboardWindow.test.tsx:319:26
+    317|       button('Open')!.focus();
+    318|       const result = await play(keys, true, () => expect(shown(kind ==…
+    319|       expect(result.ran).toEqual(runs);
+       |                          ^
+    320|       expect(result.after).toEqual({ ran: runs, focus: focusAfter });
+    321|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  23 failed | 47 passed (70)
+   Start at  20:50:44
+   Duration  2.46s (tests 41%, import 24%, environment 23%, transform 12%)
+

@@ -5,7 +5,7 @@ import { after, test } from 'node:test';
 import { type INestApplication, Module } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { type PrismaClient, type Prisma, ProjectStatus } from '@prisma/client';
+import { type PrismaClient, Prisma, ProjectStatus } from '@prisma/client';
 import { ControlEventType, type SessionProjectMembership, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { filter, firstValueFrom, timeout } from 'rxjs';
@@ -20,6 +20,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
+import { sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 
@@ -399,4 +400,235 @@ test('projectId returns an empty list for another owner or an unknown project', 
     }
   }
   assert.equal((await read(other, `/sessions?projectId=${uuidToBase62(other.project.id)}`) as SessionRow[]).length, 1);
+});
+
+/** The ids the list's projectId filter selects for `w`'s owner, over every lifecycle and behind the
+ *  same ownership fence, two ways: the membership comparison the WHERE clause used to make, and
+ *  sessionInProjectSql. Sorted, so they compare as sets. */
+async function filterBothWays(w: World, projectId: string): Promise<{ before: string[]; now: string[] }> {
+  const ids = async (predicate: Prisma.Sql) => (await w.h.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT s.id FROM session s
+    WHERE s.owner_id = ${w.ownerId}::uuid
+      AND EXISTS (SELECT 1 FROM project p WHERE p.id = ${projectId}::uuid AND p.owner_id = ${w.ownerId}::uuid)
+      AND ${predicate}
+  `)).map((row) => row.id).sort();
+  return {
+    before: await ids(Prisma.sql`(${sessionProjectMembershipSql('s')} ->> 'projectId')::uuid = ${projectId}::uuid`),
+    now: await ids(sessionInProjectSql('s', projectId)),
+  };
+}
+
+interface Members { open: string[]; completed: string[]; deleted?: string[] }
+
+/** `projectId` selects exactly `expected` for `w`'s owner and the old and new filters agree; on the
+ *  route, each view returns that view's own rows whose projectMembership names the project. */
+async function assertProjectFilter(w: World, projectId: string, expected: Members): Promise<void> {
+  const { before, now } = await filterBothWays(w, projectId);
+  assert.deepEqual(now, before, 'sessionInProjectSql disagrees with the membership comparison it replaced');
+  assert.deepEqual(now, [...expected.open, ...expected.completed, ...(expected.deleted ?? [])].sort(), 'members');
+  for (const view of ['open', 'completed'] as const) {
+    const ordinary = await read(w, `/sessions?view=${view}`) as SessionRow[];
+    const byMembership = ordinary.filter((row) => row.projectMembership?.projectId === uuidToBase62(projectId));
+    const listed = await read(w, `/sessions?projectId=${uuidToBase62(projectId)}&view=${view}`) as SessionRow[];
+    assert.deepEqual(listed, byMembership, `${view}: rows differ from the list's own projectMembership`);
+    assert.deepEqual(listed.map((row) => row.id).sort(), expected[view].map(uuidToBase62).sort(), `${view} members`);
+  }
+}
+
+/** A project `w`'s owner does not own lists nothing, whatever the links of its sessions say. */
+async function assertNoProjectRows(w: World, projectId: string): Promise<void> {
+  assert.deepEqual(await filterBothWays(w, projectId), { before: [], now: [] });
+  for (const view of ['open', 'completed'] as const) {
+    assert.deepEqual(await read(w, `/sessions?projectId=${uuidToBase62(projectId)}&view=${view}`), []);
+  }
+}
+
+const under = (root: string) => ({ rootSessionId: root, parentSessionId: root, spawnDepth: 1 });
+
+test('projectId keeps every role and inheriting child, and leaves out sessions directly in another project even under its roots', { skip }, async () => {
+  const w = await world('filter-precedence');
+  const y = await w.h.db.project.create({ data: { ownerId: w.ownerId, title: 'filter-precedence other project' } });
+  const inY = { ...w, project: y };
+  const stranger = await world('filter-precedence-stranger');
+
+  // X's members, one per direct role. Each also links to Y with a lower role, which loses: the
+  // coordinator executes a Y task, the TASK and CONTEXT members hold an open Y judgment wake.
+  const coordinator = await directSession(w, 'COORDINATOR', { taskId: await task(w, y.id) });
+  await w.h.db.session.update({ where: { id: coordinator }, data: { rootSessionId: coordinator } });
+  const taskMember = await directSession(w, 'TASK');
+  await wake(inY, taskMember);
+  const contextMember = await directSession(w, 'CONTEXT');
+  await wake(inY, contextMember);
+  const judgment = await directSession(w, 'JUDGMENT');
+  // CHILD of each kind of root, a grandchild, one whose project-less task falls through to its
+  // root, and children that have left Open.
+  const children: string[] = [];
+  for (const root of [coordinator, taskMember, contextMember, judgment]) children.push(await session(w, under(root)));
+  children.push(await session(w, { rootSessionId: coordinator, parentSessionId: children[0], spawnDepth: 2 }));
+  children.push(await session(w, { taskId: await task(w, null), ...under(coordinator) }));
+  const completedChild = await session(w, { ...under(coordinator), completedAt: new Date() });
+  const deletedChild = await session(w, { ...under(coordinator), deletedAt: new Date() });
+
+  // Y's members, every one also a candidate of X: under X's roots, or holding an open X wake.
+  const yMembers = [
+    await directSession(inY, 'COORDINATOR', under(coordinator)),
+    await directSession(inY, 'TASK', under(coordinator)),
+    await directSession(inY, 'CONTEXT', under(taskMember)),
+    await directSession(inY, 'JUDGMENT', under(judgment)),
+  ];
+  for (const role of ['TASK', 'CONTEXT'] as const) {
+    const id = await directSession(inY, role);
+    await wake(w, id);
+    yMembers.push(id);
+  }
+  // Inherits Y from a root that itself sits under X's coordinator.
+  yMembers.push(await session(w, under(yMembers[1])));
+
+  // Linked to X, but nobody's member: a delivered wake, and a root of nothing pointing at itself.
+  const delivered = await session(w);
+  await wake(w, delivered, 'DELIVERED');
+  const selfRooted = await session(w);
+  await w.h.db.session.update({ where: { id: selfRooted }, data: { rootSessionId: selfRooted } });
+
+  // Another owner's sessions whose membership names X, and that owner's own project.
+  await wake(w, await session(stranger));
+  await session(stranger, under(coordinator));
+  const strangerCoordinator = await directSession(stranger, 'COORDINATOR');
+
+  await assertProjectFilter(w, w.project.id, {
+    open: [coordinator, taskMember, contextMember, judgment, ...children],
+    completed: [completedChild],
+    deleted: [deletedChild],
+  });
+  await assertProjectFilter(w, y.id, { open: yMembers, completed: [] });
+  await assertProjectFilter(stranger, stranger.project.id, { open: [strangerCoordinator], completed: [] });
+  await assertNoProjectRows(stranger, w.project.id);
+  await assertNoProjectRows(w, stranger.project.id);
+  await assertNoProjectRows(w, randomUUID());
+});
+
+/** mulberry32: seeded, so a failing seed replays exactly. */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+test('on random membership graphs projectId matches the old comparison and a reference model', { skip }, async () => {
+  // How often each role and each precedence situation came up, over all seeds: the graphs must
+  // actually exercise what the filter has to get right.
+  const seen = new Map<string, number>();
+  const tally = (key: string) => seen.set(key, (seen.get(key) ?? 0) + 1);
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const random = seeded(seed);
+    const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)];
+    const w = await world(`random-${seed}`);
+    const stranger = await world(`random-${seed}-stranger`);
+    const projects = [w.project];
+    for (const n of [1, 2]) {
+      projects.push(await w.h.db.project.create({ data: { ownerId: w.ownerId, title: `random ${seed}.${n}` } }));
+    }
+    const projectOrNone = () => pick([...projects.map((p) => p.id), null]);
+
+    // The reference model: what each session links to directly, and its root.
+    const coordinatorOf = new Map<string, string>();
+    const taskProjectOf = new Map<string, string | null>();
+    const contextProjectOf = new Map<string, string | null>();
+    const judgmentOf = new Map<string, string>();
+    const rootOf = new Map<string, string>();
+    const lifecycleOf = new Map<string, keyof Members>();
+    const contextTasks: Array<{ id: string; projectId: string | null }> = [];
+    for (const projectId of [...projects.map((p) => p.id), null]) contextTasks.push({ id: await task(w, projectId), projectId });
+
+    const ids: string[] = [];
+    for (let i = 0; i < 36; i++) {
+      const fields: Partial<Prisma.SessionUncheckedCreateInput> = {};
+      const link = pick(['none', 'none', 'task', 'context'] as const);
+      let taskProject: string | null | undefined;
+      let contextProject: string | null | undefined;
+      if (link === 'task') {
+        taskProject = projectOrNone();
+        fields.taskId = await task(w, taskProject); // its own: a task has one live execution
+      }
+      if (link === 'context') {
+        const about = pick(contextTasks);
+        fields.contextTaskId = about.id;
+        contextProject = about.projectId;
+      }
+      const rooting = random();
+      if (rooting < 0.45 && ids.length > 0) fields.rootSessionId = pick(ids);
+      const lifecycle = pick(['open', 'open', 'open', 'completed', 'deleted'] as const);
+      if (lifecycle === 'completed') fields.completedAt = new Date();
+      if (lifecycle === 'deleted') fields.deletedAt = new Date();
+      const id = await session(w, fields);
+      if (rooting >= 0.45 && rooting < 0.55) {
+        await w.h.db.session.update({ where: { id }, data: { rootSessionId: id } });
+        rootOf.set(id, id);
+      } else if (fields.rootSessionId) {
+        rootOf.set(id, fields.rootSessionId);
+      }
+      if (taskProject !== undefined) taskProjectOf.set(id, taskProject);
+      if (contextProject !== undefined) contextProjectOf.set(id, contextProject);
+      lifecycleOf.set(id, lifecycle);
+      ids.push(id);
+    }
+    for (const project of projects) {
+      if (random() >= 0.85) continue;
+      const id = pick(ids.filter((candidate) => !coordinatorOf.has(candidate)));
+      await w.h.db.project.update({ where: { id: project.id }, data: { coordinatorSessionId: id } });
+      coordinatorOf.set(id, project.id);
+    }
+    for (let i = 0; i < 10; i++) {
+      const id = pick(ids);
+      const project = pick(projects);
+      // At most one open judgment wake per session (project_coordinator_wake_session_id_key).
+      const status = judgmentOf.has(id) ? 'DELIVERED' : pick(['SESSION_OPENED', 'SESSION_OPENED', 'DELIVERED']);
+      await wake({ ...w, project }, id, status);
+      if (status === 'SESSION_OPENED') judgmentOf.set(id, project.id);
+    }
+    // Another owner's sessions that name these projects never show up for this owner.
+    await wake({ ...w, project: pick(projects) }, await session(stranger));
+    await session(stranger, under(pick(ids)));
+
+    const direct = (id: string): string | null =>
+      coordinatorOf.get(id) ?? taskProjectOf.get(id) ?? contextProjectOf.get(id) ?? judgmentOf.get(id) ?? null;
+    const memberOf = (id: string): string | null => {
+      const root = rootOf.get(id);
+      return direct(id) ?? (root !== undefined && root !== id ? direct(root) : null);
+    };
+    for (const id of ids) {
+      const own = direct(id);
+      const links = [coordinatorOf.get(id), taskProjectOf.get(id), contextProjectOf.get(id), judgmentOf.get(id)];
+      if (new Set(links.filter(Boolean)).size > 1) tally('own links name two projects');
+      if (own === null) {
+        tally(memberOf(id) === null ? 'no project' : 'CHILD');
+        continue;
+      }
+      tally(coordinatorOf.has(id) ? 'COORDINATOR' : taskProjectOf.get(id) ? 'TASK' : contextProjectOf.get(id) ? 'CONTEXT' : 'JUDGMENT');
+      const root = rootOf.get(id);
+      if (root !== undefined && root !== id && direct(root) !== null && direct(root) !== own) {
+        tally('own project differs from the root\'s');
+      }
+    }
+
+    for (const project of projects) {
+      const members = ids.filter((id) => memberOf(id) === project.id);
+      const inLifecycle = (lifecycle: keyof Members) => members.filter((id) => lifecycleOf.get(id) === lifecycle);
+      await assertProjectFilter(w, project.id, {
+        open: inLifecycle('open'), completed: inLifecycle('completed'), deleted: inLifecycle('deleted'),
+      });
+    }
+    await assertNoProjectRows(stranger, pick(projects).id);
+  }
+  for (const key of [
+    'COORDINATOR', 'TASK', 'CONTEXT', 'JUDGMENT', 'CHILD', 'no project',
+    'own links name two projects', 'own project differs from the root\'s',
+  ]) {
+    assert.ok((seen.get(key) ?? 0) > 0, `the random graphs never produced: ${key} (${JSON.stringify([...seen])})`);
+  }
 });

@@ -1,0 +1,10 @@
+
+Running 5 tests using 1 worker
+
+  ✓  1 [chromium-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (6.9s)
+  ✓  2 [chromium-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (6.5s)
+  ✓  3 [chromium-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (11.6s)
+  ✓  4 [chromium-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (8.6s)
+  ✓  5 [chromium-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (7.5s)
+
+  5 passed (48.5s)

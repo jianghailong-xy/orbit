@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { ConfirmPromotionDto } from './dto';
@@ -25,6 +26,7 @@ export class ProjectPromotionController {
   constructor(private readonly promotions: ProjectPromotionService) {}
 
   /** What this project is currently asking its owner to merge, or null when it is asking nothing. */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get('current')
   current(@CurrentUser() user: AuthUser, @Param('projectId', PublicIdPipe) projectId: string) {
     return this.promotions.readCurrent(user.userId, projectId);
@@ -38,12 +40,14 @@ export class ProjectPromotionController {
    * moves on to the next one, and a receipt drawn from it describes a different merge every time
    * the branch is offered again.
    */
+  @PatScope('projects:read', { workspaceConfinable: false })
   @Get('merged')
   merged(@CurrentUser() user: AuthUser, @Param('projectId', PublicIdPipe) projectId: string) {
     return this.promotions.readMerged(user.userId, projectId);
   }
 
   /** M-T4: merge it. 409 when the candidate is not READY, which includes "its checks did not pass". */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':promotionId/confirm')
   @HttpCode(200)
   confirm(
@@ -62,6 +66,7 @@ export class ProjectPromotionController {
   }
 
   /** M-T5: not now. The branch is left exactly where it is, and the next landing offers it again. */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':promotionId/decline')
   @HttpCode(200)
   decline(
@@ -74,6 +79,7 @@ export class ProjectPromotionController {
   }
 
   /** M-T10: call back a confirmed merge, while its job has not reached the push. */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':promotionId/cancel')
   @HttpCode(200)
   cancel(

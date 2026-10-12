@@ -1,0 +1,1404 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p1.1/p0-regression/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--P0.2-FOCUS-1-task-share-Escape-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4052,
+   "sha256": "a9876edfffcea8fd95886599713cdc4947fd055ef4e0cea7212291c8bb2af33c",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "P0.2-FOCUS-1: task share Escape restores focus",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--P0.2-FOCUS-1-task-share-Escape-restores-focus--known-focus-failure.json",
+   "bytes": 272,
+   "sha256": "7bff4561b97b2beb701e547688e6e5d9adfb4b65cad714910c290d0051b2ed5f",
+   "fields": {
+    "key": "P0.2-FOCUS-1",
+    "reason": "Escape also closes the underlying task panel and returns focus to BODY."
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--P0.2-FOCUS-2-task-share-Done-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4050,
+   "sha256": "315c14a6fadc6a09ceb39627ad28d84e14a1f8d91b318261b16ac1518aa0980b",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "P0.2-FOCUS-2: task share Done restores focus",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--P0.2-FOCUS-2-task-share-Done-restores-focus--known-focus-failure.json",
+   "bytes": 303,
+   "sha256": "fce87537cba464d3025375de826f37edd80d0f6c5b1c4db3c46a6a4935912815",
+   "fields": {
+    "key": "P0.2-FOCUS-2",
+    "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger."
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--both-sides-of-existing-600-640-and-960px-rules--computed-styles-and-timings.json",
+   "bytes": 384901,
+   "sha256": "86bd6c738310c9a3cc0a7177bf782d980362c0cbc552356c84dacc8b8dc701ad",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--profile--computed-styles-and-timings.json",
+   "bytes": 52384,
+   "sha256": "cd9a0ec2c7264ce1958d969a0954ca3b5eefef28579b112bc7e6694546f2bd62",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "profile",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--projects--computed-styles-and-timings.json",
+   "bytes": 189871,
+   "sha256": "3e98f0403539d09c92299790e2abc4bb45b50f2910672cc3df1c4f9655018804",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "projects",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--projects-error-and-retry--computed-styles-and-timings.json",
+   "bytes": 19386,
+   "sha256": "3386ddaca1624666d0a453e0f938d62549afa2bf7e91f522e6b848f8d40f7fda",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "projects error and retry",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--projects-loading-and-release--computed-styles-and-timings.json",
+   "bytes": 17699,
+   "sha256": "5d1a96da3980e6ddb7f071c944a5e055d2f941c96e41a057d574b77d2b082ed3",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "projects loading and release",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--session--computed-styles-and-timings.json",
+   "bytes": 164174,
+   "sha256": "48720db48ec789382da29f259478d0d4bab0517f51cea14b67aef17447977e84",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "session",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--settings--computed-styles-and-timings.json",
+   "bytes": 37860,
+   "sha256": "dc3acc0ec37049bcea0cd55334dd8ff3b5c4e32cc5f46ea98c603de3b93dd4dc",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "settings",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--share--computed-styles-and-timings.json",
+   "bytes": 13893,
+   "sha256": "ed3bf31e1b04d6b5716050e6d8c37f840a99641b4644332793edc48df371237e",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "share",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--task--computed-styles-and-timings.json",
+   "bytes": 246923,
+   "sha256": "b6acaeadcd2d86d5cfb5afaf7f45ac1e595d181accc819b567f39982697bdb1b",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "task",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--wiki--computed-styles-and-timings.json",
+   "bytes": 50258,
+   "sha256": "ee2897188d466fc373efc56420d213cd15e1e82950c4113ce30b084af26f5d54",
+   "fields": {
+    "project": "chromium-dark-desktop",
+    "test": "wiki",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--P0.2-FOCUS-1-task-share-Escape-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4050,
+   "sha256": "f496a9394f34485a31f223c9a7db3fc837f08d8f15b2743eeebaa29390d5b20a",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "P0.2-FOCUS-1: task share Escape restores focus",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--P0.2-FOCUS-1-task-share-Escape-restores-focus--known-focus-failure.json",
+   "bytes": 272,
+   "sha256": "7bff4561b97b2beb701e547688e6e5d9adfb4b65cad714910c290d0051b2ed5f",
+   "fields": {
+    "key": "P0.2-FOCUS-1",
+    "reason": "Escape also closes the underlying task panel and returns focus to BODY."
+   }
+  },
+  {
+   "name": "chromium-dark-phone--P0.2-FOCUS-2-task-share-Done-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4048,
+   "sha256": "c403a926cb6704a0aaeab0c01c946214a03d8c8abd25f4dcb81f6c9e5ca7e946",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "P0.2-FOCUS-2: task share Done restores focus",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--P0.2-FOCUS-2-task-share-Done-restores-focus--known-focus-failure.json",
+   "bytes": 303,
+   "sha256": "fce87537cba464d3025375de826f37edd80d0f6c5b1c4db3c46a6a4935912815",
+   "fields": {
+    "key": "P0.2-FOCUS-2",
+    "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger."
+   }
+  },
+  {
+   "name": "chromium-dark-phone--both-sides-of-existing-600-640-and-960px-rules--computed-styles-and-timings.json",
+   "bytes": 222,
+   "sha256": "69a6e1a420d1790a759f608d226d28d441599ad767cda958df5f4098b78f4a97",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "requests": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--profile--computed-styles-and-timings.json",
+   "bytes": 52379,
+   "sha256": "025db90260706e656b605a1571127417cf408cc4f21ce543e01c1fb899298152",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "profile",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--projects--computed-styles-and-timings.json",
+   "bytes": 189627,
+   "sha256": "559b36c7bddb4c4ac01194a919a8d73c3ff6c9410fbea34c2247e40c37395317",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "projects",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--projects-error-and-retry--computed-styles-and-timings.json",
+   "bytes": 19477,
+   "sha256": "b92acef721ab77e5617d177862a8d6602587eca4a05d33ffcbd271beff1e384b",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "projects error and retry",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--projects-loading-and-release--computed-styles-and-timings.json",
+   "bytes": 17612,
+   "sha256": "cfb291fd0b1a94207dab087b5fd2827c5dae75f60369dbc7df0ad84a4176557e",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "projects loading and release",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--session--computed-styles-and-timings.json",
+   "bytes": 146858,
+   "sha256": "3352c5bebcb8f7ceff45fa2add606f32e4a96492f8eb9ff43f00244e9d2a58be",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "session",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--settings--computed-styles-and-timings.json",
+   "bytes": 37950,
+   "sha256": "5fd731c4ce545b37ebb26ded677db2f33574856daa33c37a46665c4fae9c192e",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "settings",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--share--computed-styles-and-timings.json",
+   "bytes": 13956,
+   "sha256": "2a482821b16ccaddeacaec3257151c3d1e3bc78823b16ce962befe2d2dbc2cca",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "share",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--task--computed-styles-and-timings.json",
+   "bytes": 245708,
+   "sha256": "ba9d60a2b79b553333ec516a7989317898a655526124f4dba0758b3e8bba3d36",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "task",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--wiki--computed-styles-and-timings.json",
+   "bytes": 69109,
+   "sha256": "b49304a02a86215e695a79cf2e13b1092af54b2819073938ef65abbe38a78c03",
+   "fields": {
+    "project": "chromium-dark-phone",
+    "test": "wiki",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--P0.2-FOCUS-1-task-share-Escape-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4053,
+   "sha256": "13b57c6849ef7737249874f483c441ff158e54c8642b0b927214f307b8d7071b",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "P0.2-FOCUS-1: task share Escape restores focus",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--P0.2-FOCUS-1-task-share-Escape-restores-focus--known-focus-failure.json",
+   "bytes": 272,
+   "sha256": "7bff4561b97b2beb701e547688e6e5d9adfb4b65cad714910c290d0051b2ed5f",
+   "fields": {
+    "key": "P0.2-FOCUS-1",
+    "reason": "Escape also closes the underlying task panel and returns focus to BODY."
+   }
+  },
+  {
+   "name": "chromium-light-desktop--P0.2-FOCUS-2-task-share-Done-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4051,
+   "sha256": "6320cd20991a00a56d9d3c7446ca6607c3d39799fa7f9e3df6743fb761ef31b7",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "P0.2-FOCUS-2: task share Done restores focus",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--P0.2-FOCUS-2-task-share-Done-restores-focus--known-focus-failure.json",
+   "bytes": 303,
+   "sha256": "fce87537cba464d3025375de826f37edd80d0f6c5b1c4db3c46a6a4935912815",
+   "fields": {
+    "key": "P0.2-FOCUS-2",
+    "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger."
+   }
+  },
+  {
+   "name": "chromium-light-desktop--both-sides-of-existing-600-640-and-960px-rules--computed-styles-and-timings.json",
+   "bytes": 383421,
+   "sha256": "abd6e18c43da2e4bdc1d44acdc0890351a83705ce96c9fbf6be92acc5bd31db6",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--profile--computed-styles-and-timings.json",
+   "bytes": 52227,
+   "sha256": "dea96bd61d366cd6c0507b8f6c55b22d14cf0cba4ecdfed238eb4eabe29783cf",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "profile",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--projects--computed-styles-and-timings.json",
+   "bytes": 189455,
+   "sha256": "db2bdc29000c66219a6173b06c33088f10178c551ff9df7b50426bc8ccf5d5ea",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "projects",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--projects-error-and-retry--computed-styles-and-timings.json",
+   "bytes": 19388,
+   "sha256": "ae5be0aa5e144c44933dd55dd64a7d93e9cc9c49b866f48742b2d658020cf52a",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "projects error and retry",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--projects-loading-and-release--computed-styles-and-timings.json",
+   "bytes": 17660,
+   "sha256": "c6bc2e44e773107f5c9b2c9dc565310618a21a6475e3d53b4df96a5dc47d43d4",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "projects loading and release",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--record-browser-performance-baseline--browser-performance-samples.json",
+   "bytes": 66665,
+   "sha256": "bfb39a6eef9e9853e56a85a82c5397156b39b2e40df7f0f3f38eb6671f805266",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "browser": "153.0.8010.12",
+    "node": "v26.10.0",
+    "fixedDate": "2026-09-28T12:00:00.000Z",
+    "observedAt": "2026-10-03T20:27:54.966Z",
+    "platform": "linux 6.12.107+deb13-amd64 x64"
+   }
+  },
+  {
+   "name": "chromium-light-desktop--session--computed-styles-and-timings.json",
+   "bytes": 163450,
+   "sha256": "3132f55542949b1ce6df0c45d5d6e07b0a99278c774d7ab9dfd62be908754f82",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "session",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--settings--computed-styles-and-timings.json",
+   "bytes": 37662,
+   "sha256": "e0952b4a51daf821b923713b01cf325236072c265d852f175778adc75c819203",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "settings",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--share--computed-styles-and-timings.json",
+   "bytes": 13659,
+   "sha256": "b8ff0cbf0e8a07e201059a4e5983d5ba478891e8c8d9a8e562bd768d956dfe3f",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "share",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--task--computed-styles-and-timings.json",
+   "bytes": 244374,
+   "sha256": "c40bdc3495d7256349b76bd230e7c37a3537661c5014dc4248a1e476f0ea23dd",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "task",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--wiki--computed-styles-and-timings.json",
+   "bytes": 50095,
+   "sha256": "d9583f9298fdbacaa6b7ab38a51ebe4a849c6671ef0e5a31f69f116a46d94001",
+   "fields": {
+    "project": "chromium-light-desktop",
+    "test": "wiki",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--P0.2-FOCUS-1-task-share-Escape-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4051,
+   "sha256": "edc65908428af84f2c3ae8946d601f52aefad92504c9144f81f4a7d0704c204c",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "P0.2-FOCUS-1: task share Escape restores focus",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--P0.2-FOCUS-1-task-share-Escape-restores-focus--known-focus-failure.json",
+   "bytes": 272,
+   "sha256": "7bff4561b97b2beb701e547688e6e5d9adfb4b65cad714910c290d0051b2ed5f",
+   "fields": {
+    "key": "P0.2-FOCUS-1",
+    "reason": "Escape also closes the underlying task panel and returns focus to BODY."
+   }
+  },
+  {
+   "name": "chromium-light-phone--P0.2-FOCUS-2-task-share-Done-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4049,
+   "sha256": "1202fca059285c508a4d98ffe535daea7f451ce8970c44effb9999a84d381361",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "P0.2-FOCUS-2: task share Done restores focus",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--P0.2-FOCUS-2-task-share-Done-restores-focus--known-focus-failure.json",
+   "bytes": 303,
+   "sha256": "fce87537cba464d3025375de826f37edd80d0f6c5b1c4db3c46a6a4935912815",
+   "fields": {
+    "key": "P0.2-FOCUS-2",
+    "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger."
+   }
+  },
+  {
+   "name": "chromium-light-phone--both-sides-of-existing-600-640-and-960px-rules--computed-styles-and-timings.json",
+   "bytes": 223,
+   "sha256": "95e2a1f5512e3aba90d2f53dbfde26102e0712e5f4537c08b730d11c858250c1",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "browser": "153.0.8010.12",
+    "captures": [],
+    "timings": [],
+    "requests": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--profile--computed-styles-and-timings.json",
+   "bytes": 51985,
+   "sha256": "f089f064354fafb1ea0acfbd5a981490ff5f02748c969dca720b03a6d1f180c2",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "profile",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--projects--computed-styles-and-timings.json",
+   "bytes": 189084,
+   "sha256": "870e9f7da7efa4e0ac803c8a7ff56d1e68ae05b3ef24cae6eef15bb562f55569",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "projects",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--projects-error-and-retry--computed-styles-and-timings.json",
+   "bytes": 19386,
+   "sha256": "f50fd9d3750094cb4eca675a8997b95b19c2f8921efbcbe955f2370769a34d16",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "projects error and retry",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--projects-loading-and-release--computed-styles-and-timings.json",
+   "bytes": 17510,
+   "sha256": "86cbc93b7148858ea048dd710af6463b1fa2323658b058c519205a73fffd62a2",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "projects loading and release",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--session--computed-styles-and-timings.json",
+   "bytes": 145434,
+   "sha256": "14c5d950d60f5eee1b1422ec0dca71b63ec7fc8b2f240afb5a662af95bccb2f4",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "session",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--settings--computed-styles-and-timings.json",
+   "bytes": 37600,
+   "sha256": "bc2683dc5780ef4c9072d381aad7903e9276b5f8b8dbbf9d9e9709d6353f98ed",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "settings",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--share--computed-styles-and-timings.json",
+   "bytes": 13784,
+   "sha256": "f85f35d99043ee81749f68aa1a36adc0967a2032bc019492d257f5378b06a3c8",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "share",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--task--computed-styles-and-timings.json",
+   "bytes": 243877,
+   "sha256": "27e00213d07fe9fb5bebe4cc3f96944b0b285eb7d316aa7b24f10618af777d25",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "task",
+    "browser": "153.0.8010.12",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--wiki--computed-styles-and-timings.json",
+   "bytes": 68839,
+   "sha256": "e763de38cf93f0a3a0104225f9cc6a51231779288218772f4ebd03b171fbc646",
+   "fields": {
+    "project": "chromium-light-phone",
+    "test": "wiki",
+    "browser": "153.0.8010.12",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--P0.2-FOCUS-1-task-share-Escape-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4041,
+   "sha256": "8d99383bee7004b47375cfca3f6f148dc885cb32f7d836e26f6ced4e7563fd82",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "P0.2-FOCUS-1: task share Escape restores focus",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--P0.2-FOCUS-1-task-share-Escape-restores-focus--known-focus-failure.json",
+   "bytes": 272,
+   "sha256": "7bff4561b97b2beb701e547688e6e5d9adfb4b65cad714910c290d0051b2ed5f",
+   "fields": {
+    "key": "P0.2-FOCUS-1",
+    "reason": "Escape also closes the underlying task panel and returns focus to BODY."
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--P0.2-FOCUS-2-task-share-Done-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4039,
+   "sha256": "6abc34957404bccfc4142ee42e6e5a4fb5538e5a3772a61ac73da14d42aa20f4",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "P0.2-FOCUS-2: task share Done restores focus",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--P0.2-FOCUS-2-task-share-Done-restores-focus--known-focus-failure.json",
+   "bytes": 303,
+   "sha256": "fce87537cba464d3025375de826f37edd80d0f6c5b1c4db3c46a6a4935912815",
+   "fields": {
+    "key": "P0.2-FOCUS-2",
+    "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger."
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--both-sides-of-existing-600-640-and-960px-rules--computed-styles-and-timings.json",
+   "bytes": 368290,
+   "sha256": "a35013cb7710c3b625f129b772f3434529480bb30cc5a5d6731b3678a6d3418b",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--profile--computed-styles-and-timings.json",
+   "bytes": 49524,
+   "sha256": "74cc8b349cd59a1d8620c9bd0cf2b08805e6a96d2f203fc6bd7378212a6d60bd",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "profile",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--projects--computed-styles-and-timings.json",
+   "bytes": 182450,
+   "sha256": "dda0595d5d0a584526c0cc87bca999decfb79e0717877dd4c51835c7360d28bc",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "projects",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--projects-error-and-retry--computed-styles-and-timings.json",
+   "bytes": 18233,
+   "sha256": "6b9d4ca07b35bdc22112bc1e173bf534b4ef6367a49097ee893be0f415c1409e",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "projects error and retry",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--projects-loading-and-release--computed-styles-and-timings.json",
+   "bytes": 16380,
+   "sha256": "d1433cb35f6cf9188499a28be9e3aa00b7bddd34b83aa16d2a010079d25bdb74",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "projects loading and release",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--session--computed-styles-and-timings.json",
+   "bytes": 154666,
+   "sha256": "5cae72cf8400866ef1e69e5737db3b6c560d91010cb5552ce9889b41eb16ebdb",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "session",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--settings--computed-styles-and-timings.json",
+   "bytes": 35172,
+   "sha256": "5e20cb7eb88f049e80af4d6db15267c51ccb17ba2d8336a9802f36650a0bcd98",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--share--computed-styles-and-timings.json",
+   "bytes": 12614,
+   "sha256": "be06f3affcc10a496ea51d79cd4b864234cf8bd0eb57229f7ef4368361ac52db",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "share",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--task--computed-styles-and-timings.json",
+   "bytes": 239624,
+   "sha256": "2bd96a2a3ad093a4e5ca5d8e3564d8db62c09d707a6927e666b74724b0ce0ae3",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "task",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--wiki--computed-styles-and-timings.json",
+   "bytes": 47343,
+   "sha256": "2afe5e16a34dd3b938735b4955530ff62c93d49d17edc73ac3e7eabdb74c2031",
+   "fields": {
+    "project": "webkit-dark-desktop",
+    "test": "wiki",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--P0.2-FOCUS-1-task-share-Escape-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4039,
+   "sha256": "c7a85895bd718a42e06907a3c4b5f0cd73b40c4492a2441190013039777bd7c3",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "P0.2-FOCUS-1: task share Escape restores focus",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--P0.2-FOCUS-1-task-share-Escape-restores-focus--known-focus-failure.json",
+   "bytes": 272,
+   "sha256": "7bff4561b97b2beb701e547688e6e5d9adfb4b65cad714910c290d0051b2ed5f",
+   "fields": {
+    "key": "P0.2-FOCUS-1",
+    "reason": "Escape also closes the underlying task panel and returns focus to BODY."
+   }
+  },
+  {
+   "name": "webkit-dark-phone--P0.2-FOCUS-2-task-share-Done-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4037,
+   "sha256": "f1ac50bd31611d59fe098c694a5a3a59d0479d91074c38afc01d46c6b4cd38da",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "P0.2-FOCUS-2: task share Done restores focus",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--P0.2-FOCUS-2-task-share-Done-restores-focus--known-focus-failure.json",
+   "bytes": 303,
+   "sha256": "fce87537cba464d3025375de826f37edd80d0f6c5b1c4db3c46a6a4935912815",
+   "fields": {
+    "key": "P0.2-FOCUS-2",
+    "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger."
+   }
+  },
+  {
+   "name": "webkit-dark-phone--both-sides-of-existing-600-640-and-960px-rules--computed-styles-and-timings.json",
+   "bytes": 211,
+   "sha256": "44eadc7f87585978ee41a49d5dc6cf8429332a9098200520ec78b549b32e3521",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "requests": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--profile--computed-styles-and-timings.json",
+   "bytes": 49513,
+   "sha256": "3b61df35a719b60c6040aafbed436f7a80ac648e0acb58234f86880285444006",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "profile",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--projects--computed-styles-and-timings.json",
+   "bytes": 182317,
+   "sha256": "8e5eb289dbe73133f60711a32d4aa7113ecefcc6aae91ee2d4de67bfe1142e2e",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "projects",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--projects-error-and-retry--computed-styles-and-timings.json",
+   "bytes": 18193,
+   "sha256": "6c60d693152ebf0c70b19b03fb8f2f4b60baabe668b4614c65fe06056218309b",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "projects error and retry",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--projects-loading-and-release--computed-styles-and-timings.json",
+   "bytes": 16334,
+   "sha256": "639e110b4ebee53ddf146502f45c6a1751c49eff1d3c8ba874b879c61ef24a70",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "projects loading and release",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--session--computed-styles-and-timings.json",
+   "bytes": 136982,
+   "sha256": "adf831a70e6f70f6d80bad69039e70190005a5ce04d1f979c833cf547574d200",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "session",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--settings--computed-styles-and-timings.json",
+   "bytes": 35160,
+   "sha256": "721d98932284639f9688ae80f63aec10c4ad42e21f619f8876e358e496028dfa",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "settings",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--share--computed-styles-and-timings.json",
+   "bytes": 12597,
+   "sha256": "b7fbfd7e0c6ee2272f34e7684f671ecd141aedc6da8f0dd7b94c862b470f3692",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "share",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--task--computed-styles-and-timings.json",
+   "bytes": 238584,
+   "sha256": "8f4805170f495c6968e3e79861bbed297f31960726953ce589167ce2333366db",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "task",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--wiki--computed-styles-and-timings.json",
+   "bytes": 64864,
+   "sha256": "5a0499af1ae5a2df79b8f6efb0721289cb76ae16b1b23901c742df0b77095339",
+   "fields": {
+    "project": "webkit-dark-phone",
+    "test": "wiki",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--P0.2-FOCUS-1-task-share-Escape-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4042,
+   "sha256": "3d418faf37907630e46d452af9b093305cf386879f73549c1f13de6fb61aa27c",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "P0.2-FOCUS-1: task share Escape restores focus",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--P0.2-FOCUS-1-task-share-Escape-restores-focus--known-focus-failure.json",
+   "bytes": 272,
+   "sha256": "7bff4561b97b2beb701e547688e6e5d9adfb4b65cad714910c290d0051b2ed5f",
+   "fields": {
+    "key": "P0.2-FOCUS-1",
+    "reason": "Escape also closes the underlying task panel and returns focus to BODY."
+   }
+  },
+  {
+   "name": "webkit-light-desktop--P0.2-FOCUS-2-task-share-Done-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4040,
+   "sha256": "584f353bb83fb35fc7ab8f27dcff658612310956bed9e4eafbb9a9024a488ca2",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "P0.2-FOCUS-2: task share Done restores focus",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--P0.2-FOCUS-2-task-share-Done-restores-focus--known-focus-failure.json",
+   "bytes": 303,
+   "sha256": "fce87537cba464d3025375de826f37edd80d0f6c5b1c4db3c46a6a4935912815",
+   "fields": {
+    "key": "P0.2-FOCUS-2",
+    "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger."
+   }
+  },
+  {
+   "name": "webkit-light-desktop--both-sides-of-existing-600-640-and-960px-rules--computed-styles-and-timings.json",
+   "bytes": 366527,
+   "sha256": "f22405368651d6aee7022e69b79cc23c9cfc7c50620b0f48f18643e3701581bf",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--profile--computed-styles-and-timings.json",
+   "bytes": 49324,
+   "sha256": "36ec7773f8f13a47ac02a3044846853970f475495628471245ab2c756da407cd",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "profile",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--projects--computed-styles-and-timings.json",
+   "bytes": 182018,
+   "sha256": "d0829749658de22c72a45065cdb7bae0101804d32e1d9acd0d541d28bf41c1ec",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "projects",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--projects-error-and-retry--computed-styles-and-timings.json",
+   "bytes": 18159,
+   "sha256": "23feb6f5b828fdf251de1b346cbc82a21241a733bfc29d0a550a39d3f034fb63",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "projects error and retry",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--projects-loading-and-release--computed-styles-and-timings.json",
+   "bytes": 16316,
+   "sha256": "9a1d4b92fa7540f5c714451537973eb841b6429e522872193d99bc704bee0ada",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "projects loading and release",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--session--computed-styles-and-timings.json",
+   "bytes": 154313,
+   "sha256": "c780c34c51cc0b473225c0844c9387f025869eb74c0690efe265cdfc1a03fe02",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "session",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--settings--computed-styles-and-timings.json",
+   "bytes": 34938,
+   "sha256": "2bf5d78a4b24816153b04dc116abf0544fecc13cdc969c72b1f82624a4d38dd9",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--share--computed-styles-and-timings.json",
+   "bytes": 12472,
+   "sha256": "d8b339902ee6f593ffc1e5ef421b1ddb00d403d4b6df24c195603045f4e9eabb",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "share",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--task--computed-styles-and-timings.json",
+   "bytes": 237821,
+   "sha256": "67bcf35bc51848982f2ae9747f5420655c809c192bc46a680b22160bbcfe46b9",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "task",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--wiki--computed-styles-and-timings.json",
+   "bytes": 47244,
+   "sha256": "9ec5671b9eadee9ac8ac820393f6fd37b0c98f0c206473dbfdc0a02b6ae8ec2b",
+   "fields": {
+    "project": "webkit-light-desktop",
+    "test": "wiki",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--P0.2-FOCUS-1-task-share-Escape-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4040,
+   "sha256": "798545f7b2ec7310a6443da8d7246c1756f203bf8e21ce0fc9ae1d0848a4de4e",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "P0.2-FOCUS-1: task share Escape restores focus",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--P0.2-FOCUS-1-task-share-Escape-restores-focus--known-focus-failure.json",
+   "bytes": 272,
+   "sha256": "7bff4561b97b2beb701e547688e6e5d9adfb4b65cad714910c290d0051b2ed5f",
+   "fields": {
+    "key": "P0.2-FOCUS-1",
+    "reason": "Escape also closes the underlying task panel and returns focus to BODY."
+   }
+  },
+  {
+   "name": "webkit-light-phone--P0.2-FOCUS-2-task-share-Done-restores-focus--computed-styles-and-timings.json",
+   "bytes": 4038,
+   "sha256": "90a2ea63b8e47704969938cdd5e804faeeb56c3691b2ae1086e7e8daa040e451",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "P0.2-FOCUS-2: task share Done restores focus",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--P0.2-FOCUS-2-task-share-Done-restores-focus--known-focus-failure.json",
+   "bytes": 303,
+   "sha256": "fce87537cba464d3025375de826f37edd80d0f6c5b1c4db3c46a6a4935912815",
+   "fields": {
+    "key": "P0.2-FOCUS-2",
+    "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger."
+   }
+  },
+  {
+   "name": "webkit-light-phone--both-sides-of-existing-600-640-and-960px-rules--computed-styles-and-timings.json",
+   "bytes": 212,
+   "sha256": "6e14baa126d067c9e8b4dcb31b85a0a22b289eb66a58bb5a4c62127b85ba9f01",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "both sides of existing 600, 640 and 960px rules",
+    "browser": "26.6",
+    "captures": [],
+    "timings": [],
+    "requests": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--profile--computed-styles-and-timings.json",
+   "bytes": 49271,
+   "sha256": "f5e78c414320b81e83f3c83dec918ee9b0ceaa3d61188d330636d652c1db3735",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "profile",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--projects--computed-styles-and-timings.json",
+   "bytes": 181781,
+   "sha256": "1df8b57da743eca8a0fb708177eb735368d17fecf9150eb1b220c92c2e121c47",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "projects",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--projects-error-and-retry--computed-styles-and-timings.json",
+   "bytes": 18098,
+   "sha256": "a147366b88c4a6fdb7cc1d0dd33ac17ea0d5bebba8ff31a8fd4b49969f4f7730",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "projects error and retry",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--projects-loading-and-release--computed-styles-and-timings.json",
+   "bytes": 16249,
+   "sha256": "51df9c3c9776dadc950ff1e501c650a9a9c88ed10807827b12ea041a82de38cc",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "projects loading and release",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--session--computed-styles-and-timings.json",
+   "bytes": 137022,
+   "sha256": "eb6441f48901353c0cf41d52c923c9b6c9a6d0162c5e9c79efa04e43056794f6",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "session",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--settings--computed-styles-and-timings.json",
+   "bytes": 34884,
+   "sha256": "03aff67e8a6380bbd67dfb55d7fcfdef7be01859b6a55d454e5a678aca55efed",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "settings",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--share--computed-styles-and-timings.json",
+   "bytes": 12455,
+   "sha256": "6b167cb3fc3030f7c5d311d33758028894015f57cce755a5d71b3adb1a3146aa",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "share",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--task--computed-styles-and-timings.json",
+   "bytes": 237130,
+   "sha256": "2404b561c437993e5a11510be3d923a35ebd5f9230798d449499240ab35cd51a",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "task",
+    "browser": "26.6",
+    "unhandled": [],
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--wiki--computed-styles-and-timings.json",
+   "bytes": 64672,
+   "sha256": "0e3f5dfd91319614e4450f52781c2cc8b856ed79f6f9c9714e26ea344d0c6ac6",
+   "fields": {
+    "project": "webkit-light-phone",
+    "test": "wiki",
+    "browser": "26.6",
+    "timings": [],
+    "unhandled": [],
+    "pageErrors": []
+   }
+  }
+ ]
+}

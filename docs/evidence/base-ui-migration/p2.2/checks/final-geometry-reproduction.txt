@@ -1,0 +1,114 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project=chromium-light-desktop --grep attachment matches|tooltip matches
+
+[WebServer] (node:2536555) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:2536629) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states (3.4s)
+(node:2537123) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states (3.3s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -46,10 +46,10 @@
+        Object {
+          "color": "rgb(31, 35, 41)",
+          "height": 18.84375,
+          "kind": "SPAN",
+          "paths": Array [],
+    -     "width": 14,
+    +     "width": 12,
+          "x": 16,
+          "y": 147.578125,
+        },
+      ]
+
+      139 |         expect(glyphs.orbit.filter(({ kind }) => kind === 'svg').map(({ x, width, height }) => ({ x, width, height }))).toEqual(Array(4).fill({ x: 31, width: 19, height: 19 }));
+      140 |         expect(glyphs.orbit.find(({ kind }) => kind === 'SPAN')).toMatchObject({ x: 31, width: 19 });
+    > 141 |       } else expect(glyphs.orbit).toEqual(glyphs.antd);
+          |                                   ^
+      142 |     }
+      143 |     if (kind === 'attachment' && info.project.use.hasTouch) {
+      144 |       // P0's original phone sample also measured 14px items: AntD's generated
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:141:35
+
+    Error Context: .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -11,11 +11,11 @@
+            "clipPath": "path(\"M 0 8 A 4 4 0 0 0 2.82843 6.82843 L 6.58579 3.07107 A 2 2 0 0 1 9.41421 3.07107 L 13.1716 6.82843 A 4 4 0 0 0 16 8 Z\")",
+            "fill": "rgba(0, 0, 0, 0.85)",
+          },
+          "triggerOffset": Object {
+            "x": 0,
+    -       "y": 12,
+    +       "y": 8,
+          },
+        },
+        "popup": Object {
+          "rows": Array [],
+          "surface": Object {
+
+      154 |       }));
+      155 |       expect(measurements.orbit).toEqual(expected);
+    > 156 |     } else expect(measurements.orbit).toEqual(measurements.antd);
+          |                                       ^
+      157 |   });
+      158 | }
+      159 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:156:39
+
+    Error Context: .choices-results/choices.browser.mjs-toolti-6ca31-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-toolti-6ca31-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-toolti-6ca31-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › attachment matches the current surface, density and option states 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:82:3 › tooltip matches the current surface, density and option states 
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project=chromium-light-desktop --grep 'attachment matches|tooltip matches'

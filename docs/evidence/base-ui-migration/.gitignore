@@ -1,0 +1,5 @@
+# Raw Playwright output is not committed as evidence (see evidence-slimming/README.md): commit
+# report.summary.json (the report without attachment bodies) and the screenshots the README cites instead.
+trace.zip
+*-trace.zip
+report.json

@@ -1,0 +1,608 @@
+{
+ "summary": {
+  "dirA": "/root/.orbit/worktrees/03ddb3c1-3e37-572d-8336-c8ca2b657c5b/docs/evidence/base-ui-migration/p3.2/r2c-p0-task-reference-shots/screenshots",
+  "dirB": "/var/tmp/p32acc/runs/before-fffcdb532/snapshots",
+  "total": 48,
+  "missing": 0,
+  "same": 40,
+  "noise": 0,
+  "changed": [
+   "chromium-dark-desktop/task-share-dialog.png",
+   "chromium-dark-phone/task-share-dialog.png",
+   "chromium-light-desktop/task-share-dialog.png",
+   "chromium-light-phone/task-share-dialog.png",
+   "webkit-dark-desktop/task-share-dialog.png",
+   "webkit-dark-phone/task-share-dialog.png",
+   "webkit-light-desktop/task-share-dialog.png",
+   "webkit-light-phone/task-share-dialog.png"
+  ],
+  "p0ComparatorFails": [
+   "chromium-dark-desktop/task-share-dialog.png",
+   "chromium-dark-phone/task-share-dialog.png",
+   "chromium-light-desktop/task-share-dialog.png",
+   "chromium-light-phone/task-share-dialog.png",
+   "webkit-dark-desktop/task-share-dialog.png",
+   "webkit-dark-phone/task-share-dialog.png",
+   "webkit-light-desktop/task-share-dialog.png",
+   "webkit-light-phone/task-share-dialog.png"
+  ]
+ },
+ "rows": [
+  {
+   "file": "chromium-dark-desktop/task-action-focus.png",
+   "sha256A": "71af01e7da52f4daa68d71fc5befd7d2cc79ae28f9658586ce227f1eec74e423",
+   "sha256B": "71af01e7da52f4daa68d71fc5befd7d2cc79ae28f9658586ce227f1eec74e423",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/task-action-hover.png",
+   "sha256A": "c546d69ce0158ddcba07d225d9c653da5e3911caf97225bc28943818de4e9bca",
+   "sha256B": "c546d69ce0158ddcba07d225d9c653da5e3911caf97225bc28943818de4e9bca",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/task-action-menu.png",
+   "sha256A": "7af4c91081813d74bebd31f87e1cdb8ce87b8b239ccbd85e061e0c1034796b45",
+   "sha256B": "7af4c91081813d74bebd31f87e1cdb8ce87b8b239ccbd85e061e0c1034796b45",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/task-detail.png",
+   "sha256A": "17ad7c0c2036f375b4665025014c3ceb08d0afd32d624e3d13d5060993fd7a4e",
+   "sha256B": "17ad7c0c2036f375b4665025014c3ceb08d0afd32d624e3d13d5060993fd7a4e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/task-public-share.png",
+   "sha256A": "7b0843aed860e884a277b1090b01150873daf095e649a531c84da56f31f6ff2c",
+   "sha256B": "7b0843aed860e884a277b1090b01150873daf095e649a531c84da56f31f6ff2c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/task-share-dialog.png",
+   "sha256A": "968292dc6b62d6b3bfa03c717b824299434b16b6a0866662a3fafab5d45ea905",
+   "sha256B": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3",
+   "bytesEqual": false,
+   "differentPixels": 135,
+   "maxChannelDelta": 187,
+   "box": {
+    "x": 551,
+    "y": 223,
+    "width": 22,
+    "height": 9
+   },
+   "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-phone/task-action-focus.png",
+   "sha256A": "928e2aa3ba9a7a94bfb78121544b866bc55ba0ede54ee70c56fd8e24c4020c6a",
+   "sha256B": "928e2aa3ba9a7a94bfb78121544b866bc55ba0ede54ee70c56fd8e24c4020c6a",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-action-hover.png",
+   "sha256A": "3e47867e4cdf3710a16b92938ac20ef59aa94ade1de5f703e7e3378142011a44",
+   "sha256B": "3e47867e4cdf3710a16b92938ac20ef59aa94ade1de5f703e7e3378142011a44",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-action-menu.png",
+   "sha256A": "e77181cf1e960d5963338baf99832793b2ce71c21bebcb5e4b4c04427eea4396",
+   "sha256B": "e77181cf1e960d5963338baf99832793b2ce71c21bebcb5e4b4c04427eea4396",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-detail.png",
+   "sha256A": "576c9b73f78356ac8f27f52e0aa76eaf0096267743998f7d1507df6ecedaef87",
+   "sha256B": "576c9b73f78356ac8f27f52e0aa76eaf0096267743998f7d1507df6ecedaef87",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-public-share.png",
+   "sha256A": "6f5d09a6629db5b8f5bef019b2f244b5a751b90d1dc6691403d7f138a120117b",
+   "sha256B": "6f5d09a6629db5b8f5bef019b2f244b5a751b90d1dc6691403d7f138a120117b",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-share-dialog.png",
+   "sha256A": "ad63aae00f5e909509e32ae9c4298b3b34fa7628221ec816d046efe81be358d3",
+   "sha256B": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27",
+   "bytesEqual": false,
+   "differentPixels": 135,
+   "maxChannelDelta": 187,
+   "box": {
+    "x": 179,
+    "y": 250,
+    "width": 22,
+    "height": 9
+   },
+   "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/task-action-focus.png",
+   "sha256A": "987815c3fe82d504f42c9c5db3a195d47c6586af6e84fd0d8db278e9bfc8c4b7",
+   "sha256B": "987815c3fe82d504f42c9c5db3a195d47c6586af6e84fd0d8db278e9bfc8c4b7",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/task-action-hover.png",
+   "sha256A": "4a55895f1b960e2fe323e7282a6ed5493a2451ead6df2fedea5b4570f0a42857",
+   "sha256B": "4a55895f1b960e2fe323e7282a6ed5493a2451ead6df2fedea5b4570f0a42857",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/task-action-menu.png",
+   "sha256A": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355",
+   "sha256B": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/task-detail.png",
+   "sha256A": "114cd2911df6e1186e81765b6fffe7bf8d038c87952219394cd45bbe2a2ab951",
+   "sha256B": "114cd2911df6e1186e81765b6fffe7bf8d038c87952219394cd45bbe2a2ab951",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/task-public-share.png",
+   "sha256A": "b6a708a53434ccc519901b82e9a02d6240bf241f48537f7378458d58c01480ab",
+   "sha256B": "b6a708a53434ccc519901b82e9a02d6240bf241f48537f7378458d58c01480ab",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/task-share-dialog.png",
+   "sha256A": "92299e24144fcee027dc6e471b2c429bdb1a464b60afe857681db7197be1c787",
+   "sha256B": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8",
+   "bytesEqual": false,
+   "differentPixels": 135,
+   "maxChannelDelta": 216,
+   "box": {
+    "x": 551,
+    "y": 223,
+    "width": 22,
+    "height": 9
+   },
+   "p0Comparator": "33 pixels (ratio 0.01 of all image pixels) are different.",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-phone/task-action-focus.png",
+   "sha256A": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780",
+   "sha256B": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-action-hover.png",
+   "sha256A": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79",
+   "sha256B": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-action-menu.png",
+   "sha256A": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34",
+   "sha256B": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-detail.png",
+   "sha256A": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990",
+   "sha256B": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-public-share.png",
+   "sha256A": "f074c9b7219930eaa0f74135d2661ec1f2c39a764d2a8b26f8b7119d0a03d048",
+   "sha256B": "f074c9b7219930eaa0f74135d2661ec1f2c39a764d2a8b26f8b7119d0a03d048",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-share-dialog.png",
+   "sha256A": "d2017f8c825f82664ac17408fb3baff1d1342b7d0a60b1629499136eced86c02",
+   "sha256B": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf",
+   "bytesEqual": false,
+   "differentPixels": 135,
+   "maxChannelDelta": 216,
+   "box": {
+    "x": 179,
+    "y": 250,
+    "width": 22,
+    "height": 9
+   },
+   "p0Comparator": "33 pixels (ratio 0.01 of all image pixels) are different.",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-focus.png",
+   "sha256A": "f05eeb9b19eab04d4670b6372863ce4cfe2bd6556f0289a733f6c0b1da407009",
+   "sha256B": "f05eeb9b19eab04d4670b6372863ce4cfe2bd6556f0289a733f6c0b1da407009",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-hover.png",
+   "sha256A": "d4d41cbb300feadfc5980c487f8e001b1467d96018f2139daae12f4839975fa0",
+   "sha256B": "d4d41cbb300feadfc5980c487f8e001b1467d96018f2139daae12f4839975fa0",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-menu.png",
+   "sha256A": "bc9adad4cf04c7645a341086ac12f630e58586155fa044e4733380d5708ea406",
+   "sha256B": "bc9adad4cf04c7645a341086ac12f630e58586155fa044e4733380d5708ea406",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-detail.png",
+   "sha256A": "716e5d93bb3a20b6d36255c19e0d9b9f779cb505bb004e45c9d210d9fa074542",
+   "sha256B": "716e5d93bb3a20b6d36255c19e0d9b9f779cb505bb004e45c9d210d9fa074542",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-public-share.png",
+   "sha256A": "6276adb67d96e6a368aceae885fb8ce0c5ac067b4db96d7103661f761da19852",
+   "sha256B": "6276adb67d96e6a368aceae885fb8ce0c5ac067b4db96d7103661f761da19852",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-share-dialog.png",
+   "sha256A": "ea2a58bfa6cf9220c36ee051b59e264656a1a9e9e77de0722ce105fdb58a766c",
+   "sha256B": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4",
+   "bytesEqual": false,
+   "differentPixels": 140,
+   "maxChannelDelta": 187,
+   "box": {
+    "x": 551,
+    "y": 223,
+    "width": 22,
+    "height": 9
+   },
+   "p0Comparator": "26 pixels (ratio 0.01 of all image pixels) are different.",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-phone/task-action-focus.png",
+   "sha256A": "13ca053623da6f62927955f55fa180f6107e1e979c2270e7bc7d14c9558cd3a1",
+   "sha256B": "13ca053623da6f62927955f55fa180f6107e1e979c2270e7bc7d14c9558cd3a1",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-action-hover.png",
+   "sha256A": "e9220c872625dbd51f7ab7b37c71601a6bd11feff91e9723b00ecbfe10afbd71",
+   "sha256B": "e9220c872625dbd51f7ab7b37c71601a6bd11feff91e9723b00ecbfe10afbd71",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-action-menu.png",
+   "sha256A": "14491174b4c4c8a2cf0d58d529486f5e0f3c611cf5a25a75dfdeab2bc14334cd",
+   "sha256B": "14491174b4c4c8a2cf0d58d529486f5e0f3c611cf5a25a75dfdeab2bc14334cd",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-detail.png",
+   "sha256A": "2f4e3bf6e61142a194da499676fe95fa2eb51a3a83133220f329b928e231c982",
+   "sha256B": "2f4e3bf6e61142a194da499676fe95fa2eb51a3a83133220f329b928e231c982",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-public-share.png",
+   "sha256A": "22a4ffc866526331018f0bc0b52fdcfec4a3ff2bf9f9e6bb562c0bf60cd76c2c",
+   "sha256B": "22a4ffc866526331018f0bc0b52fdcfec4a3ff2bf9f9e6bb562c0bf60cd76c2c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-share-dialog.png",
+   "sha256A": "4d288210241c7b34240e1cccea137541927394a60aac176abdd0b06d4b7c493b",
+   "sha256B": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38",
+   "bytesEqual": false,
+   "differentPixels": 140,
+   "maxChannelDelta": 187,
+   "box": {
+    "x": 179,
+    "y": 250,
+    "width": 22,
+    "height": 9
+   },
+   "p0Comparator": "26 pixels (ratio 0.01 of all image pixels) are different.",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/task-action-focus.png",
+   "sha256A": "064cc3e3f1dd4d4f8cc4c4752a906ae624722b4822330c2cb696cacc102b94fe",
+   "sha256B": "064cc3e3f1dd4d4f8cc4c4752a906ae624722b4822330c2cb696cacc102b94fe",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-action-hover.png",
+   "sha256A": "94df294c82e9f0c7b049184a4fe27feeffe6891dacfccafa10b35ff9fc73b4b0",
+   "sha256B": "94df294c82e9f0c7b049184a4fe27feeffe6891dacfccafa10b35ff9fc73b4b0",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-action-menu.png",
+   "sha256A": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194",
+   "sha256B": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-detail.png",
+   "sha256A": "096de3fe7b8170c165464098051c9bc6793bb872bf0593715d51267bee3bf058",
+   "sha256B": "096de3fe7b8170c165464098051c9bc6793bb872bf0593715d51267bee3bf058",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-public-share.png",
+   "sha256A": "3486e927411e0d117ac162a1ad6299c8226e6641e8fa71f929d6e990cda70a56",
+   "sha256B": "3486e927411e0d117ac162a1ad6299c8226e6641e8fa71f929d6e990cda70a56",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-share-dialog.png",
+   "sha256A": "b00b2e75752f686758a01cad195802571c152af25ad3db3059161bbe92eaa932",
+   "sha256B": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9",
+   "bytesEqual": false,
+   "differentPixels": 141,
+   "maxChannelDelta": 216,
+   "box": {
+    "x": 551,
+    "y": 223,
+    "width": 22,
+    "height": 9
+   },
+   "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-phone/task-action-focus.png",
+   "sha256A": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479",
+   "sha256B": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-action-hover.png",
+   "sha256A": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329",
+   "sha256B": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-action-menu.png",
+   "sha256A": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e",
+   "sha256B": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-detail.png",
+   "sha256A": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca",
+   "sha256B": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-public-share.png",
+   "sha256A": "56c69301dbb0bd027839303054f7b662214884705f362549d21f350cc604a209",
+   "sha256B": "56c69301dbb0bd027839303054f7b662214884705f362549d21f350cc604a209",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-share-dialog.png",
+   "sha256A": "b7a683ce933d7d5c4453f9dd05234ce5055ff3133fed09726b313e4f1b266890",
+   "sha256B": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3",
+   "bytesEqual": false,
+   "differentPixels": 141,
+   "maxChannelDelta": 216,
+   "box": {
+    "x": 179,
+    "y": 250,
+    "width": 22,
+    "height": 9
+   },
+   "p0Comparator": "29 pixels (ratio 0.01 of all image pixels) are different.",
+   "changed": true,
+   "class": "changed"
+  }
+ ]
+}

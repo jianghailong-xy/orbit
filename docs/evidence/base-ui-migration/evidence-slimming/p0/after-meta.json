@@ -1,0 +1,34 @@
+{
+ "label": "after",
+ "head": "9014a478df4445a24eb1eb6899bcbb7f5ba6286f",
+ "srcTree": "4dddb863dc9db4de35ef536aaed58c5010895486",
+ "evidenceTree": "9374ddc0bcc3e57f38cfb7bc349c729b4d5ff861",
+ "dirty": "0",
+ "started": "2026-10-07T12:49:16Z",
+ "finished": "2026-10-07T12:52:57Z",
+ "exit": 1,
+ "environment": "p0.2",
+ "stats": {
+  "expected": 93,
+  "unexpected": 8,
+  "flaky": 0,
+  "skipped": 11
+ },
+ "tests": 112,
+ "failed": [
+  "chromium-dark-desktop | pages.browser.mjs | profile",
+  "chromium-dark-phone | pages.browser.mjs | profile",
+  "chromium-light-desktop | pages.browser.mjs | profile",
+  "chromium-light-phone | pages.browser.mjs | profile",
+  "webkit-dark-desktop | pages.browser.mjs | profile",
+  "webkit-dark-phone | pages.browser.mjs | profile",
+  "webkit-light-desktop | pages.browser.mjs | profile",
+  "webkit-light-phone | pages.browser.mjs | profile"
+ ],
+ "command": "NO_COLOR=1 npm run test:ui-migration -w @orbit/web (in unshare -n, nice -n -10; tools/p0-run.sh)",
+ "expectedScreenshots": "88 P0.2 originals, 152 main drift references, 12 accepted migration differences",
+ "summaryLine": "8 failed / 11 skipped / 93 passed (3.6m)",
+ "failureCause": [
+  "GET /api/auth/methods"
+ ]
+}

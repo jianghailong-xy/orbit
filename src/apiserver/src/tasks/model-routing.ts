@@ -42,6 +42,8 @@ export interface ModelRoutingEngineState {
 }
 
 export interface ModelRoutingSelection {
+  /** The credential the run spends (docs/provider-engine-contract.md §4.4): the baseline's own, or —
+   *  on an engine the baseline credential cannot run — that engine's own sign-in, named by the engine. */
   provider: string;
   model: string | null;
   effort: string | null;
@@ -65,12 +67,20 @@ export interface ModelRoutingRun {
 
 export interface ModelRoutingInput {
   task: {
+    /** The task's engine pin: like a provider pin, it keeps the run on its engine. */
+    engine?: string | null;
     provider?: string | null;
     model?: string | null;
     modelHint?: ModelRoutingLevel | null;
     modelHintReason?: string | null;
   };
-  baseline: ModelRoutingSelection;
+  baseline: ModelRoutingSelection & {
+    /** The engine the baseline runs on; absent, `environment.runtime`. */
+    engine?: string;
+    /** Every engine the baseline credential can run on (the shared compatibility table). A run moved to
+     *  one of them keeps that credential; absent, the credential runs on its own engine only. */
+    engines?: readonly string[];
+  };
   /** Work runs only, newest first. The caller supplies ordering and quota classification. */
   history: readonly ModelRoutingRun[];
   environment: {
@@ -97,6 +107,8 @@ export interface ModelRoutingInput {
 export interface ModelRoutingDecision extends ModelRoutingSelection {
   policyVersion: typeof MODEL_ROUTING_POLICY_VERSION;
   level: ModelRoutingLevel | null;
+  /** The engine the run starts on: the baseline's, or the one the route moved it to (§6). */
+  engine: string;
   reasons: string[];
 }
 
@@ -123,22 +135,34 @@ export function priorLevel(run: ModelRoutingRun, runtime: string): ModelRoutingL
 
 /**
  * The engine a routed run starts on (§6), with a reason for each step. The candidates are this
- * Agent's own engine and the ones the owner allowed, and a provider pin is the only candidate there
- * is. An engine signed out on the target runner or at ENGINE_QUOTA_LIMIT of a window is not picked,
- * nor one whose models that runner has not reported. A verification task looks first for an engine
- * other than the one the task it verifies last ran on; any other run stays on this Agent's engine
- * and moves only when that engine is ruled out.
+ * Agent's own engine and the ones the owner allowed, and an engine or provider pin is the only
+ * candidate there is. An engine signed out on the target runner or at ENGINE_QUOTA_LIMIT of a window is
+ * not picked, nor one whose models that runner has not reported. A verification task looks first for an
+ * engine other than the one the task it verifies last ran on; any other run stays on this Agent's
+ * engine and moves only when that engine is ruled out.
+ *
+ * A run moved to another engine keeps the baseline's credential when that engine can run it, and
+ * otherwise spends that engine's own sign-in on the runner (docs/provider-engine-contract.md §4.4).
+ * Which is also what the runner's report is about: it rules out an engine only for a run that would
+ * spend the runner's sign-in to it, never for one on a key or an account pool.
  */
-function chooseEngine(input: ModelRoutingInput, provider: string): { provider: string; runtime: string; reasons: string[] } {
-  const { task, engines, environment } = input;
-  const { runtime } = environment;
-  if (task.provider) return { provider, runtime, reasons: [`Engine ${provider}: pinned on the task`] };
-  const own = `Engine ${provider}: this agent's own engine`;
+function chooseEngine(
+  input: ModelRoutingInput,
+  own: string,
+  provider: string,
+): { engine: string; provider: string; reasons: string[] } {
+  const { task, engines, environment, baseline } = input;
+  if (task.engine || task.provider) return { engine: own, provider, reasons: [`Engine ${own}: pinned on the task`] };
+  const ownLine = `Engine ${own}: this agent's own engine`;
   const others = MODEL_ROUTING_ENGINES.filter((engine) =>
-    engine !== runtime && (engines?.allowed ?? []).includes(engine));
-  if (others.length === 0) return { provider, runtime, reasons: [own] };
+    engine !== own && (engines?.allowed ?? []).includes(engine));
+  if (others.length === 0) return { engine: own, provider, reasons: [ownLine] };
 
+  // The credential a run on `engine` spends: the baseline's where it runs, else that engine's sign-in.
+  const runsOn = baseline.engines ?? [own];
+  const credentialOn = (engine: string) => (engine === own || runsOn.includes(engine) ? provider : engine);
   const ruledOut = (engine: string): string | null => {
+    if (credentialOn(engine) !== engine) return null;
     const state = engines?.states?.[engine];
     if (state?.signedOut) return `${engine} is signed out on this runner`;
     if (state?.quota && state.quota.utilization >= ENGINE_QUOTA_LIMIT) {
@@ -146,7 +170,7 @@ function chooseEngine(input: ModelRoutingInput, provider: string): { provider: s
     }
     return null;
   };
-  const ownOut = ruledOut(provider);
+  const ownOut = ruledOut(own);
   const notes = ownOut ? [ownOut] : [];
   const usable: string[] = [];
   for (const engine of others) {
@@ -156,29 +180,31 @@ function chooseEngine(input: ModelRoutingInput, provider: string): { provider: s
     else usable.push(engine);
   }
   const move = (engine: string, why: string) => ({
-    provider: engine,
-    runtime: engine,
+    engine,
+    provider: credentialOn(engine),
     reasons: [`Engine ${engine}: ${why}`, ...notes.filter((note) => note !== why)],
   });
-  const stay = (line: string, explained: boolean) => ({ provider, runtime, reasons: explained ? [line, ...notes] : [line] });
+  const stay = (line: string, explained: boolean) => ({ engine: own, provider, reasons: explained ? [line, ...notes] : [line] });
   const verified = engines?.verifiedRunEngine ?? null;
   if (verified) {
-    if (runtime !== verified && !ownOut) return stay(`${own} — the task it verifies last ran on ${verified}`, false);
+    if (own !== verified && !ownOut) return stay(`${ownLine} — the task it verifies last ran on ${verified}`, false);
     const fresh = usable.find((engine) => engine !== verified);
     if (fresh) return move(fresh, `the task it verifies last ran on ${verified}`);
   }
-  if (!ownOut) return verified ? stay(`${own} — no other engine it may use is available`, true) : stay(own, false);
+  if (!ownOut) return verified ? stay(`${ownLine} — no other engine it may use is available`, true) : stay(ownLine, false);
   return usable.length > 0
     ? move(usable[0], ownOut)
-    : stay(`${own} — no other engine it may use is available`, true);
+    : stay(`${ownLine} — no other engine it may use is available`, true);
 }
 
 /** No I/O or writes to the task: every decision depends only on these value snapshots. */
 export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   const { task, baseline, environment, history } = input;
   const { runtime } = environment;
+  const own = baseline.engine ?? runtime;
   const provider = task.provider ?? baseline.provider;
   const unchanged = (reasons: string[]): ModelRoutingDecision => ({
+    engine: own,
     provider,
     model: task.model ?? baseline.model,
     effort: baseline.effort,
@@ -235,13 +261,13 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   }
   reasons.push(...skipped);
   if (!level) {
-    reasons.push(`Engine ${provider}: ${task.provider ? 'pinned on the task' : "this agent's own engine"}`);
+    reasons.push(`Engine ${own}: ${task.engine || task.provider ? 'pinned on the task' : "this agent's own engine"}`);
     return unchanged(reasons);
   }
   // The tier stays what it is wherever the run goes: it maps onto the chosen engine's tier table.
-  const engine = chooseEngine(input, provider);
+  const engine = chooseEngine(input, own, provider);
   reasons.push(...engine.reasons);
-  const { runtime: chosen } = engine;
+  const { engine: chosen } = engine;
 
   const catalog = environment.modelCatalog?.[chosen as AgentProvider] ?? [];
   if (catalog.length === 0) {
@@ -303,6 +329,7 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   return {
     policyVersion: MODEL_ROUTING_POLICY_VERSION,
     level,
+    engine: chosen,
     provider: engine.provider,
     model: model.value,
     effort,

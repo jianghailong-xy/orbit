@@ -1,0 +1,273 @@
+<!doctype html>
+<!-- Design mock: the engine page's account rows (RunnerEnginePage.accountRow) without the Sign In Again
+     and Pause… buttons, Pause moved to the row's left swipe. ① is today's page drawn from the owner's
+     iPhone screenshot (2026-10-07 2:01 PM, light appearance; names and directories replaced with
+     sample ones); the rest is the proposal, drawn with antigravity-accounts/kit.js. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Account rows · Pause on the left swipe (iOS)</title>
+<link rel="stylesheet" href="../../src/web/src/index.css">
+<link rel="stylesheet" href="project-progress/mock.css">
+<link rel="stylesheet" href="antigravity-accounts/kit.css">
+<style>
+  .m-sheet { width: 1490px; }
+  .board + .board { margin-top: 0; }
+  .row3 { display: grid; grid-template-columns: repeat(3, 431px); gap: 40px; align-items: start; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+
+  /* the screenshot's status bar and bordered capsules: grey fill, blue words, Pause… black beside a blue glyph */
+  .ph-batt.low { background: #1c1c1e; color: #fff; }
+  .ph-nav { backdrop-filter: blur(7px); }
+  .ph .bb { background: rgba(120, 120, 128, .12); color: #3e69f6; }
+  .ph .bb.grey { color: #000; }
+  .ph .bb.grey svg { fill: #3e69f6; }
+
+  /* a row slid open, as the session list's circles draw it (RowSwipeActions.swift): 60pt slots 10pt
+     apart and 10pt from the edge, the row 10pt clear of the last one as a rounded systemGray5 card */
+  .r.swo { padding: 0; }
+  .r.swo::before, .r.nosep::before { display: none; }
+  .swo-card { position: relative; z-index: 1; padding: 16px; background: #e5e5ea; border-radius: 24px; }
+  .swo-b { position: absolute; top: 0; bottom: 0; right: 10px; display: flex; gap: 10px; align-items: center; }
+  .swo-s { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .swo-c { width: 47px; height: 47px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .swo-c svg { width: 19px; height: 19px; fill: #fff; }
+  .swo-t { font-size: 13px; line-height: 16px; color: #1c1c1e; white-space: nowrap; }
+  /* the system's own on a row this tall: 60pt wide, as tall as the row leaves under the titles (estimated) */
+  .swo.sys .swo-b { top: 14px; bottom: 14px; align-items: stretch; }
+  .swo.sys .swo-c { flex: 1; width: 60px; height: auto; border-radius: 30px; }
+
+  /* the pause line AccountPauseControls keeps */
+  .pz { display: flex; align-items: baseline; color: #ff9500; }
+  .pz-l { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; line-height: 17px; font-weight: 600; }
+  .pz-l svg { width: 10px; height: 12px; fill: currentColor; }
+  .pz-u { margin-left: auto; font-size: 11px; line-height: 13px; }
+
+  /* the long-press menu over a blurred page, its groups and its destructive item */
+  .dim { backdrop-filter: blur(3px); }
+  .ctx { backdrop-filter: blur(24px); }
+  .ctx .gap { height: 8px; background: rgba(0, 0, 0, .05); }
+  .ctx .it.red { color: #ff3b30; }
+  .ctx .it.red svg { fill: #ff3b30; }
+
+  /* cuts in the light appearance */
+  .cut.light { background: #f2f2f6; color: #000; box-shadow: 0 0 0 1px #dde0e6; }
+  .cut.light .s-card { background: #fff; }
+  .ab { display: grid; grid-template-columns: 393px 393px; gap: 26px; align-items: start; }
+  .ab-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 4px; display: flex; gap: 8px; align-items: center; }
+  .q { margin: 0 0 6px; font-size: 15px; font-weight: 650; color: var(--text-1); }
+  .q + .ab { margin-bottom: 4px; }
+  .split { display: grid; grid-template-columns: 812px minmax(0, 1fr); gap: 44px; align-items: start; }
+  .rec { color: var(--brand-strong); font-weight: 700; }
+  .cost { flex: none; align-self: flex-start; margin-top: 2px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700;
+          line-height: 18px; background: #eceef1; color: #5b6270; }
+  .cost.s { background: #e8f5e9; color: #2e7d32; }
+  .cost.m { background: #fff4e0; color: #b35a00; }
+</style>
+</head>
+<body class="m">
+
+<section class="board m-sheet" id="part-1">
+  <h1 class="m-h1 zh">引擎页 · 账号行去掉 Sign In Again / Pause… 两个按钮，暂停改成左滑</h1>
+  <p class="m-sub zh">Claude Code、Codex、Antigravity 的引擎页是同一个页面，三个都会这样改。现在每个账号底下固定一排「Sign In Again · Pause…」，三个账号就是三排，Add Account 被挤到屏幕外。改后账号行只剩名字、登录状态和额度；暂停放到这一行的左滑里，和已经在左滑里的 Remove 放在一起。</p>
+  <div class="m-stage">
+    <div class="row3">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>引擎页（照你的截图画）</div>
+        <div id="p1"></div>
+        <p class="m-cap zh"><b>A</b> 每个账号底下一排按钮，三个账号三排；Add Account 在屏幕外，要往下滚。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>平时</div>
+        <div id="p2"></div>
+        <p class="m-cap zh">同样的位置，三个账号加 Add Account、Update Engines Now 都在一屏里。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>左滑一个账号</div>
+        <div id="p3"></div>
+        <p class="m-cap zh">左滑露出 Pause 和 Remove；点 Pause 弹出现在那个 Pause Account 面板。</p>
+      </div>
+    </div>
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>两个按钮都去掉</b>：账号行只剩名字、存放位置、Signed in 和两条额度，每行矮 40pt 左右。</span></li>
+      <li><span class="m-n">2</span><span><b>左滑</b>：Pause（橙）在里侧，Remove（红）在最外侧，和会话列表一样 Remove 不能一滑到底直接触发。Default 不能移除，左滑只有 Pause。</span></li>
+      <li><span class="m-n">3</span><span><b>点 Pause</b>：弹出现在那个 Pause Account 面板（1h / 2h / 4h / 8h，或者自己填时长），面板不改。</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="board m-sheet" id="part-2">
+  <h1 class="m-h1 zh">暂停中、掉线、长按：按钮去掉以后这些情况怎么办</h1>
+  <p class="m-sub zh">示例：第二个账号掉线了，第三个暂停到 4:01 PM。</p>
+  <div class="m-stage">
+    <div class="row3">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">状态</span>暂停中 / 掉线</div>
+        <div id="p4"></div>
+        <p class="m-cap zh">状态文字留着，按钮只在需要你处理的时候出现。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>左滑暂停中的账号</div>
+        <div id="p5"></div>
+        <p class="m-cap zh">Pause 换成 Resume。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>长按一个账号</div>
+        <div id="p6"></div>
+        <p class="m-cap zh">左滑有的，长按里都有；Sign In Again 也在这里。</p>
+      </div>
+    </div>
+    <ul class="m-notes zh">
+      <li><span class="m-n">4</span><span><b>暂停中</b>：橙色的「Paused · Until …」一行留着，这是状态，不是按钮。现在跟在它下面的 Resume Now、Change Duration… 两个按钮也去掉。</span></li>
+      <li><span class="m-n">5</span><span><b>掉线的账号</b>：照旧显示 Signed out 和 Sign In 按钮。账号用不了了，要你去处理，所以按钮留在行里。</span></li>
+      <li><span class="m-n">6</span><span><b>暂停中的账号左滑</b>：Pause 换成 Resume（绿），点一下立刻恢复，不弹面板。</span></li>
+      <li><span class="m-n">7</span><span><b>长按菜单</b>：Rename… 下面加 Sign In Again 和 Pause…，最后是红色的 Remove…；暂停中的账号这里换成 Resume Now 和 Change Duration…。会话列表的规矩是左滑有的长按里都要有，这样 VoiceOver 用户和不习惯左滑的人也够得着。</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="board m-sheet" id="part-3">
+  <h1 class="m-h1 zh">待定 · 要你拍板，以及落地</h1>
+  <p class="m-sub zh">两处我拿不准，各给 A / B 两个方案，我都推荐 A。</p>
+  <div class="m-stage">
+    <div class="split">
+      <div>
+        <p class="q zh">待定 1 · Sign In Again 放在哪？</p>
+        <div class="ab">
+          <div><div class="ab-l zh"><span class="m-k new">A</span><span class="rec">推荐</span>只放在长按菜单（⑦）</div><div class="cut light" id="c1"></div></div>
+          <div><div class="ab-l zh"><span class="m-k">B</span>左滑里也放</div><div class="cut light" id="c2"></div></div>
+        </div>
+        <p class="m-cap zh"><b>A</b>：左滑只有 Pause 和 Remove。重新登录很少用；账号真掉线时，行里会自己出现 Sign In（⑤）。<b>B</b>：左滑三个按钮，挤；而且 Sign In Again 点了是在行里展开登录卡片，不是点一下就办完的事。Rename… 不放进左滑也是这个原因。</p>
+
+        <p class="q zh" style="margin-top:26px">待定 2 · 左滑按钮画成什么样？</p>
+        <div class="ab">
+          <div><div class="ab-l zh"><span class="m-k new">A</span><span class="rec">推荐</span>圆形，和会话列表一样</div><div class="cut light" id="c3"></div></div>
+          <div><div class="ab-l zh"><span class="m-k">B</span>系统自带的（按规则推算，没上机）</div><div class="cut light" id="c4"></div></div>
+        </div>
+        <p class="m-cap zh"><b>A</b>：会话列表左滑的圆形按钮，上面各图画的都是这种。要把那套圆形左滑搬到这种分组卡片里的高行上，有一点工作量。<b>B</b>：不用写代码，这页现在的 Remove 用的就是系统的。iOS 26 会按行高画按钮，账号行将近 180pt 高，按钮会被拉成竖长的胶囊。这张是按规则推算的，没在真机上看过。</p>
+      </div>
+      <div>
+        <p class="q zh">落地（按代价排）</p>
+        <ul class="m-notes zh" style="margin-top:8px">
+          <li><span class="cost s">小</span><span><b>去掉按钮</b>：账号行不再画 Sign In Again、Pause…、Resume Now、Change Duration…；暂停中只留橙色那一行；掉线时的 Sign In 照旧（<code>RunnerEnginePage.accountRow</code>、<code>AccountPauseControls</code>）。</span></li>
+          <li><span class="cost s">小</span><span><b>左滑</b>：在 Remove 里侧加 Pause，暂停中换成 Resume；仍然不能一滑到底直接触发。点 Pause 打开现在的 Pause Account 面板，打开面板的开关从 <code>AccountPauseControls</code> 挪到页面上。</span></li>
+          <li><span class="cost s">小</span><span><b>长按菜单</b>：Rename… 下面加 Sign In Again、Pause…（暂停中是 Resume Now、Change Duration…），最后加 Remove…。</span></li>
+          <li><span class="cost s">小</span><span><b>跟着改测试</b>：OrbitKit 里有几个测试按源码文本找这几行，比如 <code>AntigravityGoogleClientTests</code> 就认 Sign In Again 那一行。</span></li>
+          <li><span class="cost m">中</span><span><b>圆形左滑</b>（待定 2 选 A 才要做）：<code>circleSwipeActions</code> 现在只用在会话列表那种通栏的行上，要改一下才能放进分组卡片。</span></li>
+        </ul>
+        <ul class="m-notes zh">
+          <li><span class="m-n" style="background:#5b6270">?</span><span><b>范围</b>，我先这么定，你不同意就说：<b>只改 iPhone / iPad</b>。Mac 上没有左滑的习惯，按钮留着，右键菜单也加上同样几项。<b>账号池页这次不动</b>：池里账号的行用的是同一个暂停控件，但共享池那一行左滑里已经有个 Disable，图标也是暂停，再放一个 Pause 会分不清，单独再看。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="antigravity-accounts/glyphs.js"></script>
+<script src="antigravity-accounts/kit.js"></script>
+<script>
+  const STATUS = { time: `2:01 ${ICON.bell}`, net: '5G', batt: '49' };
+  const OK = { text: 'Signed in', tone: 'ok' };
+  const PLAY = '<svg viewBox="0 0 14 16"><path d="M2.2 1.6v12.8a1 1 0 0 0 1.5.86l10.6-6.4a1 1 0 0 0 0-1.72L3.7.74a1 1 0 0 0-1.5.86z"/></svg>';
+  const AGAIN = '<svg viewBox="0 0 20 20"><path d="M10 3.2V.8l4.2 3.6L10 8V5a5 5 0 1 0 5 5h1.8A6.8 6.8 0 1 1 10 3.2z"/></svg>';
+  const ACT = {
+    pause: { t: 'Pause', c: '#ff9500', i: ICON.pause },
+    resume: { t: 'Resume', c: '#34c759', i: PLAY },
+    remove: { t: 'Remove', c: '#ff3b30', i: ICON.trash },
+    again: { t: 'Sign In Again', c: '#3e69f6', i: AGAIN, w: 88 },
+  };
+
+  // The three accounts of the screenshot, under sample names.
+  const A1 = { id: 'a1', name: 'alex@example.com', sub: '~/.claude · Default', status: OK, windows: [
+    { label: '5-hour limit', pct: 0, resets: 'Resets 5:29 PM' },
+    { label: 'Weekly · all models', pct: 96, resets: 'Resets Fri, Oct 9 at 11:59 AM', warn: true } ] };
+  const A2 = { id: 'a2', name: 'alex.rd@example.com', sub: '~/.orbit/claude-accounts/7c41e0b2', status: OK, windows: [
+    { label: '5-hour limit', pct: 100, resets: 'Resets 4:09 PM', warn: true },
+    { label: 'Weekly · all models', pct: 74, resets: 'Resets Mon, Oct 12 at 6:59 PM' } ] };
+  const A3 = { id: 'a3', name: 'alex.lab@example.com', sub: '~/.orbit/claude-accounts/b93d5a17', status: OK, windows: [
+    { label: '5-hour limit', pct: 48, resets: 'Resets 6:19 PM' },
+    { label: 'Weekly · all models', pct: 25, resets: 'Resets Wed, Oct 14 at 5:59 AM' } ] };
+  const signedOut = { ...A2, status: { text: 'Signed out', tone: 'warn' }, windows: null, buttons: [BTN.signIn] };
+  const paused = { ...A3, body: `<div class="pz"><span class="pz-l">${ICON.pause}Paused</span><span class="pz-u">Until Oct 7, 2026 at 4:01 PM</span></div>` };
+
+  const head = `<div class="hd">${mark('claude', 30)}<div><div class="n">Claude Code</div><div class="s">2.1.292 · checked 3m ago</div></div></div>`;
+  const update = section({ rows: [btnRow('Update Engines Now')],
+    footer: '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>' });
+  const page = (rows) => head + section({ header: '<span id="acc-h">Accounts</span>', rows: [...rows, btnRow('Add Account')] }) + update;
+
+  /** The row's own content, without the kit's row wrapper. */
+  const inner = (a) => {
+    const box = document.createElement('div');
+    box.innerHTML = accountRow({ ...a, id: undefined });
+    return box.firstElementChild.innerHTML;
+  };
+  /** A row slid open on its trailing side: `acts` from the inside out, as the swipe reads left to right. */
+  const open = (a, acts, sys = false) => {
+    const slots = acts.map((k) => ACT[k]);
+    const width = 10 + slots.reduce((sum, s) => sum + (s.w ?? 60), 0) + 10 * (slots.length - 1) + 10;
+    return `<div class="r swo${sys ? ' sys' : ''}" id="${a.id}">
+      <div class="swo-b">${slots.map((s) => `<div class="swo-s" style="width:${s.w ?? 60}px"><span class="swo-c" style="background:${s.c}">${s.i}</span><span class="swo-t">${s.t}</span></div>`).join('')}</div>
+      <div class="swo-card" style="transform:translateX(-${width}px)">${inner(a)}</div>
+    </div>`;
+  };
+  const after = (html) => html.replace('<div class="r" ', '<div class="r nosep" ');
+  const shot = (body, cls = '') => phone({ title: 'Claude Code', body, cls, status: STATUS });
+
+  // ① today: Sign In Again and Pause… under every account. The separators start where SwiftUI put them
+  // on the screenshot, at the Pause… title.
+  const today = page([A1, A2, A3].map((a) => accountRow({ ...a, buttons: [BTN.again, BTN.pause] }))
+    .map((html, i) => i ? html.replace('<div class="r" ', '<div class="r" style="--sep:183px" ') : html))
+    .replace('<div class="r btn">Add Account', '<div class="r btn" style="--sep:183px">Add Account');
+  document.getElementById('p1').outerHTML = shot(today);
+  document.getElementById('p2').outerHTML = shot(page([accountRow(A1), accountRow(A2), accountRow(A3)]));
+  document.getElementById('p3').outerHTML = shot(page([accountRow(A1), open(A2, ['pause', 'remove']), after(accountRow(A3))]));
+  document.getElementById('p4').outerHTML = shot(page([accountRow(A1), accountRow(signedOut), accountRow(paused)]));
+  document.getElementById('p5').outerHTML = shot(page([accountRow(A1), accountRow(signedOut), open(paused, ['resume', 'remove'])])
+    .replace('<div class="r btn">Add Account', '<div class="r btn nosep">Add Account'));
+  document.getElementById('p6').outerHTML = shot(page([accountRow(A1), accountRow(A2), accountRow(A3)]));
+
+  const cut = (row) => section({ rows: [row] }).replace('<div class="s-gap"></div>', '');
+  document.getElementById('c1').innerHTML = cut(open(A2, ['pause', 'remove']));
+  document.getElementById('c2').innerHTML = cut(open(A2, ['again', 'pause', 'remove']));
+  document.getElementById('c3').innerHTML = cut(open(A2, ['pause', 'remove']));
+  document.getElementById('c4').innerHTML = cut(open(A2, ['pause', 'remove'], true));
+
+  window.drawMarks = () => {
+    const [p1, p2, p3, p4, p5, p6] = document.querySelectorAll('.ph');
+    // Every phone where the screenshot was: the Accounts header just under the bar.
+    for (const ph of [p1, p2, p3, p4, p5, p6]) scrollTo(ph, '#acc-h', 88);
+    const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"');
+
+    for (const id of ['a1', 'a2', 'a3']) {
+      const r = at(p1, `#${id} .bbs`);
+      p1.insertAdjacentHTML('beforeend', grey(marks([{ x: r.x - 5, y: r.y - 5, w: 240, h: r.h + 10 }])));
+    }
+    const b = at(p1, '#a1 .bbs');
+    p1.insertAdjacentHTML('beforeend', grey(marks([{ n: 'A', x: b.x + 228, y: b.y - 16 }])));
+
+    const r1 = at(p2, '#a1');
+    p2.insertAdjacentHTML('beforeend', marks([{ x: r1.x + 4, y: r1.y + 4, w: r1.w - 8, h: r1.h - 8 }, { n: '1', x: r1.x + r1.w - 18, y: r1.y - 6 }]));
+
+    ringMark(p3, '#a2 .swo-b', '2', 6);
+    const pz = at(p3, '#a2 .swo-s');
+    p3.insertAdjacentHTML('beforeend', marks([{ n: '3', x: pz.x - 14, y: pz.y + 38 }]));
+
+    ringMark(p4, '#a3 .pz', '4', 5);
+    ringMark(p4, '#a2 .bbs', '5', 5, 0);
+    ringMark(p5, '#a3 .swo-b', '6', 6);
+
+    // ⑥: the second account held — lifted over the dimmed page, its menu under it.
+    const r = at(p6, '#a2');
+    const item = (t, icon, cls = '') => `<div class="it ${cls}">${t}${icon}</div>`;
+    p6.insertAdjacentHTML('beforeend', `<div class="dim"></div>
+      <div class="lift" style="top:${r.y}px"><div class="r">${inner(A2)}</div></div>
+      <div class="ctx" id="menu" style="left:16px;top:${r.y + r.h + 10}px">
+        ${item('Rename…', ICON.pencil)}${item('Sign In Again', AGAIN)}${item('Pause…', ICON.pause)}
+        <div class="gap"></div>${item('Remove…', ICON.trash, 'red')}
+      </div>`);
+    ringMark(p6, '#menu', '7', 5);
+  };
+</script>
+</body>
+</html>

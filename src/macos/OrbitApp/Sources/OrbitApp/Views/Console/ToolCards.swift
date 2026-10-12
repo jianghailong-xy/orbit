@@ -1,6 +1,9 @@
 import SwiftUI
 import Foundation
 import OrbitKit
+#if os(macOS)
+import AppKit
+#endif
 
 struct ToolFailureSummary {
     let tool: String?
@@ -242,6 +245,28 @@ struct ToolCardView: View {
         if card.name == "Workflow" { return BackgroundSummary.workflow(result) != nil }
         return isBackgroundTask && BackgroundSummary.agentID(result) != nil
     }
+    /// The folded row of a background task still running says what it is on right now: the last
+    /// thing the sub-agent's transcript relayed. Web parity: Transcript.tsx's ToolCard live line.
+    private var liveActivity: String? {
+        guard isBackgroundTask, !isOpen, card.status == .running || taskRunning else { return nil }
+        for item in nestedItems.reversed() {
+            switch item {
+            case .toolCall(let child):
+                let last = ToolDisplay.describe(name: child.name, input: child.input, status: child.status, id: child.id)
+                if let path = last.path { return "\(last.label) \(path.base)" }
+                if let summary = last.summary, !summary.isEmpty { return "\(last.label) \(summary)" }
+                return last.label
+            case .thinking:
+                return "Thinking…"
+            case .assistant(let bubble):
+                let text = bubble.text.isEmpty ? bubble.streamingText : bubble.text
+                if let line = text.split(separator: "\n").first, !line.isEmpty { return String(line) }
+            default:
+                continue
+            }
+        }
+        return nil
+    }
     /// A workflow is named by its receipt once that lands (a resumed run carries no script).
     private var summaryText: String? {
         guard card.name == "Workflow" else { return d.summary }
@@ -249,11 +274,37 @@ struct ToolCardView: View {
     }
     /// A workflow's agents done out of all, an agent's tool calls; otherwise the display's own badge.
     private var badgeText: String? { taskProgress.flatMap(TaskProgressCopy.badge) ?? d.meta }
+
+    // MARK: an agent's question
+
+    /// The questions an AskUserQuestion asked — from the untrimmed call once `resolveFull` has it.
+    private var questions: [AskQuestion] {
+        if case .question(let asked) = d.body { return asked }
+        return []
+    }
+    /// How they ended, read off the result: the folded card's record, the replay's ticks.
+    private var questionOutcome: QuestionOutcome? {
+        questions.isEmpty ? nil : QuestionRecords.outcome(questions: questions, result: result,
+                                                          isError: card.status == .error)
+    }
+    /// The folded card is the record, so it reads the whole call and result while folded: a clipped
+    /// one would lose the questions' text, or the answers after the cut.
+    private var readsWholeQuestion: Bool { !questions.isEmpty }
+    /// A result this client cannot read, once it is whole: its own words are then the only answer
+    /// there is, so the card opens on them, as it always did.
+    private var questionUnread: Bool {
+        questionOutcome == nil && card.status == .ok && hasResult && (!card.resultTruncated || resultResolved)
+    }
+
     /// A result carrying an image (a screenshot the workspace produced for the user) opens so the
     /// picture shows without a click — web parity, where `hasResultImage` joins `defaultOpen`.
     /// Keyed on the block, not the decoded bytes: a clipped image has none until the open card
-    /// fetches them back.
-    private var defaultOpen: Bool { !showsHeader || ((d.autoOpen || card.resultHasImage) && hasDetail) }
+    /// fetches them back. An answered question opens only when its answer cannot be read.
+    private var defaultOpen: Bool {
+        if !showsHeader { return true }
+        if !questions.isEmpty { return questionUnread }
+        return (d.autoOpen || card.resultHasImage) && hasDetail
+    }
     private var expanded: Bool { manualOpen ?? defaultOpen }
     private var isOpen: Bool { expanded && hasDetail }
 
@@ -270,7 +321,8 @@ struct ToolCardView: View {
     }
     private var needsWholeResult: Bool { card.name == "mcp__orbit__session_create" }
     private var resolutionKey: ToolPayloadResolutionKey {
-        ToolPayloadResolutionKey(card: card, expanded: expanded, needsWholeResult: needsWholeResult)
+        ToolPayloadResolutionKey(card: card, expanded: expanded, needsWholeInput: readsWholeQuestion,
+                                 needsWholeResult: needsWholeResult || readsWholeQuestion)
     }
 
     var body: some View {
@@ -294,11 +346,12 @@ struct ToolCardView: View {
     /// console still holds, whichever view it now lives in.
     @MainActor private func resolveFull() async {
         guard let fullPayload else { return }
-        if expanded, card.inputTruncated, fullDisplay == nil, let p = await fullPayload(card.inputSeq) {
+        if expanded || readsWholeQuestion, card.inputTruncated, fullDisplay == nil,
+           let p = await fullPayload(card.inputSeq) {
             let input = p["input"] ?? .null
             fullDisplay = ToolDisplay.describe(name: card.name, input: input, status: card.status, id: card.id)
         }
-        guard expanded || needsWholeResult, card.resultTruncated, !resultResolved,
+        guard expanded || needsWholeResult || readsWholeQuestion, card.resultTruncated, !resultResolved,
               let seq = card.resultSeq else { return }
         // This view's state is not the only copy: the console keeps the bytes a card fetched back,
         // and a recycled row is a NEW view that would otherwise ask the server again for a
@@ -323,7 +376,22 @@ struct ToolCardView: View {
         // border + surface so its detail body stays visually grouped (mirrors web `.is-open`).
         VStack(alignment: .leading, spacing: 6) {
             row
-            if isOpen { detail }
+            if let liveActivity {
+                // Indented to the row's label; folded BackgroundTaskViews draw this same line.
+                Text(liveActivity)
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                    .padding(.leading, 42)
+            }
+            if isOpen {
+                detail
+            } else if !questions.isEmpty {
+                // Folded, a question is still its record: what was asked and how it was answered.
+                // The lines open the card like its row does.
+                QuestionFoldedLines(questions: questions, outcome: questionOutcome)
+                    .contentShape(Rectangle())
+                    .onTapGesture { manualOpen = !expanded }
+            }
         }
         .padding(.leading, 11)
         .padding(.trailing, 10)
@@ -343,6 +411,9 @@ struct ToolCardView: View {
         // and animates the same cell. One body's worth of delta hid that for a long time; it was
         // the same defect, below the threshold of notice.
         .animation(nil, value: isOpen)
+        #if os(macOS)
+        .background { RowHeightNudge(open: isOpen) }
+        #endif
     }
 
     private var row: some View {
@@ -412,7 +483,12 @@ struct ToolCardView: View {
     }
 
     @ViewBuilder private var status: some View {
-        ToolStatusGlyph(status: taskRunning ? .running : card.status)
+        if case .replied? = questionOutcome {
+            // The engine files "Chat about this" as the call's error; it is the person's reply.
+            Image(systemName: "bubble.left.fill").font(.orbitLabel).foregroundStyle(.secondary)
+        } else {
+            ToolStatusGlyph(status: taskRunning ? .running : card.status)
+        }
     }
 
     private var detail: some View {
@@ -429,6 +505,8 @@ struct ToolCardView: View {
                     if scriptExpanded { ToolBodyView(kind: d.body) }
                 }
                 .font(.orbitLabel).foregroundStyle(.secondary)
+            } else if !questions.isEmpty {
+                QuestionReplayView(questions: questions, outcome: questionOutcome)
             } else {
                 ToolBodyView(kind: d.body)
             }
@@ -457,9 +535,11 @@ struct ToolCardView: View {
                 ToolResultImagePlaceholder()
             }
             // A launch receipt says only that the work started: hidden once the progress speaks for
-            // the work, and always for an agent's ack. A workflow before any progress keeps it.
+            // the work, and always for an agent's ack. A workflow before any progress keeps it. A
+            // question's result, once read, is only the replay above said again.
             if let result, !result.isEmpty,
-               !(isLaunchReceipt && (taskProgress != nil || card.name != "Workflow")) {
+               !(isLaunchReceipt && (taskProgress != nil || card.name != "Workflow")),
+               questionOutcome == nil {
                 let isErr = card.status == .error
                 // Mirrors web `.chat-result`: a tinted panel (red on error, neutral otherwise) with a
                 // small uppercase label. The output text itself stays muted even on error (only the
@@ -482,6 +562,50 @@ struct ToolCardView: View {
         .imagePreview($previewTarget, images: previews, ns: previewNS)
     }
 }
+
+#if os(macOS)
+/// Asks the table behind the transcript's List to measure this row again when `open` changes.
+///
+/// SwiftUI's macOS List picks up a row's new height when the transcript's scroll extent changes with
+/// it, and not when one row grows while everything still fits: an opened question card kept its folded
+/// height, its replay clipped top and bottom under the next row, until the transcript was scrolled (the
+/// probe's Mac pass, run 38020631149). This moves nothing: it only says the row's height is stale.
+private struct RowHeightNudge: NSViewRepresentable {
+    let open: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(open: open) }
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        guard context.coordinator.open != open else { return }
+        context.coordinator.open = open
+        // After SwiftUI has laid the new content into the row, so the height asked for is the new one.
+        DispatchQueue.main.async { [weak view] in
+            guard let view, let table = Self.table(holding: view) else { return }
+            let row = table.row(for: view)
+            guard row >= 0 else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                table.noteHeightOfRows(withIndexesChanged: IndexSet(integer: row))
+            }
+        }
+    }
+
+    private static func table(holding view: NSView) -> NSTableView? {
+        var next = view.superview
+        while let current = next {
+            if let table = current as? NSTableView { return table }
+            next = current.superview
+        }
+        return nil
+    }
+
+    final class Coordinator {
+        var open: Bool
+        init(open: Bool) { self.open = open }
+    }
+}
+#endif
 
 /// Shape of a `mcp__orbit__session_create` tool result (`{id,title,status,agentName,provider}`).
 private struct SessionCreatePayload: Decodable {
@@ -623,6 +747,8 @@ struct ToolBodyView: View {
             MarkdownView(source: md)
                 .font(.orbitProseAside).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        case .question(let questions):
+            QuestionReplayView(questions: questions, outcome: nil)
         case .diff(let hunks):
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(hunks.enumerated()), id: \.offset) { _, hunk in

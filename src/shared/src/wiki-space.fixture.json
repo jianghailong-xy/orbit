@@ -1,0 +1,269 @@
+{
+  "about": [
+    "The Wiki's spaces as the two clients name them and choose among them, and what waits on the owner across",
+    "them (docs/wiki-design.md §12.3.3–§12.3.4, mocks 31 ④ ⑤). The web reads this file in",
+    "`src/web/src/lib/wikiSpace.test.ts` (`lib/wikiSpace.ts`); OrbitKit is to read it in its own tests (task I1),",
+    "so the two ends hold one rule rather than two.",
+    "",
+    "`names`: spaces as `GET /api/wiki/spaces` lists them (id, title, repoUrlNorm) and each one's name: the last",
+    "segment of its repository, its title when it has none, and — while two would be called the same — the",
+    "segments before it, one at a time, until they differ.",
+    "`defaults`: the list in the server's order (slug, workspaceIds, docs) and where the reader is — the workspace",
+    "they came from (`workspaceId`; on a project's page, the workspace its coordinator runs in) and the slug they",
+    "last looked at (`lastSlug`) — and the slug `/wiki` opens: the space bound to that workspace, else the last",
+    "one looked at, else the one with the most documents written, the list's first on a tie; null with no space.",
+    "`waiting`: the list (pendingOps, planWaiting) and the space on screen (`current`): `waiting` is the number",
+    "waiting on the owner — the drawer's and the sidebar's Wiki row and the head's Activity badge, which",
+    "Activity's amber banners add up to; `proposals` the proposals alone — Activity's first banner and Review's",
+    "head; `banner` that first banner's words (null with none); `options` the picker's, one per space."
+  ],
+  "names": [
+    {
+      "name": "one space, called by its repository",
+      "spaces": [{ "id": "s1", "title": "Orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit" }],
+      "names": { "s1": "orbit" }
+    },
+    {
+      "name": "no repository: its title",
+      "spaces": [{ "id": "s1", "title": "Design notes", "repoUrlNorm": null }],
+      "names": { "s1": "Design notes" }
+    },
+    {
+      "name": "three repositories, three names",
+      "spaces": [
+        { "id": "s1", "title": "github-com-jianghailong-xy-orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit" },
+        { "id": "s2", "title": "github-com-jianghailong-xy-wikova", "repoUrlNorm": "github.com/jianghailong-xy/wikova" },
+        { "id": "s3", "title": "github-com-jianghailong-xy-wikids", "repoUrlNorm": "github.com/jianghailong-xy/wikids" }
+      ],
+      "names": { "s1": "orbit", "s2": "wikova", "s3": "wikids" }
+    },
+    {
+      "name": "two of one name: the segment before tells them apart, and the third keeps its own",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit" },
+        { "id": "s2", "title": "orbit fork", "repoUrlNorm": "github.com/wikova/orbit" },
+        { "id": "s3", "title": "wikids", "repoUrlNorm": "github.com/jianghailong-xy/wikids" }
+      ],
+      "names": { "s1": "jianghailong-xy/orbit", "s2": "wikova/orbit", "s3": "wikids" }
+    },
+    {
+      "name": "the segment before is the same too: one more",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit" },
+        { "id": "s2", "title": "orbit mirror", "repoUrlNorm": "gitlab.com/jianghailong-xy/orbit" }
+      ],
+      "names": { "s1": "github.com/jianghailong-xy/orbit", "s2": "gitlab.com/jianghailong-xy/orbit" }
+    },
+    {
+      "name": "a title and a repository of one name: the repository's grows, the title has nothing to add",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": null },
+        { "id": "s2", "title": "Orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit" }
+      ],
+      "names": { "s1": "orbit", "s2": "jianghailong-xy/orbit" }
+    }
+  ],
+  "defaults": [
+    {
+      "name": "the workspace the reader came from opens its space",
+      "spaces": [
+        { "slug": "orbit", "workspaceIds": ["ws-orbit-develop", "ws-orbit"], "docs": { "written": 5, "total": 35 } },
+        { "slug": "wikova", "workspaceIds": ["ws-wikova-develop"], "docs": { "written": 12, "total": 12 } },
+        { "slug": "wikids", "workspaceIds": [], "docs": null }
+      ],
+      "workspaceId": "ws-wikova-develop",
+      "lastSlug": "orbit",
+      "opens": "wikova"
+    },
+    {
+      "name": "any of a space's workspaces, a project's coordinator workspace among them",
+      "spaces": [
+        { "slug": "orbit", "workspaceIds": ["ws-orbit-develop", "ws-orbit"], "docs": { "written": 5, "total": 35 } },
+        { "slug": "wikova", "workspaceIds": ["ws-wikova-develop"], "docs": { "written": 12, "total": 12 } }
+      ],
+      "workspaceId": "ws-orbit",
+      "lastSlug": "wikova",
+      "opens": "orbit"
+    },
+    {
+      "name": "a workspace bound to no space: the space last looked at",
+      "spaces": [
+        { "slug": "orbit", "workspaceIds": ["ws-orbit-develop"], "docs": { "written": 5, "total": 35 } },
+        { "slug": "wikova", "workspaceIds": ["ws-wikova-develop"], "docs": { "written": 12, "total": 12 } },
+        { "slug": "wikids", "workspaceIds": [], "docs": null }
+      ],
+      "workspaceId": "ws-elsewhere",
+      "lastSlug": "wikids",
+      "opens": "wikids"
+    },
+    {
+      "name": "from the Projects or Tasks list, no workspace: the space last looked at",
+      "spaces": [
+        { "slug": "orbit", "workspaceIds": ["ws-orbit-develop"], "docs": { "written": 5, "total": 35 } },
+        { "slug": "wikova", "workspaceIds": ["ws-wikova-develop"], "docs": { "written": 12, "total": 12 } }
+      ],
+      "workspaceId": null,
+      "lastSlug": "orbit",
+      "opens": "orbit"
+    },
+    {
+      "name": "the space last looked at is gone: the most documents written",
+      "spaces": [
+        { "slug": "orbit", "workspaceIds": ["ws-orbit-develop"], "docs": { "written": 5, "total": 35 } },
+        { "slug": "wikova", "workspaceIds": ["ws-wikova-develop"], "docs": { "written": 12, "total": 12 } }
+      ],
+      "workspaceId": null,
+      "lastSlug": "deleted",
+      "opens": "wikova"
+    },
+    {
+      "name": "the first time, nothing to go on: the most documents written",
+      "spaces": [
+        { "slug": "orbit", "workspaceIds": [], "docs": { "written": 5, "total": 35 } },
+        { "slug": "wikova", "workspaceIds": [], "docs": { "written": 12, "total": 12 } },
+        { "slug": "wikids", "workspaceIds": [], "docs": null }
+      ],
+      "workspaceId": null,
+      "lastSlug": null,
+      "opens": "wikova"
+    },
+    {
+      "name": "as many written: the server's first",
+      "spaces": [
+        { "slug": "orbit", "workspaceIds": [], "docs": { "written": 5, "total": 35 } },
+        { "slug": "wikova", "workspaceIds": [], "docs": { "written": 5, "total": 12 } }
+      ],
+      "workspaceId": null,
+      "lastSlug": null,
+      "opens": "orbit"
+    },
+    {
+      "name": "no plan anywhere, or a server older than workspaceIds and docs: the server's first",
+      "spaces": [{ "slug": "orbit" }, { "slug": "wikova" }],
+      "workspaceId": "ws-orbit-develop",
+      "lastSlug": null,
+      "opens": "orbit"
+    },
+    {
+      "name": "no space at all",
+      "spaces": [],
+      "workspaceId": "ws-orbit-develop",
+      "lastSlug": "orbit",
+      "opens": null
+    }
+  ],
+  "waiting": [
+    {
+      "name": "one space, nothing waiting",
+      "spaces": [{ "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 0, "planWaiting": 0 }],
+      "current": "s1",
+      "waiting": 0,
+      "proposals": 0,
+      "banner": null,
+      "options": ["orbit"]
+    },
+    {
+      "name": "one space, one proposal (today's orbit)",
+      "spaces": [{ "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 1, "planWaiting": 0 }],
+      "current": "s1",
+      "waiting": 1,
+      "proposals": 1,
+      "banner": "1 proposal to review",
+      "options": ["orbit · 1 waiting"]
+    },
+    {
+      "name": "mock 31 ⑤: orbit 1, wikova 2, on orbit",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 1, "planWaiting": 0 },
+        { "id": "s2", "title": "wikova", "repoUrlNorm": "github.com/jianghailong-xy/wikova", "pendingOps": 2, "planWaiting": 0 },
+        { "id": "s3", "title": "wikids", "repoUrlNorm": "github.com/jianghailong-xy/wikids", "pendingOps": 0, "planWaiting": 0 }
+      ],
+      "current": "s1",
+      "waiting": 3,
+      "proposals": 3,
+      "banner": "3 proposals to review · 2 in wikova",
+      "options": ["orbit · 1 waiting", "wikova · 2 waiting", "wikids"]
+    },
+    {
+      "name": "the same, on wikova: the other share is orbit's",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 1, "planWaiting": 0 },
+        { "id": "s2", "title": "wikova", "repoUrlNorm": "github.com/jianghailong-xy/wikova", "pendingOps": 2, "planWaiting": 0 },
+        { "id": "s3", "title": "wikids", "repoUrlNorm": "github.com/jianghailong-xy/wikids", "pendingOps": 0, "planWaiting": 0 }
+      ],
+      "current": "s2",
+      "waiting": 3,
+      "proposals": 3,
+      "banner": "3 proposals to review · 1 in orbit",
+      "options": ["orbit · 1 waiting", "wikova · 2 waiting", "wikids"]
+    },
+    {
+      "name": "a plan waits too: the number counts it, the first banner and Review's head do not",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 1, "planWaiting": 1 },
+        { "id": "s2", "title": "wikova", "repoUrlNorm": "github.com/jianghailong-xy/wikova", "pendingOps": 2, "planWaiting": 2 },
+        { "id": "s3", "title": "wikids", "repoUrlNorm": "github.com/jianghailong-xy/wikids", "pendingOps": 0, "planWaiting": 0 }
+      ],
+      "current": "s1",
+      "waiting": 6,
+      "proposals": 3,
+      "banner": "3 proposals to review · 2 in wikova",
+      "options": ["orbit · 2 waiting", "wikova · 4 waiting", "wikids"]
+    },
+    {
+      "name": "only the plan waits",
+      "spaces": [{ "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 0, "planWaiting": 2 }],
+      "current": "s1",
+      "waiting": 2,
+      "proposals": 0,
+      "banner": null,
+      "options": ["orbit · 2 waiting"]
+    },
+    {
+      "name": "the proposals are all another space's",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 0, "planWaiting": 0 },
+        { "id": "s2", "title": "wikova", "repoUrlNorm": "github.com/jianghailong-xy/wikova", "pendingOps": 2, "planWaiting": 0 }
+      ],
+      "current": "s1",
+      "waiting": 2,
+      "proposals": 2,
+      "banner": "2 proposals to review · 2 in wikova",
+      "options": ["orbit", "wikova · 2 waiting"]
+    },
+    {
+      "name": "two other spaces' shares, in the list's order",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 1, "planWaiting": 0 },
+        { "id": "s2", "title": "wikova", "repoUrlNorm": "github.com/jianghailong-xy/wikova", "pendingOps": 2, "planWaiting": 0 },
+        { "id": "s3", "title": "wikids", "repoUrlNorm": "github.com/jianghailong-xy/wikids", "pendingOps": 1, "planWaiting": 0 }
+      ],
+      "current": "s1",
+      "waiting": 4,
+      "proposals": 4,
+      "banner": "4 proposals to review · 2 in wikova · 1 in wikids",
+      "options": ["orbit · 1 waiting", "wikova · 2 waiting", "wikids · 1 waiting"]
+    },
+    {
+      "name": "a server older than planWaiting: the proposals alone",
+      "spaces": [{ "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 2 }],
+      "current": "s1",
+      "waiting": 2,
+      "proposals": 2,
+      "banner": "2 proposals to review",
+      "options": ["orbit · 2 waiting"]
+    },
+    {
+      "name": "names that need the segment before, in the banner and the picker",
+      "spaces": [
+        { "id": "s1", "title": "orbit", "repoUrlNorm": "github.com/jianghailong-xy/orbit", "pendingOps": 1, "planWaiting": 0 },
+        { "id": "s2", "title": "orbit fork", "repoUrlNorm": "github.com/wikova/orbit", "pendingOps": 2, "planWaiting": 0 }
+      ],
+      "current": "s1",
+      "waiting": 3,
+      "proposals": 3,
+      "banner": "3 proposals to review · 2 in wikova/orbit",
+      "options": ["jianghailong-xy/orbit · 1 waiting", "wikova/orbit · 2 waiting"]
+    }
+  ]
+}

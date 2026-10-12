@@ -1,0 +1,2052 @@
+{
+  "stats": {
+    "startTime": "2026-10-07T05:46:38.118Z",
+    "duration": 378007.879,
+    "expected": 120,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-0",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2923
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-0--keyboard-window.json",
+          "sha256": "51bb9ad3aaa6a6723f9088a9a0bd4da2a7a85deb78d16e0e9084ff79b68f3ced"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2857
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-1--keyboard-window.json",
+          "sha256": "79a3fd23139516645bc80214fe279d903a17aa3cfa076e109edf604b12c2dbb3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2837
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-2--keyboard-window.json",
+          "sha256": "4f4f952b5fe9951d0e28cbeabf80349f16be649cc40e0340f442b59ec3ec423c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2808
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-3--keyboard-window.json",
+          "sha256": "8ffc21dccb78f3d698dc2e04539132c5e6ea4df64a773d291074c32342f9aa86"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2941
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-4--keyboard-window.json",
+          "sha256": "21b4ac054adc54a63c242e296c0f241840a1070b5c66d1cb777f84f4b0e571ce"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2947
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-5--keyboard-window.json",
+          "sha256": "ce0b29b4e74a13e632cbd86fdb25d2f46f8a9b3e03ad503467f87e67eadf14c7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2933
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-6--keyboard-window.json",
+          "sha256": "237d3e36e67aee094d5b0579abf8c107182368aecd972a852db91c21fc9c1754"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3130
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-7--keyboard-window.json",
+          "sha256": "e9614463ad0a86b36a0ac347095929d8d129cb33d736cbe888602f9bd1365ad1"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2882
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-8--keyboard-window.json",
+          "sha256": "f1f1fcb1b914037d9841bceda3d7d3ad107b11f16abc570e00da12deb32a2e3b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2930
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-9--keyboard-window.json",
+          "sha256": "6b2389d70b76a915d042c03dc8771c075645e0ea0ce119cd234341b8c6749ed9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-10",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2849
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-10--keyboard-window.json",
+          "sha256": "b86d1010b901c5a9684bc96ae7ba114d6d03d6b7fec013a27ba307d6308103e6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-11",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2656
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-11--keyboard-window.json",
+          "sha256": "601ffe91f1229e55880ee17f1e36188529f3281956af8736d4d6e1e4ba355cf0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-12",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2644
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-12--keyboard-window.json",
+          "sha256": "afed29d761b4b6cc750da2bb3b69f3565b5d37a7798727ab689d3ac94e569806"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-13",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2855
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-13--keyboard-window.json",
+          "sha256": "73a37f332b596f74601c95ee920fcf8b3b6e06ddd7eb993481250d5dce10a2c0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-14",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2735
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-14--keyboard-window.json",
+          "sha256": "2a7a5bd9123e91b5b0f1d1f2c7d6258b00a383ef5e0ca0c783d2926551196e91"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-15",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2828
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-15--keyboard-window.json",
+          "sha256": "d8f11d9456bdc7c59357200936599e34ef80a58579ab40c6d106793f4a8b8776"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-16",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2823
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-16--keyboard-window.json",
+          "sha256": "330c406aa826be8c2517dc8f21b7ccb911f0c6be643ae3b089cd11b36602aa51"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-17",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2886
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-17--keyboard-window.json",
+          "sha256": "2b3e9b4008ac9dd523e376402ca89d108a072900469aba761dff30e7d8e1eb73"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-18",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2884
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-18--keyboard-window.json",
+          "sha256": "10eb65397082571757dc2b19591f2e53bb2912e325df1ee2d667274fb67087f2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-19",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2800
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-burst-sample-19--keyboard-window.json",
+          "sha256": "d1b196460e814738ebf2bc51bb50801a60fda837da23e4b39e8f57b8c2af681b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-0",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3325
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-0--keyboard-window.json",
+          "sha256": "1cd7de1de188ec64fa929003ae8b63e8f197d2a39eb523ea3917f13f4ead01b0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3393
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-1--keyboard-window.json",
+          "sha256": "8838711c0dda7abcde556903f606a1f369e2196da15e9f978a5b1fd2267574df"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3364
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-2--keyboard-window.json",
+          "sha256": "0743fc42556ba3ecc1814f0f7d51dffe8933318afe5e54d72dde19ee11b7f770"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3452
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-3--keyboard-window.json",
+          "sha256": "aa9f83aa2dec75af24f9b2e3b3fcf4ea2f1e05f7a81679e634c89710deef5b86"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4135
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-4--keyboard-window.json",
+          "sha256": "ad1b1bd560fc97720742a7cedb8975e3f7e9190e9c894e58d4dc119bacefe9c2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3405
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-5--keyboard-window.json",
+          "sha256": "18c9838b036ea10e3e32944fe19dc4dcc1eb372b485fe75f06785fe3dac6600e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3404
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-6--keyboard-window.json",
+          "sha256": "ac5501e384465b8a76cb0638806082638f6bc4140e9bb3c9408bf762ab3910c1"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3530
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-7--keyboard-window.json",
+          "sha256": "364edda241de41e18360a265404db304744822a6e3c5022c5e4c2f9e6f50f82d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3565
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-8--keyboard-window.json",
+          "sha256": "fcb14b49fac572c768b4281b96b845484d6a5b196ca83a84d458a1d98e8873b4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3358
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-9--keyboard-window.json",
+          "sha256": "7f25ec8ec6d81dcac4fcd3ceb1d51eab800991ac1f76c583dba0687aa92ac9d1"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-10",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3397
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-10--keyboard-window.json",
+          "sha256": "54fac5d73b55598d1af21f2f0eea9c349f874f7a7c669cca1ae801efd9a81916"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-11",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3387
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-11--keyboard-window.json",
+          "sha256": "84ae20480d06ec946760809b8c8bd529621fc9285e3c4965be6a541e2a93358c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-12",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3413
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-12--keyboard-window.json",
+          "sha256": "e1271d2741701c705768a047bffd064e5817e32c39b379fa20f910464eb839c2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-13",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3557
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-13--keyboard-window.json",
+          "sha256": "834bf567ee42a999b16979ca9ce114c4753f04c908342787b252a0463c948ce0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-14",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3391
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-14--keyboard-window.json",
+          "sha256": "2076e5e6fbdb77f022deab7a3a63b94e0a11d831162a1cbe1d1989af5099a93f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-15",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3363
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-15--keyboard-window.json",
+          "sha256": "36367e06694bce00f855e428a08bccab79195bd3137cfdc2da8b7ca3dfcf1967"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-16",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3446
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-16--keyboard-window.json",
+          "sha256": "23060a7036587a8f4a5e1c464b6abf8f840599ab7fee7bb55082f15926d60d00"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-17",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3639
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-17--keyboard-window.json",
+          "sha256": "e15330035a3de4abd56d48541e7eef5dc789514f9a4c51c23d3eb4e40e027478"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-18",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3605
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-18--keyboard-window.json",
+          "sha256": "74579c6bc9b5bd3f7d25da42cfc5bb0765becc88c9d324c972d29f056b17fdf9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-19",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3414
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-field-select-down-enter-from-7-paced-sample-19--keyboard-window.json",
+          "sha256": "2e115100acfb83f7cc5bc0c4eb1fe825b29e792e50063687dc864cf339e68be9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-0",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2749
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-0--keyboard-window.json",
+          "sha256": "a760f8504888da449fdfc05fce278a2caaf6fdcf40fe661cc9bf3add7fce9933"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2749
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-1--keyboard-window.json",
+          "sha256": "5259999cee83e1b86ad7d432c4661d7a4ec58987a595675300293dca68a65eeb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2722
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-2--keyboard-window.json",
+          "sha256": "97bd58fdfc9a0c2818f078e3f739bbf83b1f437678aee58c6c896c897c751018"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2846
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-3--keyboard-window.json",
+          "sha256": "1df71402d4b0bef59aaba9a8e4e57f3fb3109704e130b41dc3c239b7ff1ba63f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2696
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-4--keyboard-window.json",
+          "sha256": "28a8738867999918397a1de9c27d4725c49be6ed53a28e7690f015d9cec9631f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2722
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-5--keyboard-window.json",
+          "sha256": "8c4641ddd191c3335718f0d7b92ac8e7683237d0ff6a9ed535623b903bbc2395"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2717
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-6--keyboard-window.json",
+          "sha256": "a68f64fc59daa53c86c2d22f5f714939a0ff991f180b8c07eb551b98bfe13bf8"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2719
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-7--keyboard-window.json",
+          "sha256": "0a751b9ce6b23a35e3f32951383957b95f5dfad82c53d1a13316b6302f91437c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2711
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-8--keyboard-window.json",
+          "sha256": "2141b6507ad36ad15ad27fe425261d3fe31ea83e920ae8e5b7985d2d3c75953c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2682
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-9--keyboard-window.json",
+          "sha256": "a99606e5218f8b0e2cf075401d6c43c34fe93ef51a3a7ffc52b0de3fedc11146"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-10",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2647
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-10--keyboard-window.json",
+          "sha256": "9331a395d28456b512df7b875f78791a671bf401c0463a8bb52b0b94b655de23"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-11",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2639
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-11--keyboard-window.json",
+          "sha256": "bb674b393629a609e882ca329e5b36d587966d8eb03cff1e593e96c2ab5a4b5b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-12",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2710
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-12--keyboard-window.json",
+          "sha256": "dac19e0eaf96953e8f648b35c1365435e6a8768a22e2c8c7c86ac2e6313801fe"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-13",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2720
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-13--keyboard-window.json",
+          "sha256": "0de75a8ddff40e86e5d3e69110e90021a3df5aa6ac0d6032c79852b3ab09880b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-14",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2703
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-14--keyboard-window.json",
+          "sha256": "dfa8bce2ed92bd5e7d2787ac9a53657953f48b220a41388022eb9d3b9931a8e2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-15",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2735
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-15--keyboard-window.json",
+          "sha256": "54f0ae62ac3edc0f4c1364d8374494907129968e5a1e39f2350ddf0b577a4e95"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-16",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2729
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-16--keyboard-window.json",
+          "sha256": "f925c1b5a1f1a0bafff89a84427619eea80ae0c1a623cdc2e44ebfb23c69aa12"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-17",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2612
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-17--keyboard-window.json",
+          "sha256": "14140f0f91af12f01d2466a08622486fc8b2f764b10a21157cf170ebdf6dd818"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-18",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2716
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-18--keyboard-window.json",
+          "sha256": "1f80cd1b4bbb0f495c2ce719a4349ac059a9ca3230b3ca949e9fdb4062af92aa"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-19",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2695
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-burst-sample-19--keyboard-window.json",
+          "sha256": "348b4d9e1af23b6f792f4aa6f65574b8961248c0acd9ddad3162da2d1aaaa5ed"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-0",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3308
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-0--keyboard-window.json",
+          "sha256": "c9ac134a8f47e5c633e1d7d8eeb8c73eaf0a05960ad3535f8ffe82ab0b153cd7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3326
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-1--keyboard-window.json",
+          "sha256": "30ffb418929d198504f027738b1eeb24c81789487ceec3aa1815f8b424fc78a7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3294
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-2--keyboard-window.json",
+          "sha256": "0b2fef57a38cecb750b0be2403e7863e0c9c3de76fb17c8aeb4df054fdb3a984"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3261
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-3--keyboard-window.json",
+          "sha256": "9387e1e9127a8796d6baa2652d39142b4c4d61fcdd70081b824ec107db870240"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3418
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-4--keyboard-window.json",
+          "sha256": "573fbf90f529c6a82d8c810dc79ecdc86151c1e82ed12ff03e6fe5a7622af8d6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3300
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-5--keyboard-window.json",
+          "sha256": "00d7c267af1b74ecb7fd1648c8bea59caa9aa169bff886058bc64236623a0197"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3376
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-6--keyboard-window.json",
+          "sha256": "70f18cb673566188849d52e54bbde9e76f9dba3119ec343bca74c2ecca210fd5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3423
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-7--keyboard-window.json",
+          "sha256": "589ecae657c25a04ca338655a3deb09fcaac9cab22941fd64209e35752f66863"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3442
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-8--keyboard-window.json",
+          "sha256": "f1d3bf46cb5638d0553d04d5d5fb77c28ccd55360f925ec2e49dd1401d86e28f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3669
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-9--keyboard-window.json",
+          "sha256": "11eb7165811d8a6e53cc85a94930f976697dc6cca987ae72a540d6af2f1e48d2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-10",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3664
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-10--keyboard-window.json",
+          "sha256": "3b6e1ee5208ee89a6b79752bde499ff4e15c3952400c6f358e537d3b194fc9e7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-11",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3458
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-11--keyboard-window.json",
+          "sha256": "63cec11c77d62be1f7fdfa6e735efdf4608d80cfd80a84d81713486bb50080f3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-12",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3366
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-12--keyboard-window.json",
+          "sha256": "9a5f6843d4712888d41f4eb083cf203b8e6f29f96339ed74f881d4a306697e80"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-13",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3339
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-13--keyboard-window.json",
+          "sha256": "db20fc6face05846b6a7f92cd660c5e30ce8a72cc3e5b9ba3205e77f86faef8d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-14",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3313
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-14--keyboard-window.json",
+          "sha256": "e01d6fbfac9eb54e569b042b9b03e765ea381d6b0dc200f3c85e3cafdb9be4d3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-15",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3480
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-15--keyboard-window.json",
+          "sha256": "64facae990dcb3a2a1f1d5dbc2557b2c2e00fcd2644fc82297507d5a4d084025"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-16",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3395
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-16--keyboard-window.json",
+          "sha256": "14f31b00709a6864f39f73ff2953300503e2dfb6627e57df8a4087aaeb9c3440"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-17",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3432
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-17--keyboard-window.json",
+          "sha256": "6d451e1afafb888d9a1aee59e8f5894601d1c83e1253a2be35dea2708f6a3192"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-18",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3304
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-18--keyboard-window.json",
+          "sha256": "11272526e138a7a5606402deee32b2f6855b3a916d352110596c95a9385fa494"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-19",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3356
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--orbit-sample-select-down-enter-from-7-paced-sample-19--keyboard-window.json",
+          "sha256": "e85968e4e76a6994e8cb0f7f39848fa26eb19dd40434f0a8f7ca284b3159f99c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-0",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2658
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-0--keyboard-window.json",
+          "sha256": "7a9da9da3ec174af16af57de3c9b0bd54c25df355d807ba908130c2a872696ff"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2573
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-1--keyboard-window.json",
+          "sha256": "10006ad649b21dafac447b7a72ec7f6af2d5499058a11b74ec372dd87e9cfc0e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2750
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-2--keyboard-window.json",
+          "sha256": "88e13110fb49f5abc0146baa3f69276c136d73b2deb7a456ad7cf4018a0e75dd"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2681
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-3--keyboard-window.json",
+          "sha256": "f6d3998d45e1ab4022611a12e0faf26fd8c472a9b31d3acc804f297ddda32bf2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2767
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-4--keyboard-window.json",
+          "sha256": "cd9b111f8a6e9d760be75d61592892894e3642687d413bddfa1ad8900e8d218f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3092
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-5--keyboard-window.json",
+          "sha256": "6bb60beb9f5721cbd552d4c04f0b983e3bfcb755d6c4e73f2589ddd99f8898a8"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2587
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-6--keyboard-window.json",
+          "sha256": "f184da2718363fc2ecb45b06de3a1735bcfb452744723f7eddb16d76d2ec9a97"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2874
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-7--keyboard-window.json",
+          "sha256": "61fc6d07a7a36b04db6c4ee9fcd70496d31aced9c4da6ef4cb072922ff96f89b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3999
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-8--keyboard-window.json",
+          "sha256": "bcd73802c3c07202568192bd2e093e50e19b0d68341e48a3b17850b93470772e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2988
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-9--keyboard-window.json",
+          "sha256": "2cc381d8a96b255789ad4230c68e89f4c48f64e8535683083ffcaf37a83795c2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-10",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2761
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-10--keyboard-window.json",
+          "sha256": "7a227c731add749a36908cf9248a3e7d724277a9d11b5828bd988ee95f217c31"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-11",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2778
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-11--keyboard-window.json",
+          "sha256": "7d40128d01da17dd7180cffc0963558e484baa0ab252b2874b4d2436c91d5f05"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-12",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2912
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-12--keyboard-window.json",
+          "sha256": "ed2915ad2713c8138081e0f17007bc8d74a244273d735ac8e777068bbb4e38c0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-13",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3595
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-13--keyboard-window.json",
+          "sha256": "995176c924920ba372eb66734da5275ebaf00eb59a5f6762cbe525d93de83c54"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-14",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2830
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-14--keyboard-window.json",
+          "sha256": "05c2654142fc21bfe20745835a3534e542a16012571f64a7a4c499af5e54e46e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-15",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2728
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-15--keyboard-window.json",
+          "sha256": "eb39e366ac06e53fbdea4e144f25b475a2e4f691c8c84722527a32e613cb9739"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-16",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2850
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-16--keyboard-window.json",
+          "sha256": "fcafa3291dfc6139fd52df86c2a040067e9720fe7deeedff19625a813f6937b8"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-17",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2796
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-17--keyboard-window.json",
+          "sha256": "3f40bd79ea602c4184ee5df1b1a232b8e57e907c481e0b12a5d7aa2f22c4d59b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-18",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2697
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-18--keyboard-window.json",
+          "sha256": "d4c4cad0d2cd66a9a230ea495290ed37ab10279a04cfda5a8c69ff09393e02fa"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-19",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2840
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-burst-sample-19--keyboard-window.json",
+          "sha256": "9318fe546cf816293c1299b9e02190293780c361b291f46b7d51baeeb456ef00"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-0",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3310
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-0--keyboard-window.json",
+          "sha256": "1da6b3c3c02b826e3a2826a00d488bcd37a9ca474e2a5e07fbbdb836b66bcafa"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3378
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-1--keyboard-window.json",
+          "sha256": "a6483b0e5762abf458f013dd8fca90d3372755e17903832ea77a3756b07a384c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3385
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-2--keyboard-window.json",
+          "sha256": "cce0aa9b85a49b12496b544bd9af8850fa971d9b22fb909b17f01fb17d5977a3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3429
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-3--keyboard-window.json",
+          "sha256": "a58b921982b7658cbcee68ed120c53615e351db926cb01a3408d10c264a78ae0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3452
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-4--keyboard-window.json",
+          "sha256": "b041692f892233437aec4d92e493de1a881af9d548f5c7c5d599d9d3527525b1"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3587
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-5--keyboard-window.json",
+          "sha256": "95564056928f73d4f39478d86dc4447ed716245bdaaf69dcab679a050865f1af"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3547
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-6--keyboard-window.json",
+          "sha256": "ce54385833596a7e0bf40576a76ca29564bde303d2bf7b1fcdf751264cfb6f43"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3375
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-7--keyboard-window.json",
+          "sha256": "0e78c9a93b406d48c80a1c34815817d8f8ebd364f018d74a1997d3d635b917d3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3443
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-8--keyboard-window.json",
+          "sha256": "00ee0118dce65d88690b1d0b49f67eed6b62e6a09e580ec38e61cd4167ffe88e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3402
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-9--keyboard-window.json",
+          "sha256": "9578c4aceaec7a4d7ef589a150d9c6fe2486f11e785152b01a7e1928a9a0b670"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-10",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3516
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-10--keyboard-window.json",
+          "sha256": "b480a448ee25e06d0b16d723cd1b1be4ae935235b9bc766787b08e711e2ba128"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-11",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3393
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-11--keyboard-window.json",
+          "sha256": "85e8f4dec45c099e7d9334bac8d8f9a91fe51729daa045b283a36921a2a32d45"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-12",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3400
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-12--keyboard-window.json",
+          "sha256": "c666fc17c6ee17d66d5ebfdd83bee43546130adc0e96b08fbf087f43a3b3743c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-13",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3476
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-13--keyboard-window.json",
+          "sha256": "da1b6b30970bb6e565450376521032f4c7106caa4738efcb646165b11a92b93a"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-14",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3390
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-14--keyboard-window.json",
+          "sha256": "c11c2f431a5ed3b5af4835536e4ab087539188589cb8f19b92b6cbc65bfc72a5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-15",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3468
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-15--keyboard-window.json",
+          "sha256": "12214e1a0071979fed6fe509c4c5e5ca01025c480781654700cf05d13cb19b27"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-16",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3429
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-16--keyboard-window.json",
+          "sha256": "0014226d836a19db9a42db3aca34a0dd8ef2c5d1d3a08e76b47cd74ffff4d711"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-17",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3157
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-17--keyboard-window.json",
+          "sha256": "e187899c4e42717b75016eb84d7abec6f362379582af97a1324907566c845c1d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-18",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3447
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-18--keyboard-window.json",
+          "sha256": "c7ccec834e60d96ce60f5d784aba27e00a8ab0203aa96a885ef93b801a458d8b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-19",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3481
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--antd-sample-select-down-enter-from-7-paced-sample-19--keyboard-window.json",
+          "sha256": "28b52932d27479147c2a7b1f4b0773e9bcff0d7b59fac23a3e0412b273da01ce"
+        }
+      ]
+    }
+  ]
+}

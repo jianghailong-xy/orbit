@@ -1,0 +1,57 @@
+[
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-webkit-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-webkit-light-desktop--trace.zip",
+    "sha256": "964e905982d6088e2092c60421ba86ce19aae16bd94ad0e0aec444dd5edd1f32"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-chromium-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-48e8c-ion-is-retained-for-tooltip-chromium-light-desktop--trace.zip",
+    "sha256": "07e2ef361234aa4adbcf302839fb18406313d9249c94f938253e9e300422ca6a"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-b14ba--is-retained-for-attachment-chromium-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-b14ba--is-retained-for-attachment-chromium-light-desktop--trace.zip",
+    "sha256": "bce97d17bff90f254e828e4aa87f9f8c5d0956dbbe06fe6a29006af0c9c1280c"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-b14ba--is-retained-for-attachment-webkit-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-b14ba--is-retained-for-attachment-webkit-light-desktop--trace.zip",
+    "sha256": "63ff1a8c8ed76d6494ebbcbca778d0ace2dc1f2fdc37f44ba30cb85f717af9ff"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-webkit-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-webkit-light-desktop--trace.zip",
+    "sha256": "499bc1c76cfbe152e9be1ab5c4b89e3fb41f327f2517e0ed4d859e115bfaee83"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-chromium-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-chromium-light-desktop--trace.zip",
+    "sha256": "4977edde87c7c440965e3109dd55c0d438db6988028a5ecbbdb90593155f7c6e"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-686f4-tion-is-retained-for-search-chromium-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-686f4-tion-is-retained-for-search-chromium-light-desktop--trace.zip",
+    "sha256": "7ec360590bce6b01cfa2da250deb3aad2dfe939587c2477bc3b765ab8c42fdd8"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-686f4-tion-is-retained-for-search-webkit-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-686f4-tion-is-retained-for-search-webkit-light-desktop--trace.zip",
+    "sha256": "b6661fe18a084d83b5a17ac0df57f74ff5f159428ac93faffee09eafe3655401"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-chromium-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-33ef1-ion-is-retained-for-popover-chromium-light-desktop--trace.zip",
+    "sha256": "60b8992694122454a2b9c6a8aefb9a76668bf2247cc9bad331ff750aa45c38c2"
+  },
+  {
+    "source": "src/web/.coordinator-edge-results/coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-webkit-light-desktop/trace.zip",
+    "file": "coordinator-edge.browser.m-11908-tion-is-retained-for-expiry-webkit-light-desktop--trace.zip",
+    "sha256": "29a8669d4cbd5007b522f3e63e9fb83936f28d7f38387255fcf994cd29e68221"
+  },
+  {
+    "source": "src/web/.choices-results/choices.browser.mjs-multip-ed3e8-ent-labels-and-email-fields-chromium-dark-phone/trace.zip",
+    "file": "choices.browser.mjs-multip-ed3e8-ent-labels-and-email-fields-chromium-dark-phone--trace.zip",
+    "sha256": "7b7732079cdd98eb60275ebfe39d10a26275e28e0638e04a5f08587ab54514a6"
+  }
+]

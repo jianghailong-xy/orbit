@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && git rev-parse HEAD:src/web && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-choices -w @orbit/web'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_bb945ba4b8b1",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "52e78ab88",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T06:10:29.008671+00:00",
+ "exitCode": 1,
+ "outputSha256": "95eeea79448c44f4b0e38df41b07ef0e9413373339403bea3813657801f0f6bf",
+ "outputBytes": 84159,
+ "note": "Fixed tree (52e78ab88, web tree df7414507c6f...), the full choices matrix in all eight environments, own network namespace, nice -10, with only the chunked select-sequence probe running beside it: 519 passed / 1 failed (22.7 min); no page failed to mount and no request failed. The failure is webkit-dark-phone 'normal attachment can reopen during exit without stale unmount' (choices-lifecycle.browser.mjs:140): after Escape it expects the attachment menu in its exit state (data-closed), but the element was already gone (error: element(s) not found; the page shows only the trigger). The trace (fix-choices-full-traces.json) shows the Escape press taking 145.2 ms and the expectation starting 359 ms after the press began, longer than the menu's normal-motion exit, so the exit had finished and the popup unmounted before the first check. Escape goes to Base UI's dismiss with focus in the tap-opened menu; the fix's handler (ArrowDown/ArrowUp/Enter on the trigger while open) is not on this path. Repeated alone 10 times on both trees: fix-repeat-reopen-exit-*."
+}

@@ -253,13 +253,14 @@ async function turn(
   return id;
 }
 
-async function toolCall(h: Harness, sessionId: string, name: string, output: string): Promise<string> {
+async function toolCall(h: Harness, sessionId: string, name: string, output: string, toolUseId?: string): Promise<string> {
   const id = randomUUID();
-  await h.sql.query(`INSERT INTO "tool_call"("id","session_id","name","output") VALUES ($1,$2,$3,$4)`, [
+  await h.sql.query(`INSERT INTO "tool_call"("id","session_id","name","output","tool_use_id") VALUES ($1,$2,$3,$4,$5)`, [
     id,
     sessionId,
     name,
     JSON.stringify(output),
+    toolUseId ?? null,
   ]);
   return id;
 }
@@ -1161,4 +1162,60 @@ test('review modes · the owner rejects one entry, and a bulk import applies onc
     expectStatus(refused, 409, 'a Reject of the owner\'s own entry');
     assert.equal((await entryRow(h, written.body.ops[0].entryId)).status, 'active');
   });
+});
+
+// ── a tool call cited by the id its transcript shows ───────────────────────────────────────────
+
+test('review modes · Automatic verifies a tool_use_id source from its call, and applies it resting on the row', { skip, concurrency: 1, timeout: 300_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'cited by tool_use_id');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const proposer = await session(h, owner.id, ws, machine);
+  const space = await modeSpace(h, owner, 'automatic', ws);
+  const useId = `toolu_${randomUUID().slice(0, 12)}`;
+  const row = await toolCall(h, proposer, 'Bash', 'git push printed: protected branch hook declined', useId);
+  const as = agent(owner.id, proposer);
+
+  // The add waits for its verification, and its verifier reads the call's own words through that id.
+  const proposed = await h.service.submitChangeset(as, space, {
+    rationale: 'cited by the id the transcript shows',
+    ops: [{
+      op: 'add',
+      entry: draft('pitfall', 'A protected branch declines a direct push'),
+      sources: [{ kind: 'tool_call', ref: useId, quote: 'protected branch hook declined' }],
+    }],
+    idempotencyKey: `tool-use-id-${randomUUID()}`,
+  });
+  const outcomes = proposed.ops as Outcome[];
+  assert.equal(outcomes[0].waitsFor, 'verification', JSON.stringify(outcomes[0]));
+  const listed = await h.service.listVerifications(as, space);
+  const item = listed.items.find((one) => toUuid(one.opId) === toUuid(outcomes[0].opId!));
+  assert.ok(item, "the op is on its proposer's list");
+  assert.equal(item.evidence, 'readable', 'with a source its verifier can read');
+  assert.equal(item.sources[0].ref, row, 'named by the row the id resolved to');
+  assert.match(item.sources[0].text ?? '', /protected branch hook declined/u, "and the call's own words");
+  await verifyAll(h, as, space, outcomes);
+  const entry = await entryRow(h, outcomes[0].entryId!);
+  assert.deepEqual([entry.status, entry.trust], ['active', 'auto']);
+
+  // An amend applies when its verdict does, and what its revision rests on is read again then: the
+  // tool_use_id, against the session that proposed it, stored as the row's id.
+  const amend = await h.service.submitChangeset(as, space, {
+    rationale: "the symptom, in the hook's words",
+    ops: [{
+      op: 'amend',
+      entryId: entry.id,
+      baseRevision: 1,
+      changes: { summary: 'A direct push to a protected branch is declined by its hook.' },
+      sources: [{ kind: 'tool_call', ref: useId, quote: 'hook declined' }],
+    }],
+    idempotencyKey: `tool-use-id-amend-${randomUUID()}`,
+  });
+  const amended = amend.ops as Outcome[];
+  assert.equal(amended[0].waitsFor, 'verification', JSON.stringify(amended[0]));
+  await verifyAll(h, as, space, amended);
+  const second = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: entry.id, revision: 2 } });
+  const sources = await h.prisma.wikiSource.findMany({ where: { revisionId: second.id }, select: { kind: true, ref: true, quoteVerified: true } });
+  assert.deepEqual(sources, [{ kind: 'tool_call', ref: row, quoteVerified: true }]);
 });

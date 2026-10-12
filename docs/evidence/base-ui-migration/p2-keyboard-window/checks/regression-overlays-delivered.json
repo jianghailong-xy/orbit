@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm run test:ui-overlays -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_ee820fc269a1",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "075b4066a9812000a7d33af023c47f527449a5f3",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T22:50:46.128411+00:00",
+ "exitCode": 1,
+ "outputSha256": "505326a78937b8f752b866f66e6569f3cc1fc4025797162f8a9842092853b159",
+ "outputBytes": 18721,
+ "note": "95 passed / 1 failed on the delivered tree: chromium-dark-desktop \"explicit focus, native form validation, motion and document scroll restore correctly\" never mounted the fixture (overlays.browser.mjs:9, the theme expect); its trace (regression-overlays-delivered-traces.json) shows 7 module requests aborted with net::ERR_NETWORK_CHANGED, and the last actions are newPage, goto and the theme expect, before any test step. collect-overlay-evidence.mjs refuses a failing run and has no diagnostic mode, so this run was archived with collect-choice-evidence.mjs --from=src/web/.overlays-results --diagnostic, which writes the same files plus the trace."
+}

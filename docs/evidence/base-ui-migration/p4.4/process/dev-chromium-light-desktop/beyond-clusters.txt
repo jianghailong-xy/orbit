@@ -1,0 +1,8 @@
+chromium-light-desktop p44-doc-footnote-44.png        all=  6592 gt2=  6393 max=224 clusters=  3 [3269px x808-1255 y776-807 m224] [3124px x808-1255 y656-695 m211] [237px x808-863 y792-807 m112]
+chromium-light-desktop p44-entry-more.png             all=   104 gt2=    89 max= 55 clusters=  2 [75px x1168-1183 y64-79 m55] [14px x1168-1183 y104-111 m48]
+chromium-light-desktop p44-new-entry-kinds.png        all= 12969 gt2=     7 max=  6 clusters=  4 [2px x888-895 y288-295 m3] [2px x504-511 y288-295 m4] [2px x504-511 y216-223 m6]
+chromium-light-desktop p44-plan-edit-kinds.png        all= 12139 gt2=  1636 max=128 clusters=  4 [1630px x1200-1223 y496-703 m128] [2px x1208-1215 y752-759 m3] [2px x1088-1103 y752-759 m3]
+chromium-light-desktop p44-review-reject.png          all=    43 gt2=     2 max=  3 clusters=  1 [2px x536-543 y352-359 m3]
+chromium-light-desktop p44-settings-workspaces.png    all= 28307 gt2= 14683 max= 10 clusters=  1 [14683px x400-879 y272-319 m10]
+chromium-light-desktop p44-watch-editor-filled.png    all=    97 gt2=    12 max=  9 clusters=  4 [3px x416-423 y456-463 m9] [3px x416-423 y304-311 m9] [3px x400-407 y456-463 m8]
+chromium-light-desktop p44-watch-editor-sessions.png  all=    83 gt2=    12 max=  9 clusters=  4 [3px x416-423 y456-463 m9] [3px x416-423 y304-311 m9] [3px x400-407 y456-463 m8]

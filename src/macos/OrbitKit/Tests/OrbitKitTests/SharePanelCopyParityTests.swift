@@ -136,7 +136,7 @@ final class SharePanelCopyParityTests: XCTestCase {
         let web = try source(Self.modal)
         assertSays(web, "const TURN_OFF_TITLE = '\(SharePanelCopy.turnOffTitle)';", in: Self.modal)
         assertSays(web, "const TURN_OFF_DETAIL = '\(SharePanelCopy.turnOffDetail)';", in: Self.modal)
-        assertSays(web, "okText=\"\(SharePanelCopy.turnOff)\"", in: Self.modal)
+        assertSays(web, "confirmText=\"\(SharePanelCopy.turnOff)\"", in: Self.modal)
         assertSays(web, "cancelText=\"\(SharePanelCopy.cancel)\"", in: Self.modal)
         let contract = try source(Self.contract)
         assertSays(contract, "`\(SharePanelCopy.turnOffTitle)` / `\(SharePanelCopy.turnOffDetail)`", in: Self.contract)
@@ -145,7 +145,7 @@ final class SharePanelCopyParityTests: XCTestCase {
     func testTheLinksPressesAreTheContractsAndCopiedIsTheDialogs() throws {
         let web = try source(Self.modal)
         assertSays(web, "{copied ? '\(SharePanelCopy.copied)' : 'Copy'}", in: Self.modal)
-        let done = try slice(web, from: "<Button type=\"primary\" onClick={onClose}>", to: "</Button>")
+        let done = try slice(web, from: "<Button variant=\"primary\" onClick={onClose}>", to: "</Button>")
         XCTAssertEqual(lastWords(done), SharePanelCopy.done, "\(Self.modal) no longer closes with \(SharePanelCopy.done)")
         // The apps' panel, as the contract draws it: Access Picker → the link, Copy Link, Share Link….
         let contract = try source(Self.contract)
@@ -160,15 +160,18 @@ final class SharePanelCopyParityTests: XCTestCase {
         let blocks: [(ShareRootKind, String)] = [
             (.session, try slice(web, from: "  SESSION: {", to: "  TASK: {")),
             (.task, try slice(web, from: "  TASK: {", to: "  PROJECT: {")),
-            (.project, try slice(web, from: "  PROJECT: {", to: "/** Whether this dialog can be opened")),
+            (.project, try slice(web, from: "  PROJECT: {", to: "  WIKI: {")),
+            (.wiki, try slice(web, from: "  WIKI: {", to: "/** Whether this dialog can be opened")),
         ]
-        let everything = ShareCounts(messages: 2, toolCalls: 2, tasks: 2, comments: 2, files: 2, runs: 2, transcripts: 3)
+        XCTAssertEqual(blocks.map(\.0), ShareRootKind.allCases, "every kind's block, in the dialog's order")
+        let everything = ShareCounts(messages: 2, toolCalls: 2, tasks: 2, comments: 2, files: 2, runs: 2, transcripts: 3,
+                                     documents: 2, footnotes: 2)
         for (kind, block) in blocks {
             var panel = SharePanel(kind: kind)
             panel.loaded(ShareLinkRead(
                 link: ShareLink(id: "l", kind: kind, token: "t",
                                 include: ShareInclude(taskPages: true, commentsAndFiles: true, conversations: true,
-                                                      toolOutput: true),
+                                                      toolOutput: true, footnotes: true),
                                 root: ShareRootSummary(id: "r")),
                 counts: everything))
             let webRows = try rows(in: block)
@@ -182,6 +185,10 @@ final class SharePanelCopyParityTests: XCTestCase {
                 if row.name == "Conversations" {
                     assertSays(web, kind == .project ? "${CONVERSATIONS_RISK}" : "detail: CONVERSATIONS_RISK",
                                in: Self.modal)
+                } else if row.name == "Footnotes" {
+                    // What a footnote shows, then the same fixed risk sentence.
+                    assertSays(web, "detail: `\(SharePanelCopy.footnotesDetail) ${CONVERSATIONS_RISK}`", in: Self.modal)
+                    XCTAssertEqual(row.detail, SharePanelCopy.footnotesDetail + " " + SharePanelCopy.conversationsRisk)
                 } else {
                     assertSays(web, "detail: '\(row.detail)'", in: Self.modal)
                 }
@@ -199,7 +206,8 @@ final class SharePanelCopyParityTests: XCTestCase {
         let web = try source(Self.modal)
         assertSays(web, "count: () => '\(SharePanelCopy.always)'", in: Self.modal)
         for (field, noun) in [("messages", "message"), ("toolCalls", "call"), ("comments", "comment"),
-                              ("transcripts", "transcript"), ("tasks", "task")] {
+                              ("transcripts", "transcript"), ("tasks", "task"), ("documents", "document"),
+                              ("footnotes", "footnote")] {
             assertSays(web, "countOf(counts.\(field) ?? 0, '\(noun)')", in: Self.modal)
         }
         assertSays(web, "...(counts.files ? [countOf(counts.files, 'file')] : [])].join(' · ')", in: Self.modal)

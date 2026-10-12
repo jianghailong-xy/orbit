@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && NO_COLOR=1 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep \" select-(enter-down-enter|down-7-enter|down-n-enter) (burst|paced) \"",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_d2e9ebc43213",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "7676745ffbd214b72e91c62e36cc399a1799078b",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T13:21:45.614206+00:00",
+ "exitCode": 1,
+ "outputSha256": "c76f333a379a3173c8805eb558fb3ed8a35465290abe3effd4c02504e88d2a08",
+ "outputBytes": 68750,
+ "note": "359 passed / 1 failed: antd-sample select-down-n-enter paced 10 never mounted the fixture; its trace (baseline-select-e-traces.json) shows 12 module requests aborted with net::ERR_NETWORK_CHANGED, and the last actions are newPage, goto and the theme expect, before any key. Rerun in baseline-rerun."
+}

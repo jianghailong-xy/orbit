@@ -1,0 +1,16 @@
+tree start 5034a3e9f run 2 2026-10-09T11:29:57Z load 29.38 28.39 28.64
+cgroup: 0::/system.slice/run-p3184572-i53484960.scope oom_score_adj 500
+
+ RUN  v5.0.2 /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/start/src/web
+
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  19:29:59
+   Duration  11.17s (transform 51%, tests 29%, import 16%, environment 4%)
+
+  Transform  transforming modules took 5.65s · 51% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+exit=0

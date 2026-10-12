@@ -87,15 +87,16 @@ describe('the server-placement labels in the pending tail', () => {
     expect(html).not.toContain('Cancel');
   });
 
-  it('names withdrawing a queued wake for what it does, and says what follows', () => {
+  it('names withdrawing a queued wake for what it does, and leaves what follows to the confirmation', () => {
     // Nobody typed a wake, so there is nothing to cancel and take back: withdrawing it loses it for
-    // good (the watch dead-letters the delivery and never sends it again).
+    // good (the watch dead-letters the delivery and never sends it again). That sentence is what the
+    // action's confirmation says (WorkspaceView.queuedTurnWake); under the wake's one-line event the
+    // queue's line is its state and the action alone, as a background wake's is.
     const html = renderToStaticMarkup(<QueuedTurnMeta placement="queued" wake onCancel={() => {}} />);
     expect(html).toContain('Queued for next turn');
     expect(html).toContain('>Withdraw wake</a>');
-    // React escapes the apostrophe in static markup, so the sentence is matched either side of it.
-    expect(html).toContain('If withdrawn, this session is not woken this time, and the watch won');
-    expect(html).toContain('t send it again.');
+    expect(html).not.toContain('If withdrawn');
+    expect(html).not.toContain('chat-queued-why');
     expect(html).not.toContain('Cancel');
   });
 

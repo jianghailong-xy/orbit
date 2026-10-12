@@ -1,0 +1,662 @@
+<!doctype html>
+<!-- Design mock: a project's main branch on iOS / macOS — the native half of 01-board. The start card
+     (StartProjectCard in OrbitApp's ApprovalCards.swift: the conversation's card, opened as a review
+     sheet on a phone, and the project page's Start…) and the project page's How it runs
+     (ProjectsView.runSettingsSection) are one set of SwiftUI views for both platforms; their words
+     are OrbitKit's StartProject.swift / ProjectRunSettings.swift. "现在" frames are drawn from the
+     project tip's source (7217e3402); "改后" frames are the proposal, in the words the web shipped on
+     the project branch (lib/projectStart.ts, MainBranchSelect.tsx). Phone shell and marks come from the
+     iOS kit of ../antigravity-accounts. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Project main branch · iOS / macOS</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<style>
+  /* ── board chrome ─────────────────────────────────────────────────────────────────────────── */
+  .m-sheet { width: 1900px; }
+  .m-sub { line-height: 1.75; max-width: 1780px; }
+  .mb-row4 { display: grid; grid-template-columns: repeat(4, 413px); gap: 34px; align-items: start; }
+  .mb-span2 { grid-column: span 2; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap code, .m-notes code, .m-sub code, .mb-tbl code, .mb-box code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #eef0f3; }
+  .mb-notes2 { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; align-items: start; }
+  .mb-notes2 .m-notes { margin-top: 0; }
+  .mb-notes2 .m-notes + .m-notes, .mb-tbl + .m-notes { margin-top: 14px; }
+  .m-notes h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-1); }
+  .ask { background: #fff7e6; }
+  .ask .m-n { background: #fa8c16; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+  .ring.grey { border-color: #5b6270; }
+  .mb-box { padding: 14px 16px; border-radius: 10px; background: #f5f6f8; font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .mb-box h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-1); }
+  .mb-box p { margin: 0; }
+  .mb-box p + p { margin-top: 8px; }
+  .mb-box b { color: var(--text-1); }
+  .mb-tbl { border-collapse: collapse; width: 100%; font-size: 12.5px; line-height: 1.65; background: #fff; }
+  .mb-tbl th, .mb-tbl td { border: 1px solid #dde0e6; padding: 7px 10px; text-align: left; vertical-align: top; }
+  .mb-tbl th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .mb-tbl td:first-child { font-weight: 600; color: var(--text-1); }
+  .mb-tbl td.same { color: var(--text-3); }
+  .mb-tbl td.chg { color: #0958d9; }
+  .mb-tbl .en { font-family: Inter, sans-serif; }
+  .mb-tbl s { color: var(--text-3); }
+  .mb-tl { font-size: 13px; font-weight: 600; color: var(--text-1); margin: 0 0 8px 2px; }
+  .mb-tbl td:first-child { width: 118px; }
+  .mb-en { font-family: Inter, sans-serif; }
+  .mb-and { margin: 18px 0 0; padding: 9px 14px; border-radius: 8px; background: #f0f5ff; font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .mb-and .m-k { margin-right: 6px; background: #dbe7ff; color: #1d4ed8; }
+  .mb-and code { font-size: 11.5px; padding: 0 4px; border-radius: 4px; background: #e3ebfb; }
+
+  /* ── iOS 26, light, as the app draws it (sizes are SwiftUI's: .body 17/22, .subheadline 15/20,
+        .footnote 13/18, .caption2 11/13; accent #3E69F6 is the app's own) ─────────────────────── */
+  .mb-ph { background: #c5c5c5; }
+  .mb-ph .ph-sb .t { font-variant-numeric: tabular-nums; }
+  .mb-mono { font-family: "SF Mono", "JetBrains Mono", ui-monospace, monospace; letter-spacing: 0; }
+  .mb-home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; z-index: 9; }
+  .mb-gcap { height: 44px; padding: 0 16px; border-radius: 22px; display: inline-flex; align-items: center; gap: 10px; font-size: 17px;
+             background: #f9f9fc; box-shadow: 0 0 0 .75px rgba(0, 0, 0, .14), 0 2px 6px rgba(0, 0, 0, .06); white-space: nowrap; }
+
+  /* the review sheet the conversation's card opens in (ApprovalReviewSheet → ApprovalReviewLayout) */
+  .mb-sheet { position: absolute; top: 59px; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 40px 40px 0 0; overflow: hidden; }
+  .mb-scroll { position: absolute; left: 0; right: 0; top: 0; padding: 70px 16px 220px; display: flex; flex-direction: column; gap: 12px; }
+  .mb-nav { position: absolute; top: 0; left: 0; right: 0; height: 74px; z-index: 3; display: flex; align-items: center; padding: 0 16px;
+            background: linear-gradient(#fff 72%, rgba(255, 255, 255, 0)); }
+  .mb-nav .tt { position: absolute; left: 70px; right: 70px; text-align: center; font-size: 17px; font-weight: 600; }
+  .mb-nav .ph-gb { margin-left: auto; }
+  .mb-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 12px 16px 46px; display: flex; flex-direction: column; gap: 10px;
+            background: rgba(248, 248, 250, .9); backdrop-filter: blur(22px) saturate(1.6); box-shadow: 0 -.5px 0 rgba(60, 60, 67, .29); }
+  .mb-go, .mb-chat { height: 36px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+  .mb-go { background: #3e69f6; color: #fff; font-weight: 600; }
+  .mb-chat { background: rgba(120, 120, 128, .12); color: #3e69f6; font-weight: 500; }
+  .mb-bcap { margin-top: 2px; font-size: 11px; line-height: 13px; color: #8a8a8e; text-align: center; }
+
+  /* StartProjectCard's content */
+  .mb-hd { display: flex; flex-direction: column; gap: 2px; }
+  .mb-title { font-size: 17px; line-height: 22px; font-weight: 600; }
+  .mb-meta { font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .mb-panel { background: #fff; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .07); }
+  .mb-prow { position: relative; padding: 10px 12px; }
+  .mb-prow + .mb-prow::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: .5px; background: rgba(60, 60, 67, .29); }
+  .mb-q { display: flex; flex-direction: column; gap: 4px; }
+  .mb-qh { display: flex; align-items: center; gap: 5px; font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .mb-q p { margin: 0; font-size: 15px; line-height: 20px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .mb-more { font-size: 13px; line-height: 18px; color: #3e69f6; }
+  .mb-sh { padding-top: 4px; font-size: 13px; line-height: 18px; font-weight: 600; color: #8a8a8e; text-transform: uppercase; }
+  .mb-cr { display: flex; gap: 8px; align-items: flex-start; }
+  .mb-cr i { flex: none; min-width: 14px; text-align: right; font: 11px/22px "SF Mono", "JetBrains Mono", monospace; font-style: normal; color: #8a8a8e; }
+  .mb-cr p { margin: 0; font-size: 17px; line-height: 22px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .mb-ft { font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .mb-h { display: flex; align-items: center; gap: 8px; min-height: 22px; font-size: 17px; line-height: 22px; }
+  .mb-h > .v { margin-left: auto; display: flex; align-items: center; gap: 4px; color: #3e69f6; white-space: nowrap; }
+  .mb-h > .q { margin-left: auto; color: #8a8a8e; white-space: nowrap; }
+  .mb-h > .br { margin-left: auto; color: #8a8a8e; white-space: nowrap; font-family: "SF Mono", "JetBrains Mono", monospace; font-size: 16px; letter-spacing: 0; }
+  .mb-h > .lk { margin-left: auto; display: flex; align-items: center; gap: 5px; color: #8a8a8e; white-space: nowrap; }
+  .mb-h > .lk .mb-mono { font-size: 15px; }
+  .mb-h svg { flex: none; display: block; }
+  .mb-dis .mb-h > .v, .mb-dis .mb-h > .br { color: #c4c4c7; }
+  .mb-dis .mb-h svg { opacity: .45; }
+  .mb-dis .mb-h .v svg path { stroke: #c4c4c7; }
+  .mb-s { margin-top: 6px; font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .mb-field { margin-top: 6px; font: 13px/18px "SF Mono", "JetBrains Mono", monospace; letter-spacing: 0; }
+  .mb-sw { margin-left: auto; position: relative; flex: none; width: 63px; height: 28px; border-radius: 14px; background: rgba(120, 120, 128, .16); }
+  .mb-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 38px; height: 24px; border-radius: 12px; background: #fff;
+                  box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
+  .mb-sw.on { background: #34c759; }
+  .mb-sw.on::after { left: 23px; }
+  .mb-stp { flex: none; display: flex; margin-left: 2px; border-radius: 16px; background: rgba(120, 120, 128, .12); }
+  .mb-stp span { width: 47px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 300; }
+  .mb-stp span + span { box-shadow: inset .5px 0 0 rgba(60, 60, 67, .25); }
+  .mb-ctu { margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: rgba(62, 105, 246, .10); display: flex; flex-direction: column; gap: 5px; }
+  .mb-ctu .t { font-size: 11px; line-height: 13px; font-weight: 600; color: #3e69f6; text-transform: uppercase; }
+  .mb-ctu .it { display: flex; gap: 7px; align-items: baseline; font-size: 15px; line-height: 20px; }
+  .mb-ctu .it svg { flex: none; position: relative; top: 1px; }
+  .mb-ctu .it .d { color: #8a8a8e; }
+  .mb-graph { position: relative; height: 196px; }
+  .mb-gn { position: absolute; width: 142px; padding: 6px 9px; border-radius: 9px; background: #f2f2f7; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06);
+           font-size: 12px; line-height: 15px; }
+  .mb-gn b { display: block; font-weight: 600; }
+  .mb-gn span { color: #8a8a8e; }
+
+  /* a sheet over the card: the main branch picker (cf. WorktreeBar.swift MergeTargetPickerSheet) */
+  .mb-dim { position: absolute; inset: 0; z-index: 5; background: rgba(0, 0, 0, .2); }
+  .mb-pick { position: absolute; z-index: 6; left: 8px; right: 8px; bottom: 8px; top: 404px; border-radius: 40px; background: #fff; overflow: hidden;
+             box-shadow: 0 10px 40px rgba(0, 0, 0, .22); }
+  .mb-pick.large { left: 0; right: 0; bottom: 0; top: 70px; border-radius: 40px 40px 0 0; }
+  .mb-back { position: absolute; z-index: 5; left: 12px; right: 12px; top: 62px; height: 40px; border-radius: 36px 36px 0 0; background: #ececef; }
+  .mb-grab { position: absolute; top: 6px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: #c9c9ce; }
+  .mb-pnav { position: relative; height: 66px; display: flex; align-items: center; padding: 0 14px; }
+  .mb-pnav .tt { position: absolute; left: 110px; right: 110px; text-align: center; font-size: 17px; font-weight: 600; }
+  .mb-search { margin: 0 16px 4px; height: 40px; padding: 0 12px; border-radius: 20px; display: flex; align-items: center; gap: 7px;
+               background: rgba(120, 120, 128, .12); color: #8a8a8e; font-size: 17px; }
+  .mb-search svg { flex: none; display: block; }
+  .mb-search .tx { color: #000; }
+  .mb-search .clr { margin-left: auto; }
+  .mb-caret { display: inline-block; width: 2px; height: 21px; margin-left: -6px; border-radius: 1px; background: #3e69f6; }
+  .mb-lh { padding: 12px 20px 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: #8a8a8e; }
+  .mb-li { position: relative; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px; }
+  .mb-li + .mb-li::before { content: ''; position: absolute; top: 0; left: 20px; right: 0; height: .5px; background: rgba(60, 60, 67, .29); }
+  .mb-li .n { font: 15px/20px "SF Mono", "JetBrains Mono", monospace; letter-spacing: 0; }
+  .mb-li .tg { font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .mb-li svg { margin-left: auto; flex: none; display: block; }
+  .mb-li .u { font-size: 17px; line-height: 22px; }
+  .mb-lf { padding: 8px 20px 0; font-size: 13px; line-height: 18px; color: #8a8a8e; box-shadow: inset 0 .5px 0 rgba(60, 60, 67, .29); margin-top: 4px; padding-top: 9px; }
+  /* the keyboard, while a name is typed */
+  .mb-kb { position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; height: 292px; padding: 9px 3px 0; background: #d5d7dd; }
+  .mb-kr { display: flex; justify-content: center; gap: 6px; margin-bottom: 11px; }
+  .mb-k { width: 33px; height: 43px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #fdfdfe;
+          box-shadow: 0 1px 0 rgba(0, 0, 0, .28); font-size: 22px; color: #000; }
+  .mb-k.fn { width: 44px; background: #b4b8c1; font-size: 17px; }
+  .mb-kr.r3 .mb-k.fn { width: 44px; }
+  .mb-kr.r3 { gap: 6px; }
+  .mb-k.sp { width: 200px; font-size: 16px; }
+  .mb-k.go { width: 92px; background: #3e69f6; color: #fff; font-size: 16px; }
+  .mb-k.num { width: 92px; background: #b4b8c1; font-size: 16px; }
+  .mb-kx { display: flex; justify-content: space-between; padding: 6px 26px 0; }
+  .mb-kx span { width: 26px; height: 26px; border-radius: 13px; background: #a5a9b3; }
+
+  /* an iOS 26 menu over the card (the line's Menu: a Toggle per option, the one that is on ticked) */
+  .mb-mdim { position: absolute; inset: 0; z-index: 5; background: rgba(0, 0, 0, .05); }
+  .mb-menu { position: absolute; z-index: 6; width: 300px; padding: 8px 0; border-radius: 26px; background: rgba(249, 249, 251, .98);
+             box-shadow: 0 0 0 .5px rgba(0, 0, 0, .08), 0 12px 40px rgba(0, 0, 0, .2); }
+  .mb-mi { display: flex; gap: 10px; padding: 9px 20px 9px 16px; }
+  .mb-mi .ck { flex: none; width: 16px; padding-top: 4px; }
+  .mb-mi b { display: block; font-weight: 400; font-size: 17px; line-height: 22px; }
+  .mb-mi span.s { display: block; margin-top: 1px; font-size: 15px; line-height: 20px; color: #8a8a8e; overflow-wrap: anywhere; }
+  .mb-ms { height: .5px; margin: 4px 0 4px 42px; background: rgba(60, 60, 67, .2); }
+
+  /* the project page (ProjectsView: an inset-grouped List, prominent section headers) */
+  .mb-pg { background: #f2f2f7; }
+  .mb-pscroll { position: absolute; left: 0; right: 0; top: 0; padding: 112px 0 60px; }
+  .mb-pnav2 { position: absolute; z-index: 3; top: 0; left: 0; right: 0; height: 122px; padding: 56px 16px 0; display: flex; align-items: flex-start; gap: 12px;
+              background: linear-gradient(#f2f2f7 78%, rgba(242, 242, 247, 0)); }
+  .mb-pnav2 .tt { flex: 1; min-width: 0; padding-top: 3px; display: flex; flex-direction: column; align-items: center; }
+  .mb-pnav2 .tt b { max-width: 100%; font-size: 17px; line-height: 22px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mb-pnav2 .tt span { font-size: 11px; line-height: 13px; color: #8a8a8e; }
+  .mb-pnav2 .mb-gcap { gap: 14px; padding: 0 14px 0 16px; font-weight: 600; font-size: 15px; }
+  .mb-gh { display: flex; align-items: baseline; gap: 8px; padding: 14px 20px 9px; }
+  .mb-gh b { font-size: 22px; line-height: 28px; font-weight: 700; }
+  .mb-gh span { font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .mb-gcard { margin: 0 16px; background: #fff; border-radius: 26px; overflow: hidden; }
+  .mb-gr { position: relative; padding: 12px 16px; font-size: 17px; line-height: 22px; }
+  .mb-gr + .mb-gr::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: rgba(60, 60, 67, .22); }
+  .mb-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .mb-opt { display: flex; gap: 8px; align-items: flex-start; }
+  .mb-opt > svg { flex: none; margin-top: 1px; }
+  .mb-opt .t b { font-weight: 600; }
+  .mb-opt .t .mb-mono { font-size: 13px; color: #8a8a8e; }
+  .mb-opt .mb-s { margin-top: 2px; }
+  .mb-blue { color: #3e69f6; }
+  /* the page's own header, cut out (title, status, the integration line's facts) */
+  .mb-hdr { display: flex; flex-direction: column; gap: 8px; padding: 6px 20px 4px; }
+  .mb-hdr .t { font-size: 22px; line-height: 28px; font-weight: 700; }
+  .mb-hdr .m { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .mb-hdr .pill { padding: 2px 7px; border-radius: 6px; background: rgba(62, 105, 246, .13); color: #3e69f6; font-weight: 600; }
+  .mb-hdr .f { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .mb-hdr .f svg { flex: none; margin-top: 2px; }
+
+  /* rows on their own, cut out of a phone */
+  .mb-cuts { display: flex; flex-direction: column; gap: 14px; margin: 10px; }
+  .mb-cut-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 4px; }
+  .mb-cut { position: relative; width: 393px; box-sizing: border-box; border-radius: 22px; padding: 12px 16px; background: #fff; color: #000;
+            font-family: Inter, "Noto Sans SC", sans-serif; letter-spacing: -.01em; box-shadow: 0 0 0 1px #dcdce0; -webkit-font-smoothing: antialiased; }
+  .mb-cut.grouped { background: #f2f2f7; padding: 12px 0; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">项目的主分支 · iOS / macOS：开始卡片和 How it runs 多一行 Main branch，记住上次的选择，文案叫它的名字</h1>
+  <p class="m-sub zh">iOS 和 macOS 是同一批 SwiftUI 视图：开始卡片 <code>StartProjectCard</code>（<code>ApprovalCards.swift</code>；对话里的卡在 iPhone 上点开是一张审阅页，项目页的 Start… 是 <code>OwnerStartProjectSheet</code>，同一张卡），项目页的 How it runs 是 <code>ProjectsView.runSettingsSection</code>，字都在 OrbitKit 的 <code>StartProject.swift</code> / <code>ProjectRunSettings.swift</code>，由对照测试和 Web 逐字比。这里只画 iPhone（浅色），规则和每一句英文照 Web 那张（<code>01-board.png</code>）和已经落在项目分支上的 Web 实现（<code>MainBranchSelect.tsx</code>、<code>lib/projectStart.ts</code>）。「现在」按项目分支 <code>7217e3402</code> 上的代码画，「改后」是提案。例子和 Web 一样：仓库 <code>acme/payments-api</code> 的主分支是 <code>master</code>，协调工作区 <code>payments-api</code> 报上来的本地分支是 develop / master / release/2.4。灰色字母标现在的问题，橙色数字标改动。<b>主分支是 main 的项目，除了多出 Main branch 这一行、锁定说明多半句，其它字一字不差。</b>Android 跟这同一份图：每一段下面一行写 Android 的对应位置，最后的说明里有细节和文案总表。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 开始卡片 Start this project?（对话里的卡，在 iPhone 上点 View details &amp; act 打开的审阅页；项目页的 Start… 是同一张卡）</div>
+    <div class="mb-row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>卡上没有主分支这一项</div>
+        <div id="a1"></div>
+        <p class="m-cap zh"><b>A</b> 协调者在卡片顶上那段话里说了「这个仓库的主分支是 master」，Automatic 这句却写 merges into main。<b>B</b> Tasks land on 和 Merge check 之间没有地方选主分支：按下 Start，项目绑到 <code>refs/heads/main</code>，这个仓库没有 main，任务一启动就报 <code>BASE_REF_NOT_FOUND</code>，只能去终端 <code>orbit project update --upstream-ref</code>。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>多一行 Main branch</div>
+        <div id="a2"></div>
+        <p class="m-cap zh"><b>1</b> Tasks land on 下面多一行 <b>Main branch</b>：两项是同一个决定，也一起锁。值是协调者在开始请求里建议的 <code>master</code>（它读了 <code>origin/HEAD</code>）。分支名用等宽字，右边是 ›：点开是一个选择页，不是菜单（见待定 ①）。<b>2</b> 卡上所有说「合进哪里」的句子都跟着叫 master。按 Start 时连同 <code>upstreamRef: refs/heads/master</code> 一起写入，这一下也记成「你给 acme/payments-api 选的」。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">过程</span>点 Main branch：选择页</div>
+        <div id="a3"></div>
+        <p class="m-cap zh"><b>3</b> 半屏的选择页，和会话里选合并目标的 Merge into 同一个样子（<code>WorktreeBar.swift</code> 的 <code>MergeTargetPickerSheet</code>）：小标题 Branches in payments-api，列出 runner 给协调工作区报上来的本地分支（和会话 Merge 菜单同一份，去掉 <code>orbit/*</code>），当前的值打 ✓，点一个就选中并收起。<b>4</b> 最下面一句说这一项决定什么。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">过程</span>列表里没有：直接输入</div>
+        <div id="a4"></div>
+        <p class="m-cap zh"><b>5</b> 远端才有、runner 还没报上来的分支，在搜索框里直接输入：列表跟着过滤，输入的不在列表里、又像个分支名时，多出一行 <span class="mb-en">Use “release/3.0”</span>，点它就用这个名字。带空格、<code>..</code>、<code>~^:?*[</code> 的不出现 Use。runner 一个分支都没报时，列表里只剩当前的值，照样能输入（小标题换成 Type a branch name）。</p>
+      </div>
+    </div>
+    <p class="mb-and zh"><span class="m-k">Android</span><code>projects/StartProjectCard.kt</code> 的 <code>LineRow</code> 下面加 <code>MainBranchRow</code>（这张卡也用在 <code>ProjectSettings.kt</code> 的 <code>OwnerStartSheet</code> / <code>RequestedStartSheet</code> 和对话里的 <code>CoordinatorStartCard</code>）；值是一个 <code>TextButton</code>，点开的选择界面照 <code>reader/WorktreeBar.kt</code> 的 <code>MergeTargetPicker</code>（Dialog：Cancel + 输入框 + 分支列表，当前的打 ✓），加上 Use “…” 和底部那一句。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 同一个仓库的下一个项目：直接带上你上次选的</div>
+    <div class="mb-row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>第二个项目，主分支已经是 master</div>
+        <div id="b1"></div>
+        <p class="m-cap zh"><b>6</b> 两天前你给 acme/payments-api 的第一个项目选了 master。这次协调者没建议（仓库已经记住了就不用建议），卡上直接是 master，下面一行小字 Your last choice for acme/payments-api 说它从哪来。改成别的，这行字就不显示；按 Start 后，新选的就是这个仓库新的「上次」。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>选择页里标出上次选的</div>
+        <div id="b2"></div>
+        <p class="m-cap zh"><b>7</b> 上次选的分支后面标 last chosen，和 Web 的下拉、会话 Merge 菜单在当前目标后面标 selected 是同一个做法；当前的值照旧打 ✓。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin:0 0 8px 10px"><span class="m-k state">边界</span>这一行的几种样子</div>
+        <div class="mb-cuts" id="b3"></div>
+        <p class="m-cap zh" style="margin-left:14px; width:395px">卡片失效（计划变了，请求作废）或正在开始时，这一行和别的设置一样变灰、点不动。没有仓库的项目（工作区没记录远端）没有这一行：没有分支可合，其余和现在一样。</p>
+      </div>
+      <div class="mb-box zh" style="margin-top:31px">
+        <h4>初始值从哪来（和 Web 同一个顺序）</h4>
+        <p><b>取第一个有的</b>：这个项目自己已经选过的 → 你上次给同一个仓库选的（标 6）→ 协调者建议的（标 1）→ main。你自己的选择排在协调者的建议前面。</p>
+        <p><b>什么算一次选择</b>：开始卡片上按 Start（卡上显示的那个就算）、How it runs 里选中（iPhone / Mac 上选中就写入，见标 8）、终端 <code>orbit project update --upstream-ref</code>、API。</p>
+        <p><b>记在哪</b>：服务端，按「账号 + 仓库」记。iPhone、Mac、Web、Android 看到的都一样，换台机器、换个工作区也一样。</p>
+        <p><b>对话里的卡要多读一次</b> <code>GET /projects/:id/integration</code>（仓库、分支列表、上次的选择）。现在对话只在合并卡卡住时才读它；读回来之前不画这张卡（和 Web 的对话卡一样），免得先画出 main 再跳成 master。读失败时不显示这一行，开始时保留项目原有的主分支。</p>
+      </div>
+    </div>
+    <p class="mb-and zh"><span class="m-k">Android</span>同一个 <code>MainBranchRow</code> 下面用 <code>Note</code> 多一行 Your last choice for …；Dialog 里上次选的分支后面标 last chosen。初始值的顺序写在 <code>StartProjectCopy</code> 里，和 iOS、Web 同一个。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 项目页的 How it runs（项目已开始）和标题下的集成行</div>
+    <div class="mb-row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>主分支已改成 master，页面还写 main</div>
+        <div id="c1"></div>
+        <p class="m-cap zh"><b>C</b> 这个项目的主分支已经在终端改成了 master，How it runs 里却写 Directly into main、Every merge into main asks you；<b>D</b> Automatic 那段写 merges the branch into main。主分支在这一页既看不到也改不了。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>多一行 Main branch，文案叫 master</div>
+        <div id="c2"></div>
+        <p class="m-cap zh"><b>8</b> Tasks land on 下面多一行 Main branch，点开是同一个选择页（标 3、5、7）。iPhone 的 How it runs 没有 Save，每一行改了就写（Tasks land on 也是这样），所以选中即写入：<code>PATCH /projects/:id/integration</code> 的 <code>upstreamRef</code>；门拒绝时照旧弹 Couldn't do that。下面一句说明：这也是 acme/payments-api 以后新项目的默认值。<b>9</b> 两个选项、Automatic、Merge check、Pause 的说明都叫 master。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k state">状态</span>开始集成以后：和线一起锁住</div>
+        <div id="c3"></div>
+        <p class="m-cap zh"><b>10</b> 集成一开始，线和主分支一起锁住（服务端 409 <code>INTEGRATION_LINE_LOCKED</code>）。两行都只读，值前面一把锁，和现在锁住的 Tasks land on 一个样子；原来写在 Tasks land on 下面的说明挪到 Main branch 下面，多半句 and its main branch，并且叫 master。没有仓库的项目还是左下 a 的样子。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin:0 0 8px 10px"><span class="m-k">现在</span> / <span class="m-k new">改后</span>锁定说明和标题下的集成行</div>
+        <div class="mb-cuts" id="c4"></div>
+        <p class="m-cap zh" style="margin-left:14px; width:395px"><b>E</b>→<b>11</b> 标题下的集成行（<code>ProjectPage.integrationFacts</code>）：ahead of main、synced with main 改叫项目的主分支名。直接合进主分支的项目，这一行第一项本来就是主分支名，不变。</p>
+      </div>
+    </div>
+    <p class="mb-and zh"><span class="m-k">Android</span><code>projects/ProjectSettings.kt</code> 的 <code>RunSettingsSection</code>：<code>LineSetting</code>（72–89）下面加 <code>MainBranchSetting</code>，选中就 <code>PATCH /projects/:id/integration</code>（照 <code>lineWrite</code>，没有 Save）；锁住时写「🔒 master」，<code>lineLocked</code> 那句挪到它下面换成新句子。标题下的集成行是 <code>ProjectsScreen.kt</code> 的 <code>Header</code>（611–619），读 <code>ProjectPage.integrationFacts</code>。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 文案叫 master 的几处</div>
+    <div class="mb-row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>Tasks land on 的菜单</div>
+        <div id="d1"></div>
+        <p class="m-cap zh"><b>12</b> 开始卡片 Tasks land on 的菜单：第二项叫 Directly into master，说明 Every merge into master asks you.（How it runs 里的两个选项见标 9。）</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>关掉 Automatic、展开 Merge check</div>
+        <div id="d2"></div>
+        <p class="m-cap zh"><b>13</b> You decide when each task is done and when the branch goes into master.<b> 14</b> Comes to you 里的 Merging the branch into master（直接合进主分支时是 Each merge into master）。<b>15</b> Merge check 的说明 … and again before master.</p>
+      </div>
+      <div class="mb-span2">
+        <div class="mb-tl zh">其余写死 main 的地方：跟 Web 那个任务（项目页其余二十多句）同一张清单，iOS / macOS、Android 一起改</div>
+        <table class="mb-tbl zh">
+          <tr><th>地方</th><th>现在 → 改后（主分支是 master 时）</th><th>iOS / macOS</th><th>Android</th></tr>
+          <tr><td>开始卡片、How it runs</td><td class="chg">16 句（本图第 ①–④ 段）：Directly into <s>main</s> master、merges into <s>main</s> master、Merging the branch into <s>main</s> master……</td><td><code>StartProject.swift</code>（<code>RunSettings</code> / <code>StartProject</code>）、<code>ProjectRunSettings.swift</code></td><td><code>ProjectPage.kt</code> 的 <code>StartProjectCopy</code> / <code>RunSettings</code></td></tr>
+          <tr><td>标题下的集成行</td><td class="chg">ahead of <s>main</s> master、synced with <s>main</s> master</td><td><code>ProjectPage.integrationFacts</code></td><td><code>ProjectPage.kt:361–371</code></td></tr>
+          <tr><td>Work overview 两格</td><td class="chg">not on <s>main</s> master yet、On <s>main</s> master、landed on <s>main</s> master</td><td><code>ProjectPage.swift</code> 的 overview</td><td><code>ProjectPage.kt:74–75</code></td></tr>
+          <tr><td>落地队列的作业名</td><td class="chg">Merge to <s>main</s> master、syncing <s>main</s> master</td><td><code>ProjectPage.swift</code> 的作业名表</td><td><code>ProjectPage.kt:96–97</code></td></tr>
+          <tr><td>验收标准的落点</td><td class="chg">on <s>main</s> master、not on <s>main</s> master yet</td><td><code>ProjectPage.swift</code> 的标准行</td><td><code>ProjectPage.kt:211–212</code></td></tr>
+          <tr><td>合并卡</td><td class="chg">Merge to <s>main</s> master、✓ Merged into <s>main</s> master（automatically）、Now on <s>main</s> master</td><td><code>OwnerItemCards.swift</code> 的 <code>PromotionCards</code>、<code>ApprovalCards.swift</code></td><td>core <code>PromotionCards.kt:48/55/57</code>、<code>PromotionViews.kt:105/165</code></td></tr>
+          <tr><td>确认卡 If you confirm</td><td class="chg">Not on <s>main</s> master yet、No record of this branch on <s>main</s> master、…merging into <s>main</s> master asks you again、Lands on <s>main</s> master by itself…</td><td><code>OwnerConfirmation.swift</code></td><td>Android 没有这一块</td></tr>
+          <tr><td>项目完成卡</td><td class="chg">on / landed on / Landed on <s>main</s> master、Goes to <s>main</s> master after the merge check…、…checked <s>main</s> master has it…、…is on <s>main</s> master: …</td><td><code>ProjectDone.swift</code></td><td><code>ProjectDone.kt:42/55/109/131</code></td></tr>
+          <tr><td>需要你</td><td class="chg">Approve merge to <s>main</s> master</td><td><code>ProjectAttention.swift</code>、<code>NeedsYou.swift</code></td><td><code>ProjectAttention.kt:224</code>、<code>cards/NeedsYou.kt:115</code></td></tr>
+          <tr><td>分享</td><td class="chg">on <s>main</s> master、not on <s>main</s> master yet</td><td><code>ShareMarkdown.swift</code></td><td><code>ProjectPage.kt:1010</code></td></tr>
+          <tr><td>会话列表的开始建议</td><td class="chg">Directly into <s>main</s> master · Automatic on · 2 at a time</td><td><code>SessionProjectCopy.swift</code></td><td><code>directory/SessionProjects.kt:194</code></td></tr>
+          <tr><td>Project started 卡、开始请求那一行</td><td class="chg">Directly into <s>main</s> master、directly into <s>main</s> master</td><td><code>RunSettings.parts</code>、<code>StartProject.requestSummary</code></td><td><code>ProjectPage.kt:967</code></td></tr>
+          <tr><td>不改</td><td class="same" colspan="3">Wiki 的 main（锚点检查）、会话自己的 Merge 目标（本来就是会话选的分支）、给机器读的 kind id（<code>approve-merge-to-main</code>）、代码注释。主分支是 main 时，上面每一句都和现在一字不差。</td></tr>
+        </table>
+      </div>
+    </div>
+    <p class="mb-and zh"><span class="m-k">Android</span>这些句子在 <code>ProjectPage.kt</code> 的 <code>StartProjectCopy</code> / <code>RunSettings</code>；开始卡片的 Tasks land on 是 <code>TextButton</code> + <code>DropdownMenu</code>，当前项前面是「✓ 」。表里最后一栏是其余各处在 Android 上的位置。</p>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">说明</div>
+    <div class="mb-notes2">
+      <div>
+        <table class="mb-tbl zh">
+          <tr><th>情况</th><th>现在</th><th>改后（和 Web 01-board 一致）</th></tr>
+          <tr><td>谁能改主分支</td><td>账号所有者，只能用 CLI 或 API</td><td class="chg">还是只有账号所有者，多了 iPhone / Mac：开始卡片（对话里的卡、项目页 Start…）、项目页 How it runs。agent 会话照旧 403</td></tr>
+          <tr><td>新项目的初始值</td><td>一律 <code>main</code></td><td class="chg">本项目已选 → 你上次给同一个仓库选的 → 协调者建议 → main。平台仍然不去仓库里猜</td></tr>
+          <tr><td>选择页里有什么</td><td>—</td><td class="chg">runner 报上来的工作区本地分支（和 Merge into 同一份），当前的打 ✓，上次选的标 last chosen；搜索框里可以输入列表里没有的（<span class="mb-en">Use “…”</span>）</td></tr>
+          <tr><td>How it runs 里改</td><td>只能用 CLI</td><td class="chg">选中就写入，和 Tasks land on 一样（iPhone / Mac 的 How it runs 没有 Save）；门拒绝时弹 Couldn't do that</td></tr>
+          <tr><td>集成开始后</td><td>改会被 409 拒绝</td><td class="chg">两行只读带锁，说明挪到 Main branch 下面（标 10）；规则本身不变</td></tr>
+          <tr><td>说「合进哪里」的文案</td><td>一律写 main</td><td class="chg">叫项目的主分支名（第 ④ 段和它的表）</td></tr>
+          <tr><td>主分支就是 main 的项目</td><td>—</td><td class="same">除了多出 Main branch 一行、锁定说明多半句，其它字不变</td></tr>
+          <tr><td>没有仓库的项目</td><td>—</td><td class="same">不显示这一行：没有分支可合</td></tr>
+          <tr><td>输入校验</td><td>服务端要求 <code>refs/heads/…</code></td><td class="same">界面只收分支名，写入时加 <code>refs/heads/</code>；不像分支名的不给 Use；服务端规则不变</td></tr>
+          <tr><td>macOS</td><td>—</td><td class="same">同一批视图，不另画：卡片和 How it runs 一样多这一行；选择页在 Mac 上是带搜索框的小窗（Merge into 在 Mac 上就是这样，360×420），菜单里当前项打 ✓</td></tr>
+        </table>
+        <ul class="m-notes zh">
+          <li><h4>要改的地方（iOS / macOS；这次只出图，不动代码）</h4></li>
+          <li><span class="m-n">1</span><span><b>OrbitKit 模型和门</b>：<code>ProjectDetail.swift</code> 的 <code>ProjectIntegrationView</code> 加 <code>repository</code>、<code>branches</code>（names / workspaceName / reportedAt）、<code>lastMainBranch</code>（branch / repository / chosenAt）、<code>upstreamChosenAt</code>；<code>UpdateProjectIntegrationRequest</code> 加 <code>upstreamRef</code>。<code>StartProject.swift</code>：<code>ProjectStartSettings</code> 和 <code>StartProjectRequestBody</code> 加 <code>upstreamRef</code>；<code>StartSettingsDraft</code> 加 <code>upstream</code>（nil = 没有仓库，不画这一行）；<code>startMainBranch</code> 按上面的顺序取初始值；按 Start 时带 <code>refs/heads/&lt;名字&gt;</code>。</span></li>
+          <li><span class="m-n">2</span><span><b>文案</b>：新句子照 Web 逐字：<span class="mb-en">Main branch</span>、<span class="mb-en">Tasks start from it, and the project’s work ends up on it.</span>、<span class="mb-en">Your last choice for …</span>、<span class="mb-en">New projects in … start with your last choice.</span>、<span class="mb-en">last chosen</span>、<span class="mb-en">Branches in …</span>、<span class="mb-en">Type a branch name</span>、<span class="mb-en">Use “…”</span>、锁定说明。说「合进哪里」的句子都改成按分支名生成的函数，原来的常量保留 main 的写法给对照测试读（和 Web 同一个做法）。<code>StartProjectCardCopyParityTests</code>、<code>ProjectRunSettingsCopyParityTests</code>、<code>ProjectPageCopyParityTests</code>、<code>SessionProjectCopyParityTests</code> 跟着改。</span></li>
+          <li><span class="m-n">3</span><span><b>视图（OrbitApp）</b>：<code>ApprovalCards.swift</code> 的 <code>StartProjectCard</code> 在 <code>lineRow</code> 下面加一行；新的 <code>MainBranchPicker</code> 照 <code>WorktreeBar.swift</code> 的 <code>MergeTargetPickerSheet</code> 做（搜索框兼输入、✓、last chosen、<span class="mb-en">Use “…”</span>、底部一句），开始卡片和 How it runs 共用；<code>ProjectsView.swift</code> 的 <code>runSettingsSection</code> 在 <code>lineSetting</code> 下面加 <code>mainBranchSetting</code>（锁住时带锁只读，说明挪过来）；<code>ConsoleModel</code> 给对话里的卡读 integration（<code>startDraft(for:)</code> 等它读回来）；<code>OwnerStartProjectSheet</code> 把 <code>store.integration</code> 递给卡。</span></li>
+          <li><span class="m-n">4</span><span><b>测试和截图</b>：<code>StartProjectTests</code>（初始值顺序、按 Start 带的 <code>upstreamRef</code>）、<code>ProjectRunSettingsTests</code>（选中写什么、锁住不写）；SwiftUI 在 client.yml 的 probe 分支上编译，真实截图和本图标 1–15 的各帧逐帧对照。</span></li>
+        </ul>
+      </div>
+      <div>
+        <ul class="m-notes zh">
+          <li><h4>Android 跟同一份图：对应位置</h4></li>
+          <li><span class="m-n">a</span><span><b>开始卡片</b>：<code>projects/StartProjectCard.kt</code> 的 <code>StartProjectCard</code>，How it runs 那个 <code>StartCardPanel</code> 里 <code>LineRow</code>（第 117 行，定义在 230–252）下面加 <code>MainBranchRow</code>。这张卡有三处用：<code>ProjectSettings.kt</code> 的 <code>OwnerStartSheet</code> / <code>RequestedStartSheet</code>（居中的 Dialog），和对话里的 <code>CoordinatorStartCard</code>（卡片本身和 <code>CardReviewSheet</code>）。草稿 <code>StartProjectCopy.Draft</code>、<code>body</code>（<code>ProjectPage.kt:873–887</code>）和 core 的 <code>ProjectStartSettings</code>（<code>CardModels.kt:34–35</code>）加 <code>upstreamRef</code>。</span></li>
+          <li><span class="m-n">b</span><span><b>选择界面</b>：照 <code>reader/WorktreeBar.kt</code> 的 <code>MergeTargetPicker</code>（Dialog：标题 + Cancel + <code>OutlinedTextField</code> + 分支列表，当前的打 ✓）做：标题 Main branch，输入框提示 Type a branch name，列表头 Branches in payments-api，last chosen，<span class="mb-en">Use “…”</span>，底部一句。Android 的 Merge 选择现在既不能手输、也没有 last chosen，这两样是新加的。</span></li>
+          <li><span class="m-n">c</span><span><b>How it runs</b>：<code>projects/ProjectSettings.kt</code> 的 <code>RunSettingsSection</code>，<code>LineSetting</code>（72–89）下面加 <code>MainBranchSetting</code>；和 iOS 一样没有 Save，选中就 <code>PATCH /projects/:id/integration {upstreamRef}</code>（照 <code>lineWrite</code>）。锁住时写「🔒 master」（现在 Tasks land on 就是「🔒 project/…」），<code>lineLocked</code> 那句挪到这一行下面换成新句子。</span></li>
+          <li><span class="m-n">d</span><span><b>标题下的集成行</b>：<code>ProjectsScreen.kt</code> 的 <code>Header</code>（611–619）读 <code>ProjectPage.integrationFacts</code>（<code>ProjectPage.kt:361–371</code>），ahead of / synced with 跟着叫 master。</span></li>
+          <li><span class="m-n">e</span><span><b>对照测试读的是 Swift</b>：<code>StartProjectCardCopyTest</code> 和 <code>ProjectCopyParityTest</code> 要求 Android 的每个常量在 <code>StartProject.swift</code> / <code>ProjectRunSettings.swift</code> 里有同样的字面量，所以 Swift 那边先落地（或同一份交付），Android 的 Main branch 等新词才会过。</span></li>
+          <li><span class="m-n">f</span><span><b>长相上的不同</b>：Android 的设置行是 <code>TextButton</code> + <code>DropdownMenu</code>，值后面是 ▾，当前项前面是「✓ 」；卡片在 Dialog 或 ModalBottomSheet 里，不是审阅页；锁用「🔒」字符。句子和规则与 iOS 完全一样。</span></li>
+        </ul>
+        <ul class="m-notes zh ask">
+          <li><h4>待你定（每项第一个是我的推荐）</h4></li>
+          <li><span class="m-n">①</span><span><b>iPhone 上怎么选分支。</b><span class="rec">A：选择页</span>（标 3、5、7 画的）——和会话里 Merge into 的分支选择页同一个样子，搜索框兼输入，列表可以很长（Merge into 分支多于 8 个时也是换成这个页）。／ B：菜单——和 Tasks land on 一样点开一个菜单列出分支，最后一项 Other Branch… 弹一个输入框。B 少一层页面，但菜单里不能打字、分支一多就要滚。Android 跟着选：A 是 Dialog（b），B 是 <code>DropdownMenu</code> + 输入对话框。</span></li>
+          <li><span class="m-n">②</span><span><b>How it runs 里改主分支要不要再确认一次。</b><span class="rec">不用，选中就写</span>：和 Tasks land on 一样，开始集成前随时能改回来，下面那句说明了它也是这个仓库以后的默认值。／ 弹一个确认框：「<span class="mb-en">Use develop as the main branch? New projects in acme/payments-api will start with it too.</span>」——多一个要和 Web 对齐的句子，Web 是按 Save 才写，本来就多一步。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="../antigravity-accounts/kit.js"></script>
+<script>
+  // ── icons (SF Symbols, drawn) ────────────────────────────────────────────────────────────────
+  const AC = '#3e69f6';
+  const I = {
+    updown: `<svg width="10" height="15" viewBox="0 0 10 15"><path d="M1.6 5.4 5 2l3.4 3.4M1.6 9.6 5 13l3.4-3.4" fill="none" stroke="${AC}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    right: '<svg width="8" height="13" viewBox="0 0 8 13"><path d="M1.6 1.6 6.4 6.5l-4.8 4.9" fill="none" stroke="#c4c4c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    up: '<svg width="13" height="8" viewBox="0 0 13 8"><path d="M1.6 6.4 6.5 1.6l4.9 4.8" fill="none" stroke="#c4c4c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    person: `<svg width="10" height="11" viewBox="0 0 10 11"><circle cx="5" cy="2.8" r="2.5" fill="${AC}"/><path d="M.3 10.6c.4-2.6 2.3-4 4.7-4s4.3 1.4 4.7 4c0 .2-.1.4-.4.4H.7c-.3 0-.4-.2-.4-.4z" fill="${AC}"/></svg>`,
+    bubble: '<svg width="13" height="12" viewBox="0 0 14 13"><path d="M7 0C3.1 0 0 2.5 0 5.6c0 1.7.9 3.2 2.4 4.2-.1.9-.5 1.8-1.2 2.5-.2.2 0 .6.3.5 1.4-.2 2.6-.8 3.4-1.5.7.2 1.4.3 2.1.3 3.9 0 7-2.5 7-5.6S10.9 0 7 0z" fill="#8a8a8e"/></svg>',
+    lock: '<svg width="11" height="14" viewBox="0 0 11 14"><path d="M2.6 6.2V4.3a2.9 2.9 0 0 1 5.8 0v1.9" fill="none" stroke="#8a8a8e" stroke-width="1.6"/><rect x=".6" y="6" width="9.8" height="7.4" rx="1.8" fill="#8a8a8e"/></svg>',
+    check: `<svg width="15" height="13" viewBox="0 0 15 13"><path d="M1.6 7.2 5.6 11 13.4 1.9" fill="none" stroke="${AC}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    checkInk: '<svg width="15" height="13" viewBox="0 0 15 13"><path d="M1.6 7.2 5.6 11 13.4 1.9" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    on: `<svg width="21" height="21" viewBox="0 0 21 21"><circle cx="10.5" cy="10.5" r="10" fill="${AC}"/><path d="M6 10.8 9.1 13.8 15.2 7.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    off: '<svg width="21" height="21" viewBox="0 0 21 21"><circle cx="10.5" cy="10.5" r="9.3" fill="none" stroke="#c4c4c7" stroke-width="1.5"/></svg>',
+    search: '<svg width="17" height="17" viewBox="0 0 17 17"><circle cx="7.2" cy="7.2" r="5.6" fill="none" stroke="#8a8a8e" stroke-width="1.9"/><path d="m11.4 11.4 4.2 4.2" stroke="#8a8a8e" stroke-width="1.9" stroke-linecap="round"/></svg>',
+    clear: '<svg class="clr" width="17" height="17" viewBox="0 0 17 17"><circle cx="8.5" cy="8.5" r="8.5" fill="#aeaeb2"/><path d="m5.6 5.6 5.8 5.8M11.4 5.6l-5.8 5.8" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    branch: '<svg width="12" height="14" viewBox="0 0 12 14"><circle cx="2.6" cy="2.4" r="1.7" fill="none" stroke="#8a8a8e" stroke-width="1.3"/><circle cx="2.6" cy="11.6" r="1.7" fill="none" stroke="#8a8a8e" stroke-width="1.3"/><circle cx="9.4" cy="4.4" r="1.7" fill="none" stroke="#8a8a8e" stroke-width="1.3"/><path d="M2.6 4.1v5.8M9.4 6.1c0 2.6-6.8 1.8-6.8 3.8" fill="none" stroke="#8a8a8e" stroke-width="1.3"/></svg>',
+    toLine: '<svg width="12" height="14" viewBox="0 0 12 14"><path d="M6 1.2v8.6M2.4 6.4 6 10l3.6-3.6M1.2 12.8h9.6" fill="none" stroke="#8a8a8e" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    more: '<svg width="20" height="5" viewBox="0 0 20 5"><circle cx="2.5" cy="2.5" r="2.2"/><circle cx="10" cy="2.5" r="2.2"/><circle cx="17.5" cy="2.5" r="2.2"/></svg>',
+  };
+  const BAR = `<span class="t">9:41</span><span class="r">${ICON.signal}${ICON.wifi}<span class="ph-batt">48</span></span>`;
+
+  // ── the projects (the web board's own sample: docs/evidence/project-main-branch-web/kit/lib.mjs) ──
+  const P1 = {
+    title: '订单服务接入新支付网关',
+    asked: 'The coordinator asked 2m ago',
+    why: '计划已写好：4 个任务覆盖 3 条验收标准。G2、G3 都依赖 G1 的网关客户端，所以走项目分支，同时最多 2 个；合并检查用 make test；Automatic 开着。这个仓库的主分支是 master（origin/HEAD），项目最后合进 master。',
+    criteria: ['下单、退款、对账三条链路全部走新网关，旧网关的调用点清零。', '签名、重试和幂等键与网关文档一致，联调环境的用例全部通过。', '灰度开关可按商户切换，回滚只需改一个配置。'],
+    confirms: ['G4 · 按商户灰度，演练一次回滚', 'you confirm it'],
+    judged: 3,
+    atMost: 2,
+    caption: 'Starts G1 now · confirms these 3 criteria · seal 5d1a09c3be42',
+    graph: [['G1', '网关客户端：签名、重试、幂等键', 103, 4], ['G2', '下单与退款切到新网关', 22, 70], ['G3', '对账任务改读新网关流水', 184, 70], ['G4', '按商户灰度，演练一次回滚', 103, 136]],
+  };
+  const P2 = {
+    title: '退款对账报表上线',
+    asked: 'The coordinator asked 2m ago',
+    why: '计划已写好：3 个任务覆盖 2 条验收标准，一个接一个做，走项目分支，同时最多 1 个；合并检查用 make test。',
+    criteria: ['财务每天 9 点前收到前一天的退款对账报表，金额与网关流水逐笔对得上。', '对不上的退款单单独列出，带订单号和网关流水号。'],
+    confirms: null,
+    judged: 3,
+    atMost: 1,
+    caption: 'Starts R1 now · confirms these 2 criteria · seal 9b30e7c25a41',
+    graph: [['R1', '报表数据：按天汇总退款与网关流水', 103, 4], ['R2', '对不上的单子单独列出', 103, 70], ['R3', '定时发送与权限', 103, 136]],
+  };
+  const BRANCH = 'project/34cfQ…';
+  const REPO = 'acme/payments-api';
+
+  // ── the start card: StartProjectCard's rows, in the words of lib/projectStart.ts ──────────────
+  const sw = (on) => `<span class="mb-sw${on ? ' on' : ''}"></span>`;
+  const STEPPER = '<span class="mb-stp"><span>−</span><span>+</span></span>';
+  // runAutomaticSays, for a project branch with a merge check
+  const says = (automatic, main) => automatic
+    ? `The coordinator decides when each task is done and merges into ${main} once the merge check passes — with a receipt you can revert.`
+    : `You decide when each task is done and when the branch goes into ${main}.`;
+  // startComesToYou, on a project branch
+  const comes = (p, automatic, main, id) => {
+    const confirm = p.confirms ? [[p.confirms[0], p.confirms[1]]] : [];
+    const items = automatic
+      ? [...confirm, ['Any change to the criteria'], ['Problems it can’t resolve within 2 h']]
+      : [['Whether each task is done', `${p.judged} reviews`], ...confirm, ['Problems along the way', 'conflicts, failed checks'],
+        [`Merging the branch into ${main}`, null, `${id}-merging`], ['Any change to the criteria']];
+    return `<div class="mb-ctu"><div class="t">Comes to you</div>${items.map(([t, d, iid]) =>
+      `<div class="it"${iid ? ` id="${iid}"` : ''}>${I.person}<span>${t}${d ? `<span class="d"> · ${d}</span>` : ''}</span></div>`).join('')}</div>`;
+  };
+  const lineRow = (id, dis) => `<div class="mb-prow${dis ? ' mb-dis' : ''}" id="${id}-line"><div class="mb-h">Tasks land on<span class="v">A project branch${I.updown}</span></div></div>`;
+  // The new row: the branch's name, a › to the picker, and where a remembered branch is shown, whose it is.
+  const mainRow = (id, { value = 'master', hint = null, dis = false } = {}) => `<div class="mb-prow${dis ? ' mb-dis' : ''}" id="${id}-main">
+      <div class="mb-h">Main branch<span class="br">${value}</span>${I.right}</div>${hint ? `<div class="mb-s" id="${id}-hint">${hint}</div>` : ''}</div>`;
+  const mergeRow = (id, open, main) => open
+    ? `<div class="mb-prow" id="${id}-merge"><div class="mb-h">Merge check<span class="q">Set</span>${I.up}</div>
+        <div class="mb-field">make test</div>
+        <div class="mb-s" id="${id}-mhint">Runs on the combined tree before anything lands — on the project branch and again before ${main}.</div></div>`
+    : `<div class="mb-prow" id="${id}-merge"><div class="mb-h">Merge check<span class="q">Set</span>${I.right}</div></div>`;
+  const atMostRow = (p) => `<div class="mb-prow"><div class="mb-h">At most<span class="q">${p.atMost} ${p.atMost === 1 ? 'task' : 'tasks'} at a time</span>${STEPPER}</div></div>`;
+  const graph = (p) => `<div class="mb-graph">${p.graph.map(([k, t, x, y]) => `<div class="mb-gn" style="left:${x}px;top:${y}px"><b>${k}</b><span>${t}</span></div>`).join('')}</div>`;
+
+  /** The card's content. o: { id, main (the word the sentences say), row (draw Main branch), hint,
+   *  automatic, mergeOpen } */
+  function startBody(p, o) {
+    const automatic = o.automatic !== false;
+    return `<div class="mb-hd"><div class="mb-title">${p.title}</div><div class="mb-meta">${p.asked}</div></div>
+      <div class="mb-panel"><div class="mb-prow mb-q"><div class="mb-qh">${I.bubble}Coordinator</div><p>${p.why}</p><span class="mb-more">More</span></div></div>
+      <div class="mb-sh">Done when · ${p.criteria.length} criteria</div>
+      ${p.criteria.map((t, i) => `<div class="mb-cr"><i>${i + 1}</i><p>${t}</p></div>`).join('')}
+      <div class="mb-ft">Orbit derives done from these ${p.criteria.length} criteria and nothing else. If they change later, it asks you to confirm the new version — the project keeps running.</div>
+      <div class="mb-sh" id="${o.id}-how">How it runs</div>
+      <div class="mb-panel" id="${o.id}-panel">
+        <div class="mb-prow" id="${o.id}-auto"><div class="mb-h">Automatic${sw(automatic)}</div>
+          <div class="mb-s" id="${o.id}-says">${says(automatic, o.main)}</div>${comes(p, automatic, o.main, o.id)}</div>
+        ${lineRow(o.id)}
+        ${o.row ? mainRow(o.id, { hint: o.hint }) : ''}
+        ${mergeRow(o.id, o.mergeOpen, o.main)}
+        ${atMostRow(p)}
+      </div>
+      <div class="mb-ft">Automatic is on by default. The rest is the coordinator’s suggestion. You can change any of these later on the project page.</div>
+      <div class="mb-sh">Plan · ${p.graph.length} tasks</div>
+      <div class="mb-panel">${graph(p)}</div>`;
+  }
+
+  /** The review sheet a phone opens the card in: inline title, ✕, the card, Start in the bar. */
+  const reviewPhone = (id, p, body, overlay = '') => `<div class="ph mb-ph" id="${id}">
+      <div class="ph-sb">${BAR}</div>
+      <div class="mb-sheet">
+        <div class="mb-scroll">${body}</div>
+        <div class="mb-nav"><span class="tt">Start this project?</span><span class="ph-gb">${ICON.close}</span></div>
+        <div class="mb-bar"><div class="mb-go">Start the project</div><div class="mb-chat">Chat about this</div><div class="mb-bcap">${p.caption}</div></div>
+      </div>
+      ${overlay}
+      <div class="mb-home"></div>
+    </div>`;
+
+  // ── the picker: a sheet over the card, MergeTargetPickerSheet's shape with the web menu's parts ──
+  const branchRow = (name, { current, remembered, id } = {}) => `<div class="mb-li"${id ? ` id="${id}"` : ''}><span class="n">${name}</span>${remembered ? '<span class="tg">last chosen</span>' : ''}${current ? I.check : ''}</div>`;
+  function picker(id, { rows, typed = null, large = false }) {
+    return `${large ? '<div class="mb-back"></div>' : ''}<div class="mb-dim"></div>
+      <div class="mb-pick${large ? ' large' : ''}" id="${id}">
+        ${large ? '' : '<div class="mb-grab"></div>'}
+        <div class="mb-pnav"><span class="mb-gcap">Cancel</span><span class="tt">Main branch</span></div>
+        <div class="mb-search" id="${id}-search">${I.search}${typed ? `<span class="tx">${typed}</span><span class="mb-caret"></span>${I.clear}` : '<span>Type a branch name</span>'}</div>
+        <div id="${id}-body"><div class="mb-lh">Branches in payments-api</div><div>${rows}</div></div>
+        <div class="mb-lf" id="${id}-foot">Tasks start from it, and the project’s work ends up on it.</div>
+      </div>`;
+  }
+  const keyboard = () => {
+    const keys = (list, cls = '') => `<div class="mb-kr ${cls}">${list.map((k) => `<span class="mb-k${k.length > 1 ? ' fn' : ''}">${k}</span>`).join('')}</div>`;
+    return `<div class="mb-kb">${keys('qwertyuiop'.split(''))}${keys('asdfghjkl'.split(''))}${keys(['⇧', ...'zxcvbnm'.split(''), '⌫'], 'r3')}
+      <div class="mb-kr"><span class="mb-k num">123</span><span class="mb-k sp">space</span><span class="mb-k go">search</span></div>
+      <div class="mb-kx"><span></span><span></span></div></div>`;
+  };
+
+  // ① the start card
+  const A1 = startBody(P1, { id: 'a1', main: 'main', row: false });
+  const A2 = startBody(P1, { id: 'a2', main: 'master', row: true });
+  document.getElementById('a1').outerHTML = reviewPhone('a1', P1, A1);
+  document.getElementById('a2').outerHTML = reviewPhone('a2', P1, A2);
+  document.getElementById('a3').outerHTML = reviewPhone('a3', P1, startBody(P1, { id: 'a3', main: 'master', row: true }),
+    picker('a3p', { rows: branchRow('develop') + branchRow('master', { current: true, id: 'a3-master' }) + branchRow('release/2.4') }));
+  document.getElementById('a4').outerHTML = reviewPhone('a4', P1, startBody(P1, { id: 'a4', main: 'master', row: true }),
+    picker('a4p', { typed: 'release/3.0', large: true, rows: '<div class="mb-li" id="a4-use"><span class="u">Use “release/3.0”</span></div>' }) + keyboard());
+
+  // ② the second project in the same repository
+  const LAST = `Your last choice for ${REPO}`;
+  document.getElementById('b1').outerHTML = reviewPhone('b1', P2, startBody(P2, { id: 'b1', main: 'master', row: true, hint: LAST }));
+  document.getElementById('b2').outerHTML = reviewPhone('b2', P2, startBody(P2, { id: 'b2', main: 'master', row: true, hint: LAST }),
+    picker('b2p', { rows: branchRow('develop') + branchRow('master', { current: true, remembered: true, id: 'b2-master' }) + branchRow('release/2.4') }));
+  const cut = (label, inner, id = '') => `<div><div class="mb-cut-l zh">${label}</div><div class="mb-cut"${id ? ` id="${id}"` : ''}><div class="mb-panel">${inner}</div></div></div>`;
+  document.getElementById('b3').innerHTML = [
+    cut('a 第一次：协调者建议的', lineRow('ba') + mainRow('ba')),
+    cut('b 记住的：带一行小字', lineRow('bb') + mainRow('bb', { hint: LAST })),
+    cut('c 改成了别的：小字不显示', lineRow('bc') + mainRow('bc', { value: 'develop' })),
+    cut('d 卡片失效、正在开始：变灰', lineRow('bd', true) + mainRow('bd', { dis: true })),
+    cut('e 没有仓库：没有这一行', lineRow('be') + mergeRow('be', false, 'main')),
+  ].join('');
+
+  // ③ the project page's How it runs (ProjectsView.runSettingsSection), the project started
+  const opt = (on, title, branch, hint, id) => `<div class="mb-opt"${id ? ` id="${id}"` : ''}>${on ? I.on : I.off}<div class="t"><b>${title}</b>${branch ? `<span class="mb-mono"> · ${branch}</span>` : ''}<div class="mb-s">${hint}</div></div></div>`;
+  const lockedValue = (text, mono) => `<span class="lk">${I.lock}<span class="${mono ? 'mb-mono' : ''}">${text}</span></span>`;
+  const LOCKED_LINE = 'This project started integrating 3d ago, so the line it lands on can no longer change. Merge it into main, or give up the branch, to start another.';
+  const LOCKED_MAIN = 'This project started integrating 3d ago, so the line it lands on and its main branch can no longer change. Merge it into master, or give up the branch, to start another.';
+  function runRows(id, { main, row, locked }) {
+    const line = locked
+      ? `<div class="mb-gr" id="${id}-line"><div class="mb-h">Tasks land on${lockedValue(BRANCH, false)}</div>${row ? '' : `<div class="mb-s">${LOCKED_LINE}</div>`}</div>`
+      : `<div class="mb-gr" id="${id}-line">Tasks land on<div class="mb-opts">
+          ${opt(true, 'A project branch', BRANCH, 'Recommended when tasks depend on each other: they land here first and are checked together.')}
+          ${opt(false, `Directly into ${main}`, null, `For a single task or an urgent fix. Every merge into ${main} asks you.`, `${id}-direct`)}</div></div>`;
+    const mainBranch = !row ? '' : locked
+      ? `<div class="mb-gr" id="${id}-main"><div class="mb-h">Main branch${lockedValue('master', true)}</div><div class="mb-s">${LOCKED_MAIN}</div></div>`
+      : `<div class="mb-gr" id="${id}-main"><div class="mb-h">Main branch<span class="br">master</span>${I.right}</div>
+          <div class="mb-s" id="${id}-hint">Tasks start from it, and the project’s work ends up on it. New projects in ${REPO} start with your last choice.</div></div>`;
+    return `${line}${mainBranch}
+      <div class="mb-gr" id="${id}-auto"><div class="mb-h">Automatic${sw(true)}</div>
+        <div class="mb-s" id="${id}-ahint">The coordinator runs it for you: it decides when each task is done, handles conflicts and failed checks, and merges the branch into ${main} once the merge check passes — with a receipt you can revert. The criteria and anything irreversible stay yours.</div></div>
+      <div class="mb-gr"><div class="mb-h">At most<span class="q">2 tasks at a time</span>${STEPPER}</div></div>
+      <div class="mb-gr"><div class="mb-h">Merge check<span class="q"></span>${I.right}</div><div class="mb-field">make test</div>
+        <div class="mb-s">Runs on the combined tree before anything lands — on the project branch and again before ${main}.</div></div>
+      <div class="mb-gr"><div class="mb-h">Escalate after<span class="v">2 hours${I.updown}</span></div><div class="mb-s">Items the coordinator hasn’t handled by then come to you.</div></div>
+      <div class="mb-gr"><div class="mb-blue">Pause project</div><div class="mb-s">Stops new tasks, wake-ups and merges into ${main}. Running tasks finish.</div></div>`;
+  }
+  const pagePhone = (id, rows) => `<div class="ph mb-ph mb-pg" id="${id}">
+      <div class="ph-sb">${BAR}</div>
+      <div class="mb-pscroll">
+        <div class="mb-gh" id="${id}-head"><b>How it runs</b><span>applies from the next task</span></div>
+        <div class="mb-gcard" id="${id}-card">${rows}</div>
+      </div>
+      <div class="mb-pnav2"><span class="ph-gb">${ICON.back}</span><span class="tt"><b>${P1.title}</b><span>Open · 4 tasks</span></span><span class="mb-gcap">Open items${I.more}</span></div>
+      <div class="mb-home"></div>
+    </div>`;
+  document.getElementById('c1').outerHTML = pagePhone('c1', runRows('c1', { main: 'main', row: false }));
+  document.getElementById('c2').outerHTML = pagePhone('c2', runRows('c2', { main: 'master', row: true }));
+  document.getElementById('c3').outerHTML = pagePhone('c3', runRows('c3', { main: 'master', row: true, locked: true }));
+  // The page's own header (listRowBackground clear), cut out: the integration line's facts under the status.
+  const header = (icon, facts, id) => `<div class="mb-hdr"><div class="t">${P1.title}</div><div class="m"><span class="pill">Open</span><span>4 tasks</span></div>
+      <div class="f" id="${id}">${icon}<span>${facts}</span></div></div>`;
+  const FACTS = (main) => `project/34cfQ7mPaYmN2Wd8Rk3Jt · 3 commits ahead of ${main} at last measurement · synced with ${main} 2h ago · Running jobs 0 · Queued 0 · Last landing check ✓ passing`;
+  const gcut = (label, inner, id) => `<div><div class="mb-cut-l zh">${label}</div><div class="mb-cut grouped" id="${id}">${inner}</div></div>`;
+  document.getElementById('c4').innerHTML = [
+    gcut('a 现在 · 锁住时：说明在 Tasks land on 下面', `<div class="mb-gcard"><div class="mb-gr"><div class="mb-h">Tasks land on${lockedValue(BRANCH, false)}</div><div class="mb-s">${LOCKED_LINE}</div></div></div>`, 'c4a'),
+    gcut('b 现在 · 标题下的集成行', header(I.branch, FACTS('main'), 'c4b-f'), 'c4b'),
+    gcut('c 改后 · 同一行', header(I.branch, FACTS('master'), 'c4c-f'), 'c4c'),
+    gcut('d 改后 · 直接合进 master 的项目：不变', header(I.toLine, 'master · Running jobs 0 · Queued 0 · Last landing check not checked', 'c4d-f'), 'c4d'),
+  ].join('');
+
+  // ④ copy: the line's menu on the card, and the card with Automatic off and the merge check open
+  const MENU = `<div class="mb-mdim"></div><div class="mb-menu" id="d1-menu" style="right:18px">
+      <div class="mb-mi"><span class="ck">${I.checkInk}</span><div><b>A project branch</b><span class="s">project/34cfQ7mPaYmN2Wd8Rk3Jt — Recommended when tasks depend on each other: they land here first and are checked together.</span></div></div>
+      <div class="mb-ms"></div>
+      <div class="mb-mi" id="d1-direct"><span class="ck"></span><div><b>Directly into master</b><span class="s">For a single task or an urgent fix. Every merge into master asks you.</span></div></div>
+    </div>`;
+  document.getElementById('d1').outerHTML = reviewPhone('d1', P1, startBody(P1, { id: 'd1', main: 'master', row: true }), MENU);
+  document.getElementById('d2').outerHTML = reviewPhone('d2', P1, startBody(P1, { id: 'd2', main: 'master', row: true, automatic: false, mergeOpen: true }));
+
+  // ── layout, then the marks ─────────────────────────────────────────────────────────────────────
+  /** Scroll a phone's content so `sel` starts at `y` (phone coordinates). */
+  function scrollIn(ph, sel, y) {
+    const sc = ph.querySelector('.mb-scroll, .mb-pscroll');
+    sc.style.transform = 'none';
+    sc.style.transform = `translateY(${-(at(ph, sel).y - y)}px)`;
+  }
+  const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"')
+    .replace(/class="ring /g, 'class="ring grey ');
+  function greyMark(ph, sel, n, pad = 4, dx = 0, dy = 0) {
+    const r = at(ph, sel);
+    ph.insertAdjacentHTML('beforeend', grey(marks([{ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad, cls: '' },
+      ...(n ? [{ n, x: r.x + r.w + pad - 12 + dx, y: r.y - pad - 12 + dy }] : [])])));
+  }
+  /** A ring (and mark) inside a cut, which is its own positioned box. */
+  function cutMark(box, sel, n, { pad = 4, dx = 0, dy = 0, greyed = false } = {}) {
+    const b = box.getBoundingClientRect();
+    const e = box.querySelector(sel).getBoundingClientRect();
+    const r = { x: e.left - b.left, y: e.top - b.top, w: e.width, h: e.height };
+    const html = marks([{ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad, cls: '' },
+      ...(n ? [{ n, x: r.x + r.w + pad - 12 + dx, y: r.y - pad - 12 + dy }] : [])]);
+    box.insertAdjacentHTML('beforeend', greyed ? grey(html) : html);
+  }
+
+  window.drawMarks = () => {
+    const ph = (id) => document.getElementById(id);
+    const [a1, a2, a3, a4, b1, b2, c1, c2, c3, d1, d2] = ['a1', 'a2', 'a3', 'a4', 'b1', 'b2', 'c1', 'c2', 'c3', 'd1', 'd2'].map(ph);
+    scrollIn(a1, '#a1-how', 140);
+    scrollIn(a2, '#a2-how', 140);
+    scrollIn(a3, '#a3-main', 262);
+    scrollIn(a4, '#a4-how', 140);
+    scrollIn(b1, '#b1-how', 140);
+    scrollIn(b2, '#b2-main', 262);
+    scrollIn(c1, '#c1-head', 112);
+    scrollIn(c2, '#c2-head', 112);
+    scrollIn(c3, '#c3-head', 112);
+    scrollIn(d1, '#d1-auto', 128);
+    // The line's menu opens under its row, right-aligned with the value it was opened from.
+    const row = at(d1, '#d1-line');
+    document.getElementById('d1-menu').style.top = `${row.y + row.h + 4}px`;
+    scrollIn(d2, '#d2-auto', 124);
+
+    greyMark(a1, '#a1-says', 'A', 4, 10, 2);
+    const l = at(a1, '#a1-line'), m = at(a1, '#a1-merge');
+    a1.insertAdjacentHTML('beforeend', grey(marks([{ x: 12, y: l.y + l.h - 9, w: 369, h: m.y - l.y - l.h + 18, cls: '' },
+      { n: 'B', x: 368, y: l.y + l.h - 21 }])));
+    ringMark(a2, '#a2-main', '1', 3, 2, 2);
+    ringMark(a2, '#a2-says', '2', 4, 10, 2);
+    ringMark(a3, '#a3p-body', '3', 1, -8, 2);
+    ringMark(a3, '#a3p-foot', '4', 2, -8, 2);
+    ringMark(a4, '#a4p-search', null, 3);
+    ringMark(a4, '#a4-use', '5', 1, -8, 2);
+    ringMark(b1, '#b1-main', '6', 3, 2, 2);
+    ringMark(b2, '#b2-master', '7', 1, -8, 2);
+
+    greyMark(c1, '#c1-direct', 'C', 4, 2, 2);
+    greyMark(c1, '#c1-ahint', 'D', 4, 2, 2);
+    ringMark(c2, '#c2-main', '8', 1, -4, 2);
+    ringMark(c2, '#c2-direct', '9', 4, 2, 2);
+    const t = at(c3, '#c3-line'), u = at(c3, '#c3-main');
+    c3.insertAdjacentHTML('beforeend', marks([{ x: t.x - 1, y: t.y - 1, w: t.w + 2, h: u.y + u.h - t.y + 2 }, { n: '10', x: t.x + t.w - 17, y: t.y - 11 }]));
+    cutMark(document.getElementById('c4b'), '#c4b-f', 'E', { greyed: true, dx: -2, dy: 2 });
+    cutMark(document.getElementById('c4c'), '#c4c-f', '11', { dx: -2, dy: 2 });
+
+    ringMark(d1, '#d1-direct', '12', 2, -8, 2);
+    ringMark(d2, '#d2-says', '13', 4, 10, 2);
+    ringMark(d2, '#d2-merging', '14', 3, 2, 2);
+    ringMark(d2, '#d2-mhint', '15', 4, 2, 2);
+  };
+</script>
+</body>
+</html>

@@ -98,6 +98,22 @@ final class SessionProjectSessionsAPIClientTests: XCTestCase {
                                                    ["view": "archived", "projectId": "p1"]])
     }
 
+    /// A project with nothing completed is common: its empty Completed list is the answer, asked
+    /// once — not again under the legacy spelling, on every load and poll of the project's page.
+    func testAnEmptyCompletedProjectListIsAnAnswerAskedOnce() async throws {
+        let recorder = ProjectSessionsRecorder()
+        ProjectSessionsURLProtocol.handler = { request in
+            recorder.append(request)
+            return (200, Data("[]".utf8))
+        }
+
+        let rows = try await client().listSessions(view: .completed, projectId: "p1")
+
+        XCTAssertTrue(rows.isEmpty)
+        XCTAssertEqual(recorder.sent, [.init(method: "GET", path: "/api/sessions",
+                                            query: ["view": "completed", "projectId": "p1"])])
+    }
+
     func testCompletedProjectListPreservesTheFilterWhenCanonicalViewIsRejected() async throws {
         let recorder = ProjectSessionsRecorder()
         ProjectSessionsURLProtocol.handler = { request in

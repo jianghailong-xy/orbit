@@ -1,0 +1,195 @@
+{
+ "commits": {
+  "base": "da13423d3",
+  "batch": "b24209077",
+  "main": "f33589b4c",
+  "merged": "HEAD"
+ },
+ "changedByBoth": [
+  "src/macos/OrbitKit/Tests/OrbitKitTests/TaskDetailCopyParityTests.swift",
+  "src/web/src/components/AccountSelect.tsx",
+  "src/web/src/index.css"
+ ],
+ "batchOnly": 41,
+ "mainOnly": 418,
+ "movedInRound2": {
+  "batch": [
+   "src/web/ui-migration/pilot-fixtures.mjs",
+   "src/web/ui-migration/pilot.browser.mjs"
+  ],
+  "main": [
+   "src/web/src/pages/RunnerDetailPage.antigravityAccount.test.tsx"
+  ]
+ },
+ "indexCss": {
+  "batchSelectors": [
+   ".orbit-select-trigger > .orbit-choice-value)",
+   ".share-access-menu .ant-dropdown-menu-item",
+   ".share-access-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon",
+   ".share-access-menu .orbit-menu-icon",
+   ".share-dialog.orbit-overlay",
+   ".share-layer-check",
+   ".share-layer-check .ant-checkbox",
+   ".share-layer-check .orbit-checkbox",
+   ".share-layer-check.orbit-choice",
+   ".tdp-assignee-select .orbit-select-trigger",
+   ".tdp-assignee-select :is(.orbit-combobox-field",
+   ".tdp-assignee-select.ant-select .ant-select-content",
+   ".tdp-assignee-select.ant-select .ant-select-content-has-value",
+   ".tdp-assignee-select.ant-select .ant-select-placeholder",
+   ".tdp-assignee-select.ant-select:hover .ant-select-content",
+   ".tdp-assignee-select.orbit-select",
+   ".tdp-assignee-select.orbit-select[data-empty] .orbit-choice-value",
+   ".tdp-assignee-select:hover :is(.orbit-combobox-field",
+   ".tdp-dependency-view.ant-segmented",
+   ".tdp-dependency-view.orbit-segmented",
+   ".tdp-head > .ant-btn-icon-only",
+   ".tdp-head > .orbit-button-icon-only",
+   ".tdp-head-actions > .ant-btn",
+   ".tdp-head-actions > .orbit-button",
+   ".tdp-head-actions > span > .ant-btn",
+   ".tdp-head-actions > span > .orbit-button",
+   ".tdp-input-add",
+   ".tdp-reopen-dialog.orbit-overlay",
+   ".tdp-reopen-paragraph",
+   ".tdp-reopen-paragraph strong",
+   ".tdp-reopen-paragraph.is-strong"
+  ],
+  "mainSelectors": 168,
+  "mainAnchorClasses": [
+   "access-token-actions",
+   "access-token-ended",
+   "access-token-field",
+   "access-token-form",
+   "access-token-help",
+   "access-token-hint",
+   "access-token-issued",
+   "access-token-issued-head",
+   "access-token-issued-icon",
+   "access-token-issued-note",
+   "access-token-label",
+   "access-token-scope-row",
+   "access-token-scopes",
+   "access-token-secret",
+   "access-token-secret-row",
+   "access-token-sub",
+   "access-token-title",
+   "access-tokens-head",
+   "access-tokens-page",
+   "app-shell",
+   "np-list",
+   "session-press-anchor",
+   "session-project-empty",
+   "session-project-empty-icon",
+   "session-project-empty-retry",
+   "session-project-merge-criteria",
+   "session-project-merge-row-mark",
+   "session-project-merge-rule",
+   "session-project-merge-tile",
+   "session-project-page-card",
+   "session-project-page-landing",
+   "session-project-page-landing-chev",
+   "session-project-page-progress",
+   "session-project-start",
+   "session-project-start-ago",
+   "session-project-start-dot",
+   "session-project-start-line",
+   "session-project-start-press",
+   "session-project-start-suggestion",
+   "session-project-start-title",
+   "session-row",
+   "start-card-sheet",
+   "wk-act",
+   "wk-act-cards",
+   "wk-act-head",
+   "wk-activity-btn",
+   "wk-banner",
+   "wk-col",
+   "wk-cols",
+   "wk-crumb--back",
+   "wk-home",
+   "wk-home-all",
+   "wk-home-more",
+   "wk-home-n",
+   "wk-home-new",
+   "wk-home-pr",
+   "wk-home-sk",
+   "wk-home-state",
+   "wk-layout",
+   "wk-new-hint",
+   "wk-page",
+   "wk-page--activity",
+   "wk-pin",
+   "wk-pl-doc",
+   "wk-pl-sec",
+   "wk-row",
+   "wk-rv-row",
+   "wk-select",
+   "wk-sk",
+   "wk-space-tag",
+   "wk-title-row"
+  ]
+ },
+ "mainSourcesReachingBatch": {
+  "src/web/src/components/AccountSelect.tsx": [
+   "src/web/src/components/ui/Floating.css",
+   "src/web/src/components/ui/Floating.ts",
+   "src/web/src/components/ui/Select.css",
+   "src/web/src/components/ui/Select.tsx"
+  ],
+  "src/web/src/components/WorkspaceView.tsx": [
+   "src/web/src/components/AccountSelect.tsx",
+   "src/web/src/components/ShareModal.tsx"
+  ],
+  "src/web/src/pages/RunnerDetailPage.tsx": [
+   "src/web/src/components/AccountSelect.tsx"
+  ]
+ },
+ "mainCssClassUsers": {},
+ "checks": [
+  {
+   "claim": "src/macos/OrbitKit/Tests/OrbitKitTests/TaskDetailCopyParityTests.swift: MERGED is MAIN plus exactly the batch's changed lines",
+   "holds": true
+  },
+  {
+   "claim": "src/macos/OrbitKit/Tests/OrbitKitTests/TaskDetailCopyParityTests.swift: MERGED is BATCH plus exactly main's changed lines",
+   "holds": true
+  },
+  {
+   "claim": "src/web/src/components/AccountSelect.tsx: MERGED is MAIN plus exactly the batch's changed lines",
+   "holds": true
+  },
+  {
+   "claim": "src/web/src/components/AccountSelect.tsx: MERGED is BATCH plus exactly main's changed lines",
+   "holds": true
+  },
+  {
+   "claim": "src/web/src/index.css: MERGED is MAIN plus exactly the batch's changed lines",
+   "holds": true
+  },
+  {
+   "claim": "src/web/src/index.css: MERGED is BATCH plus exactly main's changed lines",
+   "holds": true
+  },
+  {
+   "claim": "the batch's other 41 files (its evidence aside) are its own blobs, but for ['src/web/ui-migration/pilot-fixtures.mjs', 'src/web/ui-migration/pilot.browser.mjs']",
+   "holds": true
+  },
+  {
+   "claim": "main's other 418 files are main's own blobs, but for ['src/web/src/pages/RunnerDetailPage.antigravityAccount.test.tsx']",
+   "holds": true
+  },
+  {
+   "claim": "main changed nothing under src/web/src/components/ui or src/web/ui-migration",
+   "holds": true
+  },
+  {
+   "claim": "index.css: no selector changed by both sides",
+   "holds": true
+  },
+  {
+   "claim": "no ui-migration fixture and no pilot source uses the first class of a selector main's index.css changed",
+   "holds": true
+  }
+ ]
+}

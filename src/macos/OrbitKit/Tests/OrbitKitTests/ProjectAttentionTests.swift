@@ -32,7 +32,8 @@ final class ProjectAttentionTests: XCTestCase {
                          done: Int = 0, cancelled: Int = 0,
                          lastActivityAt: String?? = nil,
                          attention: ProjectListAttention? = nil,
-                         integration: ProjectListIntegration? = nil) -> ProjectSummary {
+                         integration: ProjectListIntegration? = nil,
+                         mainBranch: String? = nil) -> ProjectSummary {
         nextID += 1
         let bucketed = running + ready + blocked + done + cancelled
         let activity: String?
@@ -51,7 +52,8 @@ final class ProjectAttentionTests: XCTestCase {
                                     failed: nil, cancelled: cancelled),
             lastActivityAt: activity,
             attention: attention,
-            integration: integration)
+            integration: integration,
+            mainBranch: mainBranch)
     }
 
     private func ownerItem(_ kind: OwnerItemKind, _ count: Int, waited: TimeInterval) -> ProjectListOwnerItem {
@@ -414,6 +416,30 @@ final class ProjectAttentionTests: XCTestCase {
         XCTAssertEqual(chip(row)?.text, "Needs you · Approve merge to main")
     }
 
+    /// The merge an approval asks for is into the project's main branch, which the row carries
+    /// (`GET /projects`' `mainBranch`): master by name, and main for a row that names none.
+    func testAMergeApprovalNamesTheProjectsMainBranch() throws {
+        let approval = ProjectListAttention(ownerItems: [ownerItem(.promotionApproval, 1, waited: 2 * Self.hour)])
+        let onMaster = project(running: 1, attention: approval, mainBranch: "master")
+        XCTAssertEqual(chip(onMaster)?.text, "Needs you · Approve merge to master · 2h")
+        XCTAssertEqual(chip(project(running: 1, attention: approval))?.text, "Needs you · Approve merge to main · 2h")
+        // The other three kinds name no branch, whatever the row's is.
+        let question = ProjectListAttention(ownerItems: [ownerItem(.coordinatorQuestion, 1, waited: Self.hour)])
+        XCTAssertEqual(chip(project(running: 1, attention: question, mainBranch: "master"))?.text,
+                       "Needs you · 1 question from coordinator · 1h")
+
+        // The row reads it, and keeps it through the app's own cache of the list.
+        let json = #"{"id":"p1","title":"Payments","status":"OPEN","mainBranch":"master"}"#
+        let row = try JSONDecoder().decode(ProjectSummary.self, from: Data(json.utf8))
+        XCTAssertEqual(row.mainBranch, "master")
+        XCTAssertEqual(try JSONDecoder().decode(ProjectSummary.self, from: JSONEncoder().encode(row)).mainBranch, "master")
+        let older = try JSONDecoder().decode(ProjectSummary.self, from: Data(#"{"id":"p1","title":"Payments"}"#.utf8))
+        XCTAssertNil(older.mainBranch)
+        let garbled = try JSONDecoder().decode(ProjectSummary.self,
+                                               from: Data(#"{"id":"p1","title":"Payments","mainBranch":{}}"#.utf8))
+        XCTAssertNil(garbled.mainBranch, "a branch this build cannot read costs the branch, never the row")
+    }
+
     func testCoordinatorExceptionIsBrandAndKeepsTheLaneItsActivityEarned() {
         let row = project(running: 3, ready: 2, done: 5, lastActivityAt: .some(at(Self.minute)),
                           attention: ProjectListAttention(
@@ -566,6 +592,90 @@ final class ProjectAttentionTests: XCTestCase {
         let asked = try JSONDecoder().decode(ProjectListAttention.self, from: Data(
             #"{"ownerItems":[],"startRequest":{"waitingSince":"2026-09-30T02:00:00.000Z"}}"#.utf8))
         XCTAssertEqual(asked.startRequest, ProjectListStartRequest(waitingSince: "2026-09-30T02:00:00.000Z"))
+    }
+
+    // MARK: a coordinator asking to record the project done
+
+    /// Criterion 2 and mock ⑥: while the coordinator's request to record an OPEN project done
+    /// stands, the projects list says "Needs you · Ready to close · 4m" — the sixth thing a row can
+    /// be waiting on the owner for, in the start request's tier, lane and order, in the words the
+    /// session row and the project page say.
+    private func closing(_ waited: TimeInterval, ownerItems: [ProjectListOwnerItem] = [],
+                         start: TimeInterval? = nil) -> ProjectListAttention {
+        ProjectListAttention(ownerItems: ownerItems,
+                             startRequest: start.map { ProjectListStartRequest(waitingSince: at($0)) },
+                             doneRequest: ProjectListDoneRequest(waitingSince: at(waited)))
+    }
+
+    func testADoneRequestIsNeedsYouReadyToCloseWithHowLongItHasWaited() {
+        let asked = project(done: 6, cancelled: 1, attention: closing(4 * Self.minute))
+        XCTAssertEqual(ProjectAttention.readyToCloseSays, "Needs you · Ready to close")
+        XCTAssertEqual(reason(asked), .doneRequest)
+        XCTAssertEqual(section(asked), .attention)
+        XCTAssertEqual(chip(asked), ProjectAttentionChip(tone: .warning, text: "Needs you · Ready to close · 4m"))
+        XCTAssertTrue(ProjectAttentionReason.doneRequest.isNeedsYou)
+        XCTAssertFalse(ProjectAttentionReason.doneRequest.isOwnerItem, "nothing escalated, and nothing pushes")
+
+        // Nobody asked: the same settled project keeps the old, quieter chip — not Ready to close.
+        let unasked = project(done: 6, cancelled: 1, attention: ProjectListAttention())
+        XCTAssertEqual(reason(unasked), .readyToClose)
+        XCTAssertEqual(chip(unasked)?.text, "7/7 tasks settled · project still open")
+        XCTAssertNil(reason(project(status: .done, done: 3, attention: closing(Self.hour))),
+                     "a closed project is asked nothing, whatever it still carries")
+    }
+
+    func testADoneRequestIsNamedOverTheFourOrAStartOnlyWhenItHasWaitedLonger() {
+        let question = ownerItem(.coordinatorQuestion, 1, waited: 35 * Self.minute)
+        XCTAssertEqual(chip(project(attention: closing(3 * Self.hour, ownerItems: [question])))?.text,
+                       "Needs you · Ready to close · 3h")
+        XCTAssertEqual(chip(project(attention: closing(10 * Self.minute, ownerItems: [question])))?.text,
+                       "Needs you · 1 question from coordinator · 35m")
+        XCTAssertEqual(chip(project(attention: closing(35 * Self.minute, ownerItems: [question])))?.text,
+                       "Needs you · 1 question from coordinator · 35m", "on a tie the four come first")
+        XCTAssertEqual(reason(project(attention: closing(Self.hour, start: 2 * Self.hour))), .readyToStart)
+        XCTAssertEqual(reason(project(attention: closing(2 * Self.hour, start: Self.hour))), .doneRequest)
+        XCTAssertEqual(reason(project(attention: closing(Self.hour, start: Self.hour))), .readyToStart,
+                       "and on a tie with a start, the start, as it comes first")
+    }
+
+    func testADoneRequestSitsInTheOwnerTierByItsWaitAndOutranksFreshWork() {
+        let blocker = project(title: "Blocker", attention: ProjectListAttention(
+            userBlockers: 1, maxSeverity: .critical, attentionSinceAt: at(9 * Self.quiet)))
+        let merge = project(title: "Merge", attention: ProjectListAttention(
+            ownerItems: [ownerItem(.promotionApproval, 1, waited: 2 * Self.hour)]))
+        let close = project(title: "Close", attention: closing(35 * Self.minute))
+        let start = project(title: "Start", attention: asking(20 * Self.minute))
+        XCTAssertEqual(ProjectAttention.ordered([blocker, start, close, merge], in: .attention, now: Self.now)
+                        .map(\.title), ["Merge", "Close", "Start", "Blocker"])
+        let busy = project(running: 2, lastActivityAt: .some(at(Self.minute)), attention: closing(5 * Self.minute))
+        XCTAssertEqual(section(busy), .attention)
+    }
+
+    /// The drawer counts it as one more thing waiting on the reader and orders it by its wait.
+    func testTheDrawerCountsADoneRequestAsOneMoreThingWaitingOnYou() {
+        let close = project(title: "Close", attention: closing(2 * Self.hour))
+        let merge = project(title: "Merge", attention: ProjectListAttention(
+            ownerItems: [ownerItem(.promotionApproval, 1, waited: Self.hour)]))
+        let recent = project(title: "Recent", running: 1, lastActivityAt: .some(at(Self.minute)))
+        XCTAssertEqual(ProjectAttention.drawerMark(close), .needsYou(1))
+        XCTAssertEqual(ProjectAttention.drawerMark(project(attention: closing(Self.minute, ownerItems: [
+            ownerItem(.escalated, 2, waited: Self.minute)]))), .needsYou(3))
+        XCTAssertEqual(ProjectAttention.drawerProjects([recent, merge, close]).map(\.title),
+                       ["Close", "Merge", "Recent"])
+        XCTAssertEqual(ProjectAttention.needsYouCount([recent, merge, close]), 2)
+        XCTAssertEqual(ProjectAttention.needsYouItemCount(project(status: .done, attention: closing(Self.hour))), 0)
+    }
+
+    func testAnIndexFromAServerThatPredatesDoneRequestsDecodesWithoutOne() throws {
+        let older = try JSONDecoder().decode(ProjectListAttention.self, from: Data(#"{"userBlockers":0}"#.utf8))
+        XCTAssertNil(older.doneRequest)
+        let unreadable = try JSONDecoder().decode(ProjectListAttention.self,
+                                                  from: Data(#"{"doneRequest":{"since":1}}"#.utf8))
+        XCTAssertNil(unreadable.doneRequest, "a request this build cannot read is a row that names none")
+        let asked = try JSONDecoder().decode(ProjectListAttention.self, from: Data(
+            #"{"ownerItems":[],"startRequest":null,"doneRequest":{"waitingSince":"2026-10-05T21:00:00.000Z"}}"#.utf8))
+        XCTAssertEqual(asked.doneRequest, ProjectListDoneRequest(waitingSince: "2026-10-05T21:00:00.000Z"))
+        XCTAssertNil(asked.startRequest)
     }
 
     // MARK: integration line

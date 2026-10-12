@@ -1,0 +1,341 @@
+{
+  "sourceCommit": "e1905305657569086b8d103f15aa1bdd5214fb03",
+  "finalStats": {
+    "startTime": "2026-10-04T09:04:38.692Z",
+    "duration": 1378854.386,
+    "expected": 492,
+    "skipped": 0,
+    "unexpected": 4,
+    "flaky": 0
+  },
+  "observerCommit": "522ac9d70cc0eb2b0862f6ab1360eb745a316bf5",
+  "finalSourceCommit": "954396bdbac19d54cee94459274fa5983747de6f",
+  "openValueStats": {
+    "startTime": "2026-10-04T09:42:38.431Z",
+    "duration": 328245.045,
+    "expected": 112,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "motionStats": {
+    "startTime": "2026-10-04T09:28:17.098Z",
+    "duration": 463849.664,
+    "expected": 192,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "repeatStats": {
+    "startTime": "2026-10-04T09:36:14.542Z",
+    "duration": 19497.726,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "validatedCases": 520,
+  "networkFailures": {
+    "chromium-light-phone--account-matches-the-current-surface-density-and-option-states": [
+      "http://127.0.0.1:4177/src/components/ui/Input.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Dialog.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Overlay.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Menu.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Popover.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Tooltip.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Select.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Combobox.tsx",
+      "http://127.0.0.1:4177/src/components/ui/MultiSelect.tsx",
+      "http://127.0.0.1:4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+      "http://127.0.0.1:4177/node_modules/.vite/deps/rolldown-runtime-DC62tzP2.js?v=146aa806",
+      "http://127.0.0.1:4177/node_modules/.vite/deps/react-dom.js?v=146aa806"
+    ],
+    "chromium-light-phone--search-matches-the-current-surface-density-and-option-states": [
+      "http://127.0.0.1:4177/src/components/ui/Dialog.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Overlay.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Menu.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Popover.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Tooltip.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Select.tsx",
+      "http://127.0.0.1:4177/src/components/ui/Combobox.tsx",
+      "http://127.0.0.1:4177/src/components/ui/MultiSelect.tsx",
+      "http://127.0.0.1:4177/src/components/ui/__fixtures__/ChoicesFixture.css"
+    ]
+  },
+  "observerCasesRevalidated": [
+    "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip",
+    "webkit-light-desktop--normal-bottom-entrance-and-exit-motion-matches-search"
+  ],
+  "recoveredOriginalManifestRefs": [
+    {
+      "originalRef": "flipped-search-diagnostic/webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+      "recoveredRef": "flipped-search-retained/webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+      "sha256": "0c885d2cb0ece940228f621748169d9cd49e9b32273aabc7f8741200b484ede6"
+    },
+    {
+      "originalRef": "flipped-search-diagnostic/webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+      "recoveredRef": "flipped-search-retained/webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+      "sha256": "a2ccdc1ee7f1addafdc0dde6e29459d4de5e97480dbe7ed25b63c8933bbaf435"
+    },
+    {
+      "originalRef": "flipped-search-diagnostic/webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+      "recoveredRef": "flipped-search-retained/webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+      "sha256": "05067d9c14f6bcecb9b31bb74b267bfadfca16eed9c5d0f53c42f34a67b52f32"
+    },
+    {
+      "originalRef": "flipped-search-diagnostic/webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+      "recoveredRef": "flipped-search-retained/webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-3--motion.json",
+      "sha256": "c16654b1901f712faa95c6e972fb06ced3d4b42760f09b7739b88477a18f906d"
+    }
+  ],
+  "verifiedManifestArtifacts": 2428,
+  "unchangedHistoricalFiles": 1923,
+  "checksMatchRuntimeAndRecordedTestSource": [
+    "r2-final-full-matrix",
+    "r2-final-motion",
+    "r2-network-repeat",
+    "r2-unit-regressions",
+    "r2-final-types",
+    "r2-production-build",
+    "r2-open-value-final",
+    "r2-final-production-build"
+  ],
+  "runtimeWithoutAntD": [
+    "src/web/src/components/ui/Badge.css",
+    "src/web/src/components/ui/Badge.tsx",
+    "src/web/src/components/ui/Button.css",
+    "src/web/src/components/ui/Button.tsx",
+    "src/web/src/components/ui/Checkbox.tsx",
+    "src/web/src/components/ui/ChoiceControls.css",
+    "src/web/src/components/ui/Combobox.tsx",
+    "src/web/src/components/ui/ComboboxOption.tsx",
+    "src/web/src/components/ui/ConfirmDialog.tsx",
+    "src/web/src/components/ui/Dialog.tsx",
+    "src/web/src/components/ui/Drawer.tsx",
+    "src/web/src/components/ui/Floating.css",
+    "src/web/src/components/ui/Floating.ts",
+    "src/web/src/components/ui/Input.tsx",
+    "src/web/src/components/ui/Menu.tsx",
+    "src/web/src/components/ui/MultiSelect.tsx",
+    "src/web/src/components/ui/Overlay.css",
+    "src/web/src/components/ui/Overlay.tsx",
+    "src/web/src/components/ui/Popover.tsx",
+    "src/web/src/components/ui/Radio.tsx",
+    "src/web/src/components/ui/Select.css",
+    "src/web/src/components/ui/Select.tsx",
+    "src/web/src/components/ui/SelectEmpty.tsx",
+    "src/web/src/components/ui/Spinner.css",
+    "src/web/src/components/ui/Spinner.tsx",
+    "src/web/src/components/ui/Switch.tsx",
+    "src/web/src/components/ui/TextControls.css",
+    "src/web/src/components/ui/Textarea.tsx",
+    "src/web/src/components/ui/Tooltip.tsx",
+    "src/web/src/components/ui/foundation.css"
+  ],
+  "changedTrackedFiles": [
+    "docs/evidence/base-ui-migration/p2.2/README.md",
+    "src/web/src/components/ui/Floating.css",
+    "src/web/src/components/ui/Popover.tsx",
+    "src/web/src/components/ui/README.md",
+    "src/web/src/components/ui/Select.css",
+    "src/web/src/components/ui/Tooltip.tsx",
+    "src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+    "src/web/ui-migration/choices-lifecycle.browser.mjs",
+    "src/web/ui-migration/choices-motion.browser.mjs",
+    "src/web/ui-migration/choices-open-value.browser.mjs",
+    "src/web/ui-migration/choices.browser.mjs",
+    "src/web/ui-migration/collect-choice-evidence.mjs"
+  ],
+  "mobile": {
+    "chromium-dark-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json": {
+      "height": 240.953125,
+      "fontSize": "17px",
+      "labelStarts": [
+        55,
+        55,
+        55,
+        55,
+        55
+      ]
+    },
+    "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json": {
+      "height": 240.953125,
+      "fontSize": "17px",
+      "labelStarts": [
+        55,
+        55,
+        55,
+        55,
+        55
+      ]
+    },
+    "webkit-dark-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json": {
+      "height": 240.953125,
+      "fontSize": "17px",
+      "labelStarts": [
+        55,
+        55,
+        55,
+        55,
+        55
+      ]
+    },
+    "webkit-light-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json": {
+      "height": 240.953125,
+      "fontSize": "17px",
+      "labelStarts": [
+        55,
+        55,
+        55,
+        55,
+        55
+      ]
+    }
+  },
+  "reports": {
+    "final-motion": {
+      "startTime": "2026-10-04T09:28:17.098Z",
+      "duration": 463849.664,
+      "expected": 192,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "flipped-search-diagnostic": {
+      "startTime": "2026-10-04T09:01:12.934Z",
+      "duration": 13514.871,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "flipped-search-retained": {
+      "startTime": "2026-10-04T09:01:12.934Z",
+      "duration": 13514.871,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "full-matrix": {
+      "startTime": "2026-10-04T09:04:38.692Z",
+      "duration": 1378854.386,
+      "expected": 492,
+      "skipped": 0,
+      "unexpected": 4,
+      "flaky": 0
+    },
+    "interrupted-before-shadow-fix": {
+      "startTime": "2026-10-04T08:50:08.674Z",
+      "duration": 150176.031,
+      "expected": 50,
+      "skipped": 446,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "lifecycle-correct-query": {
+      "startTime": "2026-10-04T08:48:02.934Z",
+      "duration": 37349.848999999995,
+      "expected": 24,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "lifecycle-first": {
+      "startTime": "2026-10-04T08:46:42.822Z",
+      "duration": 34379.283,
+      "expected": 10,
+      "skipped": 13,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "mobile-before": {
+      "startTime": "2026-10-04T08:31:57.819Z",
+      "duration": 5088.82,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "mobile-layout": {
+      "startTime": "2026-10-04T08:32:56.153Z",
+      "duration": 63111.165,
+      "expected": 8,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "motion-cross-browser": {
+      "startTime": "2026-10-04T08:56:08.587Z",
+      "duration": 172240.175,
+      "expected": 34,
+      "skipped": 11,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "motion-directions": {
+      "startTime": "2026-10-04T08:44:18.512Z",
+      "duration": 65860.789,
+      "expected": 24,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "motion-first": {
+      "startTime": "2026-10-04T08:36:23.239Z",
+      "duration": 23830.309999999998,
+      "expected": 6,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "network-repeat": {
+      "startTime": "2026-10-04T09:36:14.542Z",
+      "duration": 19497.726,
+      "expected": 6,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "open-value-final": {
+      "startTime": "2026-10-04T09:42:38.431Z",
+      "duration": 328245.045,
+      "expected": 112,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "open-value-reproduction": {
+      "startTime": "2026-10-04T09:41:39.789Z",
+      "duration": 9432.554,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 3,
+      "flaky": 0
+    },
+    "shadow-and-focus": {
+      "startTime": "2026-10-04T08:54:17.704Z",
+      "duration": 40020.56,
+      "expected": 14,
+      "skipped": 7,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "shadow-reproduction": {
+      "startTime": "2026-10-04T08:53:05.644Z",
+      "duration": 6263.492,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 2,
+      "flaky": 0
+    },
+    "webkit-motion": {
+      "startTime": "2026-10-04T09:02:29.556Z",
+      "duration": 49898.727,
+      "expected": 24,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  }
+}

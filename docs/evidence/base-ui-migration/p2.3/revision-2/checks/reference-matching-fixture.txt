@@ -1,0 +1,55 @@
+[WebServer] (node:2565744) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 32 tests using 1 worker
+
+(node:2565841) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing (2.9s)
+  ✓   2 [chromium-light-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing (2.2s)
+  ✓   3 [chromium-light-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing (2.0s)
+  ✓   4 [chromium-light-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing (1.8s)
+(node:2566977) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-light-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing (2.0s)
+  ✓   6 [chromium-light-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing (2.1s)
+  ✓   7 [chromium-light-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing (2.1s)
+  ✓   8 [chromium-light-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing (1.6s)
+(node:2567748) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing (1.9s)
+  ✓  10 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing (2.7s)
+  ✓  11 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing (1.9s)
+  ✓  12 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing (1.7s)
+(node:2568686) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [chromium-dark-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing (2.0s)
+  ✓  14 [chromium-dark-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing (3.9s)
+  ✓  15 [chromium-dark-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing (3.5s)
+  ✓  16 [chromium-dark-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing (3.0s)
+(node:2573255) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 [webkit-light-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing (2.0s)
+  ✓  18 [webkit-light-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing (1.9s)
+  ✓  19 [webkit-light-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing (1.8s)
+  ✓  20 [webkit-light-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing (1.6s)
+(node:2575145) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  21 [webkit-light-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing (1.6s)
+  ✓  22 [webkit-light-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing (1.5s)
+  ✓  23 [webkit-light-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing (1.6s)
+  ✓  24 [webkit-light-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing (1.5s)
+(node:2576844) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  25 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing (1.6s)
+  ✓  26 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing (1.8s)
+  ✓  27 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing (1.7s)
+  ✓  28 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing (1.5s)
+(node:2578026) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  29 [webkit-dark-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing (1.8s)
+  ✓  30 [webkit-dark-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing (1.7s)
+  ✓  31 [webkit-dark-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing (1.6s)
+  ✓  32 [webkit-dark-phone] › ../../../../tmp/orbit-p23-r2-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing (1.5s)
+
+  32 passed (1.1m)

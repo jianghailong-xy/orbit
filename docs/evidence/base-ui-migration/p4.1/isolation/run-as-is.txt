@@ -1,0 +1,133 @@
+head: b0b59fa39c4ab979c01589ec424e113dc6ed5441
+uncommitted:
+?? docs/evidence/base-ui-migration/p4.1/
+?? src/web/ui-migration/p32-reference.config.mjs
+argv: ISO_FORCE=0 npx playwright test --config /var/tmp/p4.1-293463/isolation/isolation.config.mjs --project chromium-light-phone --project webkit-light-phone --project webkit-dark-phone
+P0 expected screenshots: 88 P0.2 originals, 152 main drift references, 12 accepted migration differences.
+
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium-light-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile (1.6s)
+  ✘  2 [webkit-light-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile (1.3s)
+  ✘  3 [webkit-dark-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile (1.4s)
+
+
+  1) [webkit-light-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile 
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      378 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: profile-validation.png
+
+    Call log:
+      - Expect "toHaveScreenshot(profile-validation.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 378 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 378 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at ../../../../root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/harness.mjs:38:26)
+        at profileScenario (/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/page-scenarios.mjs:128:3)
+
+    attachment #1: profile-validation (image/png) ──────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-light-phone/profile-validation.png
+    Received: ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-light-phone/profile-validation-actual.png
+    Diff:     ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-light-phone/profile-validation-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-light-phone/attachments/computed-styles-and-timings-533e695924b8f92af54e7d769420bd14aac67c72.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile 
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      341 pixels (ratio 0.01 of all image pixels) are different.
+
+      Snapshot: profile-validation.png
+
+    Call log:
+      - Expect "toHaveScreenshot(profile-validation.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - 341 pixels (ratio 0.01 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - 341 pixels (ratio 0.01 of all image pixels) are different.
+
+
+       at ../../../../root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |                          ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/harness.mjs:38:26)
+        at profileScenario (/root/.orbit/worktrees/3402ff96-4293-56f4-8940-d723dd9fa681/src/web/ui-migration/page-scenarios.mjs:128:3)
+
+    attachment #1: profile-validation (image/png) ──────────────────────────────────────────────────
+    Expected: .ui-migration-results/expected-screenshots/webkit-dark-phone/profile-validation.png
+    Received: ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-dark-phone/profile-validation-actual.png
+    Diff:     ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-dark-phone/profile-validation-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-dark-phone/attachments/computed-styles-and-timings-9f2909442ab2ce568fbb7315c3933bb5e5bf3885.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p4.1-293463/runs/iso-force0-out/isolation.browser.mjs-profile-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-light-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile 
+    [webkit-dark-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile 
+  1 passed (7.3s)
+exit=1

@@ -43,7 +43,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     file: 'tasks.service.ts',
     method: 'linkSupersededBy',
     statements: ['UPDATE "task"'],
-    holds: ['await this.lockTaskForSupersessionWrite(tx, predecessorId);'],
+    holds: ['await this.lockTaskForSupersessionWrite(tx, ownerId, predecessorId);'],
     note:
       'The predecessor\'s retirement, reached from `create` and from `update`. Its own rank-50 lock ' +
       'is NOWAIT rather than blocking, which is the one place in this inventory where a lock is ' +
@@ -57,7 +57,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     statements: ['task.create', 'taskDependency.createMany'],
     holds: [
       'await lockTaskLists(tx, [dto.listId]);',
-      'await this.preLockCreatorSessions(tx, [sessionId], [dto.supersedesTaskId]);',
+      'await this.preLockCreatorSessions(tx, ownerId, [sessionId], [dto.supersedesTaskId]);',
       'if (dto.supersedesTaskId && dto.projectId) {',
       'await this.refenceProjectScope(',
     ],
@@ -97,6 +97,25 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'tasks.service.ts',
+    method: 'applyMoveApproval',
+    statements: ['task.updateMany'],
+    holds: [
+      'await this.lockDependencyGraph(tx, ownerId);',
+      'const projectIds = orderedIds([from, to]);',
+      'FOR UPDATE NOWAIT`;',
+      'const row = await this.handoffs.lockMoveForConfirmation(tx, ownerId, handoffId, now);',
+    ],
+    note:
+      'Unit L4: the account owner\'s confirmation of a MOVE_TASK, which moves one task. The order ' +
+      'the owner\'s own move in `update` takes, plus the request row: rank 10 (the move re-judges ' +
+      'and rewrites the task\'s place in a hierarchy), both projects at rank 40 in one sorted ' +
+      'statement, the task NOWAIT at rank 50 for the reason `linkSupersededBy` gives, and the ' +
+      'project_handoff_approval row at rank 60. The task row is written once and its creator ' +
+      'Session is not a column it changes, so rank 30 is not reached; 0130\'s project lock-order ' +
+      'trigger then re-takes both projects this transaction already holds.',
+  },
+  {
+    file: 'tasks.service.ts',
     method: 'update',
     statements: [
       'task.update',
@@ -108,7 +127,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     holds: [
       'if (restructures) await this.lockDependencyGraph(tx, ownerId);',
       'await lockTaskLists(tx, [dto.listId]);',
-      'if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);',
+      'if (rewritesTaskRow) await this.preLockCreatorSessions(tx, ownerId, [], [id]);',
       'const acceptanceProjects = touchesAcceptanceFacts || supersession',
       'tx, ownerId, actingSessionId, scopeWorld, [scopeFence], acceptanceProjects,',
     ],

@@ -1,0 +1,27 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --grep normal flipped entrance and exit motion matches attachment --project webkit-dark-phone --repeat-each 10
+
+
+Running 10 tests using 1 worker
+
+  ✓   1 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.8s)
+  ✓   2 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.5s)
+  ✓   3 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.7s)
+  ✓   4 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.5s)
+  ✓   5 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.6s)
+  ✓   6 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.5s)
+  ✓   7 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.5s)
+  ✓   8 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.7s)
+  ✓   9 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.5s)
+  ✓  10 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.5s)
+
+  10 passed (31.2s)

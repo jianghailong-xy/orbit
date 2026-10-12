@@ -403,6 +403,25 @@ test('the sidebar maps the maintained task tally and gives missing rollups zero 
   assert.deepEqual(rows[1].taskCounts, { done: 0, failed: 0, total: 0 });
 });
 
+// The project sessions page offers to start a project nobody has started, and reads which ones
+// those are off this row rather than off a project document per page.
+test('the sidebar says when each project was started, and null for one nobody has', async () => {
+  const startedAt = new Date('2026-10-05T16:00:00.000Z');
+  const service = serviceWith({
+    project: {
+      findMany: async (args: any) => {
+        assert.equal(args.select.startedAt, true, 'the rail selects startedAt');
+        return [{ id: 'running', startedAt }, { id: 'waiting', startedAt: null }];
+      },
+    },
+    projectCodebase: { findMany: async () => [] },
+    $queryRaw: async () => [],
+  });
+
+  const rows = await service.listSidebar(OWNER_ID);
+  assert.deepEqual(rows.map((row) => row.startedAt), [startedAt, null]);
+});
+
 // The sidebar's working dot and its order both read this, so it has to be the session list's own
 // spinner: a project whose coordinator the list shows spinning must not read idle, nor the reverse.
 test('the index says whether each coordinator is working, exactly when the session list spins', async () => {

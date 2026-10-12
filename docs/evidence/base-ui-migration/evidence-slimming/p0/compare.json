@@ -1,0 +1,25 @@
+{
+ "tests": 112,
+ "identical": true,
+ "differences": [],
+ "failedBefore": [
+  "chromium-dark-desktop | pages.browser.mjs | profile",
+  "chromium-dark-phone | pages.browser.mjs | profile",
+  "chromium-light-desktop | pages.browser.mjs | profile",
+  "chromium-light-phone | pages.browser.mjs | profile",
+  "webkit-dark-desktop | pages.browser.mjs | profile",
+  "webkit-dark-phone | pages.browser.mjs | profile",
+  "webkit-light-desktop | pages.browser.mjs | profile",
+  "webkit-light-phone | pages.browser.mjs | profile"
+ ],
+ "failedAfter": [
+  "chromium-dark-desktop | pages.browser.mjs | profile",
+  "chromium-dark-phone | pages.browser.mjs | profile",
+  "chromium-light-desktop | pages.browser.mjs | profile",
+  "chromium-light-phone | pages.browser.mjs | profile",
+  "webkit-dark-desktop | pages.browser.mjs | profile",
+  "webkit-dark-phone | pages.browser.mjs | profile",
+  "webkit-light-desktop | pages.browser.mjs | profile",
+  "webkit-light-phone | pages.browser.mjs | profile"
+ ]
+}

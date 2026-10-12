@@ -1,0 +1,17 @@
+folds-light: header 9 label="Jump to your last question" value="" frame=(629.0, 108.0, 371.0, 30.0) hittable=true
+folds-light: stream connected
+step turn: {"ok": true, "historySeq": 20, "maxSeq": 22}
+step think1: {"ok": true, "historySeq": 20, "maxSeq": 22}
+step fold1: {"ok": true, "historySeq": 20, "maxSeq": 25}
+fold1-light: the fold never showed
+step think2: {"ok": true, "historySeq": 20, "maxSeq": 25}
+step fold2: {"ok": true, "historySeq": 20, "maxSeq": 26}
+fold2-light: the fold never showed
+step tool2: {"ok": true, "historySeq": 20, "maxSeq": 28}
+step think3: {"ok": true, "historySeq": 20, "maxSeq": 28}
+step fold3: {"ok": true, "historySeq": 20, "maxSeq": 29}
+fold3-light: the fold never showed
+step reply: {"ok": true, "historySeq": 20, "maxSeq": 30}
+step end: {"ok": true, "historySeq": 20, "maxSeq": 31}
+rest-light: jump disc (missing)
+rest-light: last line bottom 561.0, list bottom 588.0, fade from 568.0: above the fade

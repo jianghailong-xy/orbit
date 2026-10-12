@@ -1,0 +1,94 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:53:05.644Z",
+    "duration": 6263.492,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 2392
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+          "sha256": "161ecb2ae34261f1f66eba3df0861220c206d948beda7cb41940f82f0f278d29"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+          "sha256": "28741b68e1309b6045dd70594c26ecd584f1e3103762705e58c66e7b7918b613"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+          "sha256": "ae741a0da0048e0ce286d72e3c5b25d2d545f2c9f84573db23c6b4db46c39384"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+          "sha256": "14398c746067365803a92a0eb04344eee856e200a79669f0520018bfe2451344"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--motion.json",
+          "sha256": "50dc26fda5e10ba28b9fa81ec4b83d765c9a859ac807466e82b8f056b9b45509"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--error-context.md",
+          "sha256": "9fc09c10e942c66292ab8dde284dfd4680acee42c19f6150541fc37e8b80ef60"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-popover--trace.zip",
+          "sha256": "119e93d6534abd53460b90faccf612081d4e7a4b4b8b822908e565bedbe0d5aa"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 2617
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+          "sha256": "7f2859c0305d70aab231055d169627079bbef3a0c82741b8cf3ef415cf47c7d1"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+          "sha256": "ccf836357f0a3e31f9ab1bd15f849b4118dcd8d8831ad97ed393ba3e3961da8d"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+          "sha256": "572da63ed6041d7a94973f42720513a8b9fa8e4538c98710c25ea48a64d3c868"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+          "sha256": "e0df55b66b8637860288aaf6a24764efe3614f44a81ad15b1344d7bbc2e95944"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--motion.json",
+          "sha256": "d1c93eefcb15409ca5b1fd82283eb56384d9071ebd6e50ef749c41884b7723d1"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--error-context.md",
+          "sha256": "8dd6f5a928c7de73e15784c878363895fb310582516be3e1d53d722f01008f42"
+        },
+        {
+          "file": "chromium-light-desktop--normal-bottom-entrance-and-exit-motion-matches-tooltip--trace.zip",
+          "sha256": "823ecc9aa9631755bb29c4a9cc6b25e9cffd6e8e709d7c5fea3cd07b503ad23d"
+        }
+      ]
+    }
+  ]
+}

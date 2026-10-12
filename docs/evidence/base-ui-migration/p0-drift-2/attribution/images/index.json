@@ -1,0 +1,80 @@
+[
+ {
+  "image": "A6--chromium-light-desktop--profile.png",
+  "change": "A6 d233a6cd0",
+  "screenshot": "chromium-light-desktop/profile.png",
+  "left": {
+   "run": "full-orig-e6786d077",
+   "sha256": "bee5cfd83eb10740b16f7ecacf90e4f6c41d0deef7706bb22959d69df0af115a"
+  },
+  "right": {
+   "run": "full-orig-d233a6cd0",
+   "sha256": "c212b90da375854b20dc4ac8b41e6dcd1d0d6ba292b90a4968606321e1e91e32"
+  }
+ },
+ {
+  "image": "A6--webkit-light-phone--profile-validation.png",
+  "change": "A6 d233a6cd0",
+  "screenshot": "webkit-light-phone/profile-validation.png",
+  "left": {
+   "run": "full-orig-e6786d077",
+   "sha256": "881862c4cff20e250ce0643e98e22263e76fb3fde6039d912234faec69db1d5d"
+  },
+  "right": {
+   "run": "full-orig-d233a6cd0",
+   "sha256": "0fc4f654253d7a41ec2cb664221f70105190aafc6c9c89238ff86f7f51d328db"
+  }
+ },
+ {
+  "image": "A7--webkit-light-desktop--breakpoint-959-wiki.png",
+  "change": "A7 6c4e0ac0e",
+  "screenshot": "webkit-light-desktop/breakpoint-959-wiki.png",
+  "left": {
+   "run": "full-orig-4920dab40",
+   "sha256": "92b682d12c2021299d9899539196d6379adebca66e09ac8a6aa8dcb39c1ce24f"
+  },
+  "right": {
+   "run": "full-orig-6c4e0ac0e",
+   "sha256": "aebd68cc8946285666f38967e78537954f23da7bcbed3e73f2cc91613a194970"
+  }
+ },
+ {
+  "image": "A8--chromium-light-phone--wiki-home.png",
+  "change": "A8 2f9cc095f",
+  "screenshot": "chromium-light-phone/wiki-home.png",
+  "left": {
+   "run": "full-orig-51f0cdfee",
+   "sha256": "f2ff8b25e03ffe54e81fffb8a8de9bcb08f64c899f11d4c338bafd590322e054"
+  },
+  "right": {
+   "run": "full-maint-2f9cc095f",
+   "sha256": "dcbf066a6fd5b87db734830f26ced2bdccd8130d60592fd2820525e2c79fe584"
+  }
+ },
+ {
+  "image": "A8--webkit-dark-phone--wiki-contents.png",
+  "change": "A8 2f9cc095f",
+  "screenshot": "webkit-dark-phone/wiki-contents.png",
+  "left": {
+   "run": "full-orig-51f0cdfee",
+   "sha256": "5f5bfe10d9d00e5782eba642362945e327791feb573c00de63a59a77324fbd0d"
+  },
+  "right": {
+   "run": "full-maint-2f9cc095f",
+   "sha256": "ede81c8c75ac2c42c04260d5a1cec3c1f954be653083c84f3984611c086ae364"
+  }
+ },
+ {
+  "image": "A9--chromium-light-desktop--wiki-home.png",
+  "change": "A9 a884fda36",
+  "screenshot": "chromium-light-desktop/wiki-home.png",
+  "left": {
+   "run": "full-maint-b2e05492f",
+   "sha256": "bb7e166818a583e531b27e0d11df29afce6c529b035812040fed44390323d35a"
+  },
+  "right": {
+   "run": "full-maint-a884fda36",
+   "sha256": "f9033c749fc40d6af0650267ded6ab25ab5dd9bcbf6a700d05e046fdfee6def0"
+  }
+ }
+]

@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "npm",
+    "run",
+    "test:ui-toasts",
+    "-w",
+    "@orbit/web",
+    "--",
+    "--grep",
+    "unchanged appearance"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "startedFrom": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "finishedAt": "2026-10-04T06:27:40.011800+00:00",
+  "seconds": 33.842962892988,
+  "exitCode": 1
+}

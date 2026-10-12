@@ -78,7 +78,8 @@ enum SidebarSelection: Hashable {
 }
 
 /// macOS's leftmost rail, a source list: the sections in order, with an expandable, runner-grouped
-/// Workspaces section among them. Admin is role-gated.
+/// Workspaces section among them. Admin is role-gated, and the Wiki is drawn only for an account the
+/// server has the wiki on for, as the iPhone's drawer and the iPad's sidebar draw it.
 struct SectionSidebar: View {
     @Environment(AppModel.self) private var model
     let isAdmin: Bool
@@ -112,7 +113,7 @@ struct SectionSidebar: View {
         _ = (model.selectedSection, model.selectedAgentID)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
         return List(selection: selection) {
-            ForEach(AppSection.visible(isAdmin: isAdmin)) { section in
+            ForEach(AppSection.visible(isAdmin: isAdmin, wiki: model.wiki?.shown == true)) { section in
                 if section == .agents {
                     agentsDisclosure(shortcutIndex: shortcutIndex)
                 } else {
@@ -130,6 +131,8 @@ struct SectionSidebar: View {
             .background(.bar)
         }
         .task { await model.loadAgentsThenLand() }
+        // Whether the Wiki row is drawn at all is the spaces read's answer (WIKI_DISABLED, `WikiLogic.shown`).
+        .task { await model.wiki?.loadSpaces() }
     }
 
     /// The line standing in for an empty workspace list. It says there are none only after a fetch
@@ -271,7 +274,7 @@ struct SectionContent: View {
         case .tasks:
             TasksListView()
         case .wiki:
-            WikiHomeView()
+            WikiContentsColumn()
         case .following:
             FollowingListView()
         case .agents:

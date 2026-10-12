@@ -1,0 +1,54 @@
+[
+  {
+    "name": "choices-matrix",
+    "argv": [
+      "node",
+      "node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "src/web/ui-migration/coordinator-choices.config.mjs"
+    ],
+    "exitCode": 1,
+    "seconds": 548.87
+  },
+  {
+    "name": "focused-unit",
+    "argv": [
+      "npm",
+      "test",
+      "-w",
+      "@orbit/web",
+      "--",
+      "src/lib/theme.test.tsx",
+      "src/components/ui/boundary.test.ts",
+      "src/components/ShareModal.test.tsx",
+      "src/components/WorkspaceView.composerMenu.test.tsx"
+    ],
+    "exitCode": 0,
+    "seconds": 3.58
+  },
+  {
+    "name": "fixture-types",
+    "argv": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "-p",
+      "src/web/ui-migration/choices.tsconfig.json",
+      "--noEmit"
+    ],
+    "exitCode": 0,
+    "seconds": 0.29
+  },
+  {
+    "name": "web-build",
+    "argv": [
+      "npm",
+      "run",
+      "build",
+      "-w",
+      "@orbit/web"
+    ],
+    "exitCode": 0,
+    "seconds": 1.96
+  }
+]

@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && git status --short && npm test -w @orbit/web -- src/components/ui/Menu.test.tsx",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_296cc8757323",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "4fb7ee43f",
+ "webTree": "c3c0956ee13af6c020a3de630819693c99dcd270",
+ "outputLastWritten": "2026-10-07T04:13:33.502821+00:00",
+ "exitCode": 0,
+ "outputSha256": "2adde1974508616c0110e8fa0bea58959a2e4ac0ae7542b0e4d2e0370ac8a6df",
+ "outputBytes": 663,
+ "note": "Fixed tree (fix commit 4fb7ee43f, clean). 18 passed: every window case runs the item its reference runs."
+}

@@ -46,7 +46,7 @@ func TestSelfUpdateWaitsForAnAcceptanceCommandInFlight(t *testing.T) {
 		return "0.1.186", true
 	}
 	reason, remote := waitForRunLoopStop(context.Background(), nil, "https://control.example", interval,
-		updateWhenNoTurnInFlight(published, pool, interval))
+		updateWhenNoTurnInFlight(published, pool, interval), nil)
 	settledBeforeTheUpdate := s.settledTurn("accept-1") != nil
 	stopLoop(errRunnerSelfUpdate)
 

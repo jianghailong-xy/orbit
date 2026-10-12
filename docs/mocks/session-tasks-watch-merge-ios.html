@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Watching + Tasks created here 合并为一张卡（iPhone · 深色）</title>
+<style>
+  @font-face { font-family: "MockInter"; src: url("file:///var/tmp/agy-p3demo/fonts/Inter.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "MockSC"; src: url("file:///var/tmp/agy-p3demo/fonts/NotoSansSC.ttf"); font-weight: 100 900; }
+  /* iPhone geometry as session-created-tasks-strip-ios.html; dark appearance as the owner's screenshot.
+     Card: RoundedRectangle(8), primary 4% fill, 10% hairline; header 30pt, rows 31pt; pill column 70pt. */
+  :root { --tint: #0A84FF; --sec: #8D8D93; --ter: #5A5A5F; --blue: #0A84FF; --orange: #FF9F0A; --green: #30D158; --red: #FF453A; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 26px 30px 34px; background: #e9ebef; width: 1560px;
+         font-family: -apple-system, "MockInter", "MockSC", sans-serif; color: #1f2329; }
+  h1 { font-size: 19px; font-weight: 650; margin: 0 0 4px; }
+  .sub { color: #4a4f57; margin: 0 0 18px; font-size: 13px; line-height: 1.6; max-width: 1300px; }
+  code { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 11.5px; background: #dfe2e7; border-radius: 4px; padding: 1px 4px; }
+  .phones { display: flex; gap: 34px; align-items: flex-start; }
+  .cap { font-size: 12.5px; font-weight: 650; margin: 0 0 8px; }
+  .cap.before { color: #b3380a; } .cap.after { color: #1a7f37; }
+  .cap span { font-weight: 400; color: #646a73; margin-left: 6px; }
+  .bezel { padding: 11px; background: #2c2c2e; border-radius: 66px; box-shadow: 0 12px 30px rgba(0,0,0,.25); }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 55px; overflow: hidden; background: #000; color: #fff; }
+  .abs { position: absolute; }
+  .time { left: 51px; top: 17px; font-size: 17px; font-weight: 600; }
+  .island { left: 134px; top: 11px; width: 125px; height: 37px; border-radius: 20px; background: #111; box-shadow: inset 0 0 0 1px #222; }
+  .glass { top: 59px; width: 44px; height: 44px; border-radius: 22px; background: rgba(60,60,64,.7); display: flex; align-items: center; justify-content: center; color: #fff; }
+  .navtitle { left: 70px; right: 70px; top: 62px; text-align: center; }
+  .navtitle b { display: block; font-size: 16.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .navtitle span { display: block; font-size: 12.5px; color: var(--sec); margin-top: 2px; }
+  .chat { left: 16px; right: 16px; top: 110px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; gap: 14px; }
+  .chat p { margin: 0; font-size: 17px; line-height: 1.45; color: #f2f2f7; }
+  .bubble { align-self: flex-end; max-width: 241px; background: #1c2a4a; border-radius: 12px; padding: 6px 12px 4px; font-size: 17px; line-height: 1.45; }
+  .card { left: 16px; width: 361px; border-radius: 8px; background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; }
+  .t13 { font-size: 13px; } .semi { font-weight: 600; }
+  .meta { font-size: 11px; color: var(--sec); white-space: nowrap; }
+  .mono { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 12.4px; white-space: nowrap; }
+  .grow { flex: 1 1 auto; min-width: 0; }
+  .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bpill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .composer { left: 16px; width: 361px; top: 712px; height: 92px; border-radius: 24px; background: #1c1c1e; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .composer .ph { position: absolute; left: 16px; top: 13px; font-size: 17px; color: #6c6c70; }
+  .composer .bar { position: absolute; left: 14px; right: 10px; bottom: 9px; display: flex; align-items: center; gap: 14px; font-size: 15px; color: #c7c7cc; }
+  .composer .bar b { color: #fff; font-weight: 600; margin-left: 14px; }
+  .send { margin-left: auto; width: 32px; height: 32px; border-radius: 16px; background: #636366; display: flex; align-items: center; justify-content: center; }
+  .home { left: 129.5px; top: 839px; width: 134px; height: 5px; border-radius: 3px; background: #fff; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 99px; font-size: 11px; white-space: nowrap; }
+  .pill i { width: 6px; height: 6px; border-radius: 3px; background: currentColor; }
+  .pill.run { color: var(--blue); background: rgba(10,132,255,.18); }
+  .pill.que { color: var(--orange); background: rgba(255,159,10,.18); }
+  .pill.done { color: var(--green); background: rgba(48,209,88,.16); }
+  .pill.fail { color: var(--red); background: rgba(255,69,58,.18); }
+  .spin { width: 9px; height: 9px; border-radius: 50%; border: 1.6px solid rgba(10,132,255,.3); border-top-color: var(--blue); }
+  .list { border-top: .5px solid rgba(255,255,255,.12); position: relative; }
+  .trow { display: flex; align-items: center; gap: 6px; height: 31px; padding: 0 12px; }
+  .trow + .trow { border-top: .5px solid rgba(255,255,255,.08); }
+  .trow .pc { flex: none; width: 70px; display: flex; }
+  .trow .w { flex: none; width: 14px; display: flex; justify-content: center; color: var(--tint); }
+  .trow .age { font-size: 11px; color: var(--sec); flex: none; }
+  .trow .from { font-size: 11px; color: var(--sec); flex: none; }
+  .trow .chev { flex: none; color: var(--ter); }
+  .stale { padding: 6px 12px; font-size: 11px; color: var(--orange); border-top: .5px solid rgba(255,255,255,.12); display: flex; gap: 6px; align-items: center; }
+  .more { position: absolute; left: 0; right: 0; bottom: 0; height: 22px; background: linear-gradient(to bottom, rgba(10,10,10,0), rgba(10,10,10,1)); }
+  .new { outline: 2px dashed #e8590c; outline-offset: 3px; }
+  .ann { font-size: 12px; color: #646a73; margin: 10px 4px 0; line-height: 1.55; max-width: 415px; }
+  .ann b { color: #1f2329; }
+  .strip { background: #000; border-radius: 14px; padding: 14px 16px; width: 393px; color: #fff; }
+  .strip .card { position: static; }
+  .cases { display: flex; gap: 34px; margin-top: 26px; align-items: flex-start; flex-wrap: wrap; }
+  .why { margin-top: 24px; background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 14px 18px; display: grid;
+         grid-template-columns: repeat(3, 1fr); gap: 6px 28px; font-size: 12.5px; line-height: 1.6; color: #30343b; }
+  .why h3 { margin: 0 0 4px; font-size: 13px; color: #1f2329; }
+  .why ul { margin: 0; padding-left: 16px; }
+  .why li { margin: 0 0 4px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="task" viewBox="0 0 16 16"><rect x="1.4" y="1.4" width="13.2" height="13.2" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.6 8.2 7 10.5l4.6-5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="eye" viewBox="0 0 16 16"><path d="M1 8s2.6-4.6 7-4.6S15 8 15 8s-2.6 4.6-7 4.6S1 8 1 8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.1" fill="currentColor"/></symbol>
+  <symbol id="sf-branch" viewBox="0 0 16 16"><path d="M5 2.5v11M5 9c0-2.6 6-2 6-5.2V2.5M11 2.5l-2 2M11 2.5l2 2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cr" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cd" viewBox="0 0 16 16"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cl" viewBox="0 0 16 16"><path d="M10.5 3 5.5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="dots" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M8 13V3.5M3.8 7.6 8 3.4l4.2 4.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="term" viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="11.6" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.2h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<h1>Watching + Tasks created here → 合并成一张 <i>Tasks</i> 卡（iPhone · 深色）</h1>
+<p class="sub">
+  现在两张卡列的大多是<b>同一批任务</b>：会话建了任务，再 <code>task_await</code> 等它们，于是同一条任务在 Watching 和 Tasks created here 里各出现一次（截图里 4 条 Watching 全在 6 条里）。
+  合并后只留一张卡：<b>建在这里的任务 ∪ 正在观察的任务</b>，每个任务一行；被观察的那行在状态胶囊后面多一个蓝色 <b>👁</b>。
+  卡头的计数句照旧，前面加一个 “👁 4” 说明有几条在等。虚线框 = 改动。
+</p>
+
+<template id="chrome">
+  <div class="abs time">9:41</div>
+  <div class="abs island"></div>
+  <div class="abs glass" style="left:16px"><svg width="20" height="20"><use href="#cl"/></svg></div>
+  <div class="abs glass" style="left:333px"><svg width="20" height="20"><use href="#dots"/></svg></div>
+  <div class="abs navtitle"><b>source-refused 收尾</b><span>DeepSeek V4.1 Flash · Max</span></div>
+</template>
+
+<template id="talk">
+  <p>四条任务都派出去了，我用 task_await 等它们跑完，有结果会自动接着处理。</p>
+  <div class="bubble">好，CI 那条跑完先告诉我</div>
+  <p>收到。CI 补拍那条完成后我先汇报截图结果，再看 apiserver 那条。</p>
+</template>
+
+<template id="branch">
+  <div class="row">
+    <span class="bpill"><svg width="11" height="11" style="color:var(--sec)"><use href="#sf-branch"/></svg><span class="mono" style="color:#c7c7cc">orbit…ba251c</span></span>
+    <span class="mono ell grow"><span style="color:var(--green)">+610</span> <span style="color:var(--red)">−0</span><span style="color:var(--sec)"> · 2 files</span></span>
+    <span class="t13 semi" style="color:var(--green)">✓ Merged</span>
+  </div>
+</template>
+
+<template id="bottom">
+  <div class="abs composer">
+    <span class="ph">Message…</span>
+    <div class="bar">
+      <svg width="20" height="20" viewBox="0 0 22 22"><path d="M11 3v16M3 11h16" stroke="#c7c7cc" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>Auto</span><b>DeepSeek V4.1 Flash</b><span style="color:var(--sec)">Max</span>
+      <span class="send"><svg width="15" height="15"><use href="#up"/></svg></span>
+    </div>
+  </div>
+  <div class="abs home"></div>
+</template>
+
+<!-- The merged header: checkmark.square · Tasks · 👁 4 · sentence · chevron. -->
+<template id="head">
+  <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#task"/></svg>
+  <span class="t13 semi" style="white-space:nowrap">Tasks</span>
+  <span class="meta" style="color:var(--tint);display:inline-flex;align-items:center;gap:3px"><svg width="12" height="12"><use href="#eye"/></svg>4</span>
+  <span class="meta ell">· 4 running · 2/6 done</span>
+  <span class="grow"></span>
+</template>
+
+<template id="rows">
+  <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="w"><svg width="13" height="13"><use href="#eye"/></svg></span><span class="t13 grow ell">CI 补拍 source-refused 的 macOS 截图</span><span class="age">1h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+  <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="w"><svg width="13" height="13"><use href="#eye"/></svg></span><span class="t13 grow ell">apiserver：把 SOURCE 快照发给 runner</span><span class="age">1h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+  <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="w"><svg width="13" height="13"><use href="#eye"/></svg></span><span class="t13 grow ell">被拒的开工：同一事务里把这次运行收尾</span><span class="age">1h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+  <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="w"><svg width="13" height="13"><use href="#eye"/></svg></span><span class="t13 grow ell">web：把「没跑起来」画出来（会话页两处）</span><span class="age">1h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+  <div class="trow"><span class="pc"><span class="pill done"><i></i>Done</span></span><span class="w"></span><span class="t13 grow ell">source-refused 文案三端对齐</span><span class="age">3h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+  <div class="trow"><span class="pc"><span class="pill done"><i></i>Done</span></span><span class="w"></span><span class="t13 grow ell">iOS：会话页「没跑起来」卡片</span><span class="age">4h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+</template>
+
+<div class="phones">
+  <div>
+    <p class="cap before">① 现在<span>两张卡，4 条任务出现两次</span></p>
+    <div class="bezel"><div class="screen">
+      <div data-use="chrome"></div>
+      <div class="abs chat" style="height:150px"><div data-use="talk"></div></div>
+      <div class="abs card" style="top:270px;height:92px">
+        <div class="row">
+          <svg width="13" height="13" style="color:var(--sec)"><use href="#eye"/></svg>
+          <span class="t13 semi">Watching</span><span class="meta" style="color:var(--tint)">all 4 tasks</span><span class="meta">4 running · 0/4 done</span>
+          <span class="grow"></span><svg width="10" height="10" style="color:var(--sec)"><use href="#cd"/></svg>
+        </div>
+        <div class="list">
+          <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="t13 grow ell">被拒的开工：同一事务里把这次运行收尾</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="t13 grow ell">web：把「没跑起来」画出来（会话页两处）</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+        </div>
+      </div>
+      <div class="abs card" style="top:370px;height:216px">
+        <div class="row">
+          <svg width="12" height="12" style="color:var(--sec)"><use href="#task"/></svg>
+          <span class="t13 semi">Tasks created here</span><span class="meta">4 running · 2/6 done</span>
+          <span class="grow"></span><svg width="10" height="10" style="color:var(--sec)"><use href="#cd"/></svg>
+        </div>
+        <div class="list" style="height:186px;overflow:hidden">
+          <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="t13 grow ell">CI 补拍 source-refused 的 macOS 截图</span><span class="age">1h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="t13 grow ell">apiserver：把 SOURCE 快照发给 runner</span><span class="age">1h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="t13 grow ell">被拒的开工：同一事务里把这次运行收尾</span><span class="age">1h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="t13 grow ell">web：把「没跑起来」画出来（会话页两处）</span><span class="age">1h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill done"><i></i>Done</span></span><span class="t13 grow ell">source-refused 文案三端对齐</span><span class="age">3h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+          <div class="trow"><span class="pc"><span class="pill done"><i></i>Done</span></span><span class="t13 grow ell">iOS：会话页「没跑起来」卡片</span><span class="age">4h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+          <div class="more"></div>
+        </div>
+      </div>
+      <div class="abs card" style="top:594px;height:30px"><div data-use="branch"></div></div>
+      <div data-use="bottom"></div>
+    </div></div>
+    <p class="ann">两张卡都展开时占 <b>316pt</b>，Watching 里的 4 条在下面又出现一次。</p>
+  </div>
+
+  <div>
+    <p class="cap after">② 合并 · 展开<span>一行一个任务，被观察的带 👁</span></p>
+    <div class="bezel"><div class="screen">
+      <div data-use="chrome"></div>
+      <div class="abs chat" style="height:260px"><div data-use="talk"></div></div>
+      <div class="abs card new" style="top:380px;height:206px">
+        <div class="row"><div data-use="head"></div><svg width="10" height="10" style="color:var(--sec);flex:none"><use href="#cd"/></svg></div>
+        <div class="list" style="height:176px;overflow:hidden"><div data-use="rows"></div><div class="more"></div></div>
+      </div>
+      <div class="abs card" style="top:594px;height:30px"><div data-use="branch"></div></div>
+      <div data-use="bottom"></div>
+    </div></div>
+    <p class="ann">卡片 <b>206pt</b>（省 110pt，对话区多出约 4 行）。👁 占胶囊后面固定 14pt 一列，没在观察的行留空，标题仍然对齐。
+      <b>被观察的排最前</b>（会话就是在等它们），其余照服务端原顺序。</p>
+  </div>
+
+  <div>
+    <p class="cap after">③ 合并 · 折叠<span>只剩一行</span></p>
+    <div class="bezel"><div class="screen">
+      <div data-use="chrome"></div>
+      <div class="abs chat" style="height:436px"><div data-use="talk"></div></div>
+      <div class="abs card new" style="top:556px;height:30px">
+        <div class="row"><div data-use="head"></div><svg width="10" height="10" style="color:var(--sec);flex:none"><use href="#cr"/></svg></div>
+      </div>
+      <div class="abs card" style="top:594px;height:30px"><div data-use="branch"></div></div>
+      <div data-use="bottom"></div>
+    </div></div>
+    <p class="ann">“👁 4” 用 tint 色，告诉你会话在等几条；计数句不变。都完成、观察自动结束后 👁 消失，卡头回到 “Tasks · 6/6 done”。</p>
+  </div>
+</div>
+
+<div class="cases">
+  <div>
+    <p class="cap after">观察的任务不是这里建的<span>也进同一张卡</span></p>
+    <div class="strip"><div class="card new">
+      <div class="row">
+        <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#task"/></svg>
+        <span class="t13 semi">Tasks</span>
+        <span class="meta" style="color:var(--tint);display:inline-flex;align-items:center;gap:3px"><svg width="12" height="12"><use href="#eye"/></svg>2</span>
+        <span class="meta ell">· 2 running · 1/3 done</span><span class="grow"></span>
+        <svg width="10" height="10" style="color:var(--sec)"><use href="#cd"/></svg>
+      </div>
+      <div class="list">
+        <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="w"><svg width="13" height="13"><use href="#eye"/></svg></span><span class="t13 grow ell">Android 通知点击跳转</span><span class="from">elsewhere</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+        <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="w"><svg width="13" height="13"><use href="#eye"/></svg></span><span class="t13 grow ell">apiserver：watch 唤醒去重</span><span class="age">20m ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+        <div class="trow"><span class="pc"><span class="pill done"><i></i>Done</span></span><span class="w"></span><span class="t13 grow ell">迁移编号冲突检查</span><span class="age">2h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+      </div>
+    </div></div>
+    <p class="ann">年龄那一列换成灰字 <b>elsewhere</b>，区分“别处建的、这里只是在等”。计数句按卡里所有任务算（3 条）。</p>
+  </div>
+
+  <div>
+    <p class="cap after">观察很久没被检查<span>提醒挂在卡里</span></p>
+    <div class="strip"><div class="card new">
+      <div class="row">
+        <svg width="12" height="12" style="color:var(--sec);flex:none"><use href="#task"/></svg>
+        <span class="t13 semi">Tasks</span>
+        <span class="meta" style="color:var(--orange);display:inline-flex;align-items:center;gap:3px"><svg width="12" height="12"><use href="#eye"/></svg>2</span>
+        <span class="meta ell">· 2 running · 0/2 done</span><span class="grow"></span>
+        <svg width="10" height="10" style="color:var(--sec)"><use href="#cd"/></svg>
+      </div>
+      <div class="stale">Not checked for 3h — the agent may not be waiting anymore.</div>
+      <div class="list">
+        <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="w" style="color:var(--orange)"><svg width="13" height="13"><use href="#eye"/></svg></span><span class="t13 grow ell">CI 补拍 source-refused 的 macOS 截图</span><span class="age">4h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+        <div class="trow"><span class="pc"><span class="pill run"><span class="spin"></span>Running</span></span><span class="w" style="color:var(--orange)"><svg width="13" height="13"><use href="#eye"/></svg></span><span class="t13 grow ell">apiserver：把 SOURCE 快照发给 runner</span><span class="age">4h ago</span><svg class="chev" width="9" height="9"><use href="#cr"/></svg></div>
+      </div>
+    </div></div>
+    <p class="ann">现在 Watching 卡里的 stale 提醒原样搬过来，放在列表顶部；对应行和卡头的 👁 变橙色。</p>
+  </div>
+
+  <div>
+    <p class="cap after">观察的是会话（不是任务）<span>建议：保留一张瘦 Watching 卡</span></p>
+    <div class="strip">
+      <div class="card" style="margin-bottom:8px"><div class="row">
+        <svg width="13" height="13" style="color:var(--sec);flex:none"><use href="#eye"/></svg>
+        <span class="t13 semi">Watching</span>
+        <span class="meta ell grow" style="color:var(--tint)">iOS 构建会话</span>
+        <span class="pill run" style="flex:none"><span class="spin"></span>Working</span>
+        <svg width="10" height="10" style="color:var(--sec);flex:none"><use href="#cr"/></svg>
+      </div></div>
+      <div class="card new"><div class="row"><div data-use="head"></div><svg width="10" height="10" style="color:var(--sec);flex:none"><use href="#cr"/></svg></div></div>
+    </div>
+    <p class="ann">Watching 卡只在<b>有非任务目标</b>（会话等）时出现，只列那些目标；任务一律归 Tasks 卡。这种情况少见，单独一行比硬塞进 “Tasks” 更诚实。</p>
+  </div>
+</div>
+
+<div class="why">
+  <div>
+    <h3>规则</h3>
+    <ul>
+      <li>卡内任务 = 本会话创建的 ∪ 本会话 watch 的任务目标，按 task id 去重。</li>
+      <li>被观察的行：胶囊后一列 👁（tint）；stale 时橙色。</li>
+      <li>排序：被观察的在前，其余保持服务端顺序（replaced 折叠规则不变）。</li>
+      <li>卡头：<code>Tasks</code> + <code>👁 N</code>（N&gt;0 才显示）+ 原计数句；单任务时仍是“名字 + 胶囊”，被观察就在胶囊前加 👁。</li>
+    </ul>
+  </div>
+  <div>
+    <h3>需要你拍板</h3>
+    <ul>
+      <li>卡名：<b>Tasks</b>（推荐，因为会含别处建的任务）还是保留 “Tasks created here”？</li>
+      <li>会话类 watch：保留瘦 Watching 卡（推荐）还是也并进来？</li>
+      <li>只在 iOS 改，还是 iOS / macOS / web 三端一起（现在三端文案有 parity 测试，建议一起）。</li>
+    </ul>
+  </div>
+  <div>
+    <h3>涉及文件</h3>
+    <ul>
+      <li>iOS/macOS：<code>CreatedTasksCard.swift</code>、<code>WatchingCard.swift</code>、<code>WatchProjection.swift</code>、<code>SessionCreatedTasksCopy.swift</code></li>
+      <li>web：<code>SessionCreatedTasksStrip.tsx</code>、<code>SessionWatchStrip</code></li>
+      <li>shared：<code>sessionCreatedTasks.ts</code>、<code>watch-strip.fixture.json</code> + 两组 parity 测试</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // Expand <div data-use="id"> from <template id="id">.
+  for (const el of document.querySelectorAll('[data-use]')) {
+    el.replaceWith(document.getElementById(el.dataset.use).content.cloneNode(true));
+  }
+</script>
+</body>
+</html>

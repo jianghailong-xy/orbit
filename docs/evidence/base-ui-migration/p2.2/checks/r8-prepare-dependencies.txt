@@ -1,0 +1,15 @@
+worktree-overlay: incompatible dependencies in /root/orbit: node_modules/@nodelib/fs.scandir: an extra installed package could shadow the locked graph
+==> installing this worktree's lockfile in isolated node_modules
+npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+
+added 749 packages in 4s
+==> tsc /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/node_modules/.bin/tsc (Version 7.0.2)
+==> copying @prisma/client out of /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/node_modules/@prisma/client (this worktree needs its own)
+==> generating this branch's Prisma client
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2 is ready to build and test

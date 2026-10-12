@@ -1,0 +1,118 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-08",
+ "task": "34Za39GvWRQ08ZmKOpFNe",
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-08",
+  "questions": [
+   "Empty",
+   "index.css: .ant-popover .watch-row-list {",
+   "index.css: /* The two lines, one under the other; the class makes these rules outrank antd's own"
+  ]
+ },
+ "scan": {
+  "commit": "079c5f006a7ff7cd7b24477483f902e10ef4230d",
+  "scopeHash": "159da1473a9792c1f216def3189b3e1fe92089ca2467cfc9f304a0694eb2918a",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 748,
+   "productionFiles": 377,
+   "testFiles": 369,
+   "antdProductionFiles": 79,
+   "antdTestFiles": 64,
+   "antSelectorTestFiles": 42,
+   "antClassTestFiles": 47,
+   "iconProductionFiles": 110,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 277,
+   "hitLines": {
+    "ant-class": 307,
+    "ant-design-support": 19,
+    "ant-selector": 285,
+    "antd-reference": 299,
+    "icon-class": 79,
+    "icon-reference": 121,
+    "imperative-confirm": 12,
+    "imperative-feedback": 221,
+    "internal-ref": 4,
+    "provider": 76,
+    "rc-support": 231,
+    "ref-focus": 28,
+    "theme": 2,
+    "use-app": 9,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 196
+  }
+ },
+ "files": {
+  "src/web/src/components/ui/Empty.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "079c5f006a7ff7cd7b24477483f902e10ef4230d",
+     "short": "079c5f006",
+     "date": "2026-10-08",
+     "subject": "feat(web/ui): Empty, Skeleton, typography and list styles, Card extra/small, Alert action, Badge purple, Input clear (P4.3a)",
+     "line": "project"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "Empty 的两幅插图改编自 Ant Design 的 MIT 图形，注释写明出处与许可文件 antd-empty.LICENSE；与 ui/SelectEmpty.tsx 的同一说明一样，不是 antd 依赖，退役扫描里的这处文字由 P6 处理（保留许可说明或登记为允许的说明）。",
+   "basis": "按 2026-10-07.json 中 ui/SelectEmpty.tsx（同一许可说明，归 P6）的先例；P4.3b 在 079c5f006 上运行 --check-owners 时报出，P4.3a 报告协调者。"
+  }
+ },
+ "css": [
+  {
+   "path": "src/web/src/index.css",
+   "kind": "antd-reference",
+   "text": "/* The two lines, one under the other; the class makes these rules outrank antd's own",
+   "count": 1,
+   "lines": [
+    10699
+   ],
+   "status": "reassigned",
+   "type": "antd-text",
+   "p01Group": "StartProjectCard/ProjectRunSettings（P4.3）",
+   "owner": "P4.3a",
+   "reason": "这段注释说明的是 How it runs 的执行模式单选规则；`.project-run-lines` 只在 ProjectRunSettings.tsx 中使用（StartProjectCard 不用），与下一行（2026-10-07c.json 已归 P4.3a）同属 ProjectRunSettings，由 P4.3a 迁移单选时一并改写关闭。",
+   "basis": "协调者 2026-10-08 判定（P4.3a 开工核实分界后报告：10699 随 P4.3a 关闭，19729 随 WatchRelations.tsx 改归 P4.4，记入 2026-10-08b.json）。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-popover .watch-row-list {",
+   "count": 1,
+   "lines": [
+    19729
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "WatchRelations（P4.3）",
+   "owner": "P4.4",
+   "reason": "它限定的 AntD Popover 在 WatchRelations.tsx 中，该文件归 P4.4；不迁移那个 Popover 就改不了这条选择器，随 WatchRelations 一起迁移。",
+   "basis": "协调者 2026-10-08 判定（P4.3a 开工核实分界后报告：10699 随 P4.3a 关闭，19729 随 WatchRelations.tsx 改归 P4.4，记入 2026-10-08b.json）。"
+  }
+ ],
+ "summary": {
+  "files": 1,
+  "cssLines": 2,
+  "owners": {
+   "P4.3a": 1,
+   "P4.4": 1,
+   "P6": 1
+  }
+ }
+}

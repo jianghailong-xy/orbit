@@ -22,7 +22,7 @@ import {
   exceptionCardRows,
   isOwnerExceptionCard,
 } from './ProjectProgressStatus';
-import { projectOpenItemsQuery } from '../lib/queries';
+import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 import {
   START_PROJECT_TITLE,
   START_ROW_NOT_ASKED,
@@ -496,6 +496,34 @@ describe('ProjectOpenItems — the start of a project nobody has started', () =>
     expect(html).not.toContain(START_ROW_NOT_ASKED);
   });
 
+  it('says directly into the main branch the start card opens with: main as before, else the branch by name', () => {
+    const direct = (upstreamRef?: string) => item({
+      ...START,
+      startRequest: {
+        ...START.startRequest!,
+        settings: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null,
+          ...(upstreamRef ? { upstreamRef } : {}) },
+      },
+    });
+    const page = (row: ProjectOpenItemRow, standing?: object): string =>
+      paint({ needsYou: [], withCoordinator: [], startRequest: row }, (qc) => {
+        if (standing) qc.setQueryData(projectIntegrationQuery(PROJECT_ID).queryKey, standing as never);
+        return <ProjectOpenItems projectId={PROJECT_ID} now={NOW} started={false} onReviewStart={() => {}} />;
+      });
+    expect(startRequestSummary(direct().startRequest!.settings))
+      .toBe('The coordinator asked · directly into main · Automatic off · at most 1 at a time');
+    expect(page(direct())).toContain('The coordinator asked · directly into main · Automatic off · at most 1 at a time');
+    // The coordinator's suggestion, then the owner's last choice for the repository over it.
+    expect(page(direct('refs/heads/master')))
+      .toContain('The coordinator asked · directly into master · Automatic off · at most 1 at a time');
+    expect(page(direct('refs/heads/master'), {
+      upstreamRef: 'main', upstreamChosenAt: null,
+      lastMainBranch: { branch: 'develop', repository: 'acme/payments-api', chosenAt: at(MINUTE) },
+    })).toContain('The coordinator asked · directly into develop · Automatic off · at most 1 at a time');
+    expect(startRequestSummary(direct('refs/heads/master').startRequest!.settings, 'trunk'))
+      .toBe('The coordinator asked · directly into trunk · Automatic off · at most 1 at a time');
+  });
+
   it('draws the request only while the page knows the project is not started', () => {
     for (const started of [true, null, undefined]) {
       const html = openItems(asked, { started });
@@ -923,7 +951,7 @@ function actionRow(html: string): { label: string; weight: Weight }[] {
   return Array.from(row!.querySelectorAll(':scope > .project-open-item-door')).map((door) => {
     const press = door.querySelector<HTMLElement>('button, a');
     expect(press, `a door has a press: ${door.outerHTML}`).not.toBeNull();
-    const variant = press!.className.match(/ant-btn-(primary|default|link)\b/)?.[1];
+    const variant = press!.className.match(/orbit-button-(primary|default|link)\b/)?.[1];
     const weight: Weight | null =
       press!.tagName === 'A' || variant === 'link'
         ? 'link'
@@ -1024,12 +1052,12 @@ describe('the exception card’s action row', () => {
     await settle();
 
     const press = button('Mark as handled');
-    expect(press?.className).toContain('ant-btn-link');
+    expect(press?.className).toContain('orbit-button-link');
 
     await act(async () => press!.click());
     await settle();
     expect(
-      document.body.querySelector<HTMLElement>('.ant-modal'),
+      document.body.querySelector<HTMLElement>('[role="dialog"]'),
       'the press opens the dialog that asks for the reason',
     ).not.toBeNull();
 
@@ -1086,7 +1114,7 @@ describe('T10 required actions and current-candidate doors', () => {
     const body = parsed.querySelector('.project-open-item-body')!;
     expect(body.querySelector('.project-open-item-required-action')?.textContent).toContain('Nothing on the project branch');
     expect(body.querySelector('.project-open-item-handled-by')?.textContent).toContain('repair the combined tree');
-    expect(body.querySelector('.project-open-item-actions .ant-btn-primary')?.textContent).toContain('Ask the coordinator again');
+    expect(body.querySelector('.project-open-item-actions .orbit-button-primary')?.textContent).toContain('Ask the coordinator again');
     expect(body.querySelectorAll('.project-open-item-consequence').length).toBeGreaterThanOrEqual(2);
     expect(ACTION_CONSEQUENCES.MARK_HANDLED).toContain('reason');
   });
@@ -1198,7 +1226,7 @@ let root: Root | null = null;
 let container: HTMLElement | null = null;
 
 beforeEach(() => {
-  // The reason field the owner types into grows with its text, which antd measures with a
+  // The reason field the owner types into grows with its text, which it measures with a
   // ResizeObserver jsdom lacks — the same stub the blockers dialog's own suite carries.
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
@@ -1433,7 +1461,7 @@ describe('an owner marking an exception handled', () => {
     expect(trigger).toBeTruthy();
     await click(trigger!);
 
-    const dialog = document.body.querySelector<HTMLElement>('.ant-modal');
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
     expect(dialog).not.toBeNull();
     const field = dialog!.querySelector<HTMLTextAreaElement>('textarea');
     expect(field).not.toBeNull();

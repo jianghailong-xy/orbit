@@ -1,0 +1,22 @@
+{
+ "webkit-dark-desktop | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   10,
+   0
+  ],
+  "fixab": [
+   10,
+   0
+  ]
+ },
+ "webkit-light-desktop | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   10,
+   0
+  ],
+  "fixab": [
+   10,
+   0
+  ]
+ }
+}

@@ -5,6 +5,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiMaintenanceAdvanceDto, WikiMaintenanceFinishDto, WikiProposeDto, WikiVerificationReportDto } from '../wiki/dto';
 import { isWikiMaintenanceSession, WikiMaintenance } from '../wiki/wiki-maintenance';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from '../wiki/wiki-executor-switch';
 import { finishWikiMaintenanceRun, wikiMaintenanceCheck, wikiMaintenanceRunContext } from '../wiki/wiki-maintenance-run';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
 import { answerFor, answerForVerifications, WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
@@ -157,6 +158,12 @@ export class RunnerWikiMaintainController {
   /**
    * The calling session when it is a maintenance run of this space; null for a headless call where one is
    * allowed. Every other caller is refused before anything of the space is read.
+   *
+   * AN ACCOUNT THE SERVER EXECUTES IS REFUSED THE RUN ITSELF (`WIKI_SERVER_EXECUTES`, contract
+   * `maintenance.job.server.door`, P8): its run reads the dossiers and calls the model in the wiki worker,
+   * with the deployment's System model, and no session's provider is asked — so no session is handed the
+   * run's context, its dossiers, its changesets or its verdicts. `check` asks with `sessionRequired`
+   * false and is not one of them: it is an acceptance command's read, and it stays a read for everyone.
    */
   private async maintainer(
     runner: Pick<Runner, 'id' | 'ownerId'>,
@@ -164,6 +171,15 @@ export class RunnerWikiMaintainController {
     spaceId: string,
     sessionRequired: boolean,
   ): Promise<string | null> {
+    if (sessionRequired && wikiExecutorServes(currentWikiExecutorSwitch(), runner.ownerId)) {
+      throw new WikiRefusalError({
+        code: 'WIKI_SERVER_EXECUTES',
+        message:
+          `this account's Wiki maintenance run is executed by the Orbit server (ORBIT_WIKI_EXECUTOR): its wiki worker reads `
+            + "the dossiers and calls the deployment's System model through the request queue, and no session's provider is "
+            + 'asked. Nothing was read or proposed.',
+      });
+    }
     const named = header?.trim();
     if (!named) {
       if (sessionRequired) {

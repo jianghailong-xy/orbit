@@ -1,0 +1,2 @@
+chromium-dark-phone    projects-search-empty.png      all=    13 gt2=     4 max=  4 clusters=  2 [3px x16-23 y216-223 m4] [1px x16-23 y152-159 m3]
+chromium-light-phone   task-action-focus.png          all=     2 gt2=     1 max=  3 clusters=  1 [1px x280-287 y16-23 m3]

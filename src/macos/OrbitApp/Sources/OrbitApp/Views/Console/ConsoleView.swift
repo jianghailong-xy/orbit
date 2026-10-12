@@ -29,6 +29,7 @@ struct ConsoleView: View {
     /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
     @State private var promotionReview: PromotionReviewTarget?
+    @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     #if os(iOS)
@@ -133,10 +134,27 @@ struct ConsoleView: View {
                     // the text they go out with. The band owns the gutter and the gaps; members only
                     // say whether they are on screen.
                     ComposerBand {
+                        // The managed runner's state while it is anything but ready, when this
+                        // console's runner is it (docs/managed-runner-design.md): about the runner the
+                        // message goes to, so it stays in sight while you type.
+                        if let managed = console.managed, managed.showsBanner {
+                            ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                                .padding(.bottom, .composerBandGap)
+                        }
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
                         // typing in it. Confirmations belong in the toast host (see `showToast`).
-                        if let repair = console.queuedAntigravityRepair {
+                        // Why this run produced nothing at all. Drawn first because it is about the
+                        // run itself rather than the message being sent, and drawn INSTEAD of the
+                        // two engine-repair cards below when it has something to say — one fact,
+                        // one card (an engine reason it does not claim is theirs, and the reverse).
+                        if let runStart = console.runStart {
+                            SessionRunStartCardView(console: console, card: runStart)
+                                .padding(.bottom, .composerBandGap)
+                        } else if let repair = console.queuedDshRepair {
+                            DshRepairCardView(console: console, repair: repair)
+                                .padding(.bottom, .composerBandGap)
+                        } else if let repair = console.queuedAntigravityRepair {
                             AntigravityRepairCardView(console: console, repair: repair)
                                 .padding(.bottom, .composerBandGap)
                         }
@@ -201,6 +219,8 @@ struct ConsoleView: View {
                 }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
+                // The tasks this conversation filed, which a watch's wake line names its targets by.
+                .environment(console.createdTasks)
                 // One full-screen viewer for the whole transcript: a thumbnail anywhere in it opens here
                 // and pages across every image in the session, in transcript order (web parity).
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
@@ -210,7 +230,13 @@ struct ConsoleView: View {
                     promotionReview = PromotionReviewTarget(id: promotionID)
                 })
                 .sheet(item: $promotionReview) { target in
-                    PromotionReviewSheet(console: console, promotionID: target.id)
+                    PromotionReviewSheet(source: console, promotionID: target.id)
+                }
+                .environment(\.openPromotionReceipt, { promotion in
+                    promotionReceipt = PromotionReceiptTarget(promotion: promotion)
+                })
+                .sheet(item: $promotionReceipt) { target in
+                    PromotionReceiptSheet(promotion: target.promotion)
                 }
                 .environment(approvalReviewDrafts)
                 .environment(\.openApprovalReview, { target in
@@ -235,6 +261,7 @@ struct ConsoleView: View {
         }
         .onChange(of: sessionID) { _, _ in
             promotionReview = nil
+            promotionReceipt = nil
             approvalReview = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
         }
@@ -338,12 +365,6 @@ struct ConsoleView: View {
                         }
                     }
             }
-        }
-        .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
-            Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This session and its full transcript will be permanently deleted. This can't be undone.")
         }
         #else
         // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
@@ -463,6 +484,14 @@ struct ConsoleView: View {
         }
         .menuOrder(.fixed)
         .accessibilityLabel("Session actions")
+        // Raised by this menu, so it hangs off the menu rather than off the page: the panel opens
+        // against the ⋯ that was pressed.
+        .orbitConfirmation("Delete permanently?", isPresented: $confirmPurge) {
+            Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This session and its full transcript will be permanently deleted. This can't be undone.")
+        }
     }
     #endif
 }
@@ -604,10 +633,33 @@ struct TranscriptView: View {
     private func tracker(ruler: QuestionRuler) -> some ViewModifier {
         #if os(iOS)
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck, scroll: transcriptScroll)
+                             recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll)
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck)
+                             recompute: recomputeStuck, follow: repinAfterResize)
+        #endif
+    }
+
+    /// The viewport changed size under a pinned transcript — the keyboard rising, the composer
+    /// growing a line, the chrome folding away — or the scroll geometry moved its tail without
+    /// anybody scrolling (`ScrollTracker`: rows measured to a new height, the sticky header pushing
+    /// them down), and the tail is asked for, the way a tap on the jump-to-latest disc asks for it
+    /// (`heldScroll`: this arrives off a layout report, so the rows it names are the ones the next
+    /// update has, not whatever this frame holds).
+    private func repinAfterResize() {
+        // A window opened at a record ends at a gap, and a preview's place is held while its sheet
+        // is up: neither follows the tail, so neither follows a resize to it.
+        guard !console.detached, !reviewingCard else { return }
+        #if os(iOS)
+        // A lazy List's `contentSize` is an estimate until it lays out again, and a programmatic
+        // scroll is CLAMPED to it: asked in the same update that grew the composer, the scroll
+        // stops wherever the estimate ended, one line short of the tail. Settle the layout first.
+        DispatchQueue.main.async {
+            transcriptScroll.view?.layoutIfNeeded()
+            holdScroll(to: bottomID, anchor: .bottom, animated: false)
+        }
+        #else
+        holdScroll(to: bottomID, anchor: .bottom, animated: false)
         #endif
     }
 
@@ -689,6 +741,7 @@ struct TranscriptView: View {
         .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
         .defaultScrollAnchor(.bottom)
         .modifier(tracker(ruler: ruler))
+        .modifier(ViewportResize(atBottom: atBottom, onResize: repinAfterResize))
         // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
         // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
         // the keyboard), so reading it here doesn't churn.
@@ -697,6 +750,8 @@ struct TranscriptView: View {
                 Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
             }
         }
+        // On the list alone, under `chrome`, so the jump-to-latest disc floating over it stays solid.
+        .fadesIntoComposerBand()
         // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
         // if the user has scrolled up to read, don't drag them back. A session switch always
         // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
@@ -817,10 +872,12 @@ struct TranscriptView: View {
                 // interrupted by the sheet and leave its row off-screen on return.
                 proxy.scrollTo(held.rowID, anchor: held.anchor)
                 openReview(for: row)
-            } else {
+            } else if held.animated {
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(held.rowID, anchor: held.anchor)
                 }
+            } else {
+                proxy.scrollTo(held.rowID, anchor: held.anchor)
             }
         }
         .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
@@ -882,24 +939,26 @@ struct TranscriptView: View {
     // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
     // back to naming the last question so the header shows at once; at the very top / short transcripts it
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
-    // so is a background job's news or a wakeup coming due, a line inside an answer rather than the head
-    // of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
+    // so is a watch's wake, a background job's news or a wakeup coming due, a line inside an answer
+    // rather than the head of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
+    //
+    // Which turns are questions is read once per published state (`StickyQuestions`, kept on the
+    // ruler), so a scroll is a lookup rather than a walk re-reading every turn's text.
     private func recomputeStuck() {
-        let items = console.state.items
         // Where the reader is, for the console: the needs-you bar's direction word points at a card
         // and has to say which way it is. Reported here rather than read off the ruler by the bar,
         // which is an inset of the whole console and has no ruler of its own.
         console.noteTopVisible(ruler.topAnchorID)
+        let questions = ruler.questions(console) { StickyQuestions($0.state.items, isQuestion: namesAQuestion) }
         var found: String? = nil
+        // Both answers are held (`StickyQuestionHold`): the header moves the list by its own height,
+        // so a reading taken with it shown and one taken with it hidden can disagree, and a single
+        // threshold between them flips the header on every frame.
         if let anchor = ruler.topAnchorID {
-            for item in items {
-                if item.id == anchor { break }                       // reached the top item; stop
-                if case .user(let b) = item, namesAQuestion(b) { found = b.id }
-            }
-        } else if ruler.contentOffset > 40 {
-            for item in items.reversed() {
-                if case .user(let b) = item, namesAQuestion(b) { found = b.id; break }
-            }
+            found = StickyQuestionHold.named(found: questions.above(anchor), anchor: anchor, showing: stuckID)
+        } else if StickyQuestionHold.fallbackNames(contentOffset: Double(ruler.contentOffset),
+                                                   showing: stuckID != nil) {
+            found = questions.last
         }
         if found != stuckID { stuckID = found }
     }
@@ -927,10 +986,11 @@ struct TranscriptView: View {
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
-                             decisionCards: console.decisionCards)
+                             decisionCards: console.decisionCards,
+                             clocks: console.receiptClocks)
     }
 
-    /// Only the load-earlier spinner and the zero-height tail row differ from the chat-flow insets.
+    /// Only the load-earlier spinner and the tail row differ from the chat-flow insets.
     private func rowInsets(_ row: TranscriptRow) -> EdgeInsets {
         switch row {
         case .loadOlder: return EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
@@ -974,76 +1034,17 @@ struct TranscriptView: View {
             // No `AnchorRow` — a queued turn hasn't been asked yet, so it's never the sticky
             // "Your question" (web's `:not(.chat-queued)`).
             //
-            // An exception item's delivery is nobody's message the moment it is QUEUED, not the
-            // moment a runner takes it: its words are written for the AGENT, so read as a message
-            // they are wrong about who sent them and everything the item is opened with is prose —
-            // for as long as the turn waits, and redrawn the instant it is taken. The card comes off
-            // the projection (`QueuedTurnInfo.itemCard`), never out of the text's shape, and this is
-            // checked FIRST as the transcript's own row checks it (`TranscriptItemView`): the shape
-            // must not depend on which of the two states the turn is in. A delivery's paragraph is
-            // neither of the two wake blocks below, so nothing is shadowed by the order.
-            //
-            // Another Orbit session's message is asked about before all of them, as the transcript's
-            // row asks it: who sent it is the projection's (`QueuedTurnInfo.senderCard`), and its words
-            // are the sending agent's to choose — they could take a wake's shape. Cancel withdraws it
-            // and hands nothing back to the composer (`ComposerLogic.restorableText`). Not offered for
-            // a steer: `session_send` into a running turn is written into it, and the server refuses
-            // to withdraw what the engine may already be reading (`UserBubbleView` hides it the same way).
-            if let card = bubble.sessionMessage {
-                SessionMessageCardView(card: card, text: bubble.text, ts: bubble.ts,
-                                       undelivered: bubble.undelivered,
-                                       onCancelQueued: bubble.turnId == nil || bubble.steer
-                                           ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let card = bubble.itemCard {
-                OpenItemDeliveryCardView(card: card, text: bubble.text, ts: bubble.ts,
-                                         undelivered: bubble.undelivered,
-                                         onCancelQueued: bubble.turnId == nil
-                                             ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let started = bubble.startedCard {
-                // The message telling the coordinator its project was started: the card the
-                // transcript draws once a runner takes it, off the projection (`startedCard`).
-                ProjectStartedCardView(card: started, text: bubble.text, ts: bubble.ts,
-                                       undelivered: bubble.undelivered,
-                                       onCancelQueued: bubble.turnId == nil
-                                           ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let card = bubble.reviewRequest {
-                // A confirmation review's turns are Orbit's on the queue too: the cards the
-                // transcript draws once a runner takes them (web parity: the queued tail's
-                // `q.confirmationReviewRequest` / `q.confirmationReturn`).
-                ReviewRequestedCardView(card: card, ts: bubble.ts, undelivered: bubble.undelivered,
-                                        onCancelQueued: bubble.turnId == nil
-                                            ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let card = bubble.reviewReturn {
-                SentBackByReviewerCardView(card: card, ts: bubble.ts, undelivered: bubble.undelivered,
-                                           onCancelQueued: bubble.turnId == nil
-                                               ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let wake = WatchWakeText.parse(bubble.text) {
-                WatchWakeCardView(wake: wake, text: bubble.text, ts: bubble.ts,
-                                  undelivered: bubble.undelivered,
-                                  onWithdraw: bubble.turnId == nil
-                                      ? nil : { Task { await console.cancelQueued(bubble) } })
-            } else if let background = BackgroundWakeText.parse(bubble.text) {
-                // A wake the control plane queued for a background job's news, or for a wakeup
-                // coming due, is nobody's message either: it gets the card the transcript draws
-                // once a runner takes it. Nothing has been recorded yet, so the block is still the
-                // turn's own content rather than a note beside it (web parity: the queued tail
-                // reads `q.content`). Withdrawing it is an ordinary cancel — nothing re-sends it.
-                // Except for a job that ended while the turn ran: that wake is a steer on its way
-                // into the running turn, which the server refuses to withdraw, so it says how far it
-                // has got instead (web parity: `QueuedTurnMeta` for a `steer` placement).
-                BackgroundWakeCardView(wake: background, ts: bubble.ts,
-                                       undelivered: bubble.undelivered,
-                                       onCancelQueued: bubble.turnId == nil || bubble.steer
-                                           ? nil : { Task { await console.cancelQueued(bubble) } },
-                                       steerState: BackgroundWakeCard.steerState(
-                                           steer: bubble.steer, delivery: bubble.delivery,
-                                           undelivered: bubble.undelivered),
-                                       queued: true)
-            } else {
-                UserBubbleView(bubble: bubble,
-                               onCancelQueued: { Task { await console.cancelQueued(bubble) } })
-            }
+            // Drawn by the row the transcript draws the same turn with once a runner takes it, so a
+            // turn that is a card is that card from the moment it is queued — off the cards the
+            // projection carried (`QueuedTurnInfo.cards`), never out of its words — and keeps its
+            // shape when it lands; the queue adds only its own controls.
+            UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {
+                Task { await console.cancelQueued(bubble) }
+            })
         case .bottom:
+            // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
+            // at its tail has nothing in the fade. In the row's content, not its insets: every follow and
+            // jump lands on this row (`bottomID`), and room held in its insets would stay below the fold.
             if console.detached {
                 // A window opened at a record ends at a gap: reaching its bottom pulls in the newer page.
                 HStack {
@@ -1052,19 +1053,20 @@ struct TranscriptView: View {
                     Spacer()
                 }
                 .padding(.vertical, 8)
+                .padding(.bottom, .composerBandFade)
                 .accessibilityLabel(SessionRecordLink.Copy.loadingNewer)
                 .onAppear { Task { await console.loadNewer() } }
             } else {
-                Color.clear.frame(height: 1)
+                Color.clear.frame(height: CGFloat.composerBandFade + 1)
             }
         }
     }
 
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.
-    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {
+    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false, animated: Bool = true) {
         heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1,
-                                sessionID: console.sessionID, opensReview: opensReview)
+                                sessionID: console.sessionID, opensReview: opensReview, animated: animated)
     }
 
     /// The bar opens the same review as tapping a preview. Inline cards remain scroll-only.
@@ -1086,10 +1088,10 @@ struct TranscriptView: View {
     // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
     // region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. A watch's wake — or an exception item's delivery — is
-        // still the turn the bar points back at, but it is not the person's question: it gets its
-        // card's own title and line (`StickySummary`), so the bar can't say "your question" above a
-        // card reading "not typed by you".
+        // What this turn was and what it said. An exception item's delivery — or another card the
+        // control plane draws — is still the turn the bar points back at, but it is not the person's
+        // question: it gets its card's own title and line (`StickySummary`), so the bar can't say
+        // "your question" above a card reading otherwise. A wake is no such turn (`isAnchor`).
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard,
@@ -1112,8 +1114,8 @@ struct TranscriptView: View {
         } label: { _ in
             HStack(spacing: 8) {
                 // Priority, not `fixedSize()`: the label is served first, so the line beside it is
-                // what gives way — but a label as long as "Watch stopped: every target is gone"
-                // truncates itself rather than pushing the line off the row entirely.
+                // what gives way — but a card's label too long for the row truncates itself rather
+                // than pushing the line off the row entirely.
                 Text(summary.label)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)
@@ -1137,7 +1139,8 @@ struct TranscriptView: View {
     // Circular "scroll to latest" control (ChatGPT parity). Wrapped in `CoastingButton` so the tap lands
     // even while the List is still coasting, and so a press springs the disc ~1.2× larger (ChatGPT's
     // feel — the shadow deepens with it). The disc rests at 40pt inside a 44pt hit target
-    // (near-filling it, with a hair of margin); bottom padding is 6, so it floats just above the composer.
+    // (near-filling it, with a hair of margin); it sits 6 above the list's fade, so it floats just above
+    // the composer.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
             // A window opened at a record ends at a gap: the latest message is past it, so reaching it
@@ -1183,7 +1186,8 @@ struct TranscriptView: View {
                 .contentShape(Circle())
                 .animation(.spring(response: 0.28, dampingFraction: 0.6), value: pressed)
         }
-        .padding(.bottom, 6)
+        // 6 above the room the tail row keeps under the list, which ends at the composer.
+        .padding(.bottom, CGFloat.composerBandFade + 6)
         .accessibilityLabel(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
         .help(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
     }
@@ -1329,6 +1333,10 @@ private struct HeldScroll: Equatable {
     let tick: Int
     let sessionID: String
     let opensReview: Bool
+    /// Glide to the row or land on it at once. A tap gets the glide; a re-pin for a viewport that is
+    /// still moving does not — an animated scroll is aimed at the layout of the frame it starts in,
+    /// and a composer growing under it left the tail a line short of the bottom.
+    var animated = true
 }
 
 #if os(iOS)
@@ -1470,9 +1478,34 @@ private struct ScrollTouchConfigurator: UIViewRepresentable {
 }
 #endif
 
+/// The transcript's viewport changing size — the keyboard rising, the composer growing a line, a
+/// phone's chrome folding away. `ScrollTracker` cannot answer this one: `onScrollGeometryChange`
+/// reports the scroll view scrolling (and the insets a keyboard moves), and the List's frame
+/// changing for any other reason is no sample of it — measured here, the composer growing a line
+/// reported nothing at all while the last message slid under it. A pinned transcript follows the
+/// resize anyway (see `TailPinning.followsResize`, web's ResizeObserver); the ask crosses to the
+/// transcript, which owns the scroll.
+private struct ViewportResize: ViewModifier {
+    /// The pin as of the last update — the rule's `wasPinned`. A reader away from the tail keeps
+    /// their place through a resize, however the viewport moved.
+    let atBottom: Bool
+    let onResize: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, macOS 15, *) {
+            content.onGeometryChange(for: Double.self) { Double($0.size.height) } action: { was, now in
+                if TailPinning.followsResize(wasPinned: atBottom, from: was, to: now) { onResize() }
+            }
+        } else {
+            content
+        }
+    }
+}
+
 /// The single scroll observer: drives the jump-to-latest button's `atBottom` and `tailOutOfView`,
-/// AND feeds the sticky header by stashing the live content offset into `ruler` and asking for a
-/// recompute each frame.
+/// carries a pinned transcript back to its tail when the geometry moves the tail out of view
+/// (`follow`), AND feeds the sticky header by stashing the live content offset into `ruler` and
+/// asking for a recompute each frame.
 /// `onScrollGeometryChange` (macOS 15+/iOS 18+) is read-only — unlike `scrollPosition(id:)` +
 /// `scrollTargetLayout()` it registers no per-row scroll targets, so it won't re-break `List`
 /// virtualization (see the transcript-freeze history). On the earlier floor it's a no-op, leaving
@@ -1485,6 +1518,10 @@ private struct ScrollTracker: ViewModifier {
     @Binding var tailOutOfView: Bool
     let ruler: QuestionRuler
     let recompute: () -> Void
+    /// Asks the transcript for its tail (`TranscriptView.repinAfterResize`): the geometry moved it
+    /// out of view under a pinned reader — the sticky header pushing the rows down as it arrives,
+    /// rows measured taller than they were estimated. See `TailPinning.followsGeometry`.
+    let follow: () -> Void
     #if os(iOS)
     /// The List's own `UIScrollView`, for the one fact UIKit knows better than any geometry: whether
     /// a finger is on it. See `readerIsMoving`.
@@ -1495,6 +1532,10 @@ private struct ScrollTracker: ViewModifier {
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
     /// needs the difference to tell a drag up from the clamp a row that shrank forces.
     @State private var readerDriven = false
+    /// Whether the platform reports anything moving the list, SwiftUI's own animated scrolls included
+    /// where it reports them (a List's animated `scrollTo` read `idle` throughout on iOS 26): the
+    /// geometry is followed only under a list at rest. See `TailPinning.followsGeometry`.
+    @State private var scrolling = false
 
     /// What the platform can say about that — see `TailPinning.ReaderEvidence`. iOS reports drags,
     /// measured with a synthesized one on the simulator: `interacting` for the finger and
@@ -1524,18 +1565,25 @@ private struct ScrollTracker: ViewModifier {
             content
                 .onScrollPhaseChange { _, phase in
                     readerDriven = phase != .idle && phase != .animating
+                    scrolling = phase != .idle
                 }
                 .onScrollGeometryChange(for: TailScrollSample.self) { geo in
                     TailScrollSample(offset: Double(geo.contentOffset.y),
                                      contentHeight: Double(geo.contentSize.height),
-                                     bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY))
+                                     bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY),
+                                     topInset: Double(geo.contentInsets.top))
                 } action: { was, now in
-                    atBottom = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
-                                                  readerDriven: readerIsMoving,
-                                                  evidence: Self.evidence)
+                    let pinned = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
+                                                    readerDriven: readerIsMoving,
+                                                    evidence: Self.evidence)
+                    atBottom = pinned
                     tailOutOfView = now.bottomGap > TailPinning.nearBottom
                     ruler.contentOffset = CGFloat(now.offset)
                     recompute()
+                    if TailPinning.followsGeometry(pinned: pinned, from: was, to: now,
+                                                   moving: scrolling || readerIsMoving) {
+                        follow()
+                    }
                 }
         } else {
             content
@@ -1577,8 +1625,21 @@ final class QuestionRuler {
     var viewportTop: CGFloat = 0      // transcript viewport's top edge, in global space
     var contentOffset: CGFloat = 0    // scroll offset (from onScrollGeometryChange) — only for the initial fallback
     var topAnchorID: String?          // id of the item straddling the viewport top — the header's sole scroll input
+    // The questions of one console's published state, rebuilt only when that state moves.
+    private var questionsCache: (console: ObjectIdentifier, revision: Int, questions: StickyQuestions)?
 
     func reset() { topAnchorID = nil; contentOffset = 0 }
+
+    @MainActor
+    func questions(_ console: ConsoleModel, read: (ConsoleModel) -> StickyQuestions) -> StickyQuestions {
+        let key = ObjectIdentifier(console)
+        if let cached = questionsCache, cached.console == key, cached.revision == console.stateRevision {
+            return cached.questions
+        }
+        let questions = read(console)
+        questionsCache = (key, console.stateRevision, questions)
+        return questions
+    }
 }
 
 struct TranscriptItemView: View {
@@ -1591,112 +1652,18 @@ struct TranscriptItemView: View {
     var body: some View {
         switch item {
         case .user(let b):
-            // Another Orbit session's message (`session_send` / `project_send`): somebody's words,
-            // but not the reader's, so not the reader's bubble. Who sent it is what the control plane
-            // recorded beside the echo (`sessionMessage`, `SessionMessage.parse`), so it is asked
-            // FIRST — before anything is read out of the words, which are the sending agent's to
-            // choose — as the browser asks it (`NodeView`). No payload, the old reading.
-            //
-            // An exception item's delivery is the control plane's too, and for a stronger reason
-            // than the wakes below: nobody typed it at all. What the turn says is a paragraph
-            // written for the AGENT — the tools to call, the ids to call them with — so drawing it
-            // as a message is both wrong about who sent it and unreadable as a record: the item's
-            // kind, its title, the files a merge conflicted on and whether the work has landed are
-            // all in the payload recorded beside it (`openItemDelivery`, `OpenItemDelivery.parse`).
-            // With no payload the turn keeps its old reading — this is checked before the wakes, as
-            // the browser checks it (`NodeView`).
-            if let card = b.sessionMessage {
-                SessionMessageCardView(card: card, text: b.text, ts: b.ts,
-                                       undelivered: b.undelivered || b.delivery == "failed",
-                                       attached: b.attached)
-            } else if let card = b.itemCard {
-                // The note the same turn carried rides inside the card (`b.attached`): nobody typed
-                // this turn either, so the control plane's words do not go back into a bubble in the
-                // reader's own name — the same rule the wake card applies to a mixed note.
-                OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
-                                         undelivered: b.undelivered || b.delivery == "failed",
-                                         attached: b.attached)
-            } else if let card = b.taskStart {
-                // A task run's opening turn is the brief written for the agent — the task, then four
-                // steps of protocol — and nobody typed it either. With the task recorded beside it
-                // (`taskStart`, `TaskStart.parse`) it is drawn as that task, with anything delivery
-                // appended riding inside the card; the task's inputs the turn carried keep the
-                // bubble's own image and file rows under it, with no words in the owner's name.
-                VStack(alignment: .leading, spacing: 6) {
-                    TaskStartCardView(card: card, text: b.text, ts: b.ts,
-                                      undelivered: b.undelivered || b.delivery == "failed",
-                                      attached: b.attached)
-                    if !b.attachments.isEmpty {
-                        UserBubbleView(bubble: inputsOnly(b))
-                    }
-                }
-            } else if let started = b.startedCard {
-                // The message telling the coordinator its project was started: prose for the agent,
-                // drawn as the card the payload recorded beside it (`projectStarted`,
-                // `ProjectStarted.parse`). No payload, the old reading.
-                ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
-                                       undelivered: b.undelivered || b.delivery == "failed",
-                                       attached: b.attached)
-            } else if let card = b.reviewRequest {
-                // A confirmation request handed to this conversation to review, and a reviewer's
-                // return handed to the run (`ConfirmationReviewTurns.swift`): Orbit's turns, drawn as
-                // their cards with the block the agent read riding at the foot (web parity: NodeView).
-                ReviewRequestedCardView(card: card, ts: b.ts,
-                                        undelivered: b.undelivered || b.delivery == "failed",
-                                        attached: b.attached)
-            } else if let card = b.reviewReturn {
-                SentBackByReviewerCardView(card: card, ts: b.ts,
-                                           undelivered: b.undelivered || b.delivery == "failed",
-                                           attached: b.attached)
-            } else if let replies = b.sessionReplies, !replies.isEmpty {
-                // The outcomes of this session's own requests, handed back (`sessionReplies`,
-                // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
-                // owner's may carry outcomes that were held for it — then the owner's words are their
-                // bubble, first, and the outcomes follow as cards, with what else delivery appended
-                // folded into them (web parity: NodeView).
-                VStack(alignment: .leading, spacing: 6) {
-                    if !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        UserBubbleView(bubble: withoutNote(b))
-                    }
-                    SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b))
-                }
-            } else if let wake = WatchWakeText.parse(b.text) {
-                // A turn a watch queued is the watch's to show, not a message the user typed: it opens
-                // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
-                WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
-                                  undelivered: b.undelivered || b.delivery == "failed")
-            } else if let background = BackgroundWakeText.parse(b.note) {
-                // A turn the control plane opened for a background job's news, or for a wakeup
-                // coming due, is nobody's message either: the block IS the turn, so it is read off
-                // the recorded note rather than the person's words, which are empty. Only the wake
-                // blocks become the card — anything else the same note carried (the inventory a
-                // returning engine is handed, a coordinator's standing role) is a folded entry in
-                // the same card, because it is the control plane's too. It used to be an entry in a
-                // user bubble under the card, which drew an empty bubble: a message with no words
-                // in it, in the reader's own name. A job that ended while a turn ran was written
-                // into that turn as a steer: the same line, where its echo landed inside the running
-                // turn, saying how far it got (web parity: `Transcript.tsx`'s `steer=`).
-                VStack(alignment: .leading, spacing: 6) {
-                    BackgroundWakeCardView(wake: background, ts: b.ts,
-                                           undelivered: b.undelivered || b.delivery == "failed",
-                                           attached: attachedRest(background),
-                                           steerState: BackgroundWakeCard.steerState(
-                                               steer: b.steer, delivery: b.delivery,
-                                               undelivered: b.undelivered))
-                    if BackgroundWakeCard.drawsBubble(text: b.text) {
-                        UserBubbleView(bubble: withoutNote(b))
-                    }
-                }
-            } else {
-                UserBubbleView(bubble: b)
-            }
+            // Which card a user turn is — or the owner's bubble — is decided in one place, for the
+            // transcript and the queued tail alike (`UserTurnRow`).
+            UserTurnRow(bubble: b)
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
         case .interrupt:
             Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
-            if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
+            if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
+                DshRepairCardView(console: console, repair: repair)
+            } else if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
                 AntigravityRepairCardView(console: console, repair: repair)
             } else if let summary = ToolFailureSummary.parse(message) {
                 ToolFailureCardView(message: message, summary: summary)
@@ -1728,34 +1695,5 @@ struct TranscriptItemView: View {
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
         }
-    }
-
-    /// What the wake card did NOT take, as the entry folded inside it — so a mixed note still shows
-    /// its other blocks instead of repeating the wake beneath the card.
-    private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
-        wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
-    }
-
-    /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
-    private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
-        let rest = SessionReply.withoutReplyBlocks(bubble.note)
-        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
-    }
-
-    /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here
-    /// would draw it a second time under the card that already holds it.
-    private func withoutNote(_ bubble: UserBubble) -> UserBubble {
-        var bare = bubble
-        bare.note = nil
-        return bare
-    }
-
-    /// The same bubble holding only what it was sent with: the brief and the note are the task-start
-    /// card's, so what is left is the images and files, drawn as the bubble draws them.
-    private func inputsOnly(_ bubble: UserBubble) -> UserBubble {
-        var inputs = bubble
-        inputs.text = ""
-        inputs.note = nil
-        return inputs
     }
 }

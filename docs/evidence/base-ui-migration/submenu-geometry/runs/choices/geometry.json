@@ -1,0 +1,7378 @@
+{
+ "chromium-light-desktop": {
+  "submenu at the left of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   }
+  },
+  "submenu at the middle of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   }
+  },
+  "submenu at the right edge settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   }
+  },
+  "submenu at the right edge of a dialog settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   }
+  }
+ },
+ "chromium-light-phone": {
+  "submenu at the left of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the middle of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 301,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 301,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 7,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 7,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -144,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -144,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 301,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 301,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 7,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 7,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -144,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -144,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the right edge settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the right edge of a dialog settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  }
+ },
+ "chromium-dark-desktop": {
+  "submenu at the left of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   }
+  },
+  "submenu at the middle of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 580,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 702,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   }
+  },
+  "submenu at the right edge settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   }
+  },
+  "submenu at the right edge of a dialog settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1110,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    }
+   }
+  }
+ },
+ "chromium-dark-phone": {
+  "submenu at the left of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 188,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 188,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 220,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 220,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the middle of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 301,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 301,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 7,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 7,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -144,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -144,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 301,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 301,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 7,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 7,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -144,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 179,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -144,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the right edge settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the right edge of a dialog settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 84,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 84,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 84,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 84,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  }
+ },
+ "webkit-light-desktop": {
+  "submenu at the left of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   }
+  },
+  "submenu at the middle of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   }
+  },
+  "submenu at the right edge settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1056,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1056,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 961,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 961,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 810,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 810,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1025,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1025,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 930,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 930,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 779,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 779,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   }
+  },
+  "submenu at the right edge of a dialog settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1056,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 961,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 810,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1025,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 930,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 779,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   }
+  }
+ },
+ "webkit-light-phone": {
+  "submenu at the left of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the middle of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 297,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 297,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 3,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 3,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -148,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -148,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 297,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 297,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 3,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 3,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -148,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -148,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the right edge settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 166,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 166,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 71,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 71,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -80,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -80,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 135,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 135,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 40,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 40,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -111,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -111,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the right edge of a dialog settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  }
+ },
+ "webkit-dark-desktop": {
+  "submenu at the left of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   }
+  },
+  "submenu at the middle of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 576,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 698,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   }
+  },
+  "submenu at the right edge settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1056,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1056,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 961,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 961,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 810,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 810,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1025,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1025,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 930,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 930,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 779,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 779,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   }
+  },
+  "submenu at the right edge of a dialog settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1064,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1056,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 969,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 961,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 1141,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 818,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1133,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 810,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1033,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 1025,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 938,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 930,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 1110,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 787,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1280,
+      1280
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 1102,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 779,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      1272,
+      1272
+     ]
+    }
+   }
+  }
+ },
+ "webkit-dark-phone": {
+  "submenu at the left of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 201,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 201,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 28,
+      "y": 234,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 150,
+      "y": 234,
+      "width": 240,
+      "height": 94
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the middle of the page settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 297,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 297,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 3,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 3,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -148,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -148,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 297,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 297,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 3,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 3,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -148,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 175,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -148,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the right edge settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 166,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 166,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 71,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 71,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -80,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 243,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -80,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 135,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 135,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 40,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 40,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -111,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 212,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -111,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      382,
+      390
+     ]
+    }
+   }
+  },
+  "submenu at the right edge of a dialog settles where the replaced submenu does": {
+   "submenu, short label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 174,
+      "y": 52,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, medium label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 79,
+      "y": 52,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "submenu, long label": {
+    "antd": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 251,
+      "y": 52,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -72,
+      "y": 52,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, short label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 143,
+      "y": 85,
+      "width": 76.375,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, medium label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": 48,
+      "y": 85,
+      "width": 171.297,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   },
+   "session, long label": {
+    "antd": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    },
+    "orbit": {
+     "item": {
+      "x": 220,
+      "y": 85,
+      "width": 122.063,
+      "height": 32
+     },
+     "submenu": {
+      "x": -103,
+      "y": 85,
+      "width": 322.281,
+      "height": 72
+     },
+     "viewport": [
+      390,
+      390
+     ]
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/before && git log --oneline -1 && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-choices -w @orbit/web -- --grep \"multiple choices in Dialog keep their owner\" --project chromium-light-phone --project webkit-light-phone --repeat-each 40'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_b11cf2773330",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "46a418fba",
+ "webTree": "62fce56ed0c10a115d5c4e567ce1c60e882f79a9",
+ "outputLastWritten": "2026-10-07T05:24:19.980603+00:00",
+ "exitCode": 0,
+ "outputSha256": "90857736e375716a77b2b64e14195831e02e2d13738fb31384b8f90b369e6d59",
+ "outputBytes": 14405,
+ "note": "Before-fix tree, the unchanged P2.2 case choices.browser.mjs:592 repeated 40 times on chromium-light-phone and 40 on webkit-light-phone, own network namespace, nice -10, at the same time as fix-row-actions-after: 80 passed. Under these conditions the natural timing did not put the Enter into the window in any of the 80 runs (the earlier measurements were 1/40 on the delivered tree and 6/40, 9/40 in P3.2)."
+}

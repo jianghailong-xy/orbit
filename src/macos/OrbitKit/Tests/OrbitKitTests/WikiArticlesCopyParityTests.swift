@@ -516,12 +516,12 @@ final class WikiArticlesCopyParityTests: XCTestCase {
         assertSays(view, "content.listSectionIndexVisibility(.visible)", in: "WikiArticleView.swift")
     }
 
-    /// The home page's bands on a phone: the status line, the search, the Review bar, then the four.
+    /// The home's bands on a phone, under its head (design §12.3.1): the line that says what the space holds,
+    /// the search, the principles, the documents, then Browse · A–Z.
     func testTheHomeBandsAreTheFixtures() throws {
         let shared = try fixture()
-        XCTAssertEqual(shared.orders.homeBands.first, "statusLine", "the status line leads, in the native header")
-        XCTAssertEqual(WikiLogic.HomeBand.allCases.map(\.rawValue), Array(shared.orders.homeBands.dropFirst()))
-        XCTAssertEqual(WikiLogic.HomeBand.allCases.map(\.title), Array(shared.orders.homeBandTitles.dropFirst()))
+        XCTAssertEqual(WikiLogic.HomeBand.allCases.map(\.rawValue), shared.orders.homeBands)
+        XCTAssertEqual(WikiLogic.HomeBand.allCases.map(\.title), shared.orders.homeBandTitles)
     }
 
     // MARK: the wiring

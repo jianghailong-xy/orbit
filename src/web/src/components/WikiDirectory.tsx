@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
 import {
   AppstoreOutlined,
   CloseOutlined,
@@ -34,6 +33,7 @@ import {
   wikiDirectoryGroups,
   wikiIndexPath,
 } from '../lib/wikiArticles';
+import { Button } from './ui/Button';
 
 /**
  * The category directory (criterion 10, mocks 11 ③, 12 ③, 13 ①, 15 ①③; by the plan since its second
@@ -62,7 +62,9 @@ export type WikiDirectoryAt =
   | { view: 'index' }
   | { view: 'topic'; topic: string; part: number }
   | { view: 'doc'; slug: string }
-  | { view: 'plan' };
+  | { view: 'plan' }
+  // Activity (design §12.3.2) is not one of the directory's rows: beside it, none is lit.
+  | { view: 'activity' };
 
 /** The section a document's page has on screen, as it announces it (`wk-doc-section`): the directory lights it. */
 export const WIKI_DOC_SECTION_EVENT = 'wk-doc-section';

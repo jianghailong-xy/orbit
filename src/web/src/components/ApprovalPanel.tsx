@@ -7,9 +7,10 @@ import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
-import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
+import { buildBatchGraph, describeShape } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainLines } from '../lib/markdownText';
+import { mainBranchName } from '../lib/projectStart';
 import {
   OWNER_CONFIRMATION_SHOW_ALL,
   OWNER_CONFIRMATION_SHOW_LESS,
@@ -62,7 +63,11 @@ export const decliningPrefix = (toolName: string | null | undefined): string =>
     ? 'Leaving the graph alone: '
     : toolName === 'orbit_blocker_resolve'
       ? 'Leaving this open: '
-      : 'Not creating: ';
+      : toolName === 'orbit_integration_skip_merge_check'
+        ? 'Checking it after all: '
+        : toolName === 'orbit_project_update_integration'
+          ? 'Leaving the check as it is: '
+          : 'Not creating: ';
 
 /** What the empty composer asks for while a decline is armed. */
 export const DECLINE_PLACEHOLDER = 'Say what to do instead…';
@@ -177,6 +182,84 @@ export const createFoldNoun = (input: CreateInput): string => (input.isProject ?
 const isBlockerResolve = (a: ApprovalInfo): boolean => a.toolName === 'orbit_blocker_resolve';
 
 /**
+ * Orbit's ask before one landing runs WITHOUT its merge check (§2.4 J-S5). The fourth of the
+ * coordinator's asks, and the one whose subject is a command: what the owner decides is whether that
+ * command — shown verbatim — gets to hold up this landing, so the card leads with the command and
+ * the red it produced, not with the word "skip".
+ */
+const isSkipMergeCheck = (a: ApprovalInfo): boolean => a.toolName === 'orbit_integration_skip_merge_check';
+
+interface SkipMergeCheckInput {
+  projectTitle: string;
+  /** The DONE task whose landing this is. */
+  taskTitle: string;
+  /** The check command that will NOT run, as the project has it configured. */
+  checkCommand: string;
+  /** What that check said the last time, in the landing read's own words. */
+  failure: string;
+  /** Why the coordinator says this red is the check's rather than the delivery's. */
+  reason: string;
+  /** The project's main branch by name, which every merge into is still checked; main where the
+   *  card names none (no repository bound, or a runner that predates it). */
+  mainBranch: string;
+}
+
+function skipMergeCheckInput(a: ApprovalInfo): SkipMergeCheckInput | null {
+  if (!isSkipMergeCheck(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+  return {
+    projectTitle: text(obj.projectTitle),
+    taskTitle: text(obj.taskTitle),
+    checkCommand: text(obj.checkCommand),
+    failure: text(obj.failure),
+    reason: text(obj.reason),
+    mainBranch: mainBranchName(text(obj.mainBranch)),
+  };
+}
+
+/**
+ * Orbit's ask before a session changes a project's merge check — the check run on the combined tree
+ * before that project's work lands.
+ *
+ * The one integration setting an agent may propose: where the work LANDS stays the owner's alone
+ * and is refused outright, but what is checked before it lands is a judgement the session holding a
+ * failing check is the one that can make. So the card leads with the two commands — what the check
+ * is now, and what it would become — because that difference is the whole of what is being decided.
+ *
+ * The server writes the change only against an ALLOWED card whose input reproduces the proposal it
+ * is sent (`projects/project-integration-approval.ts`), so a card that misrepresents what would be
+ * written does not merely mislead: the write it is attached to is refused.
+ */
+const isMergeCheckChange = (a: ApprovalInfo): boolean =>
+  a.toolName === 'orbit_project_update_integration';
+
+interface MergeCheckChangeInput {
+  projectTitle: string;
+  /** The check as the project stands, or null when it has none. */
+  current: string | null;
+  /** What it would become; null clears it. */
+  next: string | null;
+  /** The budget for the new check, in seconds, when the proposal named one. */
+  timeout: number | null;
+}
+
+function mergeCheckChangeInput(a: ApprovalInfo): MergeCheckChangeInput | null {
+  if (!isMergeCheckChange(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
+  const timeout = obj.mergeCheckTimeoutSeconds;
+  return {
+    projectTitle: text(obj.projectTitle) ?? '',
+    current: text(obj.currentMergeCheckCommand),
+    next: text(obj.mergeCheckCommand),
+    // Absent means the budget is left as it is, which is not the same as "no budget" — so a
+    // proposal that named none shows no second line rather than a zero.
+    timeout: typeof timeout === 'number' ? timeout : null,
+  };
+}
+
+/**
  * Orbit's asks before a provider write: one of the owner's own providers created, changed or removed.
  * Drawn as the plain card — its body is the provider as it would be written, the key reduced to the
  * fact that one is being set — but, like every ask Orbit raises for itself, never waived by a rule.
@@ -269,7 +352,18 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // blocker — "always let this session clear whatever stops its project" is the one rule that would
   // make every card after it a formality. Nor a provider write, which would be a standing yes to
   // whatever endpoint and key the next one names.
-  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a)) return [];
+  // Nor a skip: "always let this conversation land past the check" is every later landing unchecked,
+  // which is the project's setting and not a rule this card may leave behind.
+  //
+  // Nor a merge check, and this one has teeth on BOTH sides: the server writes a session's merge
+  // check only against a card a PERSON answered (an auto-allowed row does not count), so a standing
+  // rule would be a switch that turns the change into a refusal the agent cannot read — the owner
+  // believing they had allowed it, and every later proposal coming back as a 403 telling the agent
+  // to ask for a card that is already answered.
+  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a) || isProviderWrite(a)
+    || isSkipMergeCheck(a) || isMergeCheckChange(a)) {
+    return [];
+  }
   if (a.toolName === 'Bash') {
     const cmd =
       a.input && typeof a.input === 'object'
@@ -311,9 +405,13 @@ export function ApprovalPanel({
   answerable = true,
   onChatAbout,
   onDecline,
+  rememberable = true,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
+  /** Whether this session's runtime honours remember rules (`approvalRememberOffered`). False
+   *  drops "Always allow" and its shortcut: the card is Approve / Reject only. */
+  rememberable?: boolean;
   active?: boolean;
   /** Whether an answer to this card can still reach anybody — see UNANSWERABLE_NOTE. */
   answerable?: boolean;
@@ -333,7 +431,7 @@ export function ApprovalPanel({
   // and the rule is kept on this session's workspace so its other sessions start with it too.
   // Empty for questions/plans and Bash commands with no clean prefix; a compound Bash line
   // yields one rule per distinct sub-command.
-  const rules = isQuestion ? [] : rememberRulesFor(approval);
+  const rules = isQuestion || !rememberable ? [] : rememberRulesFor(approval);
   // One claim for the card, so that the two triggers below are one card asking rather than two.
   // The keys are the card's only while it is the highest card asking: a question card above it on
   // the screen holds them first, and this one holds them over every card below it (`CardHotkey.ts`)
@@ -364,6 +462,8 @@ export function ApprovalPanel({
   const batch = isBatch(approval) ? batchPreview(approval.input) : null;
   const create = createInput(approval);
   const blocker = blockerResolveInput(approval);
+  const skipCheck = skipMergeCheckInput(approval);
+  const mergeCheck = mergeCheckChangeInput(approval);
   // What the composer's bar would name as the thing not being done: the proposal's own subject, and
   // never the tool's name, which says nothing about what is not being created. Null for everything
   // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
@@ -375,7 +475,11 @@ export function ApprovalPanel({
         ? create.title
         : blocker
           ? (blocker.subjectTitle || blocker.kind || 'this blocker')
-          : null;
+          : skipCheck
+            ? (skipCheck.taskTitle || 'this landing')
+          : mergeCheck
+            ? `${mergeCheck.projectTitle || 'this project'}'s merge check`
+            : null;
   const heading = isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
           : dag
@@ -390,7 +494,11 @@ export function ApprovalPanel({
                   : '📝 Confirm: create 1 task?'
                 : blocker
                   ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
-                  : `🔓 Approve tool call: ${approval.toolName}`;
+                  : skipCheck
+                    ? `⏭ Confirm: land ${skipCheck.taskTitle || 'this task'} without the merge check?`
+                    : mergeCheck
+                      ? `🔧 Confirm: change the merge check of ${mergeCheck.projectTitle || 'this project'}?`
+                      : `🔓 Approve tool call: ${approval.toolName}`;
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
@@ -401,7 +509,7 @@ export function ApprovalPanel({
         {heading}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -418,6 +526,10 @@ export function ApprovalPanel({
           <CreateBody input={create} />
         ) : blocker ? (
           <BlockerResolveBody input={blocker} />
+        ) : skipCheck ? (
+          <SkipMergeCheckBody input={skipCheck} />
+        ) : mergeCheck ? (
+          <MergeCheckChangeBody input={mergeCheck} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
@@ -434,12 +546,18 @@ export function ApprovalPanel({
             : dag
               ? 'Apply changes'
               : batch
-                ? 'Create them'
+                ? // The count, not "them": the question above it scrolls away on a long batch. The
+                  // native card says the same (`Approvals.batchCreateAction`).
+                  `Create ${batch.taskCount ?? 0} task${batch.taskCount === 1 ? '' : 's'}`
                 : create
                   ? 'Create it'
                   : blocker
                     ? 'Resolve it'
-                    : 'Approve'}
+                    : skipCheck
+                      ? 'Land it without the check'
+                      : mergeCheck
+                        ? 'Change the check'
+                        : 'Approve'}
           {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {rules.length > 0 && (
@@ -511,6 +629,81 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
         {input.reason}
       </Markdown>
     </div>
+  );
+}
+
+/**
+ * What is being skipped, and what the coordinator says is the matter with it.
+ *
+ * Three sentences in the order the decision is made in: what this is about (the landing, named by the
+ * task it delivers), the command that would not run — verbatim, on its own line, because the whole
+ * question is whether THAT command should hold up THAT landing — and then the agent's claim that the
+ * red is the check's rather than the work's, marked as the agent's for the same reason the blocker
+ * card marks its own. The command is shown and not run: nothing here proves it would fail.
+ *
+ * Its neighbour below is the other half of that question — changing the command rather than going
+ * past it — and the two cards are deliberately separate: an owner who lets this landing through has
+ * not agreed to run something else next time.
+ */
+function SkipMergeCheckBody({ input }: { input: SkipMergeCheckInput }): JSX.Element {
+  return (
+    <div className="dag-approval">
+      {input.projectTitle && <p className="dag-approval-caption">In {input.projectTitle}</p>}
+      <p className="dag-approval-caption">This landing runs without the merge check</p>
+      <pre className="approval-input">{input.checkCommand}</pre>
+      {input.failure && <p className="dag-approval-foot">{input.failure}</p>}
+      <p className="dag-approval-caption">The agent says this red is the check&rsquo;s, not the work&rsquo;s</p>
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={referenceUrlTransform}
+        components={{ a: ReferenceLink }}
+      >
+        {input.reason}
+      </Markdown>
+      <p className="create-criteria-note">
+        Once, and only this landing: the project&rsquo;s check command is unchanged, and the next
+        landing and every merge into {input.mainBranch} are checked as before.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * What the merge check is now, and what it would become.
+ *
+ * Two commands and nothing else, because their difference IS the decision: everything else about
+ * this project's integration line — which branch the work lands on — is not being asked about and
+ * could not be given away here. The current value comes from the project read rather than from the
+ * agent's recollection of it, which is the thing a person is here to check.
+ *
+ * A check that is being REMOVED says so in words: an empty line on the right reads as a loading
+ * state, not as "no check at all".
+ */
+function MergeCheckChangeBody({ input }: { input: MergeCheckChangeInput }): JSX.Element {
+  const current = input.current ?? 'no check configured';
+  const next = input.next ?? 'no check — nothing runs on the combined tree';
+  return (
+    <div className="dag-approval">
+      <p className="dag-approval-note">
+        Run on the combined tree before this project's work lands. Nothing else about the
+        project's integration line changes.
+      </p>
+      <Command label="now" command={current} />
+      <Command label="after" command={next} />
+      {input.timeout !== null && (
+        <p className="dag-approval-caption">killed after {input.timeout}s</p>
+      )}
+    </div>
+  );
+}
+
+/** One command on the card: the label above it, the command as it would be run below. */
+function Command({ label, command }: { label: string; command: string }): JSX.Element {
+  return (
+    <>
+      <p className="dag-approval-caption">{label}</p>
+      <pre className="approval-input">{command}</pre>
+    </>
   );
 }
 
@@ -672,9 +865,6 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
   // picture shows, and the "+N more" below says what it does not.
   const graph = buildBatchGraph(tasks);
   const shape = describeShape(graph);
-  // Drawn only while it stays legible; past that the sentence carries the shape and the list
-  // carries the names, which is strictly more readable than a picture scaled into illegibility.
-  const hasShape = shouldDraw(graph);
   return (
     <div className="dag-approval">
       <ImpactPills preview={preview} withZeroStarting />
@@ -687,26 +877,28 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
       <p className="dag-approval-caption">
         Tasks{shape ? ` — ${shape}` : ''}
       </p>
-      {hasShape ? (
-        // Drawn only when the batch has edges. A chain of ten and ten unrelated tasks produce the
-        // same list of titles and behave completely differently, and that is exactly what a
-        // picture shows and a list cannot.
-        <BatchGraph tasks={tasks} />
-      ) : (
-        <ul className="dag-approval-ops">
-          {tasks.map((t, i) => (
-            <li key={i} className="dag-op">
-              <span className="dag-op-verb">+</span>
-              <span className="dag-op-text">{t.title}</span>
-              {((t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)) > 0 && (
-                <span className="dag-op-noop">
-                  waits on {(t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* The picture — the project page's own canvas, drawn top to bottom on a card — or, when
+          there is no shape to draw or none that fits this width, the titles. A chain of ten and ten
+          unrelated tasks produce the same list and behave completely differently, and that is
+          exactly what a picture shows and a list cannot. */}
+      <BatchGraph
+        tasks={tasks}
+        fallback={
+          <ul className="dag-approval-ops">
+            {tasks.map((t, i) => (
+              <li key={i} className="dag-op">
+                <span className="dag-op-verb">+</span>
+                <span className="dag-op-text">{t.title}</span>
+                {((t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)) > 0 && (
+                  <span className="dag-op-noop">
+                    waits on {(t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        }
+      />
       {(preview.titlesTruncated ?? 0) > 0 && (
         <p className="dag-approval-foot">+{preview.titlesTruncated} more</p>
       )}

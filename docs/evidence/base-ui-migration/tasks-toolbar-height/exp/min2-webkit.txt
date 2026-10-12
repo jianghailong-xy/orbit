@@ -1,0 +1,29 @@
+argv: node min2.mjs webkit  (from the delivery's src/web)
+load: 33.80 30.93 29.28 20/6406 1810441
+started: 2026-10-10T00:55:13Z
+
+webkit 26.6
+app                    narrow: tb 34 bar 42 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+no-flex-ancestor       narrow: tb 42 bar 42 sb 8 ovf heads 130   wide: tb 34 bar 34 sb 0 heads 122
+flex-shell-only        narrow: tb 42 bar 42 sb 8 ovf heads 114   wide: tb 34 bar 34 sb 0 heads 106
+flex-view-only         narrow: tb 34 bar 42 sb 8 ovf heads 122   wide: tb 34 bar 34 sb 0 heads 122
+no-flex-at-all         narrow: tb 42 bar 42 sb 8 ovf heads 130   wide: tb 34 bar 34 sb 0 heads 122
+block-toolbar          narrow: tb 34 bar 42 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+grid-toolbar           narrow: tb 34 bar 42 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+header-flex-column     narrow: tb 34 bar 42 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+header-grid            narrow: tb 34 bar 42 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+view-grid              narrow: tb 34 bar 42 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+view-grid-block-shell  narrow: tb 34 bar 42 sb 8 ovf heads 122   wide: tb 34 bar 34 sb 0 heads 122
+contain-layout-header  narrow: tb 34 bar 42 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+toolbar-is-scroller    narrow: tb 42 bar 34 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+inner-scroller         narrow: tb 34 bar 34 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+reserve-min-height     narrow: tb 42 bar 42 sb 8 ovf heads 114   wide: tb 42 bar 34 sb 0 heads 114
+overflow-scroll        narrow: tb 42 bar 42 sb 8 ovf heads 114   wide: tb 42 bar 42 sb 8 heads 114
+fixed-34               narrow: tb 34 bar 42 sb 8 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+hidden-scrollbar       narrow: tb 34 bar 34 sb 0 ovf heads 106   wide: tb 34 bar 34 sb 0 heads 106
+js-commit              narrow: tb 42 bar 42 sb 8 ovf heads 114   wide: tb 34 bar 34 sb 0 heads 106
+js-ro-raf              narrow: tb 42 bar 42 sb 8 ovf heads 114   wide: tb 34 bar 34 sb 0 heads 106
+js-ro-sync+body-ro     narrow: tb 42 bar 42 sb 8 ovf heads 114 errors 1   wide: tb 34 bar 34 sb 0 heads 106
+js-ro-raf+body-ro      narrow: tb 34 bar 42 sb 8 ovf heads 106 -> later tb 42 bar 42 sb 8 ovf heads 114   wide: tb 34 bar 34 sb 0 heads 106
+exit=0
+ended: 2026-10-10T00:59:11Z

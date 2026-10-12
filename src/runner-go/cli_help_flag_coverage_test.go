@@ -31,14 +31,18 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
 		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
 		watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, wikiPlanCLICapabilities,
+		userCLICapabilities,
 	} {
 		for _, spec := range list {
-			// Single-command families (`orbit notify`) have one help text, not a per-action map.
+			help, ok := "", false
 			if len(spec.Argv) < 3 {
-				continue
-			}
-			help, ok := helpByFamily[spec.Argv[1]][spec.Argv[2]]
-			if !ok {
+				// A single-command family (`orbit notify`, `orbit whoami`) has one help text: the one
+				// `orbit <cmd> --help` prints.
+				if help, ok = cmdHelp[spec.Argv[1]]; !ok {
+					t.Errorf("`orbit %s --help` has no help text, and capabilities advertises it", spec.Argv[1])
+					continue
+				}
+			} else if help, ok = helpByFamily[spec.Argv[1]][spec.Argv[2]]; !ok {
 				continue
 			}
 			seen := map[string]bool{}
@@ -49,10 +53,40 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 					}
 					seen[flag] = true
 					if !strings.Contains(help, flag) {
-						t.Errorf("`orbit %s %s --help` does not document %s, which capabilities advertises",
-							spec.Argv[1], spec.Argv[2], flag)
+						t.Errorf("`%s --help` does not document %s, which capabilities advertises",
+							strings.Join(spec.Argv, " "), flag)
 					}
 				}
+			}
+		}
+	}
+}
+
+// T5: the engine flags reach the help of every command that takes them, with the six engines a person
+// can pass named by the CLI they are — the overview's usage line included, which is where a reader of
+// `orbit task --help` first sees batch-pin's shape.
+func TestEngineFlagsAreInTheHelpOfEveryCommandThatTakesThem(t *testing.T) {
+	for _, tc := range []struct {
+		command string
+		help    string
+		want    []string
+	}{
+		{command: "orbit session create", help: sessionActionHelp["create"], want: []string{"--engine ENGINE", "PROVIDER_ENGINE_INCOMPATIBLE", "DEEPSEEK_KEY_REQUIRED"}},
+		{command: "orbit task create", help: taskActionHelp["create"], want: []string{"--engine ENGINE", "PROVIDER_ENGINE_INCOMPATIBLE"}},
+		{command: "orbit task update", help: taskActionHelp["update"], want: []string{"--engine ENGINE | --clear-engine"}},
+		{command: "orbit task batch-pin", help: taskActionHelp["batch-pin"], want: []string{"(--engine ENGINE | --clear-engine)", "--clear-engine"}},
+		{command: "orbit task", help: taskHelp, want: []string{"(--engine E | --clear-engine)"}},
+	} {
+		for _, want := range tc.want {
+			if !strings.Contains(tc.help, want) {
+				t.Errorf("`%s --help` does not say %q", tc.command, want)
+			}
+		}
+	}
+	for _, help := range []string{sessionActionHelp["create"], taskActionHelp["create"]} {
+		for _, name := range []string{"Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"} {
+			if !strings.Contains(strings.Join(strings.Fields(help), " "), name) {
+				t.Errorf("an --engine help does not name %s:\n%s", name, help)
 			}
 		}
 	}

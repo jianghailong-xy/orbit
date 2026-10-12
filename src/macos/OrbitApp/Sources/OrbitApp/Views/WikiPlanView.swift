@@ -58,6 +58,8 @@ struct WikiPlanPage: View {
     /// Where a draft runs, and on what: `orbit · wikova`, `local-vllm`.
     let whereItRuns: String?
     let provider: String?
+    /// Whether the server executes this account's wiki: a draft is then the wiki-worker's, on the System model.
+    var serverExecutes = false
     var busy = false
     /// The gate's errors of a change whose acceptance it refused, by proposal.
     var refused: [String: [WikiPlanGateError]] = [:]
@@ -231,7 +233,7 @@ struct WikiPlanPage: View {
                 .foregroundStyle(.secondary)
             Text(WikiPlanCopy.emptyTitle)
                 .font(.title3.bold())
-            Text(WikiPlanCopy.emptyText(provider: provider))
+            Text(WikiPlanCopy.emptyText(provider: provider, serverExecutes: serverExecutes))
                 .font(.orbitSubtext)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -241,7 +243,7 @@ struct WikiPlanPage: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(busy)
-            Text(WikiPlanCopy.emptyNote(where: whereItRuns, provider: provider))
+            Text(WikiPlanCopy.emptyNote(where: whereItRuns, provider: provider, serverExecutes: serverExecutes))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -251,46 +253,174 @@ struct WikiPlanPage: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// `1.3  安全模型与密钥信任` over the reader's question and `2 errors · 7 sections · 1,500–2,400 chars`.
+    /// `1.3  安全模型与密钥信任` over the reader's question and `2 errors · 7 sections · 1,500–2,400 chars`: the
+    /// document row the home draws too, with the plan's counts under the question.
     private func docRow(_ doc: WikiPlanLogic.ShownDoc, in shown: WikiPlanLogic.Shown) -> some View {
         let errors = WikiPlanLogic.docErrors(shown, doc: doc).count
-        return Button { actions.openDoc(doc.slug) } label: {
+        return WikiDocRow(mark: .number(doc.number), title: doc.title, line: doc.question, locked: doc.protected,
+                          action: { actions.openDoc(doc.slug) }) {
+            ((errors > 0 ? Text(WikiPlanCopy.errorCount(errors)).foregroundColor(.red).bold() + Text(" · ") : Text(""))
+                + Text(WikiPlanLogic.docLine(doc)))
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - a document as a row
+
+/// A document as a list row (`WikiDocRow`): its number, its title, a line under it and the chevron into its
+/// page — the plan page's row (mock 22 ②), and the home's (design §12.3.1, mocks 30 ③, 31 ① ③).
+///
+/// ONE ROW, TWO LINES UNDER THE TITLE: the plan's is the question the document answers; the home's is the
+/// document's lead (`lead`), a shade darker, since it is what the document says rather than what it is for.
+struct WikiDocRow<Extra: View>: View {
+    /// What stands in the number column: `3.1`, or a principle's pin. Nil leaves the row no such column (a topic).
+    enum Mark: Equatable {
+        case number(String)
+        case pin
+    }
+
+    let mark: Mark?
+    let title: String
+    /// The line under the title, two lines at most.
+    var line: String? = nil
+    /// The line is the document's lead.
+    var lead = false
+    /// A blue dot before the title: new since the reader last looked.
+    var fresh = false
+    var locked = false
+    /// The title in grey: a document not written yet.
+    var muted = false
+    /// What ends the row in the chevron's place: a principle's day.
+    var end: String? = nil
+    let action: () -> Void
+    /// Under the line: the plan's counts, and the errors its check found.
+    let extra: Extra
+
+    /// The number column, as wide as `10.3` (the web's 34 px).
+    @ScaledMetric(relativeTo: .subheadline) private var numberWidth: CGFloat = 34
+
+    init(mark: Mark?, title: String, line: String? = nil, lead: Bool = false, fresh: Bool = false, locked: Bool = false,
+         muted: Bool = false, end: String? = nil, action: @escaping () -> Void, @ViewBuilder extra: () -> Extra) {
+        self.mark = mark
+        self.title = title
+        self.line = line
+        self.lead = lead
+        self.fresh = fresh
+        self.locked = locked
+        self.muted = muted
+        self.end = end
+        self.action = action
+        self.extra = extra()
+    }
+
+    var body: some View {
+        Button(action: action) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(doc.number)
-                    .font(.orbitSubtext.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                switch mark {
+                case .number(let number)?:
+                    Text(number)
+                        .font(.orbitSubtext.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: numberWidth, alignment: .leading)
+                case .pin?:
+                    Image(systemName: "pin.fill")
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .frame(width: numberWidth, alignment: .leading)
+                case nil:
+                    EmptyView()
+                }
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
-                        Text(doc.title)
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        if fresh {
+                            Text("●")
+                                .font(.orbitMeta)
+                                .foregroundStyle(WikiPalette.color(.blue))
+                                .accessibilityHidden(true)
+                        }
+                        Text(title)
                             .font(.orbitProse)
-                            .foregroundStyle(Color.primary)
-                        if doc.protected {
+                            .foregroundStyle(muted ? Color.secondary : Color.primary)
+                            .lineLimit(1)
+                        if locked {
                             Image(systemName: "lock.fill")
                                 .font(.orbitMeta)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    if !doc.question.isEmpty {
-                        Text(doc.question)
+                    if let line, !line.isEmpty {
+                        Text(line)
                             .font(.orbitListSubtitle)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(lead ? Color.primary.opacity(0.75) : Color.secondary)
                             .lineLimit(2)
                     }
-                    (errors > 0 ? Text(WikiPlanCopy.errorCount(errors)).foregroundColor(.red).bold() + Text(" · ") : Text(""))
-                        + Text(WikiPlanLogic.docLine(doc))
+                    extra
                 }
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
+                // The separator under the row starts at the title, past the number column (mock 30 ③).
+                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.forward")
-                    .font(.orbitMeta.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                if let end {
+                    Text(end)
+                        .font(.orbitLabel.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                } else {
+                    Image(systemName: "chevron.forward")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 }
+
+extension WikiDocRow where Extra == EmptyView {
+    init(mark: Mark?, title: String, line: String? = nil, lead: Bool = false, fresh: Bool = false, locked: Bool = false,
+         muted: Bool = false, end: String? = nil, action: @escaping () -> Void) {
+        self.init(mark: mark, title: title, line: line, lead: lead, fresh: fresh, locked: locked, muted: muted, end: end,
+                  action: action, extra: { EmptyView() })
+    }
+}
+
+/// A category's folded row: what of it is not written yet, in grey under the title column, and the chevron that
+/// turns down once it is opened to their titles.
+struct WikiDocFoldedRow: View {
+    let text: String
+    let open: Bool
+    let action: () -> Void
+
+    /// The number column the titles above it start after.
+    @ScaledMetric(relativeTo: .subheadline) private var numberWidth: CGFloat = 34
+
+    init(text: String, open: Bool, action: @escaping () -> Void) {
+        self.text = text
+        self.open = open
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Color.clear.frame(width: numberWidth, height: 1)
+                Text(text)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.forward")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(open ? 90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(open ? "Expanded" : "Collapsed")
+    }
+}
+
 
 // MARK: - the job
 
@@ -1178,40 +1308,5 @@ struct WikiPlanSectionEditSheet: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - the plan on the home
-
-/// The plan's banner (mock 26 ③; owner's call 2026-09-29: the phone's second banner, under Review's): one
-/// line in the look's colour — amber while something waits on the owner, blue while a draft is on its way or
-/// the documents are being written — the whole bar one press into the plan, or into Maintenance.
-struct WikiPlanBannerRow: View {
-    let banner: WikiPlanLogic.Banner
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Circle()
-                    .fill(banner.tone == .amber ? Color.orange : Color.blue)
-                    .frame(width: 7, height: 7)
-                Text(banner.text)
-                    .font(.orbitControl)
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.forward")
-                    .font(.orbitMeta)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(banner.tone == .amber ? AnyShapeStyle(wikiAmberWash) : AnyShapeStyle(Color.blue.opacity(0.10)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(banner.text)
     }
 }

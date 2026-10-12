@@ -1,0 +1,13 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index b492f4d82..e70aed37b 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -13550,7 +13550,7 @@ button.chat-jump-start:hover {
+   display: flex;
+   align-items: center;
+   gap: 16px;
+-  padding: 12px 20px;
++  padding: 13px 20px 12px;
+   border-bottom: 1px solid var(--border);
+   flex: none;
+ }

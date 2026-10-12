@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -190,10 +189,7 @@ func TestAntigravityGoogleProbeNetworkFailureIsUnknown(t *testing.T) {
 }
 
 func TestAntigravityGoogleContractProbeNetworkFailureIsUnknown(t *testing.T) {
-	path, err := exec.LookPath(agyExecutable)
-	if err != nil {
-		t.Fatal("real agy is required for the Linux Google contract tests:", err)
-	}
+	path := requireRealAgy(t)
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	saveGoogleSignIn(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

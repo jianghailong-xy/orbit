@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && npm run test:ui-overlays -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_184cff71a796",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "a93ecfb2e0f268d9e8ed1c31c4e497273aa1349f",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T14:27:06.864739+00:00",
+ "exitCode": 0,
+ "outputSha256": "c730ece9b4ce227f6161b8a20fbf12e973976c55da855e94f650e1ba2b99db22",
+ "outputBytes": 16176,
+ "note": "96 passed: the overlays matrix (Dialog/Drawer surfaces, Tab trap, Esc/outside close and focus return, nested layers, legacy Modal/Popconfirm/Select coexistence in both directions, async confirmation, theme inheritance, composing Escape, motion and scroll restore) in all eight environments."
+}

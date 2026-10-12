@@ -1,0 +1,2033 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/var/tmp/p4.1-293463/tip/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/p41.config.mjs",
+   "--update-snapshots=all",
+   "-g",
+   "photo|approve|deny|denied"
+  ],
+  "configFile": "/var/tmp/p4.1-293463/tip/src/web/ui-migration/p41.config.mjs",
+  "rootDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/var/tmp/p4.1-293463/tip/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/rep-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p41*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/rep-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p41*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/rep-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p41*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/rep-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p41*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/rep-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p41*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/rep-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p41*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/rep-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p41*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/var/tmp/p4.1-293463/runs/rep-ref-1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/var/tmp/p4.1-293463/tip/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p41*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4331 --strictPort",
+   "cwd": "/var/tmp/p4.1-293463/tip/src/web/",
+   "url": "http://127.0.0.1:4331",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "p41.browser.mjs",
+   "file": "p41.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "P4.1 profile",
+     "file": "p41.browser.mjs",
+     "line": 189,
+     "column": 6,
+     "specs": [
+      {
+       "title": "photo: choose, show and remove",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 999,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-profile-photo.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:24.634Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-profile-photo-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-profile-photo.png"
+            },
+            {
+             "name": "p41-profile-photo-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-chromium-light-desktop/p41-profile-photo-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-chromium-light-desktop/attachments/computed-styles-and-timings-151d858a49118fb7d971f53dc8deb463566963c6.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-edb1c72bf64d10829ce1",
+       "file": "p41.browser.mjs",
+       "line": 236,
+       "column": 3
+      },
+      {
+       "title": "photo: choose, show and remove",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1171,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-profile-photo.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:29.416Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-profile-photo-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-profile-photo.png"
+            },
+            {
+             "name": "p41-profile-photo-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-chromium-light-phone/p41-profile-photo-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-chromium-light-phone/attachments/computed-styles-and-timings-e239d8c8c9b34ecb5ead3c7858e54fa41a3f75ac.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-598b79b0c638c8d580b5",
+       "file": "p41.browser.mjs",
+       "line": 236,
+       "column": 3
+      },
+      {
+       "title": "photo: choose, show and remove",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1240,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-profile-photo.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:33.765Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-profile-photo-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-profile-photo.png"
+            },
+            {
+             "name": "p41-profile-photo-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-chromium-dark-desktop/p41-profile-photo-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-chromium-dark-desktop/attachments/computed-styles-and-timings-decfdf2e2d421c74bdf116003e6107c37d8136dd.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-b730c1725a139bd4d561",
+       "file": "p41.browser.mjs",
+       "line": 236,
+       "column": 3
+      },
+      {
+       "title": "photo: choose, show and remove",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1073,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-profile-photo.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:38.875Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-profile-photo-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-profile-photo.png"
+            },
+            {
+             "name": "p41-profile-photo-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-chromium-dark-phone/p41-profile-photo-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-chromium-dark-phone/attachments/computed-styles-and-timings-134d339eea7e5f14f00d388ef206b487db7bd493.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-841605fe5fdc3f48e104",
+       "file": "p41.browser.mjs",
+       "line": 236,
+       "column": 3
+      },
+      {
+       "title": "photo: choose, show and remove",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1676,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-profile-photo.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:42.966Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-profile-photo-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-profile-photo.png"
+            },
+            {
+             "name": "p41-profile-photo-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-webkit-light-desktop/p41-profile-photo-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-webkit-light-desktop/attachments/computed-styles-and-timings-74fcb3a24069b5f468196167ee5993a4572baf0b.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-96767b4ceaa202b5fc92",
+       "file": "p41.browser.mjs",
+       "line": 236,
+       "column": 3
+      },
+      {
+       "title": "photo: choose, show and remove",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-phone",
+         "projectName": "webkit-light-phone",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1298,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-profile-photo.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:49.394Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-profile-photo-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-profile-photo.png"
+            },
+            {
+             "name": "p41-profile-photo-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-webkit-light-phone/p41-profile-photo-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-webkit-light-phone/attachments/computed-styles-and-timings-d1b691532afa56debb14abc73c5aea45331ca647.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-8a6eaf5a84192ddb4690",
+       "file": "p41.browser.mjs",
+       "line": 236,
+       "column": 3
+      },
+      {
+       "title": "photo: choose, show and remove",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1406,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-profile-photo.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:54.411Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-profile-photo-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-profile-photo.png"
+            },
+            {
+             "name": "p41-profile-photo-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-webkit-dark-desktop/p41-profile-photo-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-webkit-dark-desktop/attachments/computed-styles-and-timings-8aab2c25b36075739f6018e2fc9484d7e00efee3.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-0a46d56b87398583b9a9",
+       "file": "p41.browser.mjs",
+       "line": 236,
+       "column": 3
+      },
+      {
+       "title": "photo: choose, show and remove",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-phone",
+         "projectName": "webkit-dark-phone",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1409,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-profile-photo.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:32:00.338Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-profile-photo-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-profile-photo.png"
+            },
+            {
+             "name": "p41-profile-photo-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-webkit-dark-phone/p41-profile-photo-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-profile-photo-choose-show-and-remove-webkit-dark-phone/attachments/computed-styles-and-timings-b60e71013661dc69a6d325dcdbedd1f7526e9a35.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-87dbb1df9ec2ac4d440a",
+       "file": "p41.browser.mjs",
+       "line": 236,
+       "column": 3
+      }
+     ]
+    },
+    {
+     "title": "P4.1 orbit login approval",
+     "file": "p41.browser.mjs",
+     "line": 519,
+     "column": 6,
+     "specs": [
+      {
+       "title": "approve",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1243,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-loading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-approved.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:25.692Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-loading-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-loading.png"
+            },
+            {
+             "name": "p41-cli-loading-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-light-desktop/p41-cli-loading-actual.png"
+            },
+            {
+             "name": "p41-cli-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli.png"
+            },
+            {
+             "name": "p41-cli-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-light-desktop/p41-cli-actual.png"
+            },
+            {
+             "name": "p41-cli-approved-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-approved.png"
+            },
+            {
+             "name": "p41-cli-approved-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-light-desktop/p41-cli-approved-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-light-desktop/attachments/computed-styles-and-timings-97ec88ba82453a29e5099c8158dd7fccb429bff2.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-c296e15954e5c2faa15e",
+       "file": "p41.browser.mjs",
+       "line": 520,
+       "column": 3
+      },
+      {
+       "title": "warnings, a refused approval, deny and a dead code",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 2123,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-warnings.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-denied.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-error.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:26.939Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-warnings-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-warnings.png"
+            },
+            {
+             "name": "p41-cli-warnings-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-light-desktop/p41-cli-warnings-actual.png"
+            },
+            {
+             "name": "p41-cli-denied-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-denied.png"
+            },
+            {
+             "name": "p41-cli-denied-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-light-desktop/p41-cli-denied-actual.png"
+            },
+            {
+             "name": "p41-cli-error-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-desktop/p41-cli-error.png"
+            },
+            {
+             "name": "p41-cli-error-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-light-desktop/p41-cli-error-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-light-desktop/attachments/computed-styles-and-timings-14a303ea43eaa44efe3986d8f471b94594011631.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-1ff95e6fc51b2384fc3c",
+       "file": "p41.browser.mjs",
+       "line": 545,
+       "column": 3
+      },
+      {
+       "title": "approve",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1209,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-loading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-approved.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:30.660Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-loading-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-loading.png"
+            },
+            {
+             "name": "p41-cli-loading-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-light-phone/p41-cli-loading-actual.png"
+            },
+            {
+             "name": "p41-cli-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli.png"
+            },
+            {
+             "name": "p41-cli-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-light-phone/p41-cli-actual.png"
+            },
+            {
+             "name": "p41-cli-approved-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-approved.png"
+            },
+            {
+             "name": "p41-cli-approved-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-light-phone/p41-cli-approved-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-light-phone/attachments/computed-styles-and-timings-f92704aced050d28258444d3d486bb6e0f5a37ad.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-2ad382fd5181a9148d40",
+       "file": "p41.browser.mjs",
+       "line": 520,
+       "column": 3
+      },
+      {
+       "title": "warnings, a refused approval, deny and a dead code",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1566,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-warnings.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-denied.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-error.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:31.877Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-warnings-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-warnings.png"
+            },
+            {
+             "name": "p41-cli-warnings-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-light-phone/p41-cli-warnings-actual.png"
+            },
+            {
+             "name": "p41-cli-denied-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-denied.png"
+            },
+            {
+             "name": "p41-cli-denied-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-light-phone/p41-cli-denied-actual.png"
+            },
+            {
+             "name": "p41-cli-error-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-light-phone/p41-cli-error.png"
+            },
+            {
+             "name": "p41-cli-error-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-light-phone/p41-cli-error-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-light-phone/attachments/computed-styles-and-timings-68abf4f29b7dea2ec308c3b8886aa55070d686c1.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-abd9296daa523ddbd4f9",
+       "file": "p41.browser.mjs",
+       "line": 545,
+       "column": 3
+      },
+      {
+       "title": "approve",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1517,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-loading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-approved.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:35.075Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-loading-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-loading.png"
+            },
+            {
+             "name": "p41-cli-loading-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-dark-desktop/p41-cli-loading-actual.png"
+            },
+            {
+             "name": "p41-cli-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli.png"
+            },
+            {
+             "name": "p41-cli-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-dark-desktop/p41-cli-actual.png"
+            },
+            {
+             "name": "p41-cli-approved-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-approved.png"
+            },
+            {
+             "name": "p41-cli-approved-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-dark-desktop/p41-cli-approved-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-dark-desktop/attachments/computed-styles-and-timings-38fed61885b704088bf58a20d7b60d9f0fc7d019.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-13706bb58ea72c79cba2",
+       "file": "p41.browser.mjs",
+       "line": 520,
+       "column": 3
+      },
+      {
+       "title": "warnings, a refused approval, deny and a dead code",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1940,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-warnings.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-denied.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-error.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:36.597Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-warnings-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-warnings.png"
+            },
+            {
+             "name": "p41-cli-warnings-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-dark-desktop/p41-cli-warnings-actual.png"
+            },
+            {
+             "name": "p41-cli-denied-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-denied.png"
+            },
+            {
+             "name": "p41-cli-denied-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-dark-desktop/p41-cli-denied-actual.png"
+            },
+            {
+             "name": "p41-cli-error-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-desktop/p41-cli-error.png"
+            },
+            {
+             "name": "p41-cli-error-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-dark-desktop/p41-cli-error-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-dark-desktop/attachments/computed-styles-and-timings-e884186c27db467bf93d0b60457f4976a7db879b.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-5c9435bbd4d636a1f100",
+       "file": "p41.browser.mjs",
+       "line": 545,
+       "column": 3
+      },
+      {
+       "title": "approve",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1083,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-loading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-approved.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:40.003Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-loading-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-loading.png"
+            },
+            {
+             "name": "p41-cli-loading-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-dark-phone/p41-cli-loading-actual.png"
+            },
+            {
+             "name": "p41-cli-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli.png"
+            },
+            {
+             "name": "p41-cli-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-dark-phone/p41-cli-actual.png"
+            },
+            {
+             "name": "p41-cli-approved-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-approved.png"
+            },
+            {
+             "name": "p41-cli-approved-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-dark-phone/p41-cli-approved-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-chromium-dark-phone/attachments/computed-styles-and-timings-53aac30954e280870dc5fa18df5ac3677af67b11.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-95f94c3981b45354890c",
+       "file": "p41.browser.mjs",
+       "line": 520,
+       "column": 3
+      },
+      {
+       "title": "warnings, a refused approval, deny and a dead code",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1501,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-warnings.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-denied.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-error.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:41.091Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-warnings-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-warnings.png"
+            },
+            {
+             "name": "p41-cli-warnings-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-dark-phone/p41-cli-warnings-actual.png"
+            },
+            {
+             "name": "p41-cli-denied-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-denied.png"
+            },
+            {
+             "name": "p41-cli-denied-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-dark-phone/p41-cli-denied-actual.png"
+            },
+            {
+             "name": "p41-cli-error-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/chromium-dark-phone/p41-cli-error.png"
+            },
+            {
+             "name": "p41-cli-error-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-dark-phone/p41-cli-error-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-chromium-dark-phone/attachments/computed-styles-and-timings-ef6ca874ba928f55e5955a5492a8569681ed6f47.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-12af512d11b13e8a0e21",
+       "file": "p41.browser.mjs",
+       "line": 545,
+       "column": 3
+      },
+      {
+       "title": "approve",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1674,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-loading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-approved.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:44.820Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-loading-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-loading.png"
+            },
+            {
+             "name": "p41-cli-loading-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-light-desktop/p41-cli-loading-actual.png"
+            },
+            {
+             "name": "p41-cli-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli.png"
+            },
+            {
+             "name": "p41-cli-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-light-desktop/p41-cli-actual.png"
+            },
+            {
+             "name": "p41-cli-approved-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-approved.png"
+            },
+            {
+             "name": "p41-cli-approved-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-light-desktop/p41-cli-approved-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-light-desktop/attachments/computed-styles-and-timings-4f7539a7a6d0b04087226552f293c9ab15af765a.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-88ae5628f41f14e18d07",
+       "file": "p41.browser.mjs",
+       "line": 520,
+       "column": 3
+      },
+      {
+       "title": "warnings, a refused approval, deny and a dead code",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 2552,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-warnings.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-denied.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-error.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:46.499Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-warnings-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-warnings.png"
+            },
+            {
+             "name": "p41-cli-warnings-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-light-desktop/p41-cli-warnings-actual.png"
+            },
+            {
+             "name": "p41-cli-denied-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-denied.png"
+            },
+            {
+             "name": "p41-cli-denied-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-light-desktop/p41-cli-denied-actual.png"
+            },
+            {
+             "name": "p41-cli-error-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-desktop/p41-cli-error.png"
+            },
+            {
+             "name": "p41-cli-error-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-light-desktop/p41-cli-error-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-light-desktop/attachments/computed-styles-and-timings-dcc790e29b07de3ab71f21d3a612dd7b8ec1faa9.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-588a14f0860e73127261",
+       "file": "p41.browser.mjs",
+       "line": 545,
+       "column": 3
+      },
+      {
+       "title": "approve",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-phone",
+         "projectName": "webkit-light-phone",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1302,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-loading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-approved.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:50.773Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-loading-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-loading.png"
+            },
+            {
+             "name": "p41-cli-loading-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-light-phone/p41-cli-loading-actual.png"
+            },
+            {
+             "name": "p41-cli-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli.png"
+            },
+            {
+             "name": "p41-cli-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-light-phone/p41-cli-actual.png"
+            },
+            {
+             "name": "p41-cli-approved-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-approved.png"
+            },
+            {
+             "name": "p41-cli-approved-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-light-phone/p41-cli-approved-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-light-phone/attachments/computed-styles-and-timings-1f0f3d06f4828c4535c6d530c2d0b8fc344b397b.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-cb864a80c08f25c6d5b6",
+       "file": "p41.browser.mjs",
+       "line": 520,
+       "column": 3
+      },
+      {
+       "title": "warnings, a refused approval, deny and a dead code",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-phone",
+         "projectName": "webkit-light-phone",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 2002,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-warnings.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-denied.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-error.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:52.080Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-warnings-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-warnings.png"
+            },
+            {
+             "name": "p41-cli-warnings-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-light-phone/p41-cli-warnings-actual.png"
+            },
+            {
+             "name": "p41-cli-denied-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-denied.png"
+            },
+            {
+             "name": "p41-cli-denied-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-light-phone/p41-cli-denied-actual.png"
+            },
+            {
+             "name": "p41-cli-error-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-light-phone/p41-cli-error.png"
+            },
+            {
+             "name": "p41-cli-error-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-light-phone/p41-cli-error-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-light-phone/attachments/computed-styles-and-timings-22c5bb907c9e7fe18dcc9451cced3fdb57192827.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-bb12ff9442fe582e19ce",
+       "file": "p41.browser.mjs",
+       "line": 545,
+       "column": 3
+      },
+      {
+       "title": "approve",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1689,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-loading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-approved.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:55.895Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-loading-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-loading.png"
+            },
+            {
+             "name": "p41-cli-loading-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-dark-desktop/p41-cli-loading-actual.png"
+            },
+            {
+             "name": "p41-cli-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli.png"
+            },
+            {
+             "name": "p41-cli-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-dark-desktop/p41-cli-actual.png"
+            },
+            {
+             "name": "p41-cli-approved-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-approved.png"
+            },
+            {
+             "name": "p41-cli-approved-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-dark-desktop/p41-cli-approved-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-dark-desktop/attachments/computed-styles-and-timings-7b76a899df082a6a4eb236f1693fded4f3a41732.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-e37417c03f5826a754f8",
+       "file": "p41.browser.mjs",
+       "line": 520,
+       "column": 3
+      },
+      {
+       "title": "warnings, a refused approval, deny and a dead code",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 2399,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-warnings.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-denied.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-error.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:31:57.592Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-warnings-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-warnings.png"
+            },
+            {
+             "name": "p41-cli-warnings-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-dark-desktop/p41-cli-warnings-actual.png"
+            },
+            {
+             "name": "p41-cli-denied-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-denied.png"
+            },
+            {
+             "name": "p41-cli-denied-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-dark-desktop/p41-cli-denied-actual.png"
+            },
+            {
+             "name": "p41-cli-error-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-desktop/p41-cli-error.png"
+            },
+            {
+             "name": "p41-cli-error-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-dark-desktop/p41-cli-error-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-dark-desktop/attachments/computed-styles-and-timings-2f251d933e8c2a500ea09c38c6a2ad551f40e8dc.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-fd2cf59ed219ebef0772",
+       "file": "p41.browser.mjs",
+       "line": 545,
+       "column": 3
+      },
+      {
+       "title": "approve",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-phone",
+         "projectName": "webkit-dark-phone",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 1469,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-loading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-approved.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:32:01.817Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-loading-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-loading.png"
+            },
+            {
+             "name": "p41-cli-loading-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-dark-phone/p41-cli-loading-actual.png"
+            },
+            {
+             "name": "p41-cli-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli.png"
+            },
+            {
+             "name": "p41-cli-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-dark-phone/p41-cli-actual.png"
+            },
+            {
+             "name": "p41-cli-approved-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-approved.png"
+            },
+            {
+             "name": "p41-cli-approved-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-dark-phone/p41-cli-approved-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-login-approval-approve-webkit-dark-phone/attachments/computed-styles-and-timings-5dc6669cd8d802142cdd6aaca879d6b0d6cb573f.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-b683f5e0671c969cb7b7",
+       "file": "p41.browser.mjs",
+       "line": 520,
+       "column": 3
+      },
+      {
+       "title": "warnings, a refused approval, deny and a dead code",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 90000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-phone",
+         "projectName": "webkit-dark-phone",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 2264,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-warnings.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-denied.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-error.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-07T15:32:03.291Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p41-cli-warnings-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-warnings.png"
+            },
+            {
+             "name": "p41-cli-warnings-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-dark-phone/p41-cli-warnings-actual.png"
+            },
+            {
+             "name": "p41-cli-denied-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-denied.png"
+            },
+            {
+             "name": "p41-cli-denied-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-dark-phone/p41-cli-denied-actual.png"
+            },
+            {
+             "name": "p41-cli-error-expected.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-shots/webkit-dark-phone/p41-cli-error.png"
+            },
+            {
+             "name": "p41-cli-error-actual.png",
+             "contentType": "image/png",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-dark-phone/p41-cli-error-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/var/tmp/p4.1-293463/runs/rep-ref-1-out/p41.browser.mjs-P4-1-orbit-430b3-proval-deny-and-a-dead-code-webkit-dark-phone/attachments/computed-styles-and-timings-50318b89938da0e214aac6127de67114d12ea711.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "63e79af2a8b6ecca3000-c5ebcc921e40c1b54923",
+       "file": "p41.browser.mjs",
+       "line": 545,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-07T15:31:23.098Z",
+  "duration": 42562.933,
+  "expected": 24,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

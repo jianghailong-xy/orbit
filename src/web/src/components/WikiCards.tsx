@@ -1,4 +1,3 @@
-import { PushpinOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 
 /**
@@ -8,7 +7,7 @@ import type { ReactNode } from 'react';
  * REUSED RATHER THAN RESTATED. `.project-open-items` is the app's own card (a raised surface, the
  * subtle border, the 10px radius) and the design's mock links that rule and draws inside it, so the
  * only thing this adds is the head's shape — a title, an optional hint, and an optional trailing
- * action — plus the pin the Principles card leads with.
+ * action.
  */
 export function WikiCard({
   title,
@@ -20,7 +19,7 @@ export function WikiCard({
 }: {
   title: ReactNode;
   hint?: ReactNode;
-  /** A mark before the title: the pin on Principles, the amber dot on Review. */
+  /** A mark before the title: the amber dot on Review. */
   leading?: ReactNode;
   /** A trailing action on the head's line: `All decisions ›`, a count pill. */
   trailing?: ReactNode;
@@ -38,11 +37,6 @@ export function WikiCard({
       {children}
     </section>
   );
-}
-
-/** The pin Principles leads with. */
-export function WikiPin() {
-  return <PushpinOutlined className="ic wk-pin" />;
 }
 
 /** What a block says when there is nothing in it yet. Never an empty box. */

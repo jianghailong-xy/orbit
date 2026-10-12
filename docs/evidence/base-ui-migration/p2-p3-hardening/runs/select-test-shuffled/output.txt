@@ -1,0 +1,66 @@
+
+ RUN  v5.0.2 /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/src/web
+      Running tests with seed "1"
+
+ ✓ src/components/ui/Select.test.tsx (26 tests) 698ms
+
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  20:24:01
+   Duration  1.89s (tests 38%, import 29%, environment 27%, transform 5%)
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/src/web
+      Running tests with seed "2"
+
+ ✓ src/components/ui/Select.test.tsx (26 tests) 708ms
+
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  20:24:03
+   Duration  1.39s (tests 53%, import 21%, environment 20%, transform 6%)
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/src/web
+      Running tests with seed "3"
+
+ ✓ src/components/ui/Select.test.tsx (26 tests) 655ms
+
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  20:24:05
+   Duration  1.30s (tests 53%, environment 21%, import 21%, transform 5%)
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/src/web
+      Running tests with seed "4"
+
+ ✓ src/components/ui/Select.test.tsx (26 tests) 668ms
+
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  20:24:07
+   Duration  1.35s (tests 52%, environment 20%, import 20%, transform 8%)
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/src/web
+      Running tests with seed "5"
+
+ ✓ src/components/ui/Select.test.tsx (26 tests) 746ms
+
+ Test Files  1 passed (1)
+      Tests  26 passed (26)
+   Start at  20:24:09
+   Duration  1.48s (tests 53%, environment 21%, import 21%, transform 5%)
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/81d798cd-8d2e-56d8-8e3d-7f8e64e1ee3d/src/web
+
+ ✓ src/components/ui/Menu.test.tsx (18 tests) 454ms
+ ✓ src/components/ui/Select.test.tsx (26 tests) 732ms
+
+ Test Files  2 passed (2)
+      Tests  44 passed (44)
+   Start at  20:24:10
+   Duration  1.52s (tests 44%, import 24%, environment 22%, transform 10%)
+

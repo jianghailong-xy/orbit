@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Spin } from 'antd';
 import { useEffect, useState } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { routeId } from '../lib/idCodec';
 import { projectTaskPath } from '../lib/projectTaskRoute';
+import { Spinner } from '../components/ui/Spinner';
 import { TaskListView } from './TaskListView';
 
 /**
@@ -50,7 +50,7 @@ export function TaskRoute() {
     return (
       <main className="app-main">
         <div className="app-view app-view--doc" style={{ display: 'grid', placeItems: 'center' }}>
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       </main>
     );

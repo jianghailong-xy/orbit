@@ -1,0 +1,357 @@
+[WebServer] (node:3076730) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 80 tests using 1 worker
+
+(node:3078032) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (8.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/task-share-dialog.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/task-public-share.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (617ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/wiki-new-entry.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/settings-saved.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/profile-validation.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/notification-error.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/projects-loading.png, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (776ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-desktop/projects-error.png, writing actual.
+  ✓  10 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.9s)
+(node:3080124) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  11 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/task-share-dialog.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/task-public-share.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (580ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/wiki-new-entry.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/settings-saved.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (937ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/profile-validation.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/notification-error.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/projects-loading.png, writing actual.
+  ✓  19 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (824ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-light-phone/projects-error.png, writing actual.
+  ✓  20 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.1s)
+(node:3081451) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (10.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  22 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/task-public-share.png, writing actual.
+  ✓  23 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (589ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  24 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/wiki-new-entry.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/settings-saved.png, writing actual.
+  ✓  26 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/profile-validation.png, writing actual.
+  ✓  27 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/notification-error.png, writing actual.
+  ✓  28 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/projects-loading.png, writing actual.
+  ✓  29 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (684ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-desktop/projects-error.png, writing actual.
+  ✓  30 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.0s)
+(node:3084503) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  31 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/task-share-dialog.png, writing actual.
+  ✓  32 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/task-public-share.png, writing actual.
+  ✓  33 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (542ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  34 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/wiki-new-entry.png, writing actual.
+  ✓  35 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/settings-saved.png, writing actual.
+  ✓  36 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (932ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/profile-validation.png, writing actual.
+  ✓  37 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (996ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/notification-error.png, writing actual.
+  ✓  38 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/projects-loading.png, writing actual.
+  ✓  39 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (679ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/chromium-dark-phone/projects-error.png, writing actual.
+  ✓  40 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.9s)
+(node:3086957) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓  41 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (10.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/task-share-dialog.png, writing actual.
+  ✓  42 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/task-public-share.png, writing actual.
+  ✓  43 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (800ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  44 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/wiki-new-entry.png, writing actual.
+  ✓  45 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/settings-saved.png, writing actual.
+  ✓  46 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/profile-validation.png, writing actual.
+  ✓  47 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/notification-error.png, writing actual.
+  ✓  48 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/projects-loading.png, writing actual.
+  ✓  49 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-desktop/projects-error.png, writing actual.
+  ✓  50 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+(node:3091394) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  51 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/task-share-dialog.png, writing actual.
+  ✓  52 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/task-public-share.png, writing actual.
+  ✓  53 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (676ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓  54 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/wiki-new-entry.png, writing actual.
+  ✓  55 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/settings-saved.png, writing actual.
+  ✓  56 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/profile-validation.png, writing actual.
+  ✓  57 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/notification-error.png, writing actual.
+  ✓  58 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/projects-loading.png, writing actual.
+  ✓  59 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-light-phone/projects-error.png, writing actual.
+  ✓  60 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (4.9s)
+(node:3093680) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓  61 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (10.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  62 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/task-public-share.png, writing actual.
+  ✓  63 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  64 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (4.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/wiki-new-entry.png, writing actual.
+  ✓  65 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/settings-saved.png, writing actual.
+  ✓  66 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/profile-validation.png, writing actual.
+  ✓  67 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/notification-error.png, writing actual.
+  ✓  68 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (6.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/projects-loading.png, writing actual.
+  ✓  69 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-desktop/projects-error.png, writing actual.
+  ✓  70 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.6s)
+(node:3097169) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  71 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/task-share-dialog.png, writing actual.
+  ✓  72 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/task-public-share.png, writing actual.
+  ✓  73 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  74 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/wiki-new-entry.png, writing actual.
+  ✓  75 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/settings-saved.png, writing actual.
+  ✓  76 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  77 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/notification-error.png, writing actual.
+  ✓  78 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/projects-loading.png, writing actual.
+  ✓  79 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (988ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cFgyWHIYDslABFPloEM/runs/full-fix-negative-control-1px-final/snapshots/webkit-dark-phone/projects-error.png, writing actual.
+  ✓  80 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+
+  4 skipped
+  76 passed (4.7m)

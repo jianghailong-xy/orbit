@@ -1,0 +1,8606 @@
+{
+ "chromium-dark-desktop :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+  {
+   "step": "dialog open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "custom scopes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "checkbox",
+    "name": "Read"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "boxes": [
+    "false",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "true",
+    "false",
+    "true"
+   ]
+  },
+  {
+   "step": "workspaces open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "workspace picked, list closed",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "never chosen, named",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "issued",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens",
+     "body": {
+      "name": "Nightly report",
+      "scopes": [
+       "projects:read",
+       "sessions:read",
+       "workspaces:read",
+       "runners:read",
+       "wiki:read",
+       "events:read"
+      ],
+      "workspaceIds": [
+       "2zwQZ2hd93IvLb59t6p1s"
+      ],
+      "expiresInDays": null
+     }
+    }
+   ]
+  },
+  {
+   "step": "done",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+  {
+   "step": "dialog open",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Close"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "asked inside the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test",
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes the question only",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/admin",
+   "focus": "body",
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "escape closes the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Access tokens"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 access tokens › list, tabs and the revoke question": [
+  {
+   "step": "open",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "ended tab",
+   "url": "/settings/access-tokens?tab=ended",
+   "focus": {
+    "role": "tab",
+    "name": "Revoked & expired2"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Old cron\norbit_pat_…h703\n\tRead-only · everything\tAll workspaces\tRevoked by an administrator Sep 26, 2026\tNever used\t\nSep 18, 2026\nin Settings\n\t",
+    "Demo\norbit_pat_…h704\n\tRead-only · everything\tAll workspaces\tExpired Sep 23, 2026\tNever used\t\nSep 18, 2026\nin Settings\n\t"
+   ]
+  },
+  {
+   "step": "asked",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 access tokens › loading, empty and a failed read": [
+  {
+   "step": "loading",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "empty",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "failed",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "retried",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 orbit login approval › approve": [
+  {
+   "step": "loading",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "asked",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approved",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+  {
+   "step": "never expires, name in use",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it.",
+    "You already have an access token named \"orbit CLI on devbox\".Revoke it under Settings → Access tokens, or run orbit login --name with another name."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approval refused",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "denied",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/deny",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "code not found",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "enter in the first field",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Current password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "Enter a new password"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Confirm your new password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "short new password, confirmation differs",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Confirm new password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "At least 6 characters"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "new password long enough and now matching",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "New password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "changed, tokens revoked, form reset",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Change password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/change-password",
+     "body": {
+      "currentPassword": "old password",
+      "newPassword": "abcdef",
+      "revokeAccessTokens": true
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 profile › photo: choose, show and remove": [
+  {
+   "step": "photo chosen",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Choose photo"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PUT",
+     "path": "/api/users/me/avatar",
+     "body": "<multipart>"
+    }
+   ],
+   "photo": {
+    "width": 62,
+    "height": 62,
+    "alt": ""
+   }
+  },
+  {
+   "step": "photo removed",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/users/me/avatar",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 profile › sign-in methods card beside the replaced ones": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+  {
+   "step": "mode list open",
+   "url": "/settings",
+   "focus": {
+    "role": "option",
+    "name": "Default"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ]
+  },
+  {
+   "step": "mode chosen",
+   "url": "/settings",
+   "focus": {
+    "role": "combobox",
+    "name": "Default permission mode"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "defaultPermissionMode": "plan"
+     }
+    }
+   ]
+  },
+  {
+   "step": "smart model selection on",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "Smart model selection"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "modelRouting": true
+     }
+    }
+   ]
+  },
+  {
+   "step": "saving",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "notifySessionFinished": false
+     }
+    }
+   ],
+   "switches": [
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    }
+   ]
+  },
+  {
+   "step": "saved",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "theme: system",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "dark"
+  },
+  {
+   "step": "theme: the other scheme",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Light"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "light"
+     }
+    }
+   ],
+   "theme": "light"
+  },
+  {
+   "step": "arrow left",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "dark",
+   "saved": "system"
+  },
+  {
+   "step": "manage access tokens",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Manage"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+  {
+   "step": "sent to sign in",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "input",
+    "name": "Email"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "wrong password",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "Invalid email or password"
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "wrong password"
+     }
+    }
+   ]
+  },
+  {
+   "step": "signed in and back at the login request",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+  {
+   "step": "open",
+   "url": "/setup",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    }
+   ]
+  },
+  {
+   "step": "submit empty",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Create account & sign in"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Please enter Email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Please enter Password"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "Please enter Confirm password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "invalid email, short password, confirmation differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Email is not a valid email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Password must be at least 6 characters"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password fixed, confirmation still differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "confirmation matches",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed after the confirmation",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed back",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "tab from the password",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "toggle shown",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Hide"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "text"
+  },
+  {
+   "step": "toggle hidden",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "password"
+  },
+  {
+   "step": "created and sent to the runner guide",
+   "url": "/runners/register",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "name": "First Admin",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  },
+  {
+   "step": "refused by the server",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+  {
+   "step": "dialog open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "custom scopes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "checkbox",
+    "name": "Read"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "boxes": [
+    "false",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "true",
+    "false",
+    "true"
+   ]
+  },
+  {
+   "step": "workspaces open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "workspace picked, list closed",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "never chosen, named",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "issued",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens",
+     "body": {
+      "name": "Nightly report",
+      "scopes": [
+       "projects:read",
+       "sessions:read",
+       "workspaces:read",
+       "runners:read",
+       "wiki:read",
+       "events:read"
+      ],
+      "workspaceIds": [
+       "2zwQZ2hd93IvLb59t6p1s"
+      ],
+      "expiresInDays": null
+     }
+    }
+   ]
+  },
+  {
+   "step": "done",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+  {
+   "step": "dialog open",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Close"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "asked inside the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test",
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes the question only",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/admin",
+   "focus": "body",
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "escape closes the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Access tokens"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.1 access tokens › list, tabs and the revoke question": [
+  {
+   "step": "open",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "ended tab",
+   "url": "/settings/access-tokens?tab=ended",
+   "focus": {
+    "role": "tab",
+    "name": "Revoked & expired2"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Old cron\norbit_pat_…h703\n\tRead-only · everything\tAll workspaces\tRevoked by an administrator Sep 26, 2026\tNever used\t\nSep 18, 2026\nin Settings\n\t",
+    "Demo\norbit_pat_…h704\n\tRead-only · everything\tAll workspaces\tExpired Sep 23, 2026\tNever used\t\nSep 18, 2026\nin Settings\n\t"
+   ]
+  },
+  {
+   "step": "asked",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.1 access tokens › loading, empty and a failed read": [
+  {
+   "step": "loading",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "empty",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "failed",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "retried",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.1 orbit login approval › approve": [
+  {
+   "step": "loading",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "asked",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approved",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+  {
+   "step": "never expires, name in use",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it.",
+    "You already have an access token named \"orbit CLI on devbox\".Revoke it under Settings → Access tokens, or run orbit login --name with another name."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approval refused",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "denied",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/deny",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "code not found",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "enter in the first field",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Current password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "Enter a new password"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Confirm your new password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "short new password, confirmation differs",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Confirm new password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "At least 6 characters"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "new password long enough and now matching",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "New password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "changed, tokens revoked, form reset",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Change password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/change-password",
+     "body": {
+      "currentPassword": "old password",
+      "newPassword": "abcdef",
+      "revokeAccessTokens": true
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.1 profile › photo: choose, show and remove": [
+  {
+   "step": "photo chosen",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Choose photo"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PUT",
+     "path": "/api/users/me/avatar",
+     "body": "<multipart>"
+    }
+   ],
+   "photo": {
+    "width": 62,
+    "height": 62,
+    "alt": ""
+   }
+  },
+  {
+   "step": "photo removed",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/users/me/avatar",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.1 profile › sign-in methods card beside the replaced ones": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+  {
+   "step": "mode list open",
+   "url": "/settings",
+   "focus": {
+    "role": "option",
+    "name": "Default"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ]
+  },
+  {
+   "step": "mode chosen",
+   "url": "/settings",
+   "focus": {
+    "role": "combobox",
+    "name": "Default permission mode"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "defaultPermissionMode": "plan"
+     }
+    }
+   ]
+  },
+  {
+   "step": "smart model selection on",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "Smart model selection"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "modelRouting": true
+     }
+    }
+   ]
+  },
+  {
+   "step": "saving",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "notifySessionFinished": false
+     }
+    }
+   ],
+   "switches": [
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    }
+   ]
+  },
+  {
+   "step": "saved",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "theme: system",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "dark"
+  },
+  {
+   "step": "theme: the other scheme",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Light"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "light"
+     }
+    }
+   ],
+   "theme": "light"
+  },
+  {
+   "step": "arrow left",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "dark",
+   "saved": "system"
+  },
+  {
+   "step": "manage access tokens",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Manage"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+  {
+   "step": "sent to sign in",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "input",
+    "name": "Email"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "wrong password",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "Invalid email or password"
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "wrong password"
+     }
+    }
+   ]
+  },
+  {
+   "step": "signed in and back at the login request",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+  {
+   "step": "open",
+   "url": "/setup",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    }
+   ]
+  },
+  {
+   "step": "submit empty",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Create account & sign in"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Please enter Email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Please enter Password"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "Please enter Confirm password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "invalid email, short password, confirmation differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Email is not a valid email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Password must be at least 6 characters"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password fixed, confirmation still differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "confirmation matches",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed after the confirmation",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed back",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "tab from the password",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "toggle shown",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Hide"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "text"
+  },
+  {
+   "step": "toggle hidden",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "password"
+  },
+  {
+   "step": "created and sent to the runner guide",
+   "url": "/runners/register",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "name": "First Admin",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  },
+  {
+   "step": "refused by the server",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+  {
+   "step": "dialog open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "custom scopes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "checkbox",
+    "name": "Read"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "boxes": [
+    "false",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "true",
+    "false",
+    "true"
+   ]
+  },
+  {
+   "step": "workspaces open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "workspace picked, list closed",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "never chosen, named",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "issued",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens",
+     "body": {
+      "name": "Nightly report",
+      "scopes": [
+       "projects:read",
+       "sessions:read",
+       "workspaces:read",
+       "runners:read",
+       "wiki:read",
+       "events:read"
+      ],
+      "workspaceIds": [
+       "2zwQZ2hd93IvLb59t6p1s"
+      ],
+      "expiresInDays": null
+     }
+    }
+   ]
+  },
+  {
+   "step": "done",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+  {
+   "step": "dialog open",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Close"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "asked inside the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test",
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes the question only",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/admin",
+   "focus": "body",
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "escape closes the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Access tokens"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.1 access tokens › list, tabs and the revoke question": [
+  {
+   "step": "open",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "ended tab",
+   "url": "/settings/access-tokens?tab=ended",
+   "focus": {
+    "role": "tab",
+    "name": "Revoked & expired2"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Old cron\norbit_pat_…h703\n\tRead-only · everything\tAll workspaces\tRevoked by an administrator Sep 26, 2026\tNever used\t\nSep 18, 2026\nin Settings\n\t",
+    "Demo\norbit_pat_…h704\n\tRead-only · everything\tAll workspaces\tExpired Sep 23, 2026\tNever used\t\nSep 18, 2026\nin Settings\n\t"
+   ]
+  },
+  {
+   "step": "asked",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.1 access tokens › loading, empty and a failed read": [
+  {
+   "step": "loading",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "empty",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "failed",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "retried",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.1 orbit login approval › approve": [
+  {
+   "step": "loading",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "asked",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approved",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+  {
+   "step": "never expires, name in use",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it.",
+    "You already have an access token named \"orbit CLI on devbox\".Revoke it under Settings → Access tokens, or run orbit login --name with another name."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approval refused",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "denied",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/deny",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "code not found",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "enter in the first field",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Current password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "Enter a new password"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Confirm your new password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "short new password, confirmation differs",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Confirm new password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "At least 6 characters"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "new password long enough and now matching",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "New password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "changed, tokens revoked, form reset",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Change password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/change-password",
+     "body": {
+      "currentPassword": "old password",
+      "newPassword": "abcdef",
+      "revokeAccessTokens": true
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.1 profile › photo: choose, show and remove": [
+  {
+   "step": "photo chosen",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Choose photo"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PUT",
+     "path": "/api/users/me/avatar",
+     "body": "<multipart>"
+    }
+   ],
+   "photo": {
+    "width": 62,
+    "height": 62,
+    "alt": ""
+   }
+  },
+  {
+   "step": "photo removed",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/users/me/avatar",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.1 profile › sign-in methods card beside the replaced ones": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+  {
+   "step": "mode list open",
+   "url": "/settings",
+   "focus": {
+    "role": "option",
+    "name": "Default"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ]
+  },
+  {
+   "step": "mode chosen",
+   "url": "/settings",
+   "focus": {
+    "role": "combobox",
+    "name": "Default permission mode"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "defaultPermissionMode": "plan"
+     }
+    }
+   ]
+  },
+  {
+   "step": "smart model selection on",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "Smart model selection"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "modelRouting": true
+     }
+    }
+   ]
+  },
+  {
+   "step": "saving",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "notifySessionFinished": false
+     }
+    }
+   ],
+   "switches": [
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    }
+   ]
+  },
+  {
+   "step": "saved",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "theme: system",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "light"
+  },
+  {
+   "step": "theme: the other scheme",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Dark"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "dark"
+     }
+    }
+   ],
+   "theme": "dark"
+  },
+  {
+   "step": "arrow left",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Light"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "light"
+     }
+    }
+   ],
+   "theme": "light",
+   "saved": "light"
+  },
+  {
+   "step": "manage access tokens",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Manage"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+  {
+   "step": "sent to sign in",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "input",
+    "name": "Email"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "wrong password",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "Invalid email or password"
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "wrong password"
+     }
+    }
+   ]
+  },
+  {
+   "step": "signed in and back at the login request",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+  {
+   "step": "open",
+   "url": "/setup",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    }
+   ]
+  },
+  {
+   "step": "submit empty",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Create account & sign in"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Please enter Email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Please enter Password"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "Please enter Confirm password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "invalid email, short password, confirmation differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Email is not a valid email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Password must be at least 6 characters"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password fixed, confirmation still differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "confirmation matches",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed after the confirmation",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed back",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "tab from the password",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "toggle shown",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Hide"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "text"
+  },
+  {
+   "step": "toggle hidden",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "password"
+  },
+  {
+   "step": "created and sent to the runner guide",
+   "url": "/runners/register",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "name": "First Admin",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  },
+  {
+   "step": "refused by the server",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+  {
+   "step": "dialog open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "custom scopes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "checkbox",
+    "name": "Read"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "boxes": [
+    "false",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "true",
+    "false",
+    "true"
+   ]
+  },
+  {
+   "step": "workspaces open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "workspace picked, list closed",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "never chosen, named",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "issued",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens",
+     "body": {
+      "name": "Nightly report",
+      "scopes": [
+       "projects:read",
+       "sessions:read",
+       "workspaces:read",
+       "runners:read",
+       "wiki:read",
+       "events:read"
+      ],
+      "workspaceIds": [
+       "2zwQZ2hd93IvLb59t6p1s"
+      ],
+      "expiresInDays": null
+     }
+    }
+   ]
+  },
+  {
+   "step": "done",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+  {
+   "step": "dialog open",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Close"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "asked inside the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test",
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes the question only",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/admin",
+   "focus": "body",
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "escape closes the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Access tokens"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.1 access tokens › list, tabs and the revoke question": [
+  {
+   "step": "open",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  },
+  {
+   "step": "ended tab",
+   "url": "/settings/access-tokens?tab=ended",
+   "focus": {
+    "role": "tab",
+    "name": "Revoked & expired2"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Old cron\norbit_pat_…h703\n\tRead-only · everything\tAll workspaces\tRevoked by an administrator Sep 26, 2026\tNever used\t\nSep 18, 2026\nin Settings\n\t",
+    "Demo\norbit_pat_…h704\n\tRead-only · everything\tAll workspaces\tExpired Sep 23, 2026\tNever used\t\nSep 18, 2026\nin Settings\n\t"
+   ]
+  },
+  {
+   "step": "asked",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.1 access tokens › loading, empty and a failed read": [
+  {
+   "step": "loading",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "empty",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "failed",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "retried",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.1 orbit login approval › approve": [
+  {
+   "step": "loading",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "asked",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approved",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+  {
+   "step": "never expires, name in use",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it.",
+    "You already have an access token named \"orbit CLI on devbox\".Revoke it under Settings → Access tokens, or run orbit login --name with another name."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approval refused",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "denied",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/deny",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "code not found",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "enter in the first field",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Current password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "Enter a new password"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Confirm your new password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "short new password, confirmation differs",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Confirm new password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "At least 6 characters"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "new password long enough and now matching",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "New password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "changed, tokens revoked, form reset",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Change password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/change-password",
+     "body": {
+      "currentPassword": "old password",
+      "newPassword": "abcdef",
+      "revokeAccessTokens": true
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.1 profile › photo: choose, show and remove": [
+  {
+   "step": "photo chosen",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Choose photo"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PUT",
+     "path": "/api/users/me/avatar",
+     "body": "<multipart>"
+    }
+   ],
+   "photo": {
+    "width": 62,
+    "height": 62,
+    "alt": ""
+   }
+  },
+  {
+   "step": "photo removed",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/users/me/avatar",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.1 profile › sign-in methods card beside the replaced ones": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+  {
+   "step": "mode list open",
+   "url": "/settings",
+   "focus": {
+    "role": "option",
+    "name": "Default"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ]
+  },
+  {
+   "step": "mode chosen",
+   "url": "/settings",
+   "focus": {
+    "role": "combobox",
+    "name": "Default permission mode"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "defaultPermissionMode": "plan"
+     }
+    }
+   ]
+  },
+  {
+   "step": "smart model selection on",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "Smart model selection"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "modelRouting": true
+     }
+    }
+   ]
+  },
+  {
+   "step": "saving",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "notifySessionFinished": false
+     }
+    }
+   ],
+   "switches": [
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    }
+   ]
+  },
+  {
+   "step": "saved",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "theme: system",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "light"
+  },
+  {
+   "step": "theme: the other scheme",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Dark"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "dark"
+     }
+    }
+   ],
+   "theme": "dark"
+  },
+  {
+   "step": "arrow left",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Light"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "light"
+     }
+    }
+   ],
+   "theme": "light",
+   "saved": "light"
+  },
+  {
+   "step": "manage access tokens",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Manage"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+  {
+   "step": "sent to sign in",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "input",
+    "name": "Email"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "wrong password",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "Invalid email or password"
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "wrong password"
+     }
+    }
+   ]
+  },
+  {
+   "step": "signed in and back at the login request",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+  {
+   "step": "open",
+   "url": "/setup",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    }
+   ]
+  },
+  {
+   "step": "submit empty",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Create account & sign in"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Please enter Email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Please enter Password"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "Please enter Confirm password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "invalid email, short password, confirmation differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Email is not a valid email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Password must be at least 6 characters"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password fixed, confirmation still differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "confirmation matches",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed after the confirmation",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed back",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "tab from the password",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "toggle shown",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Hide"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "text"
+  },
+  {
+   "step": "toggle hidden",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "password"
+  },
+  {
+   "step": "created and sent to the runner guide",
+   "url": "/runners/register",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "name": "First Admin",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  },
+  {
+   "step": "refused by the server",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+  {
+   "step": "dialog open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "custom scopes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "checkbox",
+    "name": "Read"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "boxes": [
+    "false",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "true",
+    "false",
+    "true"
+   ]
+  },
+  {
+   "step": "workspaces open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "workspace picked, list closed",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "never chosen, named",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "issued",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens",
+     "body": {
+      "name": "Nightly report",
+      "scopes": [
+       "projects:read",
+       "sessions:read",
+       "workspaces:read",
+       "runners:read",
+       "wiki:read",
+       "events:read"
+      ],
+      "workspaceIds": [
+       "2zwQZ2hd93IvLb59t6p1s"
+      ],
+      "expiresInDays": null
+     }
+    }
+   ]
+  },
+  {
+   "step": "done",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+  {
+   "step": "dialog open",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Close"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "asked inside the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test",
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes the question only",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/admin",
+   "focus": "body",
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "escape closes the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Access tokens"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 access tokens › list, tabs and the revoke question": [
+  {
+   "step": "open",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "ended tab",
+   "url": "/settings/access-tokens?tab=ended",
+   "focus": {
+    "role": "tab",
+    "name": "Revoked & expired2"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Old cron\norbit_pat_…h703\nRead-only · everything\tAll workspaces\tRevoked by an administrator Sep 26, 2026\tNever used\t\nSep 18, 2026\nin Settings",
+    "Demo\norbit_pat_…h704\nRead-only · everything\tAll workspaces\tExpired Sep 23, 2026\tNever used\t\nSep 18, 2026\nin Settings"
+   ]
+  },
+  {
+   "step": "asked",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 access tokens › loading, empty and a failed read": [
+  {
+   "step": "loading",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "empty",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "failed",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "retried",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 orbit login approval › approve": [
+  {
+   "step": "loading",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "asked",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approved",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+  {
+   "step": "never expires, name in use",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it.",
+    "You already have an access token named \"orbit CLI on devbox\".Revoke it under Settings → Access tokens, or run orbit login --name with another name."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approval refused",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": {
+    "role": "button",
+    "name": "Approve"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "denied",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/deny",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "code not found",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "enter in the first field",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Current password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "Enter a new password"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Confirm your new password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "short new password, confirmation differs",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Confirm new password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "At least 6 characters"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "new password long enough and now matching",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "New password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "changed, tokens revoked, form reset",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Change password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/change-password",
+     "body": {
+      "currentPassword": "old password",
+      "newPassword": "abcdef",
+      "revokeAccessTokens": true
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 profile › photo: choose, show and remove": [
+  {
+   "step": "photo chosen",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Choose photo"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PUT",
+     "path": "/api/users/me/avatar",
+     "body": "<multipart>"
+    }
+   ],
+   "photo": {
+    "width": 62,
+    "height": 62,
+    "alt": ""
+   }
+  },
+  {
+   "step": "photo removed",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/users/me/avatar",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 profile › sign-in methods card beside the replaced ones": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+  {
+   "step": "mode list open",
+   "url": "/settings",
+   "focus": {
+    "role": "option",
+    "name": "Default"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ]
+  },
+  {
+   "step": "mode chosen",
+   "url": "/settings",
+   "focus": {
+    "role": "combobox",
+    "name": "Default permission mode"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "defaultPermissionMode": "plan"
+     }
+    }
+   ]
+  },
+  {
+   "step": "smart model selection on",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "Smart model selection"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "modelRouting": true
+     }
+    }
+   ]
+  },
+  {
+   "step": "saving",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "notifySessionFinished": false
+     }
+    }
+   ],
+   "switches": [
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    }
+   ]
+  },
+  {
+   "step": "saved",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "theme: system",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "dark"
+  },
+  {
+   "step": "theme: the other scheme",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Light"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "light"
+     }
+    }
+   ],
+   "theme": "light"
+  },
+  {
+   "step": "arrow left",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "dark",
+   "saved": "system"
+  },
+  {
+   "step": "manage access tokens",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+  {
+   "step": "sent to sign in",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "input",
+    "name": "Email"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "wrong password",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "button",
+    "name": "Sign In"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "Invalid email or password"
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "wrong password"
+     }
+    }
+   ]
+  },
+  {
+   "step": "signed in and back at the login request",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+  {
+   "step": "open",
+   "url": "/setup",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    }
+   ]
+  },
+  {
+   "step": "submit empty",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Create account & sign in"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Please enter Email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Please enter Password"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "Please enter Confirm password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "invalid email, short password, confirmation differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Email is not a valid email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Password must be at least 6 characters"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password fixed, confirmation still differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "confirmation matches",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed after the confirmation",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed back",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "tab from the password",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "toggle shown",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Hide"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "text"
+  },
+  {
+   "step": "toggle hidden",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "password"
+  },
+  {
+   "step": "created and sent to the runner guide",
+   "url": "/runners/register",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "name": "First Admin",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  },
+  {
+   "step": "refused by the server",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+  {
+   "step": "dialog open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "custom scopes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "checkbox",
+    "name": "Read"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "boxes": [
+    "false",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "true",
+    "false",
+    "true"
+   ]
+  },
+  {
+   "step": "workspaces open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "workspace picked, list closed",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "never chosen, named",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "issued",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens",
+     "body": {
+      "name": "Nightly report",
+      "scopes": [
+       "projects:read",
+       "sessions:read",
+       "workspaces:read",
+       "runners:read",
+       "wiki:read",
+       "events:read"
+      ],
+      "workspaceIds": [
+       "2zwQZ2hd93IvLb59t6p1s"
+      ],
+      "expiresInDays": null
+     }
+    }
+   ]
+  },
+  {
+   "step": "done",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+  {
+   "step": "dialog open",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Close"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "asked inside the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test",
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes the question only",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/admin",
+   "focus": "body",
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "escape closes the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Access tokens"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.1 access tokens › list, tabs and the revoke question": [
+  {
+   "step": "open",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "ended tab",
+   "url": "/settings/access-tokens?tab=ended",
+   "focus": {
+    "role": "tab",
+    "name": "Revoked & expired2"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Old cron\norbit_pat_…h703\nRead-only · everything\tAll workspaces\tRevoked by an administrator Sep 26, 2026\tNever used\t\nSep 18, 2026\nin Settings",
+    "Demo\norbit_pat_…h704\nRead-only · everything\tAll workspaces\tExpired Sep 23, 2026\tNever used\t\nSep 18, 2026\nin Settings"
+   ]
+  },
+  {
+   "step": "asked",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.1 access tokens › loading, empty and a failed read": [
+  {
+   "step": "loading",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "empty",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "failed",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "retried",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.1 orbit login approval › approve": [
+  {
+   "step": "loading",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "asked",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approved",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+  {
+   "step": "never expires, name in use",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it.",
+    "You already have an access token named \"orbit CLI on devbox\".Revoke it under Settings → Access tokens, or run orbit login --name with another name."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approval refused",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": {
+    "role": "button",
+    "name": "Approve"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "denied",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/deny",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "code not found",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "enter in the first field",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Current password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "Enter a new password"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Confirm your new password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "short new password, confirmation differs",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Confirm new password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "At least 6 characters"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "new password long enough and now matching",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "New password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "changed, tokens revoked, form reset",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Change password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/change-password",
+     "body": {
+      "currentPassword": "old password",
+      "newPassword": "abcdef",
+      "revokeAccessTokens": true
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.1 profile › photo: choose, show and remove": [
+  {
+   "step": "photo chosen",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Choose photo"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PUT",
+     "path": "/api/users/me/avatar",
+     "body": "<multipart>"
+    }
+   ],
+   "photo": {
+    "width": 62,
+    "height": 62,
+    "alt": ""
+   }
+  },
+  {
+   "step": "photo removed",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/users/me/avatar",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.1 profile › sign-in methods card beside the replaced ones": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+  {
+   "step": "mode list open",
+   "url": "/settings",
+   "focus": {
+    "role": "option",
+    "name": "Default"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ]
+  },
+  {
+   "step": "mode chosen",
+   "url": "/settings",
+   "focus": {
+    "role": "combobox",
+    "name": "Default permission mode"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "defaultPermissionMode": "plan"
+     }
+    }
+   ]
+  },
+  {
+   "step": "smart model selection on",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "Smart model selection"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "modelRouting": true
+     }
+    }
+   ]
+  },
+  {
+   "step": "saving",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "notifySessionFinished": false
+     }
+    }
+   ],
+   "switches": [
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    }
+   ]
+  },
+  {
+   "step": "saved",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "theme: system",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "dark"
+  },
+  {
+   "step": "theme: the other scheme",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Light"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "light"
+     }
+    }
+   ],
+   "theme": "light"
+  },
+  {
+   "step": "arrow left",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "dark",
+   "saved": "system"
+  },
+  {
+   "step": "manage access tokens",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+  {
+   "step": "sent to sign in",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "input",
+    "name": "Email"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "wrong password",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "button",
+    "name": "Sign In"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "Invalid email or password"
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "wrong password"
+     }
+    }
+   ]
+  },
+  {
+   "step": "signed in and back at the login request",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+  {
+   "step": "open",
+   "url": "/setup",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    }
+   ]
+  },
+  {
+   "step": "submit empty",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Create account & sign in"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Please enter Email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Please enter Password"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "Please enter Confirm password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "invalid email, short password, confirmation differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Email is not a valid email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Password must be at least 6 characters"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password fixed, confirmation still differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "confirmation matches",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed after the confirmation",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed back",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "tab from the password",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "toggle shown",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Hide"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "text"
+  },
+  {
+   "step": "toggle hidden",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "password"
+  },
+  {
+   "step": "created and sent to the runner guide",
+   "url": "/runners/register",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "name": "First Admin",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  },
+  {
+   "step": "refused by the server",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+  {
+   "step": "dialog open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "custom scopes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "checkbox",
+    "name": "Read"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "boxes": [
+    "false",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "true",
+    "false",
+    "true"
+   ]
+  },
+  {
+   "step": "workspaces open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "workspace picked, list closed",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "never chosen, named",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "issued",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens",
+     "body": {
+      "name": "Nightly report",
+      "scopes": [
+       "projects:read",
+       "sessions:read",
+       "workspaces:read",
+       "runners:read",
+       "wiki:read",
+       "events:read"
+      ],
+      "workspaceIds": [
+       "2zwQZ2hd93IvLb59t6p1s"
+      ],
+      "expiresInDays": null
+     }
+    }
+   ]
+  },
+  {
+   "step": "done",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+  {
+   "step": "dialog open",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Close"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "asked inside the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test",
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes the question only",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/admin",
+   "focus": "body",
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "escape closes the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Access tokens"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.1 access tokens › list, tabs and the revoke question": [
+  {
+   "step": "open",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "ended tab",
+   "url": "/settings/access-tokens?tab=ended",
+   "focus": {
+    "role": "tab",
+    "name": "Revoked & expired2"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Old cron\norbit_pat_…h703\nRead-only · everything\tAll workspaces\tRevoked by an administrator Sep 26, 2026\tNever used\t\nSep 18, 2026\nin Settings",
+    "Demo\norbit_pat_…h704\nRead-only · everything\tAll workspaces\tExpired Sep 23, 2026\tNever used\t\nSep 18, 2026\nin Settings"
+   ]
+  },
+  {
+   "step": "asked",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.1 access tokens › loading, empty and a failed read": [
+  {
+   "step": "loading",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "empty",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "failed",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "retried",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.1 orbit login approval › approve": [
+  {
+   "step": "loading",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "asked",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approved",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+  {
+   "step": "never expires, name in use",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it.",
+    "You already have an access token named \"orbit CLI on devbox\".Revoke it under Settings → Access tokens, or run orbit login --name with another name."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approval refused",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": {
+    "role": "button",
+    "name": "Approve"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "denied",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/deny",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "code not found",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "enter in the first field",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Current password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "Enter a new password"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Confirm your new password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "short new password, confirmation differs",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Confirm new password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "At least 6 characters"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "new password long enough and now matching",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "New password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "changed, tokens revoked, form reset",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Change password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/change-password",
+     "body": {
+      "currentPassword": "old password",
+      "newPassword": "abcdef",
+      "revokeAccessTokens": true
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.1 profile › photo: choose, show and remove": [
+  {
+   "step": "photo chosen",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Choose photo"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PUT",
+     "path": "/api/users/me/avatar",
+     "body": "<multipart>"
+    }
+   ],
+   "photo": {
+    "width": 62,
+    "height": 62,
+    "alt": ""
+   }
+  },
+  {
+   "step": "photo removed",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/users/me/avatar",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.1 profile › sign-in methods card beside the replaced ones": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+  {
+   "step": "mode list open",
+   "url": "/settings",
+   "focus": {
+    "role": "option",
+    "name": "Default"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ]
+  },
+  {
+   "step": "mode chosen",
+   "url": "/settings",
+   "focus": {
+    "role": "combobox",
+    "name": "Default permission mode"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "defaultPermissionMode": "plan"
+     }
+    }
+   ]
+  },
+  {
+   "step": "smart model selection on",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "Smart model selection"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "modelRouting": true
+     }
+    }
+   ]
+  },
+  {
+   "step": "saving",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "notifySessionFinished": false
+     }
+    }
+   ],
+   "switches": [
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    }
+   ]
+  },
+  {
+   "step": "saved",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "theme: system",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "light"
+  },
+  {
+   "step": "theme: the other scheme",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Dark"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "dark"
+     }
+    }
+   ],
+   "theme": "dark"
+  },
+  {
+   "step": "arrow left",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Light"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "light"
+     }
+    }
+   ],
+   "theme": "light",
+   "saved": "light"
+  },
+  {
+   "step": "manage access tokens",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+  {
+   "step": "sent to sign in",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "input",
+    "name": "Email"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "wrong password",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "button",
+    "name": "Sign In"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "Invalid email or password"
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "wrong password"
+     }
+    }
+   ]
+  },
+  {
+   "step": "signed in and back at the login request",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+  {
+   "step": "open",
+   "url": "/setup",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    }
+   ]
+  },
+  {
+   "step": "submit empty",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Create account & sign in"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Please enter Email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Please enter Password"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "Please enter Confirm password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "invalid email, short password, confirmation differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Email is not a valid email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Password must be at least 6 characters"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password fixed, confirmation still differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "confirmation matches",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed after the confirmation",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed back",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "tab from the password",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "toggle shown",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Hide"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "text"
+  },
+  {
+   "step": "toggle hidden",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "password"
+  },
+  {
+   "step": "created and sent to the runner guide",
+   "url": "/runners/register",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "name": "First Admin",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  },
+  {
+   "step": "refused by the server",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once": [
+  {
+   "step": "dialog open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "custom scopes",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "checkbox",
+    "name": "Read"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "boxes": [
+    "false",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "false",
+    "true",
+    "true",
+    "false",
+    "true"
+   ]
+  },
+  {
+   "step": "workspaces open",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "workspace picked, list closed",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "combobox",
+    "name": "Workspaces"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "never chosen, named",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "input",
+    "name": "Name"
+   },
+   "dialogs": [
+    "New access token"
+   ],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "issued",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "New token"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens",
+     "body": {
+      "name": "Nightly report",
+      "scopes": [
+       "projects:read",
+       "sessions:read",
+       "workspaces:read",
+       "runners:read",
+       "wiki:read",
+       "events:read"
+      ],
+      "workspaceIds": [
+       "2zwQZ2hd93IvLb59t6p1s"
+      ],
+      "expiresInDays": null
+     }
+    }
+   ]
+  },
+  {
+   "step": "done",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+  {
+   "step": "dialog open",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Close"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "asked inside the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test",
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape closes the question only",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/admin",
+   "focus": "body",
+   "dialogs": [
+    "Access tokens — dev@example.test"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "escape closes the dialog",
+   "url": "/admin",
+   "focus": {
+    "role": "button",
+    "name": "Access tokens"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.1 access tokens › list, tabs and the revoke question": [
+  {
+   "step": "open",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  },
+  {
+   "step": "ended tab",
+   "url": "/settings/access-tokens?tab=ended",
+   "focus": {
+    "role": "tab",
+    "name": "Revoked & expired2"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Old cron\norbit_pat_…h703\nRead-only · everything\tAll workspaces\tRevoked by an administrator Sep 26, 2026\tNever used\t\nSep 18, 2026\nin Settings",
+    "Demo\norbit_pat_…h704\nRead-only · everything\tAll workspaces\tExpired Sep 23, 2026\tNever used\t\nSep 18, 2026\nin Settings"
+   ]
+  },
+  {
+   "step": "asked",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "dialog",
+    "name": "Revoke “CI pipeline”?"
+   },
+   "dialogs": [
+    "Revoke “CI pipeline”?"
+   ],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape",
+   "url": "/settings/access-tokens",
+   "focus": {
+    "role": "button",
+    "name": "Revoke"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "revoked",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/access-tokens/2zwQZ2hd93IvLb59t6pUH",
+     "body": null
+    }
+   ],
+   "rows": [
+    "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+    "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.1 access tokens › loading, empty and a failed read": [
+  {
+   "step": "loading",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "empty",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "failed",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "retried",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.1 orbit login approval › approve": [
+  {
+   "step": "loading",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "asked",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approved",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+  {
+   "step": "never expires, name in use",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "This token never expires. If it leaks, it keeps working until you revoke it.",
+    "You already have an access token named \"orbit CLI on devbox\".Revoke it under Settings → Access tokens, or run orbit login --name with another name."
+   ],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "approval refused",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": {
+    "role": "button",
+    "name": "Approve"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "denied",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/access-tokens/device/WXYZ4-8K2QP/deny",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "code not found",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.1 profile › password form: each check, the linked confirmation and the reset": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "enter in the first field",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Current password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "Enter a new password"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Confirm your new password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "short new password, confirmation differs",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "Confirm new password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "New password",
+     "describedBy": "At least 6 characters"
+    },
+    {
+     "name": "Confirm new password",
+     "describedBy": "Passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "new password long enough and now matching",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "input",
+    "name": "New password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "changed, tokens revoked, form reset",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Change password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/change-password",
+     "body": {
+      "currentPassword": "old password",
+      "newPassword": "abcdef",
+      "revokeAccessTokens": true
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.1 profile › photo: choose, show and remove": [
+  {
+   "step": "photo chosen",
+   "url": "/settings/profile",
+   "focus": {
+    "role": "button",
+    "name": "Choose photo"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PUT",
+     "path": "/api/users/me/avatar",
+     "body": "<multipart>"
+    }
+   ],
+   "photo": {
+    "width": 62,
+    "height": 62,
+    "alt": ""
+   }
+  },
+  {
+   "step": "photo removed",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "DELETE",
+     "path": "/api/users/me/avatar",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.1 profile › sign-in methods card beside the replaced ones": [
+  {
+   "step": "open",
+   "url": "/settings/profile",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+  {
+   "step": "mode list open",
+   "url": "/settings",
+   "focus": {
+    "role": "option",
+    "name": "Default"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ]
+  },
+  {
+   "step": "mode chosen",
+   "url": "/settings",
+   "focus": {
+    "role": "combobox",
+    "name": "Default permission mode"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "defaultPermissionMode": "plan"
+     }
+    }
+   ]
+  },
+  {
+   "step": "smart model selection on",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "Smart model selection"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "modelRouting": true
+     }
+    }
+   ]
+  },
+  {
+   "step": "saving",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "notifySessionFinished": false
+     }
+    }
+   ],
+   "switches": [
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    },
+    {
+     "checked": "true",
+     "disabled": true
+    }
+   ]
+  },
+  {
+   "step": "saved",
+   "url": "/settings",
+   "focus": {
+    "role": "switch",
+    "name": "When a session finishes"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "theme: system",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "System"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "system"
+     }
+    }
+   ],
+   "theme": "light"
+  },
+  {
+   "step": "theme: the other scheme",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Dark"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "dark"
+     }
+    }
+   ],
+   "theme": "dark"
+  },
+  {
+   "step": "arrow left",
+   "url": "/settings",
+   "focus": {
+    "role": "radio",
+    "name": "Light"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/users/me/preferences",
+     "body": {
+      "theme": "light"
+     }
+    }
+   ],
+   "theme": "light",
+   "saved": "light"
+  },
+  {
+   "step": "manage access tokens",
+   "url": "/settings/access-tokens",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+  {
+   "step": "sent to sign in",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "input",
+    "name": "Email"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "wrong password",
+   "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP",
+   "focus": {
+    "role": "button",
+    "name": "Sign In"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [
+    "Invalid email or password"
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "wrong password"
+     }
+    }
+   ]
+  },
+  {
+   "step": "signed in and back at the login request",
+   "url": "/cli-login?code=WXYZ4-8K2QP",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/login",
+     "body": {
+      "email": "reviewer@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal": [
+  {
+   "step": "open",
+   "url": "/setup",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    }
+   ]
+  },
+  {
+   "step": "submit empty",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Create account & sign in"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Please enter Email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Please enter Password"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "Please enter Confirm password"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "invalid email, short password, confirmation differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Email",
+     "describedBy": "Email is not a valid email"
+    },
+    {
+     "name": "Password",
+     "describedBy": "Password must be at least 6 characters"
+    },
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password fixed, confirmation still differs",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "confirmation matches",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed after the confirmation",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [
+    {
+     "name": "Confirm password",
+     "describedBy": "passwords do not match"
+    }
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "password changed back",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "tab from the password",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "toggle shown",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Hide"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "text"
+  },
+  {
+   "step": "toggle hidden",
+   "url": "/setup",
+   "focus": {
+    "role": "button",
+    "name": "Show"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "passwordType": "password"
+  },
+  {
+   "step": "created and sent to the runner guide",
+   "url": "/runners/register",
+   "focus": "body",
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "name": "First Admin",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  },
+  {
+   "step": "refused by the server",
+   "url": "/setup",
+   "focus": {
+    "role": "input",
+    "name": "Confirm password"
+   },
+   "dialogs": [],
+   "invalid": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/auth/setup-status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/auth/bootstrap",
+     "body": {
+      "email": "owner@example.test",
+      "password": "correct horse battery"
+     }
+    }
+   ]
+  }
+ ]
+}

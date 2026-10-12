@@ -1,0 +1,42 @@
+{
+ "webkit-dark-desktop | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   7,
+   1
+  ],
+  "fixab": [
+   8,
+   0
+  ]
+ },
+ "webkit-dark-phone | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   8,
+   0
+  ],
+  "fixab": [
+   8,
+   0
+  ]
+ },
+ "webkit-light-desktop | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   8,
+   0
+  ],
+  "fixab": [
+   8,
+   0
+  ]
+ },
+ "webkit-light-phone | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   8,
+   0
+  ],
+  "fixab": [
+   8,
+   0
+  ]
+ }
+}

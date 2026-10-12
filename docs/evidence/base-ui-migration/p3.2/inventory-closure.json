@@ -1,0 +1,522 @@
+{
+ "before": {
+  "commit": "da13423d3e80e00a487ed91327c31d6788cc7a7a",
+  "scopeHash": "5427a80c63691852ff735f93767f4ceb7f8a4e8f661ffe2c81118b93fc3ce045"
+ },
+ "after": {
+  "commit": "5311a0cf78bd244126723244538e5308ce389d7c",
+  "scopeHash": "409c66208f2af8799ea1679f587d09ac5cead2e98c741a033aa6d358aa4face2"
+ },
+ "counts": {
+  "scannedFiles": [
+   649,
+   656
+  ],
+  "productionFiles": [
+   323,
+   330
+  ],
+  "testFiles": [
+   324,
+   324
+  ],
+  "antdProductionFiles": [
+   99,
+   95
+  ],
+  "antdTestFiles": [
+   71,
+   71
+  ],
+  "antSelectorTestFiles": [
+   58,
+   53
+  ],
+  "antClassTestFiles": [
+   64,
+   59
+  ],
+  "iconProductionFiles": [
+   93,
+   95
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   264,
+   265
+  ],
+  "retirementBlockingFiles": [
+   228,
+   223
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   480,
+   422
+  ],
+  "ant-design-support": [
+   19,
+   19
+  ],
+  "ant-selector": [
+   449,
+   394
+  ],
+  "antd-reference": [
+   338,
+   336
+  ],
+  "icon-class": [
+   76,
+   77
+  ],
+  "icon-reference": [
+   104,
+   106
+  ],
+  "imperative-confirm": [
+   21,
+   21
+  ],
+  "imperative-feedback": [
+   200,
+   200
+  ],
+  "internal-ref": [
+   6,
+   5
+  ],
+  "provider": [
+   83,
+   83
+  ],
+  "rc-support": [
+   224,
+   231
+  ],
+  "ref-focus": [
+   25,
+   25
+  ],
+  "theme": [
+   2,
+   2
+  ],
+  "use-app": [
+   16,
+   16
+  ],
+  "use-token": [
+   1,
+   1
+  ]
+ },
+ "files": {
+  "src/web/src/components/AccountSelect.tsx": {
+   "owner": "P4.2 → P3.2 (task scope)",
+   "before": {
+    "antdImports": [
+     "Select"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectShareControls.test.tsx": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-selector": 4,
+     "ant-class": 4
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-selector": 2,
+     "ant-class": 2
+    }
+   }
+  },
+  "src/web/src/components/ShareModal.test.tsx": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-selector": 12,
+     "ant-class": 12
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ShareModal.tsx": {
+   "owner": "P3.2",
+   "before": {
+    "antdImports": [
+     "Button",
+     "Checkbox",
+     "Dropdown",
+     "Modal",
+     "Popconfirm",
+     "Select",
+     "Spin"
+    ],
+    "hitKinds": {
+     "icon-reference": 1,
+     "antd-reference": 1,
+     "imperative-feedback": 4
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 4
+    }
+   }
+  },
+  "src/web/src/components/TaskDetailPanel.modelRouting.test.tsx": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "ant-selector": 10,
+     "ant-class": 10
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/TaskDetailPanel.share.test.tsx": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-selector": 5,
+     "ant-class": 5
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/TaskDetailPanel.test.tsx": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 1,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/TaskDetailPanel.tsx": {
+   "owner": "P3.2",
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Avatar",
+     "Button",
+     "Dropdown",
+     "Input",
+     "Modal",
+     "Popconfirm",
+     "Segmented",
+     "Select",
+     "Spin",
+     "Switch",
+     "Tooltip",
+     "Typography"
+    ],
+    "hitKinds": {
+     "icon-reference": 1,
+     "antd-reference": 2,
+     "imperative-feedback": 16,
+     "internal-ref": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 16
+    }
+   }
+  },
+  "src/web/src/components/TaskInputs.tsx": {
+   "owner": "P3.2",
+   "before": {
+    "antdImports": [
+     "Button",
+     "Popconfirm",
+     "Upload"
+    ],
+    "hitKinds": {
+     "icon-reference": 1,
+     "antd-reference": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WorkspaceView.shareEntry.test.tsx": {
+   "owner": null,
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "provider": 1,
+     "ant-selector": 12,
+     "ant-class": 13,
+     "icon-class": 1
+    }
+   },
+   "after": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "provider": 1,
+     "ant-selector": 9,
+     "ant-class": 10,
+     "icon-class": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/Alert.css": {
+   "owner": null,
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/Alert.tsx": {
+   "owner": null,
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/Avatar.css": {
+   "owner": null,
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/Avatar.tsx": {
+   "owner": null,
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/Floating.css": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 1,
+     "antd-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/Floating.ts": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "rc-support": 6
+    }
+   }
+  },
+  "src/web/src/components/ui/Popconfirm.tsx": {
+   "owner": null,
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/README.md": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 10,
+     "ant-selector": 2,
+     "ant-class": 2,
+     "icon-reference": 1,
+     "ref-focus": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 11,
+     "ant-selector": 2,
+     "ant-class": 2,
+     "icon-reference": 1,
+     "rc-support": 1,
+     "ref-focus": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/Segmented.css": {
+   "owner": null,
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/Segmented.tsx": {
+   "owner": null,
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ChoicesFixture.css": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "ant-selector": 1,
+     "ant-class": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ComposerFixture.css": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {}
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 2,
+     "ant-selector": 1,
+     "ant-class": 1
+    }
+   }
+  },
+  "src/web/src/index.css": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 38,
+     "ant-selector": 160,
+     "ant-class": 160,
+     "icon-class": 24
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 40,
+     "ant-selector": 147,
+     "ant-class": 147,
+     "icon-class": 24
+    }
+   }
+  },
+  "src/web/src/pages/RunnerDetailPage.codexAccount.test.tsx": {
+   "owner": null,
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "provider": 1,
+     "ant-selector": 5,
+     "ant-class": 5
+    }
+   },
+   "after": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   }
+  },
+  "src/web/src/pages/SharedLinksPage.test.tsx": {
+   "owner": null,
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-selector": 20,
+     "ant-class": 20
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-selector": 14,
+     "ant-class": 14
+    }
+   }
+  }
+ }
+}

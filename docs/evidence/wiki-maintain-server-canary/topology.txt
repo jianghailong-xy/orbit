@@ -1,0 +1,80 @@
+
+> orbit@0.1.224 test:compose-topology
+> node --test --test-reporter=tap test/compose-topology.test.mjs
+
+TAP version 13
+# Subtest: the baseline commit really is the nine-service stack this change removes from
+ok 1 - the baseline commit really is the nine-service stack this change removes from
+  ---
+  duration_ms: 1.194337
+  type: 'test'
+  ...
+# Subtest: the approved configuration commits still have exactly the five surviving services
+ok 2 - the approved configuration commits still have exactly the five surviving services
+  ---
+  duration_ms: 0.118103
+  type: 'test'
+  ...
+# Subtest: (a) Compose declares exactly the five surviving services and the wiki worker
+ok 3 - (a) Compose declares exactly the five surviving services and the wiki worker
+  ---
+  duration_ms: 0.121229
+  type: 'test'
+  ...
+# Subtest: (b) no removed sidecar is named anywhere in Compose
+ok 4 - (b) no removed sidecar is named anywhere in Compose
+  ---
+  duration_ms: 0.099655
+  type: 'test'
+  ...
+# Subtest: (c) nothing was added back: no new service, no new always-on process, no init job
+ok 5 - (c) nothing was added back: no new service, no new always-on process, no init job
+  ---
+  duration_ms: 0.47886
+  type: 'test'
+  ...
+# Subtest: (i) the postgres service definition matches the approved configuration, byte for byte
+ok 6 - (i) the postgres service definition matches the approved configuration, byte for byte
+  ---
+  duration_ms: 0.097758
+  type: 'test'
+  ...
+# Subtest: (j) the gateway service definition is unchanged and still mounts ./gateway/nginx.conf
+ok 7 - (j) the gateway service definition is unchanged and still mounts ./gateway/nginx.conf
+  ---
+  duration_ms: 0.067382
+  type: 'test'
+  ...
+# Subtest: nothing beyond the approved configuration was added to pgbackup, apiserver or web
+ok 8 - nothing beyond the approved configuration was added to pgbackup, apiserver or web
+  ---
+  duration_ms: 0.209718
+  type: 'test'
+  ...
+# Subtest: (k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained
+ok 9 - (k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained
+  ---
+  duration_ms: 3.984126
+  type: 'test'
+  ...
+# Subtest: (l) the wiki worker is exactly the service the owner approved on 2026-10-07
+ok 10 - (l) the wiki worker is exactly the service the owner approved on 2026-10-07
+  ---
+  duration_ms: 0.246853
+  type: 'test'
+  ...
+# Subtest: (l) the System model's address and key are given to the wiki worker and to no other service
+ok 11 - (l) the System model's address and key are given to the wiki worker and to no other service
+  ---
+  duration_ms: 0.312777
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 68.694348

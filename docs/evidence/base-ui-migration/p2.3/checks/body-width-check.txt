@@ -1,0 +1,658 @@
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs --project=webkit-dark-phone --grep unchanged appearance|retained|breakpoint
+
+[WebServer] (node:1972943) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:1973018) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.3s)
+(node:1973166) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (899ms)
+(node:1973296) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (924ms)
+(node:1973917) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  4 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (1.4s)
+(node:1974443) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  5 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (14.9s)
+
+
+  1) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -16,11 +16,11 @@
+          "lineHeight": "18.4px",
+          "padding": "0px",
+          "pointerEvents": "none",
+          "tag": "SECTION",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -39,11 +39,11 @@
+          "lineHeight": "20px",
+          "padding": "12px 12px 12px 14px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -62,11 +62,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedule",
+    -     "width": 322,
+    +     "width": 330,
+          "x": 31,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -85,11 +85,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "SPAN",
+          "text": "Couldn't save the schedule",
+    -     "width": 256,
+    +     "width": 264,
+          "x": 63,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -109,11 +109,11 @@
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "BUTTON",
+          "text": "",
+          "width": 22,
+    -     "x": 331,
+    +     "x": 339,
+          "y": 69,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+          "border": "1px solid rgb(52, 52, 55)",
+    @@ -131,11 +131,11 @@
+          "lineHeight": "18px",
+          "padding": "7px 10px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "revision 12 is stale",
+    -     "width": 290,
+    +     "width": 298,
+          "x": 63,
+          "y": 99,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+
+      54 |     const after = await measure(region);
+      55 |     await attach(info, 'appearance', { before, after });
+    > 56 |     expect(after).toEqual(before);
+         |                   ^
+      57 |     await shot(info, 'with-overlay', region);
+      58 |     await shot(info, 'notification-and-overlay', page);
+      59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19
+
+    Error Context: .toasts-results/toasts.browser.mjs-existin-678e1-g-with-unchanged-appearance-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-existin-678e1-g-with-unchanged-appearance-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-existin-678e1-g-with-unchanged-appearance-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -16,11 +16,11 @@
+          "lineHeight": "18.4px",
+          "padding": "0px",
+          "pointerEvents": "none",
+          "tag": "SECTION",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -39,11 +39,11 @@
+          "lineHeight": "20px",
+          "padding": "12px 12px 12px 14px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -62,11 +62,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedule",
+    -     "width": 322,
+    +     "width": 330,
+          "x": 31,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -85,11 +85,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "SPAN",
+          "text": "Couldn't save the schedule",
+    -     "width": 256,
+    +     "width": 264,
+          "x": 63,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -109,11 +109,11 @@
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "BUTTON",
+          "text": "",
+          "width": 22,
+    -     "x": 331,
+    +     "x": 339,
+          "y": 69,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+          "border": "1px solid rgb(52, 52, 55)",
+    @@ -131,11 +131,11 @@
+          "lineHeight": "18px",
+          "padding": "7px 10px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "revision 12 is stale",
+    -     "width": 290,
+    +     "width": 298,
+          "x": 63,
+          "y": 99,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+
+      54 |     const after = await measure(region);
+      55 |     await attach(info, 'appearance', { before, after });
+    > 56 |     expect(after).toEqual(before);
+         |                   ^
+      57 |     await shot(info, 'with-overlay', region);
+      58 |     await shot(info, 'notification-and-overlay', page);
+      59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19
+
+    Error Context: .toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -16,11 +16,11 @@
+          "lineHeight": "18.4px",
+          "padding": "0px",
+          "pointerEvents": "none",
+          "tag": "SECTION",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -39,11 +39,11 @@
+          "lineHeight": "20px",
+          "padding": "12px 12px 12px 14px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -62,11 +62,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedule",
+    -     "width": 322,
+    +     "width": 330,
+          "x": 31,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -85,11 +85,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "SPAN",
+          "text": "Couldn't save the schedule",
+    -     "width": 256,
+    +     "width": 264,
+          "x": 63,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -109,11 +109,11 @@
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "BUTTON",
+          "text": "",
+          "width": 22,
+    -     "x": 331,
+    +     "x": 339,
+          "y": 69,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+          "border": "1px solid rgb(52, 52, 55)",
+    @@ -131,11 +131,11 @@
+          "lineHeight": "18px",
+          "padding": "7px 10px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "revision 12 is stale",
+    -     "width": 290,
+    +     "width": 298,
+          "x": 63,
+          "y": 99,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+
+      54 |     const after = await measure(region);
+      55 |     await attach(info, 'appearance', { before, after });
+    > 56 |     expect(after).toEqual(before);
+         |                   ^
+      57 |     await shot(info, 'with-overlay', region);
+      58 |     await shot(info, 'notification-and-overlay', page);
+      59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19
+
+    Error Context: .toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -16,11 +16,11 @@
+          "lineHeight": "18.4px",
+          "padding": "0px",
+          "pointerEvents": "none",
+          "tag": "SECTION",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -39,11 +39,11 @@
+          "lineHeight": "20px",
+          "padding": "12px 12px 12px 14px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -62,11 +62,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedule",
+    -     "width": 322,
+    +     "width": 330,
+          "x": 31,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -85,11 +85,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "SPAN",
+          "text": "Couldn't save the schedule",
+    -     "width": 256,
+    +     "width": 264,
+          "x": 63,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -109,11 +109,11 @@
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "BUTTON",
+          "text": "",
+          "width": 22,
+    -     "x": 331,
+    +     "x": 339,
+          "y": 69,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+          "border": "1px solid rgb(52, 52, 55)",
+    @@ -131,11 +131,11 @@
+          "lineHeight": "18px",
+          "padding": "7px 10px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "revision 12 is stale",
+    -     "width": 290,
+    +     "width": 298,
+          "x": 63,
+          "y": 99,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+
+      264 |   await page.mouse.move(0, 0);
+      265 |   await finishAnimations();
+    > 266 |   expect(await measure(notices(page))).toEqual(before);
+          |                                        ^
+      267 |   await page.keyboard.press('Escape');
+      268 |   await expect(dialog).not.toBeVisible();
+      269 |   await expect(trigger).toBeFocused();
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:266:40
+
+    Error Context: .toasts-results/toasts.browser.mjs-retaine-8fda9-tles-at-the-original-origin-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-retaine-8fda9-tles-at-the-original-origin-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-retaine-8fda9-tles-at-the-original-origin-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 106
+    + Received  +  14
+
+    @@ -9,66 +9,43 @@
+          "focused": false,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "16px",
+          "fontWeight": "400",
+          "gap": "8px",
+    -     "height": 144,
+    +     "height": 36,
+          "hovered": false,
+          "lineHeight": "18.4px",
+          "padding": "0px",
+          "pointerEvents": "none",
+          "tag": "SECTION",
+    -     "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 559,
+    +     "text": "Couldn't save the schedule",
+    +     "width": 567,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+          "border": "1px solid rgba(245, 74, 69, 0.38)",
+    -     "borderRadius": "12px",
+    +     "borderRadius": "999px",
+          "boxShadow": "rgba(0, 0, 0, 0.4) 0px 8px 22px 0px",
+          "color": "rgb(201, 206, 213)",
+          "focusVisible": false,
+          "focused": false,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "fontWeight": "400",
+    -     "gap": "10px",
+    -     "height": 144,
+    +     "gap": "8px",
+    +     "height": 36,
+          "hovered": false,
+          "lineHeight": "20px",
+    -     "padding": "12px 12px 12px 14px",
+    +     "padding": "7px 16px 7px 10px",
+          "pointerEvents": "auto",
+    -     "tag": "DIV",
+    -     "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 559,
+    -     "x": 16,
+    +     "tag": "BUTTON",
+    +     "text": "Couldn't save the schedule",
+    +     "width": 253.703125,
+    +     "x": 172.640625,
+          "y": 56,
+    -   },
+    -   Object {
+    -     "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    -     "border": "0px none rgb(201, 206, 213)",
+    -     "borderRadius": "0px",
+    -     "boxShadow": "none",
+    -     "color": "rgb(201, 206, 213)",
+    -     "focusVisible": false,
+    -     "focused": false,
+    -     "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    -     "fontSize": "14px",
+    -     "fontWeight": "400",
+    -     "gap": "12px",
+    -     "height": 20,
+    -     "hovered": false,
+    -     "lineHeight": "20px",
+    -     "padding": "0px",
+    -     "pointerEvents": "auto",
+    -     "tag": "DIV",
+    -     "text": "Couldn't save the schedule",
+    -     "width": 531,
+    -     "x": 31,
+    -     "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+          "border": "0px none rgb(201, 206, 213)",
+          "borderRadius": "0px",
+    @@ -85,79 +62,10 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "SPAN",
+          "text": "Couldn't save the schedule",
+    -     "width": 465,
+    -     "x": 63,
+    -     "y": 69,
+    -   },
+    -   Object {
+    -     "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    -     "border": "0px none rgb(139, 144, 153)",
+    -     "borderRadius": "0px",
+    -     "boxShadow": "none",
+    -     "color": "rgb(139, 144, 153)",
+    -     "focusVisible": false,
+    -     "focused": false,
+    -     "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    -     "fontSize": "13px",
+    -     "fontWeight": "400",
+    -     "gap": "normal",
+    -     "height": 20,
+    -     "hovered": false,
+    -     "lineHeight": "20px",
+    -     "padding": "0px",
+    -     "pointerEvents": "auto",
+    -     "tag": "BUTTON",
+    -     "text": "",
+    -     "width": 22,
+    -     "x": 540,
+    -     "y": 69,
+    -   },
+    -   Object {
+    -     "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    -     "border": "1px solid rgb(52, 52, 55)",
+    -     "borderRadius": "8px",
+    -     "boxShadow": "none",
+    -     "color": "rgb(167, 173, 182)",
+    -     "focusVisible": false,
+    -     "focused": false,
+    -     "fontFamily": "ui-monospace, SFMono-Regular, Menlo, monospace",
+    -     "fontSize": "12px",
+    -     "fontWeight": "400",
+    -     "gap": "normal",
+    -     "height": 34,
+    -     "hovered": false,
+    -     "lineHeight": "18px",
+    -     "padding": "7px 10px",
+    -     "pointerEvents": "auto",
+    -     "tag": "DIV",
+    -     "text": "revision 12 is stale",
+    -     "width": 499,
+    -     "x": 63,
+    -     "y": 99,
+    -   },
+    -   Object {
+    -     "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    -     "border": "1px solid rgb(52, 52, 55)",
+    -     "borderRadius": "7px",
+    -     "boxShadow": "none",
+    -     "color": "rgb(201, 206, 213)",
+    -     "focusVisible": false,
+    -     "focused": false,
+    -     "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    -     "fontSize": "13px",
+    -     "fontWeight": "600",
+    -     "gap": "normal",
+    -     "height": 44,
+    -     "hovered": false,
+    -     "lineHeight": "20px",
+    -     "padding": "0px 12px",
+    -     "pointerEvents": "auto",
+    -     "tag": "BUTTON",
+    -     "text": "Copy error",
+    -     "width": 92.46875,
+    -     "x": 63,
+    -     "y": 143,
+    +     "width": 180.703125,
+    +     "x": 209.640625,
+    +     "y": 64,
+        },
+      ]
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      294 |     await expect(drawer).toBeVisible();
+      295 |     await page.mouse.move(0, 0);
+    > 296 |     await expect.poll(() => measure(notices(page))).toEqual(before);
+          |                                                     ^
+      297 |     measurements.push({ width, before, after: await measure(notices(page)) });
+      298 |     await page.keyboard.press('Escape');
+      299 |     await expect(drawer).not.toBeVisible();
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:296:53
+
+    Error Context: .toasts-results/toasts.browser.mjs-notific-466af-across-the-phone-breakpoint-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-notific-466af-across-the-phone-breakpoint-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-notific-466af-across-the-phone-breakpoint-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5 failed
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance 
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance 
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance 
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin 
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint 
+npm error Lifecycle script `test:ui-toasts` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/toasts.config.mjs --project=webkit-dark-phone --grep 'unchanged appearance|retained|breakpoint'

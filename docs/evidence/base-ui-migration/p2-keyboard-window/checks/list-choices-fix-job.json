@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && npm run test:ui-choices -w @orbit/web -- --list",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_bb40c00f9548",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "5a6ee008a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T04:36:06.604497+00:00",
+ "exitCode": 0,
+ "outputSha256": "ea6af897b79287aea27091f9d086249899a4ed0faaf2291000eb1195af48c767",
+ "outputBytes": 66542,
+ "note": "Fixed tree (5a6ee008a; its web tree differs from the fix commit 4fb7ee43f only by Menu.test.tsx). Total: 520 tests in 4 files. The listing from 'Listing tests:' on (checks/list-choices-fix.txt) is byte-identical to checks/list-choices.txt, checks/list-choices-delivered.txt and ../p2-select-keys/checks/list-choices.txt (sha256 869171286b2f...): no choices case was added, removed or renamed."
+}

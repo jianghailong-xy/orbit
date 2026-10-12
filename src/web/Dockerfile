@@ -3,6 +3,11 @@
 # from a tree without Git metadata and the commit must be named explicitly:
 # docker build --build-arg ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" -f src/web/Dockerfile .
 
+# The web image this build replaces, whose runner release stays downloadable at /dl/previous/
+# (see the runtime stage). upgrade.sh names the image now serving; a build that names none keeps no
+# previous release, and runners can then be neither held at one nor rolled back to one.
+ARG PREVIOUS_RELEASE_IMAGE=scratch
+
 # ───────────────────────────────── build ─────────────────────────────────
 FROM node:26-alpine AS build
 WORKDIR /app
@@ -30,6 +35,27 @@ RUN npm run build -w @orbit/web
 # stdlib gzip. Go cross-compiles trivially with no external deps.
 FROM golang:1.27 AS binbuild
 WORKDIR /app
+# Set by a deployment that signs its macOS runner binaries with a Developer ID
+# (deploy/macos-runner-signing.yml): the path of its .p12 on the host, which only says that this
+# build signs. The .p12 and its password reach the build step below as BuildKit secrets, never as
+# an argument or in a layer. Declared ahead of every RUN, so switching signing on or off rebuilds
+# the binaries rather than reusing ones built the other way.
+ARG ORBIT_MACOS_SIGNING
+# rcodesign (apple-codesign) signs Mach-O binaries on Linux. Only a build that signs fetches it,
+# pinned by the sha256 of its release archive.
+RUN if [ -n "$ORBIT_MACOS_SIGNING" ]; then \
+      case "$(uname -m)" in \
+        x86_64) arch=x86_64 sum=dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002 ;; \
+        aarch64) arch=aarch64 sum=4af92c87ddf52f5f2d1258a3b4e56c7dcb8f1b2468df744976c5f139e031961f ;; \
+        *) echo "no rcodesign release for $(uname -m)" >&2; exit 1 ;; \
+      esac && \
+      curl -fsSL -o /tmp/rcodesign.tar.gz \
+        "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign/0.29.0/apple-codesign-0.29.0-$arch-unknown-linux-musl.tar.gz" && \
+      echo "$sum  /tmp/rcodesign.tar.gz" | sha256sum -c - && \
+      tar -xzf /tmp/rcodesign.tar.gz -C /usr/local/bin --strip-components=1 \
+        "apple-codesign-0.29.0-$arch-unknown-linux-musl/rcodesign" && \
+      rm /tmp/rcodesign.tar.gz; \
+    fi
 COPY src/runner-go ./src/runner-go
 COPY package.json ./package.json
 COPY scripts ./scripts
@@ -44,7 +70,16 @@ ARG PUBLIC_ORIGIN
 ARG ORBIT_SOURCE_SHA
 ENV PUBLIC_ORIGIN=$PUBLIC_ORIGIN
 RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=secret,id=orbit_macos_signing_p12 \
+    --mount=type=secret,id=orbit_macos_signing_password \
+    if [ -n "$ORBIT_MACOS_SIGNING" ]; then \
+      export ORBIT_MACOS_SIGNING_P12=/run/secrets/orbit_macos_signing_p12 \
+        ORBIT_MACOS_SIGNING_PASSWORD_FILE=/run/secrets/orbit_macos_signing_password; \
+    fi; \
     ORBIT_SOURCE_SHA="$ORBIT_SOURCE_SHA" bash scripts/build-binaries.sh dist-bin
+
+# The image PREVIOUS_RELEASE_IMAGE names, whose /dl the runtime stage reads (empty: scratch).
+FROM ${PREVIOUS_RELEASE_IMAGE} AS previous-release
 
 # ──────────────────────────────── runtime ────────────────────────────────
 FROM nginx:alpine AS runtime
@@ -52,6 +87,12 @@ ARG PUBLIC_ORIGIN
 COPY src/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/src/web/dist /usr/share/nginx/html
 COPY --from=binbuild /app/dist-bin /usr/share/nginx/html/dl
+# The release the replaced image published, kept at /dl/previous/ beside this one's: the release the
+# control plane holds runners at during a staged rollout and rolls them back to
+# (src/apiserver/src/runner-api/runner-release.ts).
+RUN --mount=type=bind,from=previous-release,target=/previous-release \
+    --mount=type=bind,source=scripts/retain-runner-release.sh,target=/tmp/retain-runner-release.sh \
+    sh /tmp/retain-runner-release.sh /previous-release/usr/share/nginx/html/dl /usr/share/nginx/html/dl
 # install.sh is a static asset (Vite copies it verbatim, no substitution), so rewrite its
 # baked-in default BASE_URL to this deployment's origin — then `curl .../install.sh | bash`
 # pulls the runner from here with no ORBIT_BASE_URL override.

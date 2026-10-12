@@ -1,0 +1,111 @@
+{
+  "refs": {
+    "acceptedR7": "45bb56928225bbe6d00800180ebcc73f26250fd4",
+    "upstream": "6cdca5a03d7baabe124c6ea8ae387c5269ce492e",
+    "upstreamFinal": "bf12315af31d56de71229b7ffa5ebfe2219efef5",
+    "project": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "acceptedP22": "d71afc686760eb4a37c84822bf1ea478dbe8fcf1",
+    "notificationDelivery": "59c439e47515f15f581a76318df0ecad6b23e53e",
+    "previousUpstream": "53da29cc1e799e1b5a82e98167305d9b41cc54cc",
+    "merge": "38947755e48ac979362db36f82bfcf966b527a75",
+    "mergeFinal": "8a29e349324e7aaca83827a52148b540c118b992"
+  },
+  "finalAncestors": {
+    "acceptedR7": true,
+    "upstream": true,
+    "upstreamFinal": true,
+    "project": true,
+    "acceptedP22": true,
+    "notificationDelivery": true,
+    "previousUpstream": true,
+    "merge": true,
+    "mergeFinal": true
+  },
+  "merges": [
+    {
+      "merge": "38947755e48ac979362db36f82bfcf966b527a75",
+      "parents": [
+        "45bb56928225bbe6d00800180ebcc73f26250fd4",
+        "6cdca5a03d7baabe124c6ea8ae387c5269ce492e"
+      ],
+      "mergeBase": "53da29cc1e799e1b5a82e98167305d9b41cc54cc",
+      "tree": "28ed8fc4c04ffb5d8f327e12295140bf3d992704",
+      "webTree": "848736509199b4db94c3a30a20b43d5c202599a4",
+      "mergeTreePreviewEqualsCommit": true,
+      "conflicts": [],
+      "manualResolutions": [],
+      "filesFromUpstream": 768,
+      "webFilesFromUpstream": 107,
+      "filesFromOurSide": 14700,
+      "everyOtherBlobEqualsOneParent": true,
+      "editedOnBothSides": [
+        {
+          "path": "src/web/src/components/ToastViewport.tsx",
+          "base": "100644 blob f3ff82b223b060c761728e4872d1aa848297a075",
+          "ours": "100644 blob e80950ddb9754fb6550a5fab5253d46da186d4ed",
+          "theirs": "100644 blob ec041acecb65904818ea5f4215cf7cac8185ce88",
+          "merge": "100644 blob b637abd90bc9ae7788f61f94df58e0e66c9994df",
+          "theirsChangeLinesKeptVerbatim": 35,
+          "oursChangeLinesKeptVerbatim": 98
+        },
+        {
+          "path": "src/web/src/index.css",
+          "base": "100755 blob 6c285e8274c9257936897eec47b6ee7b1221a9fc",
+          "ours": "100755 blob c9230d87b334faef17f1f5caba78da2016c4b9dc",
+          "theirs": "100755 blob 58d97b64468bc349155a7720c1e57b48bae00baa",
+          "merge": "100755 blob 3bfcef4753c494963a074d57308bae448f517c95",
+          "theirsChangeLinesKeptVerbatim": 744,
+          "oursChangeLinesKeptVerbatim": 11
+        },
+        {
+          "path": "src/web/src/lib/toast.test.tsx",
+          "base": "100644 blob 23b47c24c7da66b7e93117e7b2f3797fda5702ed",
+          "ours": "100644 blob 3a95db3e5b9207609be6698a062d9c96db83e01d",
+          "theirs": "100644 blob 84e496057e457c1e9517afecf8e60c0e36bc436f",
+          "merge": "100644 blob ad1ad0c996b77d496fdaebcb13168830f783c7fd",
+          "theirsChangeLinesKeptVerbatim": 23,
+          "oursChangeLinesKeptVerbatim": 54
+        }
+      ],
+      "historicalEvidenceUnchanged": 16957,
+      "migrationEvidenceUnchanged": 16844,
+      "componentFixtureNotificationConfigAndLockInputs": 104,
+      "changedAmongThoseInputs": [
+        "src/web/src/components/ToastViewport.tsx"
+      ]
+    },
+    {
+      "merge": "8a29e349324e7aaca83827a52148b540c118b992",
+      "parents": [
+        "38947755e48ac979362db36f82bfcf966b527a75",
+        "bf12315af31d56de71229b7ffa5ebfe2219efef5"
+      ],
+      "mergeBase": "6cdca5a03d7baabe124c6ea8ae387c5269ce492e",
+      "tree": "2d6dfc9fe183a7780b4c454976e54332cf6cd946",
+      "webTree": "9aa3a0b96d7c1e3fd473995798774d4f20144885",
+      "mergeTreePreviewEqualsCommit": true,
+      "conflicts": [],
+      "manualResolutions": [],
+      "filesFromUpstream": 97,
+      "webFilesFromUpstream": 14,
+      "filesFromOurSide": 14700,
+      "everyOtherBlobEqualsOneParent": true,
+      "editedOnBothSides": [
+        {
+          "path": "src/web/src/index.css",
+          "base": "100755 blob 58d97b64468bc349155a7720c1e57b48bae00baa",
+          "ours": "100755 blob 3bfcef4753c494963a074d57308bae448f517c95",
+          "theirs": "100755 blob 8b3e3d330c1d148cad957c74c3397c0f4e2efebf",
+          "merge": "100755 blob 5d0f9f2bfefb15b205eaf3660f9bce67193f3e03",
+          "theirsChangeLinesKeptVerbatim": 239,
+          "oursChangeLinesKeptVerbatim": 11
+        }
+      ],
+      "historicalEvidenceUnchanged": 17207,
+      "migrationEvidenceUnchanged": 16844,
+      "componentFixtureNotificationConfigAndLockInputs": 104,
+      "changedAmongThoseInputs": []
+    }
+  ],
+  "rootPackageJson": "version 0.1.210 -> 0.1.213 -> 0.1.215, both from upstream"
+}

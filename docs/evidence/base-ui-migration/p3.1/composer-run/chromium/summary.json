@@ -1,0 +1,2557 @@
+{
+  "stats": {
+    "startTime": "2026-10-06T07:57:22.994Z",
+    "duration": 273319.49,
+    "expected": 61,
+    "skipped": 11,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 9279
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts--keystroke-cost.json",
+          "sha256": "b9087a7f69dee742b5ce13bba8b38b433e8be3d2df4ef8dcfd5436868843b7a4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 33
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-dark-desktop--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 33
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-dark-phone--records-per-keystroke-cost-of-the-session-field-with-short-and-long-drafts",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 33
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-light-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2767
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+          "sha256": "94b0f6605d7d458c26905d3dc281c8547f9d0733a0ef0353995b518ab923a86f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2561
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+          "sha256": "fa56b03e2e0692dda93488ae678615385fc7e2ea9d9de4d1b35db8f8ec7afc21"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4292
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+          "sha256": "7ce617b9d5d146903b84ea458fb344ac62c788a110affd3373930d112c7025b3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2525
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+          "sha256": "35d946c596340c342a3621ecd5ee6f3c0c991baca1f82f7be317fb0758d878b0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3047
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+          "sha256": "32e3e7a7590a5f621c8f3610aab377280f1e225176ebe61e990297f0d2cc2cf7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2654
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+          "sha256": "94b0f6605d7d458c26905d3dc281c8547f9d0733a0ef0353995b518ab923a86f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2009
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+          "sha256": "8d5998993069d0262436f8e9564fd7f12be9ce27c1a235c76ffd24f264ddc8a0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3461
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+          "sha256": "82830cf0b1cc18ea3441fd6ac6df067376521f550b30668394262e5793387965"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3108
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+          "sha256": "293536317051ca9f4f3756a6013879fc11603aa986c3fd438ec3d4cd3dd1c4ed"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3064
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+          "sha256": "32e3e7a7590a5f621c8f3610aab377280f1e225176ebe61e990297f0d2cc2cf7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2757
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+          "sha256": "94b0f6605d7d458c26905d3dc281c8547f9d0733a0ef0353995b518ab923a86f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2425
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+          "sha256": "fa56b03e2e0692dda93488ae678615385fc7e2ea9d9de4d1b35db8f8ec7afc21"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3526
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+          "sha256": "7ce617b9d5d146903b84ea458fb344ac62c788a110affd3373930d112c7025b3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2460
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+          "sha256": "35d946c596340c342a3621ecd5ee6f3c0c991baca1f82f7be317fb0758d878b0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3063
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+          "sha256": "32e3e7a7590a5f621c8f3610aab377280f1e225176ebe61e990297f0d2cc2cf7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2627
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--session-Enter-sends-Shift-Enter-breaks-the-line-Chinese-composition-never-sends--session-keys-and-ime.json",
+          "sha256": "94b0f6605d7d458c26905d3dc281c8547f9d0733a0ef0353995b518ab923a86f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2125
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--comment-Ctrl-Meta-Enter-posts-plain-Enter-and-composition-keep-editing--comment-keys-and-ime.json",
+          "sha256": "8d5998993069d0262436f8e9564fd7f12be9ce27c1a235c76ffd24f264ddc8a0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3578
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--session-menus-arrows-Enter-Tab-Escape-and-pointer-keep-the-field-focused-with-the-caret-at-the-end--session-menus.json",
+          "sha256": "82830cf0b1cc18ea3441fd6ac6df067376521f550b30668394262e5793387965"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3309
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--comment--mention-restores-focus-and-the-caret-through-the-native-ref--comment-mention-caret.json",
+          "sha256": "293536317051ca9f4f3756a6013879fc11603aa986c3fd438ec3d4cd3dd1c4ed"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3030
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--paste-text-and-files-the-50-000-character-cap-and-history-recall--session-paste-history.json",
+          "sha256": "32e3e7a7590a5f621c8f3610aab377280f1e225176ebe61e990297f0d2cc2cf7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7546
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-ant.png",
+          "sha256": "4528bf897a4df3034f7dbb0b483c55d63c7d5be9090ad31c95d2d6f112c38e02"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-orbit.png",
+          "sha256": "4528bf897a4df3034f7dbb0b483c55d63c7d5be9090ad31c95d2d6f112c38e02"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-ant.png",
+          "sha256": "adc02901e8140a0dfb8e3f9658b6d69cc440d407a79ce3c1e9e9799472c4e56e"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-orbit.png",
+          "sha256": "adc02901e8140a0dfb8e3f9658b6d69cc440d407a79ce3c1e9e9799472c4e56e"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-ant.png",
+          "sha256": "41c7605399e66f6fa67d76059a87b7fe8042c4410ce930df88f87674dab564d1"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-orbit.png",
+          "sha256": "41c7605399e66f6fa67d76059a87b7fe8042c4410ce930df88f87674dab564d1"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-ant.png",
+          "sha256": "e0886e6f511ae3e2153241efc67ffd6111fa7fdb1ae9c43996282364d749fafb"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-orbit.png",
+          "sha256": "e0886e6f511ae3e2153241efc67ffd6111fa7fdb1ae9c43996282364d749fafb"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-ant.png",
+          "sha256": "5adfcbc6fe14dd5009097971add6b2199aedcd4c1c9e6755d84ed8952ddedf62"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-orbit.png",
+          "sha256": "5adfcbc6fe14dd5009097971add6b2199aedcd4c1c9e6755d84ed8952ddedf62"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-ant.png",
+          "sha256": "5856da36187737f69cb420420addf31b404426488cfbd00fbb736e51e44489e8"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-orbit.png",
+          "sha256": "5856da36187737f69cb420420addf31b404426488cfbd00fbb736e51e44489e8"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-ant.png",
+          "sha256": "c2d6da046eead3a39e2ce9e5268261578786cfdbdd3f4361950abb7ab06cee94"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-orbit.png",
+          "sha256": "c2d6da046eead3a39e2ce9e5268261578786cfdbdd3f4361950abb7ab06cee94"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-ant.png",
+          "sha256": "57db8642bf0de50c0968c66160db9cbd64df8593205e32ada8b19328050d2902"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-orbit.png",
+          "sha256": "57db8642bf0de50c0968c66160db9cbd64df8593205e32ada8b19328050d2902"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+          "sha256": "787d0ebba72619d1b74a0867f7544c1b5d31542ec842ad8490ba0a26aef0a490"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4292
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-ant.png",
+          "sha256": "e9a5bc1f487894ba84b78d17dfa83c19112e3511054707e5b7f357809e083b73"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-orbit.png",
+          "sha256": "e9a5bc1f487894ba84b78d17dfa83c19112e3511054707e5b7f357809e083b73"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-ant.png",
+          "sha256": "c0833e9654fb828627781edd8928ce76ff2047ab3dc976f68c79653427760f30"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-orbit.png",
+          "sha256": "c0833e9654fb828627781edd8928ce76ff2047ab3dc976f68c79653427760f30"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+          "sha256": "a55cae51082689eefe7987655dc3adfc4fd68072e7aa994eeaaaa28b0208a7b2"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-ant.png",
+          "sha256": "fdd9d6542a7d16a71c21807db4559488d5eed240ec336ff95f6b3202d000883d"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-orbit.png",
+          "sha256": "fdd9d6542a7d16a71c21807db4559488d5eed240ec336ff95f6b3202d000883d"
+        },
+        {
+          "file": "chromium-light-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+          "sha256": "3e6b736df3170d85ebe2b7855d6fd1e41820580016da33af2db7773c66887045"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7860
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-ant.png",
+          "sha256": "6b1ccd22fe41918e44e2d1760ec031c7d9f9746fcd9d4266778ae9808fda7cd0"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-orbit.png",
+          "sha256": "6b1ccd22fe41918e44e2d1760ec031c7d9f9746fcd9d4266778ae9808fda7cd0"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-hover-ant.png",
+          "sha256": "b96dc79184298deb82862af09f7cb622f3ddd26361abfa4ed061eac450ec7daa"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-hover-orbit.png",
+          "sha256": "b96dc79184298deb82862af09f7cb622f3ddd26361abfa4ed061eac450ec7daa"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-ant.png",
+          "sha256": "bf353716b3a4df0bded3e81a0ff962d0bd168fd7e8e48d25a086e167643633e1"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-orbit.png",
+          "sha256": "bf353716b3a4df0bded3e81a0ff962d0bd168fd7e8e48d25a086e167643633e1"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-ant.png",
+          "sha256": "6d56799c7b023ab86c9cb5d30c538154afb4c6f23185106ae6a0576c93e3dc16"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-orbit.png",
+          "sha256": "6d56799c7b023ab86c9cb5d30c538154afb4c6f23185106ae6a0576c93e3dc16"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-ant.png",
+          "sha256": "4cde81c897db4767dfc1f59900af461da4fe65710403e7c0041ab4ceba04fd10"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-orbit.png",
+          "sha256": "4cde81c897db4767dfc1f59900af461da4fe65710403e7c0041ab4ceba04fd10"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-ant.png",
+          "sha256": "bf263a22dd317c0940ba7ec5ce46d0f7ee799d6d26555af69346c7141bc6803f"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-orbit.png",
+          "sha256": "bf263a22dd317c0940ba7ec5ce46d0f7ee799d6d26555af69346c7141bc6803f"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-ant.png",
+          "sha256": "b96dc79184298deb82862af09f7cb622f3ddd26361abfa4ed061eac450ec7daa"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-orbit.png",
+          "sha256": "b96dc79184298deb82862af09f7cb622f3ddd26361abfa4ed061eac450ec7daa"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+          "sha256": "eb89c0d984842748930b048e8823cfbe574184b68ad4d868cbfaf9a769f70ce6"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-ant.png",
+          "sha256": "061c16e8b06ec3e7f2187495c954b84f63355c423f6942c3102bfdd138347a9e"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-orbit.png",
+          "sha256": "061c16e8b06ec3e7f2187495c954b84f63355c423f6942c3102bfdd138347a9e"
+        },
+        {
+          "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+          "sha256": "537ded55d0b9cfa718a523874fbe9361cac8ee20770c65314989869316ef3645"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4709
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-ant.png",
+          "sha256": "4b99c028aed6c36227cc712eca8c722a27f876fb26aa2f4ad3c5c2074dc561dc"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-orbit.png",
+          "sha256": "4b99c028aed6c36227cc712eca8c722a27f876fb26aa2f4ad3c5c2074dc561dc"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-ant.png",
+          "sha256": "df70f0a068b41e1afd1b0b26cc410436e114bcb2f4f318bd7da2c41b0b0086e1"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-orbit.png",
+          "sha256": "df70f0a068b41e1afd1b0b26cc410436e114bcb2f4f318bd7da2c41b0b0086e1"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-ant.png",
+          "sha256": "df70f0a068b41e1afd1b0b26cc410436e114bcb2f4f318bd7da2c41b0b0086e1"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-orbit.png",
+          "sha256": "df70f0a068b41e1afd1b0b26cc410436e114bcb2f4f318bd7da2c41b0b0086e1"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-ant.png",
+          "sha256": "1c257f5b53614e7811e97f96f65a5e49db8dd4baacaa0ca662960d2b562dc27e"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-orbit.png",
+          "sha256": "1c257f5b53614e7811e97f96f65a5e49db8dd4baacaa0ca662960d2b562dc27e"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+          "sha256": "69bf9c0565e407e967143476ffafb1a60b32272daa8f1114b5298f76aca0151c"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-ant.png",
+          "sha256": "753cff08c851d9ff97d1a9fc49b46f2e821f54cfd0439d0ddca85b0622d69205"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-orbit.png",
+          "sha256": "753cff08c851d9ff97d1a9fc49b46f2e821f54cfd0439d0ddca85b0622d69205"
+        },
+        {
+          "file": "chromium-light-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+          "sha256": "388e6abe7618722de71e4a9b57c9dd728080a8b3d2fb16b4d14d1a97faf7a3b7"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5018
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-ant.png",
+          "sha256": "e0886e6f511ae3e2153241efc67ffd6111fa7fdb1ae9c43996282364d749fafb"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-orbit.png",
+          "sha256": "e0886e6f511ae3e2153241efc67ffd6111fa7fdb1ae9c43996282364d749fafb"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-ant.png",
+          "sha256": "283aba335f184a98ffe69f9ac8c8c166712b5da7852103464e8ce9d89ae4aa5e"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-orbit.png",
+          "sha256": "283aba335f184a98ffe69f9ac8c8c166712b5da7852103464e8ce9d89ae4aa5e"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-ant.png",
+          "sha256": "32da4c50349085634fb1c42e9ac6c3bd213b8bd33220f18dd2622ee0d779c265"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-orbit.png",
+          "sha256": "32da4c50349085634fb1c42e9ac6c3bd213b8bd33220f18dd2622ee0d779c265"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-ant.png",
+          "sha256": "6c1ddfc5b65c948e93f622584489216ef0109b660853ad57148e7a5272e5cfa6"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-orbit.png",
+          "sha256": "6c1ddfc5b65c948e93f622584489216ef0109b660853ad57148e7a5272e5cfa6"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-ant.png",
+          "sha256": "fd7e0c6c2185ca93d4626b26d6b2e4135fe78d37123382f0e3899995b885e9df"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-orbit.png",
+          "sha256": "fd7e0c6c2185ca93d4626b26d6b2e4135fe78d37123382f0e3899995b885e9df"
+        },
+        {
+          "file": "chromium-light-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+          "sha256": "364d1080fffcca73413666fd963d42825c57cabf7e5558d443245335ee4604e1"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4607
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-field.png",
+          "sha256": "81cd8d1e6b7b7eaabc026e3fd2ff770e5988a2238a5085a1ce1c404657a1abd3"
+        },
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-mirror.png",
+          "sha256": "81cd8d1e6b7b7eaabc026e3fd2ff770e5988a2238a5085a1ce1c404657a1abd3"
+        },
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-field.png",
+          "sha256": "850e4f230dde19f2082765a979b006a278090cb17b169fa48a03a33f1605a62c"
+        },
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-mirror.png",
+          "sha256": "a987e5fb1d93b72b527637e6ee79a82f98a1256f2c6253805bb9e96da9abc4e9"
+        },
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-field.png",
+          "sha256": "81cd8d1e6b7b7eaabc026e3fd2ff770e5988a2238a5085a1ce1c404657a1abd3"
+        },
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-mirror.png",
+          "sha256": "81cd8d1e6b7b7eaabc026e3fd2ff770e5988a2238a5085a1ce1c404657a1abd3"
+        },
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-field.png",
+          "sha256": "850e4f230dde19f2082765a979b006a278090cb17b169fa48a03a33f1605a62c"
+        },
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-mirror.png",
+          "sha256": "a987e5fb1d93b72b527637e6ee79a82f98a1256f2c6253805bb9e96da9abc4e9"
+        },
+        {
+          "file": "chromium-light-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+          "sha256": "7b4ddfc1517e258e150477684c468d56ad51f26aef7f0bd7ec03b4a1d16a6080"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7479
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-ant.png",
+          "sha256": "9d4da2f6de515a6ef5901850ea903dc3a2e9a212ab0e2f1f6247b0e2e6ed1e84"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-orbit.png",
+          "sha256": "9d4da2f6de515a6ef5901850ea903dc3a2e9a212ab0e2f1f6247b0e2e6ed1e84"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-ant.png",
+          "sha256": "b48c0bf3d5c39597b5f0111d5c2c561c20f77a21c1e0aa22107b8be7f2eefe7b"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-orbit.png",
+          "sha256": "b48c0bf3d5c39597b5f0111d5c2c561c20f77a21c1e0aa22107b8be7f2eefe7b"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-ant.png",
+          "sha256": "5701c898a3f0076a7748d2ed970900cf06d1ed2bb36987b76d64de21d3c709ee"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-orbit.png",
+          "sha256": "5701c898a3f0076a7748d2ed970900cf06d1ed2bb36987b76d64de21d3c709ee"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-ant.png",
+          "sha256": "6ffee056ebfabc695b62d908d0c72ea0ffa74893064788e9227a232913a4a173"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-orbit.png",
+          "sha256": "6ffee056ebfabc695b62d908d0c72ea0ffa74893064788e9227a232913a4a173"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-ant.png",
+          "sha256": "1540298bce49e401b6500dc724b36d262d397735799a461532f14e4e4267fbf5"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-orbit.png",
+          "sha256": "1540298bce49e401b6500dc724b36d262d397735799a461532f14e4e4267fbf5"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-ant.png",
+          "sha256": "bf270f5cff4627ca5dcbee6031e714f44a126007c00d52fe634ad7bb8dc899eb"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-orbit.png",
+          "sha256": "bf270f5cff4627ca5dcbee6031e714f44a126007c00d52fe634ad7bb8dc899eb"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-ant.png",
+          "sha256": "53b4992c52c411c3cb01917719f2fc423914a5d6299eda4e33d3c33cb77b58f3"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-orbit.png",
+          "sha256": "53b4992c52c411c3cb01917719f2fc423914a5d6299eda4e33d3c33cb77b58f3"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-ant.png",
+          "sha256": "db9a43be6e8514c0747f1d15ace3f9cd23f89fa6d5b92cd9be01f4a0e974f347"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-orbit.png",
+          "sha256": "db9a43be6e8514c0747f1d15ace3f9cd23f89fa6d5b92cd9be01f4a0e974f347"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+          "sha256": "f176dffd0b966bf105a301bc140f13581719680ff7b46a208185b0b526ed91b9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4446
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-ant.png",
+          "sha256": "0d60e950d40632fc2e453a7b8254689e24caba341301395bde79211b0b3061dd"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-orbit.png",
+          "sha256": "0d60e950d40632fc2e453a7b8254689e24caba341301395bde79211b0b3061dd"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-ant.png",
+          "sha256": "532930947cecc34f3880eb9eeec6589efc20fc6c260de145262adc15ac500424"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-orbit.png",
+          "sha256": "532930947cecc34f3880eb9eeec6589efc20fc6c260de145262adc15ac500424"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+          "sha256": "09c31f776a0c5640edb7c9c851b7f2d53affb871efc9bb0e9602b5c901bb75c0"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-ant.png",
+          "sha256": "9a9b92770e41212496d66a8bcd1b8e164f4b796cf15c6a3c81ccb6d4ad7ae3b2"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-orbit.png",
+          "sha256": "9a9b92770e41212496d66a8bcd1b8e164f4b796cf15c6a3c81ccb6d4ad7ae3b2"
+        },
+        {
+          "file": "chromium-light-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+          "sha256": "7ae0de9911bf77a50abf3b02680b5d73a40f725d83d5aa2132fcc228e1e2184c"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7391
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-ant.png",
+          "sha256": "2fe72f0c29672ce2ad770323311534100eae0ad46a2a4852cf4c3d7d1d33d5b3"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-orbit.png",
+          "sha256": "2fe72f0c29672ce2ad770323311534100eae0ad46a2a4852cf4c3d7d1d33d5b3"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-ant.png",
+          "sha256": "90686e64d2e1ca4adc4b59f433484b8e975451d8e87170106da9ffcdc2acba10"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-orbit.png",
+          "sha256": "90686e64d2e1ca4adc4b59f433484b8e975451d8e87170106da9ffcdc2acba10"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-ant.png",
+          "sha256": "a7861c9a789df82589a1c43188a69c8280650ec7d94e9c21bc5b04d0e74326d9"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-orbit.png",
+          "sha256": "a7861c9a789df82589a1c43188a69c8280650ec7d94e9c21bc5b04d0e74326d9"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-ant.png",
+          "sha256": "68d47d7269dd4368c5ed464ef2793605c0e675eb6b82839ccb1be08879b83dc3"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-orbit.png",
+          "sha256": "68d47d7269dd4368c5ed464ef2793605c0e675eb6b82839ccb1be08879b83dc3"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-ant.png",
+          "sha256": "a1f82ad9e8c98dbe15c9718f7dd19f0f815d1594e0b8120c43af4d05208db9ff"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-orbit.png",
+          "sha256": "a1f82ad9e8c98dbe15c9718f7dd19f0f815d1594e0b8120c43af4d05208db9ff"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-ant.png",
+          "sha256": "2fe72f0c29672ce2ad770323311534100eae0ad46a2a4852cf4c3d7d1d33d5b3"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-orbit.png",
+          "sha256": "2fe72f0c29672ce2ad770323311534100eae0ad46a2a4852cf4c3d7d1d33d5b3"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+          "sha256": "c41e9286eb282d53131e3537e385d3868a23766c850ec90da338408b7132348a"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-ant.png",
+          "sha256": "d6eceb880a6322f43fe8edbdee9bca2055a3f9018d783fb984dbb3f968a5c6be"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-orbit.png",
+          "sha256": "d6eceb880a6322f43fe8edbdee9bca2055a3f9018d783fb984dbb3f968a5c6be"
+        },
+        {
+          "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+          "sha256": "6904a80053509e6191573d899206ded903e2b45cf04b083b19476f89135b25c2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4926
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-ant.png",
+          "sha256": "2ff3ab9aa222a8f368efd26da949bba0326958610769d2eb96a46239dde57360"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-orbit.png",
+          "sha256": "2ff3ab9aa222a8f368efd26da949bba0326958610769d2eb96a46239dde57360"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-ant.png",
+          "sha256": "5c379102de1483bba197e09838da4cb97ffd69a749dd5805148d3895baa36e75"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-orbit.png",
+          "sha256": "5c379102de1483bba197e09838da4cb97ffd69a749dd5805148d3895baa36e75"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-ant.png",
+          "sha256": "5c379102de1483bba197e09838da4cb97ffd69a749dd5805148d3895baa36e75"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-orbit.png",
+          "sha256": "5c379102de1483bba197e09838da4cb97ffd69a749dd5805148d3895baa36e75"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-ant.png",
+          "sha256": "c6fcd4c42b8a5ccc488d7f272b46a7192633c01505f2efdb7521058779695f02"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-orbit.png",
+          "sha256": "c6fcd4c42b8a5ccc488d7f272b46a7192633c01505f2efdb7521058779695f02"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+          "sha256": "f399452a40f253383970f252df7eef56da27091e1a838cc4d5a7745f46090027"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-ant.png",
+          "sha256": "968bc068ddbb4da45795832ce79ceb84f8e82efd750ba5d65d1fc442966d7a98"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-orbit.png",
+          "sha256": "968bc068ddbb4da45795832ce79ceb84f8e82efd750ba5d65d1fc442966d7a98"
+        },
+        {
+          "file": "chromium-light-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+          "sha256": "7dbf877ffbfb7d7a67689114e09dd148a1b8ba8cd4af710cb8c73443c51814eb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4995
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-ant.png",
+          "sha256": "6ffee056ebfabc695b62d908d0c72ea0ffa74893064788e9227a232913a4a173"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-orbit.png",
+          "sha256": "6ffee056ebfabc695b62d908d0c72ea0ffa74893064788e9227a232913a4a173"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-ant.png",
+          "sha256": "2f8af11047b0621c5a9954ed212c99c4efa7fb0d842aab368de5d4501dfa19b1"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-orbit.png",
+          "sha256": "2f8af11047b0621c5a9954ed212c99c4efa7fb0d842aab368de5d4501dfa19b1"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-ant.png",
+          "sha256": "5ad2a8804f1d93c5e86bf3340b35258b68b7a3a9a079c806c3c84c85bb30472e"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-orbit.png",
+          "sha256": "5ad2a8804f1d93c5e86bf3340b35258b68b7a3a9a079c806c3c84c85bb30472e"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-ant.png",
+          "sha256": "0074dc16b2df47283aab00689e5e498eaf9f8ef0a373451cebea509c787409da"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-orbit.png",
+          "sha256": "0074dc16b2df47283aab00689e5e498eaf9f8ef0a373451cebea509c787409da"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-ant.png",
+          "sha256": "40d64908a9306715c653650c06e38cf9d54b41f17995da75d4798975b8b99a79"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-orbit.png",
+          "sha256": "40d64908a9306715c653650c06e38cf9d54b41f17995da75d4798975b8b99a79"
+        },
+        {
+          "file": "chromium-light-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+          "sha256": "560573a3235732f938cc13fe735efc70221edbeeb8bd9aceab4f38c14dab2d4f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4515
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-field.png",
+          "sha256": "dee0ebe229b6303e18f2930aea1ac24a189e901e22f3b4319875729cae61e49b"
+        },
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-mirror.png",
+          "sha256": "dee0ebe229b6303e18f2930aea1ac24a189e901e22f3b4319875729cae61e49b"
+        },
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-field.png",
+          "sha256": "7fbb4ce9598db11d77fc79aa1b5f4ef734c3b94693f9e78ac8ce74b52499dfd8"
+        },
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-mirror.png",
+          "sha256": "885efb0d2850046a2ca2b9e64394c9307c4703d3a54113032c572a1f067a4360"
+        },
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-field.png",
+          "sha256": "dee0ebe229b6303e18f2930aea1ac24a189e901e22f3b4319875729cae61e49b"
+        },
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-mirror.png",
+          "sha256": "dee0ebe229b6303e18f2930aea1ac24a189e901e22f3b4319875729cae61e49b"
+        },
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-field.png",
+          "sha256": "7fbb4ce9598db11d77fc79aa1b5f4ef734c3b94693f9e78ac8ce74b52499dfd8"
+        },
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-mirror.png",
+          "sha256": "885efb0d2850046a2ca2b9e64394c9307c4703d3a54113032c572a1f067a4360"
+        },
+        {
+          "file": "chromium-light-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+          "sha256": "bf731d93c841a3ba055310bb89757fdef0dfd38461315fbabe76b20d1cfa8e8b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7550
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-ant.png",
+          "sha256": "640efa33f09ad25bddffcaa3a69e0b64b45aecaef3ae58116409b494fcf2a59b"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-orbit.png",
+          "sha256": "640efa33f09ad25bddffcaa3a69e0b64b45aecaef3ae58116409b494fcf2a59b"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-ant.png",
+          "sha256": "ced4e185c9b0a43e637bcf9801e37e81a9dc72044c09cadd1241870495850417"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-orbit.png",
+          "sha256": "ced4e185c9b0a43e637bcf9801e37e81a9dc72044c09cadd1241870495850417"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-ant.png",
+          "sha256": "f339842816ed7cd5f3bdd6253c0a0fefd9c2a61e6e943f8fe544edea85eda26f"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-orbit.png",
+          "sha256": "f339842816ed7cd5f3bdd6253c0a0fefd9c2a61e6e943f8fe544edea85eda26f"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-ant.png",
+          "sha256": "0e723d78bc92e465329f64e10245aaf0453d917811a49776c1d17527acb0426b"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-orbit.png",
+          "sha256": "0e723d78bc92e465329f64e10245aaf0453d917811a49776c1d17527acb0426b"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-ant.png",
+          "sha256": "32a831ccc636d6fa5f0607c73b0cbd2c0949e1721b02356a96ff6fdb547d5bb1"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-orbit.png",
+          "sha256": "32a831ccc636d6fa5f0607c73b0cbd2c0949e1721b02356a96ff6fdb547d5bb1"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-ant.png",
+          "sha256": "d94d49f75277ccfa5bc5963df95cf33c0dd71fa6a6023e48b5f943aea6cc4036"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-orbit.png",
+          "sha256": "d94d49f75277ccfa5bc5963df95cf33c0dd71fa6a6023e48b5f943aea6cc4036"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-ant.png",
+          "sha256": "5860422bb926088ba93068e0c2d63a474dcad574e1dc9c246267057c09bccbc2"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-orbit.png",
+          "sha256": "5860422bb926088ba93068e0c2d63a474dcad574e1dc9c246267057c09bccbc2"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-ant.png",
+          "sha256": "739a7b627ce6e4503a03f930f1af0f5c194766ee67e3230354ec6c7a95f9b27e"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-orbit.png",
+          "sha256": "739a7b627ce6e4503a03f930f1af0f5c194766ee67e3230354ec6c7a95f9b27e"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+          "sha256": "727d696bd97ee3649828f01abe1d9748071d111cb384a3f1b95c9210ff3d87f9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4623
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-ant.png",
+          "sha256": "c76740c1a88fe2542c18fd1d393d7f4c42245adb88d571579e92e28f8d5f8618"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-orbit.png",
+          "sha256": "c76740c1a88fe2542c18fd1d393d7f4c42245adb88d571579e92e28f8d5f8618"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-ant.png",
+          "sha256": "d657e03084bc266daf00c84b86f42735af29cff578872c3ef5e7179073a7a15f"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-orbit.png",
+          "sha256": "d657e03084bc266daf00c84b86f42735af29cff578872c3ef5e7179073a7a15f"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+          "sha256": "d44fc30799fc569f723446983bd25fd7a3cf087350621054cfe95608ab595e59"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-ant.png",
+          "sha256": "50400af0db67130912af3c6b80c0c56724ab04dea4b1105d8255de8d0f715de3"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-orbit.png",
+          "sha256": "50400af0db67130912af3c6b80c0c56724ab04dea4b1105d8255de8d0f715de3"
+        },
+        {
+          "file": "chromium-dark-desktop--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+          "sha256": "cf0f8476d79691d338689699f25d849a0ccf116b88634f2608e2f955401c0dba"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 8024
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-ant.png",
+          "sha256": "aa16bac1567e54a4d20be7c71fc158e495a707a9deadbf2b2132b19fbe0b63e0"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-orbit.png",
+          "sha256": "aa16bac1567e54a4d20be7c71fc158e495a707a9deadbf2b2132b19fbe0b63e0"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-hover-ant.png",
+          "sha256": "980c6b7fd63a7835b2c49fb83278fd8a610dbb174396c5670d6a26bc537d8355"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-hover-orbit.png",
+          "sha256": "980c6b7fd63a7835b2c49fb83278fd8a610dbb174396c5670d6a26bc537d8355"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-ant.png",
+          "sha256": "6b76bea8795430322679db7d05d8549dff5cf3e1aa5fc140496cd70828f7ad0b"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-orbit.png",
+          "sha256": "6b76bea8795430322679db7d05d8549dff5cf3e1aa5fc140496cd70828f7ad0b"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-ant.png",
+          "sha256": "8ecf176e1dba67249a054632fab0a23fe7ca59db44199777d29d14a9b89cf17b"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-orbit.png",
+          "sha256": "8ecf176e1dba67249a054632fab0a23fe7ca59db44199777d29d14a9b89cf17b"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-ant.png",
+          "sha256": "f978b16e22237947f94419ee281a47878fae01ad67529cbec7bab14566608156"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-orbit.png",
+          "sha256": "f978b16e22237947f94419ee281a47878fae01ad67529cbec7bab14566608156"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-ant.png",
+          "sha256": "882e8e848b0a81e4948d9e6a2365b8e0b4b1e4a69efa53ef535c9938ff85942d"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-orbit.png",
+          "sha256": "882e8e848b0a81e4948d9e6a2365b8e0b4b1e4a69efa53ef535c9938ff85942d"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-ant.png",
+          "sha256": "980c6b7fd63a7835b2c49fb83278fd8a610dbb174396c5670d6a26bc537d8355"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-orbit.png",
+          "sha256": "980c6b7fd63a7835b2c49fb83278fd8a610dbb174396c5670d6a26bc537d8355"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+          "sha256": "51644fba897a4367b8ca2d6ee34083b44e9e41ff9799e9b66bdcec0575a32679"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-ant.png",
+          "sha256": "49767cfd23e7c7c58092fcc7baf8781bff5db03945b269582c8fcb398277cbe8"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-orbit.png",
+          "sha256": "49767cfd23e7c7c58092fcc7baf8781bff5db03945b269582c8fcb398277cbe8"
+        },
+        {
+          "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+          "sha256": "0b99a3bdf11d5c62fa298fd81cf59a14eb031bf413a3c6381ff9ac50a73824dc"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4676
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-ant.png",
+          "sha256": "207386a9321f9e67108f31cafd27e8d2cd0aa08f1c88b873aae17991cee40d6e"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-orbit.png",
+          "sha256": "207386a9321f9e67108f31cafd27e8d2cd0aa08f1c88b873aae17991cee40d6e"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-ant.png",
+          "sha256": "ac5d80aaee6e605228343cfd42c74dd043e37eb3e3dafb9358b66381021a04cd"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-orbit.png",
+          "sha256": "ac5d80aaee6e605228343cfd42c74dd043e37eb3e3dafb9358b66381021a04cd"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-ant.png",
+          "sha256": "ac5d80aaee6e605228343cfd42c74dd043e37eb3e3dafb9358b66381021a04cd"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-orbit.png",
+          "sha256": "ac5d80aaee6e605228343cfd42c74dd043e37eb3e3dafb9358b66381021a04cd"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-ant.png",
+          "sha256": "98f2b443aa9f99390a254ec032f0ad54de990ec1a3395e94464f06c92d26fc7e"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-orbit.png",
+          "sha256": "98f2b443aa9f99390a254ec032f0ad54de990ec1a3395e94464f06c92d26fc7e"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+          "sha256": "8b9cf4ec5658ae1f626a16e50a9c6b1253cc9ba6216e32da3d334b2ece6302f9"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-ant.png",
+          "sha256": "780d82cf41743ddc654803975204327bd5b8a5792c3295455baf406ade19a1a0"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-orbit.png",
+          "sha256": "780d82cf41743ddc654803975204327bd5b8a5792c3295455baf406ade19a1a0"
+        },
+        {
+          "file": "chromium-dark-desktop--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+          "sha256": "5b9b2d22232ef49f0ae73c5fc46048d5ca7c846eebf1a4cf792d1098c5cffc3b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5305
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-ant.png",
+          "sha256": "0e723d78bc92e465329f64e10245aaf0453d917811a49776c1d17527acb0426b"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-orbit.png",
+          "sha256": "0e723d78bc92e465329f64e10245aaf0453d917811a49776c1d17527acb0426b"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-ant.png",
+          "sha256": "293cb30437262510425880e4520ddd98ccf8ba205128b4a01290d0926ca7f4fd"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-orbit.png",
+          "sha256": "293cb30437262510425880e4520ddd98ccf8ba205128b4a01290d0926ca7f4fd"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-ant.png",
+          "sha256": "f122ce144e57f38915ab8663eba2701e3e5f7f17b8ca9e77ab51d914d368c7cb"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-orbit.png",
+          "sha256": "f122ce144e57f38915ab8663eba2701e3e5f7f17b8ca9e77ab51d914d368c7cb"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-ant.png",
+          "sha256": "fc6323778795bc4effc740fa3f09107778dd7c531e91139aca24269d83653a77"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-orbit.png",
+          "sha256": "fc6323778795bc4effc740fa3f09107778dd7c531e91139aca24269d83653a77"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-ant.png",
+          "sha256": "f11c1427834c6f02f1b0493bfab372259d7998fa357bcf5d2a2af34c4c77182b"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-orbit.png",
+          "sha256": "f11c1427834c6f02f1b0493bfab372259d7998fa357bcf5d2a2af34c4c77182b"
+        },
+        {
+          "file": "chromium-dark-desktop--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+          "sha256": "3a7d1dbf466f6bd31d71e5d224645a1cd7882d1b532ade5f5dd4ee47509e8887"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4726
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-field.png",
+          "sha256": "df5267a51f0da65bd638c5d1b2dfb343f65b355f133578e93803261463bf0bf6"
+        },
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-mirror.png",
+          "sha256": "df5267a51f0da65bd638c5d1b2dfb343f65b355f133578e93803261463bf0bf6"
+        },
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-field.png",
+          "sha256": "47ca70ecd7945ba1e45dfddbb2f08c7ba101dd8d9742579a3970758c77c25970"
+        },
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-mirror.png",
+          "sha256": "3e19d826f3ae5fa060c3b9b658732fb5fe60ae215545cc43ea3ea3e337d25739"
+        },
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-field.png",
+          "sha256": "df5267a51f0da65bd638c5d1b2dfb343f65b355f133578e93803261463bf0bf6"
+        },
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-mirror.png",
+          "sha256": "df5267a51f0da65bd638c5d1b2dfb343f65b355f133578e93803261463bf0bf6"
+        },
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-field.png",
+          "sha256": "47ca70ecd7945ba1e45dfddbb2f08c7ba101dd8d9742579a3970758c77c25970"
+        },
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-mirror.png",
+          "sha256": "3e19d826f3ae5fa060c3b9b658732fb5fe60ae215545cc43ea3ea3e337d25739"
+        },
+        {
+          "file": "chromium-dark-desktop--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+          "sha256": "ff4dc47b6a23c0e6c24d866d9c83e42aa421b2af3c2bf50a6e376a7cdb1a0e71"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 8136
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-ant.png",
+          "sha256": "42b8c7574569ccd70cc2345db3dfffcc253cb394324b5e94d07959bfbc93e188"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-idle-orbit.png",
+          "sha256": "42b8c7574569ccd70cc2345db3dfffcc253cb394324b5e94d07959bfbc93e188"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-ant.png",
+          "sha256": "d7eaef9ec2892d4c42d5b6b1ca457b22ba756909844cf92f851d49eabf7450f4"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-one-line-orbit.png",
+          "sha256": "d7eaef9ec2892d4c42d5b6b1ca457b22ba756909844cf92f851d49eabf7450f4"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-ant.png",
+          "sha256": "66b38fc8f70e1339c1bd3c9e5c5f22ca626905304c38bee89c45b35ba012755d"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-two-lines-orbit.png",
+          "sha256": "66b38fc8f70e1339c1bd3c9e5c5f22ca626905304c38bee89c45b35ba012755d"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-ant.png",
+          "sha256": "0acdffb19c7ef1f7611ba46e01950d2a44a12677defa101a106da81912ac278e"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-capped-scrolled-to-end-orbit.png",
+          "sha256": "0acdffb19c7ef1f7611ba46e01950d2a44a12677defa101a106da81912ac278e"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-ant.png",
+          "sha256": "2ea91e573a863773f83dd8ba81b09f965f21b58e3751bc4852bd411bf9d5efed"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-shell-mode-orbit.png",
+          "sha256": "2ea91e573a863773f83dd8ba81b09f965f21b58e3751bc4852bd411bf9d5efed"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-ant.png",
+          "sha256": "7441ca5560ed13fb2cc8728328fc0571b52465e2aebefac0ff38eb188d5c3f48"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-cleared-orbit.png",
+          "sha256": "7441ca5560ed13fb2cc8728328fc0571b52465e2aebefac0ff38eb188d5c3f48"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-ant.png",
+          "sha256": "994494691a5a3c16d340afc7bd36afc8d88b78011f719d05d61a07525292f9ec"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-before-edit-orbit.png",
+          "sha256": "994494691a5a3c16d340afc7bd36afc8d88b78011f719d05d61a07525292f9ec"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-ant.png",
+          "sha256": "22755fda335a77da240d23cce4c4604a0d5c634129fedee6758642ee6349c5e1"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-long-placeholder-after-edit-orbit.png",
+          "sha256": "22755fda335a77da240d23cce4c4604a0d5c634129fedee6758642ee6349c5e1"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-grows-caps-scrolls-and-draws-exactly-like-the-AntD-field--session-states.json",
+          "sha256": "468e522cf9b0ff491507639925cbaadf95bc9a821fc7414b7e84b2f970f89e0f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4589
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-ant.png",
+          "sha256": "7318c25d0619ce9bf780268ea2bc416e5937ecf8e635892220f0eecd47eeacb0"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-idle-orbit.png",
+          "sha256": "7318c25d0619ce9bf780268ea2bc416e5937ecf8e635892220f0eecd47eeacb0"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-ant.png",
+          "sha256": "542a0e3efaa9a1b168c40d73646bc344fad2607b68bddcbcdab51cf010c3b8c0"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-two-lines-orbit.png",
+          "sha256": "542a0e3efaa9a1b168c40d73646bc344fad2607b68bddcbcdab51cf010c3b8c0"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-attachments-states.json",
+          "sha256": "df6b7d7e2701566cbea282d9143bf46d2628b57fbc54952782c8ba8748135411"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-ant.png",
+          "sha256": "bd0e76b66f0edbec30f9097ce00cb443ee732b1684d26ca09ea3c2741549bdd9"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-orbit.png",
+          "sha256": "bd0e76b66f0edbec30f9097ce00cb443ee732b1684d26ca09ea3c2741549bdd9"
+        },
+        {
+          "file": "chromium-dark-phone--session-composer-with-staged-attachments-and-while-disabled-matches-the-AntD-field--session-disabled-text-Read-20only-20draft-states.json",
+          "sha256": "0f72a7bb8f900deda1aede976bc3d7a4e51ea6c13862fa0d6526ecff5f6f0813"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7458
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-ant.png",
+          "sha256": "287019838fda8cb2210ed18ee5d3a2728f5519bf7fcf91de9360d19b3eb55c51"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-idle-orbit.png",
+          "sha256": "287019838fda8cb2210ed18ee5d3a2728f5519bf7fcf91de9360d19b3eb55c51"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-ant.png",
+          "sha256": "6e98af9e4ba45dc1caf1890215aff2208c22f099473e2bcdf7321204d0875d52"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-focused-orbit.png",
+          "sha256": "6e98af9e4ba45dc1caf1890215aff2208c22f099473e2bcdf7321204d0875d52"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-ant.png",
+          "sha256": "21bb9ace11be18fba968e2f90eff8c5a546226b8279314863a1baca061624e55"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-one-line-orbit.png",
+          "sha256": "21bb9ace11be18fba968e2f90eff8c5a546226b8279314863a1baca061624e55"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-ant.png",
+          "sha256": "a0f110ad65a53c04bdeba18c7fde90e5d043a14277b86fe1d5e189280527da2a"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-two-lines-orbit.png",
+          "sha256": "a0f110ad65a53c04bdeba18c7fde90e5d043a14277b86fe1d5e189280527da2a"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-ant.png",
+          "sha256": "a9a60e781250c2d02da70fc39887c531e1fd6752579979f00911cb48a771e3b8"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-capped-scrolled-orbit.png",
+          "sha256": "a9a60e781250c2d02da70fc39887c531e1fd6752579979f00911cb48a771e3b8"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-ant.png",
+          "sha256": "287019838fda8cb2210ed18ee5d3a2728f5519bf7fcf91de9360d19b3eb55c51"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-cleared-orbit.png",
+          "sha256": "287019838fda8cb2210ed18ee5d3a2728f5519bf7fcf91de9360d19b3eb55c51"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+          "sha256": "a542e04e60f79bf84c8de3d7b454dd907f41dbe006e9211679d4711e63cd2a88"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-ant.png",
+          "sha256": "c8ec484b9d0288b704fec0c6ca15dc52bdcaa191bf6ffbad36676636e8161579"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-orbit.png",
+          "sha256": "c8ec484b9d0288b704fec0c6ca15dc52bdcaa191bf6ffbad36676636e8161579"
+        },
+        {
+          "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+          "sha256": "1fe76d8fee21364a2165d6d931b58ecca2c0417ee28d8e0171c8f130aeff03f0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4825
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-ant.png",
+          "sha256": "54e8ef1728ae5a8f0e5cd89cb7cc2daa9b6e0ce9391332b7e4ec37c21996ba67"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-rest-orbit.png",
+          "sha256": "54e8ef1728ae5a8f0e5cd89cb7cc2daa9b6e0ce9391332b7e4ec37c21996ba67"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-ant.png",
+          "sha256": "08779312490ecd0a5d895aad0d6543a38cb8f147bcf25facb30fc3aed9b217fc"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-keyboard-focus-orbit.png",
+          "sha256": "08779312490ecd0a5d895aad0d6543a38cb8f147bcf25facb30fc3aed9b217fc"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-ant.png",
+          "sha256": "08779312490ecd0a5d895aad0d6543a38cb8f147bcf25facb30fc3aed9b217fc"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-focus-and-hover-orbit.png",
+          "sha256": "08779312490ecd0a5d895aad0d6543a38cb8f147bcf25facb30fc3aed9b217fc"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-ant.png",
+          "sha256": "70072ada25ec12c8c9e8c715c1ddcac38edb6b5a9254323dc209a0cef5a243b4"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-typed-orbit.png",
+          "sha256": "70072ada25ec12c8c9e8c715c1ddcac38edb6b5a9254323dc209a0cef5a243b4"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-states.json",
+          "sha256": "d4d6750f7febb5b44fb2e9acfd26356f74fdd19f27bb29ad750e49ecd46a48ae"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-ant.png",
+          "sha256": "124529b0b108ceef2a7aeb7250b5baeadf7053282ff48352526a8f3aea303b82"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-orbit.png",
+          "sha256": "124529b0b108ceef2a7aeb7250b5baeadf7053282ff48352526a8f3aea303b82"
+        },
+        {
+          "file": "chromium-dark-phone--the-borderless-variant-on-its-own-matches-AntD-at-rest-focused-hovered-and-disabled--plain-disabled-text-Disabled-states.json",
+          "sha256": "328a2387c61282d1a8a5ac4a0d34993ef559a0af62e2be734dc497511e11e8ea"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4903
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-ant.png",
+          "sha256": "0acdffb19c7ef1f7611ba46e01950d2a44a12677defa101a106da81912ac278e"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-capped-handle-shown-orbit.png",
+          "sha256": "0acdffb19c7ef1f7611ba46e01950d2a44a12677defa101a106da81912ac278e"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-ant.png",
+          "sha256": "b5dd832178c69807da6a11371e1d164483cd9a7ad654e49df8fee0bd404db933"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-dragged-taller-orbit.png",
+          "sha256": "b5dd832178c69807da6a11371e1d164483cd9a7ad654e49df8fee0bd404db933"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-ant.png",
+          "sha256": "b287dd3485b4cce03d96743c11312187c73179ed599f829bbe527fc4a4cc043b"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-clamped-minimum-orbit.png",
+          "sha256": "b287dd3485b4cce03d96743c11312187c73179ed599f829bbe527fc4a4cc043b"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-ant.png",
+          "sha256": "17551951730a7af5df7b9dfee1e66649bee9ecdccd5dc38fb3e7d2af67d0b742"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-manual-height-kept-for-short-text-orbit.png",
+          "sha256": "17551951730a7af5df7b9dfee1e66649bee9ecdccd5dc38fb3e7d2af67d0b742"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-ant.png",
+          "sha256": "3a4670e530ca8fa4d578867a1180fe391f81a5ffa24f523c97457b18a457c7b5"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-reset-to-auto-orbit.png",
+          "sha256": "3a4670e530ca8fa4d578867a1180fe391f81a5ffa24f523c97457b18a457c7b5"
+        },
+        {
+          "file": "chromium-dark-phone--manual-height-drag-the-handle-clamp-it-and-double-click-back-to-auto-size--session-states.json",
+          "sha256": "e63e03ca33022165006ec2782c223bd2080027954003d7f15e8b68d42c48fc43"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4424
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-field.png",
+          "sha256": "f29793d644fba6aeb971f95f7e8142a783aa177e9835c2c50c068242b1736e75"
+        },
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-ant-mirror.png",
+          "sha256": "f29793d644fba6aeb971f95f7e8142a783aa177e9835c2c50c068242b1736e75"
+        },
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-field.png",
+          "sha256": "93697d0d41c4d38612687098607a53e4c4f32d6cea2b1c3813fea8d1350d67cb"
+        },
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-ant-mirror.png",
+          "sha256": "aa25d13747350e538d63dfb14728dfb0718dd70942c475bc75aff46b80640bf5"
+        },
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-field.png",
+          "sha256": "f29793d644fba6aeb971f95f7e8142a783aa177e9835c2c50c068242b1736e75"
+        },
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-wrapping-orbit-mirror.png",
+          "sha256": "f29793d644fba6aeb971f95f7e8142a783aa177e9835c2c50c068242b1736e75"
+        },
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-field.png",
+          "sha256": "93697d0d41c4d38612687098607a53e4c4f32d6cea2b1c3813fea8d1350d67cb"
+        },
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--probe-chips-orbit-mirror.png",
+          "sha256": "aa25d13747350e538d63dfb14728dfb0718dd70942c475bc75aff46b80640bf5"
+        },
+        {
+          "file": "chromium-dark-phone--the-mirror-paints-its-glyphs-exactly-where-the-field-lays-out-its-own-text--mirror-probe.json",
+          "sha256": "c0277ed58baf356e3e6a6a95af6b5049e51879962a3bb94916a0e85eaee74929"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--fields-match-at-599px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5353
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--session-idle-ant.png",
+          "sha256": "9ad31820d4eeb6a1f66a9ce999cf3b0ab2fb0e154009b000c2c87f43bf717e1f"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--session-idle-orbit.png",
+          "sha256": "9ad31820d4eeb6a1f66a9ce999cf3b0ab2fb0e154009b000c2c87f43bf717e1f"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--session-two-lines-ant.png",
+          "sha256": "dacf75da3d68b427fed1a20de7c58866126dc0138798974227db8bba5de2e641"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--session-two-lines-orbit.png",
+          "sha256": "dacf75da3d68b427fed1a20de7c58866126dc0138798974227db8bba5de2e641"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--session-width-360-states.json",
+          "sha256": "b7bd16cb0c618955787009e9672bc1502fb875163dfa90d66db3d9418b291518"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--comment-idle-ant.png",
+          "sha256": "67163cd308989ad78c1b4b86622932e25e84c9fccc47cd02875b5f2c229d5fe5"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--comment-idle-orbit.png",
+          "sha256": "67163cd308989ad78c1b4b86622932e25e84c9fccc47cd02875b5f2c229d5fe5"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--comment-two-lines-ant.png",
+          "sha256": "4526e66ba9b4ffc96dc09253ac9407f2ffba71d3bcad14ac9e4a69cdaac552a8"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--comment-two-lines-orbit.png",
+          "sha256": "4526e66ba9b4ffc96dc09253ac9407f2ffba71d3bcad14ac9e4a69cdaac552a8"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-599px--comment-width-360-states.json",
+          "sha256": "45cb133f9bc7e033d30bce58202fe3e13f523a08eb3016cdc26ac31b449b915d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--fields-match-at-601px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5292
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--session-idle-ant.png",
+          "sha256": "7bf1b59f4afd76ba4bb935446c4ca6e2f16ace4dff048c2e097307ad5f170471"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--session-idle-orbit.png",
+          "sha256": "7bf1b59f4afd76ba4bb935446c4ca6e2f16ace4dff048c2e097307ad5f170471"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--session-two-lines-ant.png",
+          "sha256": "c4c788fe3ec4fcc68923b8903b1f50b9d259b00873c3279c1dcc5134b0cde17a"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--session-two-lines-orbit.png",
+          "sha256": "c4c788fe3ec4fcc68923b8903b1f50b9d259b00873c3279c1dcc5134b0cde17a"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--session-width-360-states.json",
+          "sha256": "8f8941cf5100611b891790221debc7eced0bfad0e136d95196ac6d68b335d7f1"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--comment-idle-ant.png",
+          "sha256": "e90bf64cd0a671483b969166bb4d20d0edd11c5cfc12086e69b8de3831c658f3"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--comment-idle-orbit.png",
+          "sha256": "e90bf64cd0a671483b969166bb4d20d0edd11c5cfc12086e69b8de3831c658f3"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--comment-two-lines-ant.png",
+          "sha256": "9b49afddc07fb9fe29d57365b73214740f743b145317f00fe57bd8c0047f0d54"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--comment-two-lines-orbit.png",
+          "sha256": "9b49afddc07fb9fe29d57365b73214740f743b145317f00fe57bd8c0047f0d54"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-601px--comment-width-360-states.json",
+          "sha256": "b17c70deb708af727e52472837baf91068eb931818677a0a18e0d31bf00ed7da"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--fields-match-at-959px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5229
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--session-idle-ant.png",
+          "sha256": "7bf1b59f4afd76ba4bb935446c4ca6e2f16ace4dff048c2e097307ad5f170471"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--session-idle-orbit.png",
+          "sha256": "7bf1b59f4afd76ba4bb935446c4ca6e2f16ace4dff048c2e097307ad5f170471"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--session-two-lines-ant.png",
+          "sha256": "c4c788fe3ec4fcc68923b8903b1f50b9d259b00873c3279c1dcc5134b0cde17a"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--session-two-lines-orbit.png",
+          "sha256": "c4c788fe3ec4fcc68923b8903b1f50b9d259b00873c3279c1dcc5134b0cde17a"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--session-width-360-states.json",
+          "sha256": "247c5f505b18ed39c267d574db1b195f27697dd81fbf650323145b18c7c8ffcd"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--comment-idle-ant.png",
+          "sha256": "e90bf64cd0a671483b969166bb4d20d0edd11c5cfc12086e69b8de3831c658f3"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--comment-idle-orbit.png",
+          "sha256": "e90bf64cd0a671483b969166bb4d20d0edd11c5cfc12086e69b8de3831c658f3"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--comment-two-lines-ant.png",
+          "sha256": "c799dcc5f0f77f53f77d4150732df168f6463d73107819ee5012dc2aada2f3ed"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--comment-two-lines-orbit.png",
+          "sha256": "c799dcc5f0f77f53f77d4150732df168f6463d73107819ee5012dc2aada2f3ed"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-959px--comment-width-360-states.json",
+          "sha256": "efe00b2a3b686dcd88f42b78170cc8fc9af0ca4c599c99906152060207b2e653"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--fields-match-at-961px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4885
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--session-idle-ant.png",
+          "sha256": "7bf1b59f4afd76ba4bb935446c4ca6e2f16ace4dff048c2e097307ad5f170471"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--session-idle-orbit.png",
+          "sha256": "7bf1b59f4afd76ba4bb935446c4ca6e2f16ace4dff048c2e097307ad5f170471"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--session-two-lines-ant.png",
+          "sha256": "c4c788fe3ec4fcc68923b8903b1f50b9d259b00873c3279c1dcc5134b0cde17a"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--session-two-lines-orbit.png",
+          "sha256": "c4c788fe3ec4fcc68923b8903b1f50b9d259b00873c3279c1dcc5134b0cde17a"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--session-width-360-states.json",
+          "sha256": "c5f328f4a5ae8dd4d1994bae21c339ca1b78224bca4d51a6814e7bf79df50ace"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--comment-idle-ant.png",
+          "sha256": "97575d13b885c03152d47a700af40164559dcd788363241755f8659fdfa508b6"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--comment-idle-orbit.png",
+          "sha256": "97575d13b885c03152d47a700af40164559dcd788363241755f8659fdfa508b6"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--comment-two-lines-ant.png",
+          "sha256": "77349fb6f04fe9a229f29744392300b20e8d45da8193d9ba61e408bc356b43be"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--comment-two-lines-orbit.png",
+          "sha256": "77349fb6f04fe9a229f29744392300b20e8d45da8193d9ba61e408bc356b43be"
+        },
+        {
+          "file": "chromium-light-desktop--fields-match-at-961px--comment-width-360-states.json",
+          "sha256": "84e91997f2adf26c7999d8584b7489ae913b4e56de873a0a17962c790eb88797"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--fields-match-at-599px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-light-phone--fields-match-at-601px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-light-phone--fields-match-at-959px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-light-phone--fields-match-at-961px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-dark-desktop--fields-match-at-599px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5044
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--session-idle-ant.png",
+          "sha256": "2817c68342af2a6ecb18ba841f688606234cce80030dad6da6ab5c2f3b287d79"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--session-idle-orbit.png",
+          "sha256": "2817c68342af2a6ecb18ba841f688606234cce80030dad6da6ab5c2f3b287d79"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--session-two-lines-ant.png",
+          "sha256": "aef408444eab32745c87243b594b1f80421c2fa7bd2094de5a5513d14eee4314"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--session-two-lines-orbit.png",
+          "sha256": "aef408444eab32745c87243b594b1f80421c2fa7bd2094de5a5513d14eee4314"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--session-width-360-states.json",
+          "sha256": "d8a5374957670726dbf5327e8ab89b8f60376e757d16f10418cf1f5d59296d40"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--comment-idle-ant.png",
+          "sha256": "93aa1143e05beaf3e923ec7af936cf04cd26edd61a2c04bdba798c4f9044f065"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--comment-idle-orbit.png",
+          "sha256": "93aa1143e05beaf3e923ec7af936cf04cd26edd61a2c04bdba798c4f9044f065"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--comment-two-lines-ant.png",
+          "sha256": "19028646ba3913cd95629c092c6bcc2d85e27f7412cb286a1245ce6b685ece1f"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--comment-two-lines-orbit.png",
+          "sha256": "19028646ba3913cd95629c092c6bcc2d85e27f7412cb286a1245ce6b685ece1f"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-599px--comment-width-360-states.json",
+          "sha256": "d676b22b1fa4481f16e015155b0c9809b2d48b345c5575d5ae3ef850c7b97021"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--fields-match-at-601px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4862
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--session-idle-ant.png",
+          "sha256": "db2071c4b874c7a79b02aa7857e93e2da115926bbdb9101f33ccdbfe0cf38874"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--session-idle-orbit.png",
+          "sha256": "db2071c4b874c7a79b02aa7857e93e2da115926bbdb9101f33ccdbfe0cf38874"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--session-two-lines-ant.png",
+          "sha256": "7aa87c89cc5d473375c29cfdee8d9f54f26b4a4f1b104511be31329e0a6d5c0d"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--session-two-lines-orbit.png",
+          "sha256": "7aa87c89cc5d473375c29cfdee8d9f54f26b4a4f1b104511be31329e0a6d5c0d"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--session-width-360-states.json",
+          "sha256": "d1f3372b2b2011cddfa59052544222e19cc83600892ff497f88f74d18648238c"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--comment-idle-ant.png",
+          "sha256": "96c42ac2694c8aff4eb65f560c00e25162b2c4e5b1d810f4e12b48449c33885a"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--comment-idle-orbit.png",
+          "sha256": "96c42ac2694c8aff4eb65f560c00e25162b2c4e5b1d810f4e12b48449c33885a"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--comment-two-lines-ant.png",
+          "sha256": "1768a81762e06990a8fbabaec91e964f434aae0c75372132e80a81b4389e3d35"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--comment-two-lines-orbit.png",
+          "sha256": "1768a81762e06990a8fbabaec91e964f434aae0c75372132e80a81b4389e3d35"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-601px--comment-width-360-states.json",
+          "sha256": "4c0f4e92e3b6370704130e57a499985402acc5e9d4e9a7f96d1be6e393048e71"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--fields-match-at-959px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5145
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--session-idle-ant.png",
+          "sha256": "db2071c4b874c7a79b02aa7857e93e2da115926bbdb9101f33ccdbfe0cf38874"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--session-idle-orbit.png",
+          "sha256": "db2071c4b874c7a79b02aa7857e93e2da115926bbdb9101f33ccdbfe0cf38874"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--session-two-lines-ant.png",
+          "sha256": "7aa87c89cc5d473375c29cfdee8d9f54f26b4a4f1b104511be31329e0a6d5c0d"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--session-two-lines-orbit.png",
+          "sha256": "7aa87c89cc5d473375c29cfdee8d9f54f26b4a4f1b104511be31329e0a6d5c0d"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--session-width-360-states.json",
+          "sha256": "5e93e900022b5744c92c7ba254b6add8d1817c702f9da04769ad357968e71db2"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--comment-idle-ant.png",
+          "sha256": "e41ebede495e582bb87a586cc4f765842ee80f1e98c1341727c3f2d6695c5ebb"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--comment-idle-orbit.png",
+          "sha256": "e41ebede495e582bb87a586cc4f765842ee80f1e98c1341727c3f2d6695c5ebb"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--comment-two-lines-ant.png",
+          "sha256": "6c54aeee9e43247352fbc31a457d2fa965958198336c38879469c09af3208fa5"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--comment-two-lines-orbit.png",
+          "sha256": "6c54aeee9e43247352fbc31a457d2fa965958198336c38879469c09af3208fa5"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-959px--comment-width-360-states.json",
+          "sha256": "76e7f308dd2ccfd9f835d026e7dbd238996fef3159294cbad244ed215ab58056"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--fields-match-at-961px",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4974
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--session-idle-ant.png",
+          "sha256": "db2071c4b874c7a79b02aa7857e93e2da115926bbdb9101f33ccdbfe0cf38874"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--session-idle-orbit.png",
+          "sha256": "db2071c4b874c7a79b02aa7857e93e2da115926bbdb9101f33ccdbfe0cf38874"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--session-two-lines-ant.png",
+          "sha256": "7aa87c89cc5d473375c29cfdee8d9f54f26b4a4f1b104511be31329e0a6d5c0d"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--session-two-lines-orbit.png",
+          "sha256": "7aa87c89cc5d473375c29cfdee8d9f54f26b4a4f1b104511be31329e0a6d5c0d"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--session-width-360-states.json",
+          "sha256": "b1f3a2284a51de7d9ac64cb5c4ef55db2872f48715e8e64139acd76e97294e49"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--comment-idle-ant.png",
+          "sha256": "8c8ca8aeb3b6f47da8bd5c681096920d8938e03577dcc4ee9b5ff9d61662220f"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--comment-idle-orbit.png",
+          "sha256": "8c8ca8aeb3b6f47da8bd5c681096920d8938e03577dcc4ee9b5ff9d61662220f"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--comment-two-lines-ant.png",
+          "sha256": "82bbb3f3740559310966c98060c3c7ba73ae271f7bc6c356a41fd33182842547"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--comment-two-lines-orbit.png",
+          "sha256": "82bbb3f3740559310966c98060c3c7ba73ae271f7bc6c356a41fd33182842547"
+        },
+        {
+          "file": "chromium-dark-desktop--fields-match-at-961px--comment-width-360-states.json",
+          "sha256": "3c93c702003cf1a169065d128866f0fd7f79955b08f60ec3100cc775501b8232"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--fields-match-at-599px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-dark-phone--fields-match-at-601px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-dark-phone--fields-match-at-959px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-dark-phone--fields-match-at-961px",
+      "expectedStatus": "skipped",
+      "status": "skipped",
+      "results": [
+        {
+          "status": "skipped",
+          "duration": 0
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "name": "chromium-light-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4646
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+          "sha256": "33adaf9ba959fcd3e61d51bbd7ba86fda38186ff9f2d92edc70b2094121260eb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4822
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+          "sha256": "e2c86c5d58faefed8f13649b319e6cea9a9daf710f85407fa88c1355d2e332f4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4698
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+          "sha256": "f09fac53ceffeada876a00334f7757628db5eca82950ef83038281afd2d31852"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5066
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--auto-size-transitions-match-AntD-reduced-motion-drops-them-as-other-Orbit-controls-do--normal-motion.json",
+          "sha256": "4353d41ae00c4154ca2af17db0bb286f2911b8302006d4ce3744b198413e085e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1387
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+          "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1417
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+          "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1339
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+          "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1435
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--records-the-one-intended-difference-Orbit-text-fields-stop-transitioning--reduced-motion.json",
+          "sha256": "27ad4393543bb312addc50dbca8467ef935eb0eb34aeb03e7423f4580ce57515"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+ "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs --project chromium-dark-desktop --repeat-each 6",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_88220ae0aaf3",
+ "cwd": "/root/.orbit/worktrees/f9ffd160-2464-5af0-9d66-5af91c8bd5ab",
+ "commit": "632b7950e",
+ "webTree": "35301ab31d4cd93761cad55eb7bc2bf1f7a3fa98",
+ "outputLastWritten": "2026-10-06T07:51:38.413658+00:00",
+ "exitCode": 1,
+ "outputSha256": "c6e15ab1b30319adf12c5d2a0d6962cdfc03cf99e15d158abf08de09596d98f5",
+ "outputBytes": 135803,
+ "note": "718 passed / 2 failed: orbit-sample 2 (repeat 1) and 32 (repeat 2) never mounted the fixture; their traces show 18 and 1 module requests aborted with net::ERR_NETWORK_CHANGED before any key was pressed."
+}

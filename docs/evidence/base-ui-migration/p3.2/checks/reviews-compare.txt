@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/dist-packages/PIL/Image.py", line 3645, in open
+    fp.seek(0)
+    ^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'seek'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/docs/evidence/base-ui-migration/p3.2/attachments-compare.py", line 74, in <module>
+    result[label] = {'kind': 'png', **pixels(read(r), read(d), r.get('path'), d.get('path'))}
+                                      ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.orbit/worktrees/a5681895-0737-5f8f-95dd-bbc11d689f18/docs/evidence/base-ui-migration/p3.2/attachments-compare.py", line 57, in pixels
+    a, b = Image.open(a_path).convert('RGBA'), Image.open(b_path).convert('RGBA')
+           ~~~~~~~~~~^^^^^^^^
+  File "/usr/local/lib/python3.13/dist-packages/PIL/Image.py", line 3647, in open
+    fp = io.BytesIO(fp.read())
+                    ^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'read'

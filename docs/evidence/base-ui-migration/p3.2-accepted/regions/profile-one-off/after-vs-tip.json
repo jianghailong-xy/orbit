@@ -1,0 +1,26 @@
+{
+ "webkit-dark-phone/profile-validation.png": {
+  "differentPixels": 8489,
+  "maxChannelDelta": 167,
+  "pixelsBeyond2": 4959,
+  "pixelsAtMost2": 3530,
+  "allDifferencesBox": {
+   "x": 100,
+   "y": 44,
+   "width": 177,
+   "height": 76
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 114,
+     "y": 52,
+     "width": 154,
+     "height": 60
+    },
+    "pixels": 4959,
+    "maxChannelDelta": 167
+   }
+  ]
+ }
+}

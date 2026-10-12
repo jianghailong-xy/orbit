@@ -1,0 +1,7 @@
+## test1Console
+reset 1: no answer
+console-light: header 9 label="Jump to your last question" value="" frame=(0.0, 116.0, 402.0, 32.0) hittable=true
+## test3ReaderStaysUp
+reader-light: header 9 label="Jump to your last question" value="" frame=(0.0, 116.0, 402.0, 32.0) hittable=true
+reader-up-more-light: last line not in the tree
+question-light: header 9 label="Jump to your last question" value="" frame=(0.0, 116.0, 402.0, 32.0) hittable=true

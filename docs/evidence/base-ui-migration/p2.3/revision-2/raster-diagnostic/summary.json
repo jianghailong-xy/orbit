@@ -1,0 +1,100 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:06:07.668Z",
+    "duration": 17618.33,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--original",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--original--notification.png",
+          "sha256": "15c15c9790a44ffe14580bf9a28624b770a4b595f7fc3c1d9a377178cc0899ad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--cardWillChange",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--cardWillChange--notification.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--cardTransform",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--cardTransform--notification.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--viewportTransform",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--viewportTransform--notification.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--hostWillChange",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--hostWillChange--notification.png",
+          "sha256": "cd668568228f6d7e4325c958ad1be48253229d9ff0b47b38172a0cbad8733401"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--backface",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--backface--notification.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--isolate",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--isolate--notification.png",
+          "sha256": "15c15c9790a44ffe14580bf9a28624b770a4b595f7fc3c1d9a377178cc0899ad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--opacityGroup",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--opacityGroup--notification.png",
+          "sha256": "e9fafb8cb7d5efb66229fe451ca7bc01f39fb903b3f8b2a28134b1c32673eb77"
+        }
+      ]
+    }
+  ]
+}

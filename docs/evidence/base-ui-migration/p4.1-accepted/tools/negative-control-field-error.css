@@ -1,0 +1,3 @@
+
+/* P4.1 accepted-layer negative control, never delivered: on the profile page, the field error text 1px further right. */
+body:has(input[autocomplete="name"]) .orbit-field-error { position: relative; left: 1px; }

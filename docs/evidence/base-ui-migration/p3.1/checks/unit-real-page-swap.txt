@@ -1,0 +1,31 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/components/WorkspaceView src/components/TaskDetailPanel src/components/ComposerMirror
+
+
+ RUN  v5.0.2 /tmp/p31-swap/src/web
+
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: navigation to another Document
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+
+ Test Files  45 passed (45)
+      Tests  434 passed (434)
+   Start at  16:38:33
+   Duration  84.85s (tests 68%, import 22%, environment 7%, transform 2%)
+
+    Isolate  45 workers spawned · ~333ms startup each (spawn + environment, per file)
+             at least ~7.16s faster with isolate: false — reuses workers across files instead of one per file
+

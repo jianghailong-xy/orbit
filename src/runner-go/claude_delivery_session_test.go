@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -151,6 +152,18 @@ func (r *deliverySession) turnResult(turnID string) *TurnCompleteRequest {
 // reports that what the test was waiting for has happened.
 func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, until func(*deliverySession) bool) *deliverySession {
 	t.Helper()
+	return runDeliverySessionWith(t, script, turns, until, deliveryOptions{})
+}
+
+// deliveryOptions are what a test changes about runDeliverySession's run: the claim it starts
+// from, and a look at what the runner sends the control plane besides its inbox polls.
+type deliveryOptions struct {
+	claim     func(*ClaimedSession)
+	onRequest func(path string, body []byte)
+}
+
+func runDeliverySessionWith(t *testing.T, script []fakeStep, turns []scriptedTurn, until func(*deliverySession) bool, opts deliveryOptions) *deliverySession {
+	t.Helper()
 	fake := newFakeClaude(t, script...)
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ORBIT_HOME", t.TempDir())
@@ -204,6 +217,10 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 	}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/inbox") {
+			if opts.onRequest != nil {
+				body, _ := io.ReadAll(r.Body)
+				opts.onRequest(r.URL.Path, body)
+			}
 			_, _ = w.Write([]byte(`{}`))
 			return
 		}
@@ -246,6 +263,9 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 	ctx, cancel := context.WithTimeout(context.Background(), fakeClaudeTimeout)
 	defer cancel()
 	dir, job := t.TempDir(), claudeSpawnJob(t)
+	if opts.claim != nil {
+		opts.claim(job)
+	}
 	run.job = job
 	done := make(chan struct{})
 	go func() {

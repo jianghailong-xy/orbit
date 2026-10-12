@@ -112,23 +112,25 @@ async function click(element: Element | null | undefined, what: string): Promise
 async function openMenu(): Promise<HTMLElement[]> {
   await click(container!.querySelector('button[aria-label="More actions"]'), 'the ⋯ button');
   await vi.waitFor(() => expect(document.body.querySelector('.tdp-more-menu')).not.toBeNull());
-  return [...document.body.querySelectorAll<HTMLElement>('.tdp-more-menu .ant-dropdown-menu-item')];
+  return [...document.body.querySelectorAll<HTMLElement>('.tdp-more-menu [role="menuitem"]')];
 }
-const item = (items: HTMLElement[], label: string) =>
-  items.find((el) => el.querySelector('.ant-dropdown-menu-title-content')?.textContent?.startsWith(label));
+const item = (items: HTMLElement[], label: string) => items.find((el) => el.textContent?.startsWith(label));
 
 const dialog = (): HTMLElement => {
-  const found = document.body.querySelector<HTMLElement>('.ant-modal.share-dialog');
+  const found = document.body.querySelector<HTMLElement>('[role="dialog"].share-dialog');
   if (!found) throw new Error('the Share dialog is not open');
   return found;
 };
+/** A dialog's name, as assistive technology reads it. */
+const nameOf = (el: Element): string | undefined =>
+  document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent ?? undefined;
 const layers = () =>
   [...dialog().querySelectorAll<HTMLElement>('.share-layer')].map((row) => ({
     name: row.querySelector('.share-layer-name')?.textContent,
     detail: row.querySelector('.share-layer-detail')?.textContent,
     warn: row.querySelector('.share-layer-detail')?.classList.contains('is-warn') ?? false,
-    on: row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked,
-    locked: row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled,
+    on: row.querySelector('[role="checkbox"]')!.getAttribute('aria-checked') === 'true',
+    locked: row.querySelector('[role="checkbox"]')!.getAttribute('aria-disabled') === 'true',
     count: row.querySelector('.share-layer-count')?.textContent,
   }));
 
@@ -215,12 +217,12 @@ describe('the task panel’s ⋯', { timeout: 60_000 }, () => {
     });
     await mount();
     await openMenu();
-    const menuItems = () => [...document.body.querySelectorAll<HTMLElement>('.tdp-more-menu .ant-dropdown-menu-item')];
+    const menuItems = () => [...document.body.querySelectorAll<HTMLElement>('.tdp-more-menu [role="menuitem"]')];
     // A link is open, and the entry says so.
     await vi.waitFor(() => expect(item(menuItems(), 'Share…')?.textContent).toBe('Share…Live link'));
     await click(item(menuItems(), 'Share…'), 'Share…');
     await vi.waitFor(() => expect(dialog().querySelector('.share-layers')).not.toBeNull());
-    expect(dialog().querySelector('.ant-modal-title')?.textContent).toBe('Share task');
+    expect(nameOf(dialog())).toBe('Share task');
     expect(layers()).toEqual([
       { name: 'Overview', detail: 'Description, acceptance, dependencies and runs', warn: false, on: true, locked: true, count: 'Always' },
       { name: 'Comments & files', detail: 'Written by agents and people', warn: false, on: true, locked: false, count: '3 comments' },
@@ -229,7 +231,7 @@ describe('the task panel’s ⋯', { timeout: 60_000 }, () => {
 
     // Conversations on: saved as it is made, and its risk is now said in amber.
     const conversations = [...dialog().querySelectorAll<HTMLElement>('.share-layer')][2];
-    await click(conversations.querySelector('input[type="checkbox"]'), 'the Conversations box');
+    await click(conversations.querySelector('[role="checkbox"]'), 'the Conversations box');
     expect(vi.mocked(putShareLink).mock.calls).toEqual([['TASK', TASK, { include: { conversations: true } }]]);
     await vi.waitFor(() => expect(layers()[2]).toMatchObject({ on: true, warn: true }));
   });

@@ -11,6 +11,11 @@ import Foundation
 /// the retries ran out, or they switched it off themselves.
 public enum AutoRetryLogic {
 
+    /// What a continue sends — the sentence the card's button sends in the reader's name, and the
+    /// one the armed retry sends at the reset. Mirrors `CONTINUE_MESSAGE` in @orbit/shared, where
+    /// the server's half of the same rule lives.
+    public static let continueMessage = "Continue where you left off."
+
     /// How many attempts the server spends before handing back. A quota is retried until its own
     /// reported reset stops moving (auto-retry.service BACKOFF_MS); a provider error gets the
     /// shorter API_ERROR_RETRY_BACKOFF_MS ladder.
@@ -37,6 +42,14 @@ public enum AutoRetryLogic {
         public var needsYou: Bool
         /// The switch can be flipped back on, at `rearmAt`.
         public var canArm: Bool
+        /// There is nothing of anybody's for a re-send to carry, so every verb on this card is
+        /// Continue: the failure landed on a turn nobody sent and the reader's own message was
+        /// answered long before it. What the two controls send is `continueMessage` — by hand now,
+        /// or by the server at the reset through the switch.
+        public var continues: Bool
+        /// What the card says while its moment is passing: re-sending somebody's words, or picking
+        /// the session back up with the platform's own.
+        public var firingText: String
         /// "in 27 sec" / "in 11 min", while there is something to count down to.
         public var countdown: String?
         /// A quota card leads with the absolute moment the window resets — a time the reader may
@@ -76,6 +89,9 @@ public enum AutoRetryLogic {
     ///   - attempts: attempts already spent on this outage — what separates "never armed" from
     ///     "gave up".
     ///   - hasRetryText: there is a last user message a manual retry could re-send.
+    ///   - nothingToResend: the server answered that there is nothing of anybody's to send —
+    ///     not the reader's words, and not a reply or confirmation turn the sweep re-sends on its
+    ///     own (`APIClient.retryMessage`). The card continues instead of re-sending.
     public static func state(notice: AutoRetryNotice,
                              live: Bool,
                              retryAt: Date?,
@@ -83,10 +99,14 @@ public enum AutoRetryLogic {
                              provider: String,
                              runnerName: String?,
                              hasRetryText: Bool,
+                             nothingToResend: Bool = false,
                              now: Date,
                              takenOver: TaskRunHandoff.Conflict? = nil,
                              rand: () -> Double = { .random(in: 0..<1) }) -> State {
         let quota = notice.variant == .quota
+        // Read once: the body, the labels and the two controls all branch on it, and they must
+        // never disagree about which verb this card is offering.
+        let continues = live && nothingToResend
         // Only a card with a session behind it can be taken over: a stale card is history (the
         // session went on) and the share page's has no console to have pressed anything.
         let takenOver = live ? takenOver : nil
@@ -114,6 +134,12 @@ public enum AutoRetryLogic {
         // tells the user their own click was a system limitation. So it states only what is true
         // either way, and the reason is visible in what they just did.
         let body: String
+        // Why there is no Retry, said where the button would have been. Nothing of the reader's is
+        // waiting to go out — the failure landed on a turn nobody sent — and that, not a switch
+        // position, is the fact that decides what this card offers.
+        let nothingToSend = quota
+            ? "Nothing to re-send — the limit landed on a turn that wasn’t yours."
+            : "Nothing to re-send — the failure landed on a turn that wasn’t yours."
         if gaveUp {
             body = quota
                 ? "Tried \(attempts) times — the quota still reports as spent. Over to you."
@@ -121,10 +147,10 @@ public enum AutoRetryLogic {
         } else if quota {
             let on = runnerName.map { $0.isEmpty ? "" : " on “\($0)”" } ?? ""
             body = "\(window.what) for \(provider)\(on) is used up."
-                + (needsYou ? " Auto-retry is off." : "")
+                + (continues ? " \(nothingToSend)" : needsYou ? " Auto-retry is off." : "")
         } else {
             body = "The \(provider) API could not answer — nothing about your message caused it."
-                + (needsYou ? " Auto-retry is off." : "")
+                + (continues ? " \(nothingToSend)" : needsYou ? " Auto-retry is off." : "")
         }
 
         return State(
@@ -136,40 +162,75 @@ public enum AutoRetryLogic {
             gaveUp: gaveUp,
             needsYou: needsYou,
             canArm: canArm,
+            continues: continues,
+            firingText: continues
+                ? "Continuing — picking up where it left off…"
+                : "Retrying — re-sending your message…",
             countdown: armed ? countdownText(seconds: secondsLeft) : nil,
             showsResetAt: quota,
             showsAutoRow: armed || canArm,
-            autoLabel: quota ? "Auto-retry when the quota resets" : "Auto-retry — this usually clears",
+            autoLabel: continues
+                ? (quota ? "Continue when the quota resets" : "Continue — this usually clears")
+                : (quota ? "Auto-retry when the quota resets" : "Auto-retry — this usually clears"),
             autoDetail: armed
                 ? "Runs on the server — you don't have to stay here."
-                : "Off — nothing will re-send until you do.",
+                : continues ? "Off — nothing will continue until you do."
+                            : "Off — nothing will re-send until you do.",
             rearmAt: rearmAt,
             // …and the press itself is withdrawn: with the task in another run's hands, the only
             // answer this button can get is the refusal that is now standing in its place.
-            retryNowTitle: (live && !firing && hasRetryText && takenOver == nil)
-                ? (armed ? "Retry now anyway" : "Retry now") : nil,
-            retryNowNote: (live && !firing && hasRetryText && armed && takenOver == nil)
-                ? (quota ? "The quota hasn’t reset yet — this will likely fail again."
-                         : "The API may still be failing — this could fail again.")
+            // A continue is pressable on the same terms — it needs no words from this window, only
+            // the server's answer that a continue is what the session is waiting on.
+            retryNowTitle: (live && !firing && (hasRetryText || continues) && takenOver == nil)
+                ? (armed ? (continues ? "Continue now anyway" : "Retry now anyway")
+                         : (continues ? "Continue" : "Retry now")) : nil,
+            // The one promise the card can make about words nobody wrote: which sentence the press
+            // sends. Said under the button rather than left to the transcript, because the sentence
+            // goes out in the reader's name.
+            retryNowNote: (live && !firing && (hasRetryText || continues) && takenOver == nil)
+                ? (armed
+                    ? (quota ? "The quota hasn’t reset yet — this will likely fail again."
+                             : "The API may still be failing — this could fail again.")
+                    : continues ? "Sends “\(continueMessage)”" : nil)
                 : nil,
             quotesRetryText: live && !firing && hasRetryText && !notice.afterUserMsg
                 && takenOver == nil,
             takenOver: takenOver)
     }
 
+    /// Which of an account's quota windows a usage-limit failure says ran out — web's
+    /// `quotaWindowKind` (`lib/quotaWindow.ts`).
+    public enum QuotaWindow: Equatable, Sendable {
+        case fiveHour, weekly, other
+    }
+
     /// The window that ran out, in the runtime's own terms. Keyed on the whole phrase the runtime
     /// uses ("hit your weekly limit"), not on "weekly limit" loose in the text: naming the wrong
     /// window tells the user to wait days for a quota that comes back in hours. Codex names no
-    /// window at all and falls through to the generic wording.
+    /// window at all and is `other`.
+    ///
+    /// One judgment for both places that name the window: this card's title, and the pause line of
+    /// an evidence version waiting for its coordinator (`EvidenceDecisions.coordinatorPause`), so the
+    /// line can never name another window than the card above it. Whether a failure is a usage
+    /// limit at all is `EngineErrors.isUsageLimitErrorText`'s answer, not this one's.
+    public static func quotaWindowKind(_ message: String) -> QuotaWindow {
+        let m = message.lowercased()
+        if m.contains("hit your session limit") { return .fiveHour }
+        if m.contains("hit your weekly limit") { return .weekly }
+        return .other
+    }
+
+    /// The card's words for that window.
     ///
     /// The runtime calls its 5-hour window a "session limit", but here that reads as a limit on the
     /// Orbit session the card sits in — the one noun this product uses for something else entirely.
     /// Titled by its length instead; the runtime's own phrasing survives in the body.
     static func quotaWindow(_ message: String) -> (title: String, what: String) {
-        let m = message.lowercased()
-        if m.contains("hit your session limit") { return ("5-hour limit reached", "The 5-hour quota") }
-        if m.contains("hit your weekly limit") { return ("Weekly limit reached", "The weekly quota") }
-        return ("Usage limit reached", "The quota")
+        switch quotaWindowKind(message) {
+        case .fiveHour: return ("5-hour limit reached", "The 5-hour quota")
+        case .weekly:   return ("Weekly limit reached", "The weekly quota")
+        case .other:    return ("Usage limit reached", "The quota")
+        }
     }
 
     /// "in 27 sec" / "in 11 min" / "in 2 hr" / "in 2 days" — the felt distance, next to the absolute

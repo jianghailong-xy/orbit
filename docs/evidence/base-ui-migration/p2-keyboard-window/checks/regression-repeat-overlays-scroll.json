@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm run test:ui-overlays -w @orbit/web -- --grep 'explicit focus, native form validation, motion and document scroll restore correctly' --project chromium-dark-desktop --repeat-each 10",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_b8af8e776cd5",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "075b4066a9812000a7d33af023c47f527449a5f3",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T22:51:58.800692+00:00",
+ "exitCode": 0,
+ "outputSha256": "c72c734a49c4cec6922feec20eed62c5ef94322ff8205347e3fa52c8cc86ac31",
+ "outputBytes": 2161,
+ "note": "10 passed on the delivered tree: the overlays case whose page never mounted in the first delivered overlays run, alone in its environment, ten times; unchanged test, timeout and retries. Archived with collect-choice-evidence.mjs --from=src/web/.overlays-results, which numbers repeated tests (the overlays collector would overwrite them)."
+}

@@ -1,0 +1,2540 @@
+{
+  "testedCommit": "2bd040fe3bc642cdb53460539146e25eb4e8aad2",
+  "files": [
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-final-choices-entry.json",
+      "sha256": "db7ad6519a22ac0d164ec6505981e2d15f03ffae56203b16cd7b05b70c6eefcd",
+      "bytes": 11726
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-final-choices-entry.txt",
+      "sha256": "00333c9c26513e2baf7ae452567f75031efe20d300e33d7070da5758b9e24ebb",
+      "bytes": 7057
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-final-reduced-repeat.json",
+      "sha256": "4e4d74103fe262d5fd9bec4ec5c6dba4aaecfdf5771d1ed34481b4a9fb80cb60",
+      "bytes": 11746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-final-reduced-repeat.txt",
+      "sha256": "84bfd73564dacde206e379453619f958af654c74adb8ccb9cd6bd487db3384cc",
+      "bytes": 13531
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-list-choices.json",
+      "sha256": "196ed21864e8d67b41c647e8c330bf035769c7cb5bdfa7aba9c8a8577985d726",
+      "bytes": 11646
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-list-choices.txt",
+      "sha256": "b76b2780c5d6c00a54cdd5b1a232e729edd50d18f8fd20d756a031da6b574088",
+      "bytes": 66460
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-negative-controls-standard.json",
+      "sha256": "d347ae0796f70e3609d32bb5c0343e7fd34e178e04c72875363dd9094c78105e",
+      "bytes": 11732
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-negative-controls-standard.txt",
+      "sha256": "ed45ad1d36c702b2a0f79a1b681bb926dc60556e41cf8f5a3331073daaa91b5d",
+      "bytes": 4482
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-negative-controls.json",
+      "sha256": "2c7c8877f54bef2929c6a3729ddeef6521e315c8c2188d41d4bd837615e175f0",
+      "bytes": 11723
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-negative-controls.txt",
+      "sha256": "e73297558f31364084a0efd3c35c4e2a35338dd7e63e0004a875823eb805181f",
+      "bytes": 22662
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-scroll-diagnosis-native-input.json",
+      "sha256": "6be44ca32d20932307378d6da79b6343b2da40c72a61020c1066a9a3b1b48ab8",
+      "bytes": 11591
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-scroll-diagnosis-native-input.txt",
+      "sha256": "ccb0b54082da3f84367256ba4af5af6345d4fe85a9fd4b62f3fae286fd4c7479",
+      "bytes": 4748
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-scroll-diagnosis.json",
+      "sha256": "e8523d3b5f486d0a0b9e4caeb2757af514b3d5bac9b7f051b9a1598c28d8fe62",
+      "bytes": 11585
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-scroll-diagnosis.txt",
+      "sha256": "8dbd68195ed774f3518682cedfd014b1e29fe0ed7b3aa240d52b7053beb9ce6c",
+      "bytes": 13160
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-source-observation-audit.json",
+      "sha256": "ac14666d624047051b4e2889bbb39de82f0a39ebbc400d685a6cd26907e10955",
+      "bytes": 11631
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-source-observation-audit.txt",
+      "sha256": "5498ec329d3ca6ca1827b53027c08a68c884db5b80b929c1a4f8e474f90cd9c0",
+      "bytes": 1316
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-source-observation-final.json",
+      "sha256": "5d9e1c41dc9a5ec44d81b03ea549554d7219e87d8e0124948a4a7075d3e4d17e",
+      "bytes": 11631
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/checks/r4-source-observation-final.txt",
+      "sha256": "5498ec329d3ca6ca1827b53027c08a68c884db5b80b929c1a4f8e474f90cd9c0",
+      "bytes": 1316
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/README.md",
+      "sha256": "7d63d86c54eed8969d7ec7bbc6ba78654c149170f1715b9d84f1f65662e700f7",
+      "bytes": 8035
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/audit-r4.py",
+      "sha256": "029305f6e5dab26f7b9d46a1e39014cc3d235f8060d25fe0734ce2026897086e",
+      "bytes": 6598
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/coordinator-input/coordinator-review-summary.json",
+      "sha256": "6b31ed94bb5fe8fc67798f56b1c0dd32a1c037c81ed7ffa7f9fa5c20b387d7bb",
+      "bytes": 2253
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/coordinator-input/coordinator-scroll-independent-failure.json",
+      "sha256": "210f0716344371d8fd487f5cdb50ecbeab88fe19acd0f6f724678cc74245a49f",
+      "bytes": 1796
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/coordinator-input/coordinator-scroll-trace-review.json",
+      "sha256": "3eba3d752f569dd83b6594a90faa8ef5dda523cb0b8582eddb3adeda98261210",
+      "bytes": 4507
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/coordinator-input/decision.json",
+      "sha256": "efc94a3636225602fe0f720afe675403ad2869108a1a4814eb9d52ab34688afa",
+      "bytes": 3335
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/coordinator-input/p22-r3-coordinator-review.zip",
+      "sha256": "fc73b225948d6f5a18a635b8d7f77703fd41adf31c78b61674c608fb038dfbdf",
+      "bytes": 1764167
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "c428127e85122930089d501821f5ded105f0bb65debc2e978430c44574043dd8",
+      "bytes": 4473
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "48a8f7200193d699f7298adb0753aa6ed90d3ae3c59a310224b84bd2bf49954b",
+      "bytes": 64728
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "08a06e7aadfa049afa8948d8ee9747fa355b2265fb352f178c54b9af8da02961",
+      "bytes": 233
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "5a39a5009316ca48f630e1b020ae37d18a7f25f69d4f2afb3586083d25700f37",
+      "bytes": 1137
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "8fe00629fbc196abd50edc27e3d3b307ba0f21345904d22471ec22d2b8943dcc",
+      "bytes": 855
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "9f482279a56c666348070275fc2d70dfa0c3ed155a74f86a73572b7c42d49ff3",
+      "bytes": 64658
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "753ba6b8284eccb9b10ebb72ce89ed05e2db36512b0199ab1fe73b6517811290",
+      "bytes": 221
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "4f997fcfd1b8ca782aeba95a1b5d9fc1f90c803095b8d73859efd8c4d0a06691",
+      "bytes": 1157
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "1c907fb14f33b551160a2b7e330aee872545a5cb7c75e531701aa796269a3da5",
+      "bytes": 4486
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "784db55e058fb0e0b2f762d5247683dec44a9b1c099cd72e838fe0dbe7d87f98",
+      "bytes": 39589
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "1322f273804888fb7975a3d098c28a1daaa334e5531798a220eab87a54e88daf",
+      "bytes": 218
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "1b26c524f8b7c088fd3b1c585380ed57d413777bd20c867e06945e942f3aa054",
+      "bytes": 1140
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "257152fcd6d1bb15df354faafcfd080c748838d6b23938cbc985d66e4e3157dc",
+      "bytes": 39420
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "db8641ec3d7975db8ee135c41e6ca37f48c8eb0c2c17391f71a4fccdd1d7e43f",
+      "bytes": 234
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "0c25a87f8714b204fd57f88f3bade0d14156544afe2f3334bb1e694442a9f468",
+      "bytes": 1136
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "1f56c6c9e68f71492eeb721c29b36de5802aae8ae398285f6d4b284fda23db18",
+      "bytes": 4363
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "bff764dd9df8cf46c5d0bfd527559e0f2d5bd4aaf2662f4fe5ebba7a5139c421",
+      "bytes": 74130
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "e20cf0316fd8103b5a2024fd5b063a42f51a1ba5140fab6c8398dc3cfb9b4488",
+      "bytes": 233
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "76e944d7b7536731cde3b379de6080966c1c746dafdf59f0c05c5f7cfeac76b7",
+      "bytes": 1155
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "2637e72f6db65c5deb0d2cf234e0acc594199f2f81c528097b3b3b255301b896",
+      "bytes": 74084
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "b202210d07857ac0f83ca66722d62794104bddf39de05feaa7bdf1a4ebfbae1d",
+      "bytes": 234
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "6cdce0e6ad2db3d78c13893df328bedfaf174c7a191d9032b9ea230b080e5f72",
+      "bytes": 1075
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "655e5b0539c4ae29adfc918d0ff492a6a6c322feb071a853f1ed1b56b3438b26",
+      "bytes": 4594
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "5e3283ec7cb00a37c0e348f5b41e12da809294217b463da004f894d58e26908b",
+      "bytes": 45473
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "1940ca48082e4a5bfd652b925ae66889d5570468154affd08cdb1421e8b76d68",
+      "bytes": 234
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "b1aaa491ec8bd18b1b3e3411b267f32b6cf5e1afea6aae4b07222533eab70833",
+      "bytes": 1122
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "6096535f46b2016597a9f87e8196eeaf7b71ce20ccb1f178a88780486953f69e",
+      "bytes": 45267
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "7a5accdb604348034d1154ece3936163e418e79530189c220402f0459215a73e",
+      "bytes": 234
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "7217e0bcad45a65bad7db7c32430b6a63e7d6d0c8fa6286875e668073ec82205",
+      "bytes": 1120
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/environment.json",
+      "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+      "bytes": 10774
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/report.json",
+      "sha256": "f7ef55718b34f09bf0ecc71357b6b45b4f05f95170724b496cb83cb174a800a9",
+      "bytes": 1436495
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/summary.json",
+      "sha256": "055d01a64623b6b2e6d9fe7b4744ed63ac6f3bfdafa92d12fdae9c25b5b9e483",
+      "bytes": 20288
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "4d003debf968f2067eeb823556136baa25bbc209f6ef4cd67ce0521d38321e45",
+      "bytes": 4467
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "33adb8e8fc29acc94e2c7bcc5b92364d5a81615b84c88c2f3d0cd1467b595341",
+      "bytes": 79017
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "290bc3ac71fd4da38cc26dcc0c0385d53ae6f1650e282c48c474d39b66244c6a",
+      "bytes": 202
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "d025e342cd2ebae26770162ab05cf38a39c618f18c7bb292736305c0178fe58b",
+      "bytes": 1046
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+      "bytes": 634
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "b5769c0f59fd61b517b5baa5e1aa78c7cde0fea2301b83273c07efa7271e4126",
+      "bytes": 79020
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "0ddbd09c8f0fe563975c3488a7d6750311dcc2f14a6789dc11b623076d754d09",
+      "bytes": 202
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "166318ac78848a37931123d23a0b875433cce682fe6d2d414604dd1b5f2d483d",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--error-context.md",
+      "sha256": "8cbdb6ce132359f611d35bc42094cbc1b4114d673dfbfa4e5214056d031a04e8",
+      "bytes": 8603
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "df55d7a65d15f1035dfdfa5c86e7dd802cf7ce1cdfbbdf7e87cfaa132d077be2",
+      "bytes": 49245
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "221a23735ff5165ade92ca785bbcb4d516090885632bdc51da87664fa2bd0ef5",
+      "bytes": 1032
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip",
+      "sha256": "1430a4e1645a2fd4a6bba650cbfb40505eecde9b8bffc90162ad3dcb2467cb17",
+      "bytes": 3115769
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--error-context.md",
+      "sha256": "2462fb84ce54bc2706705c57ea6f7f4ea15284b072b4a0bc5670f77f2880f907",
+      "bytes": 8596
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "3937a5c81e7824192efd205f9e70eb5ca6b338dd9ced77e18f09d2584d942d1b",
+      "bytes": 49235
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "e7134c4ec54d58f66e16bd026997d4dafd1ac5f4a3470f90b974ef24f6908ec9",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip",
+      "sha256": "9d65022334a038e400a95c8306ecad96c25412c04f756e12df1fe54d8338f43f",
+      "bytes": 709666
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "877d066d36f26fae534a54c54fc9d50763748a628c81b65bc9b82fed475e8a86",
+      "bytes": 4579
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "fc9795b8ed1b631f746e546f1e5b9f5fee00b48c6f6b5b9ddb4ad1b460809684",
+      "bytes": 88001
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "0ddbd09c8f0fe563975c3488a7d6750311dcc2f14a6789dc11b623076d754d09",
+      "bytes": 202
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "d025e342cd2ebae26770162ab05cf38a39c618f18c7bb292736305c0178fe58b",
+      "bytes": 1046
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "d0319faece2e7f6985a7cc857af459f5cbb2b3f74f4e7374b6e5e6d4d0120698",
+      "bytes": 743
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "f1f72807897b55ec8ccfd87f9f5fc408af4ceaf83027db894f2205c60f52bc26",
+      "bytes": 88017
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "e03a76c8d3fe1b8817eb9d61cd0068fa662e91b0032aa7f8c49a20ccb5cdbd08",
+      "bytes": 202
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "fa3ff61550c5379270b7b82d912d284890aaa5634008557577b59877337462e7",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--error-context.md",
+      "sha256": "f497d752bf6a921c6f685ac7d6fb2a5b1a9c48c5597fdbcaa375df2f5ba0051d",
+      "bytes": 8604
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "6b3ddb26bfcffda7b4244b206b908cf45406a025bda205319b053393bf8d5592",
+      "bytes": 55082
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "2ad494e264231b35e3477c1887600e9d536a9d5a9f3e898d7e36c46606a753c2",
+      "bytes": 1032
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip",
+      "sha256": "96242625066523df0e0ce2f34a3e163a8b400ff7ce77fd255f818278f923dbae",
+      "bytes": 3356344
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--error-context.md",
+      "sha256": "14b277fbd3014e4787f48fabba4d26e193ec29c35348b5995bf40b06de113801",
+      "bytes": 8597
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "95799386ab5864d8b2de4ee04fd7038a8678a438798f93d958602c8e10e9d52b",
+      "bytes": 55092
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "3083092d47df5abd64fa748d12abd8cad454bc33f3a1e5c62face5f8aeedeb9b",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-first/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--trace.zip",
+      "sha256": "dcd4794f5d84953d7ca3ba9931c66683ee91c4fe5e3d9d9e0e3c93e4649e2d5e",
+      "bytes": 763229
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "517b79fec817869fcacdf357cb85c755dfdffdbbadaabf9f9d47b4ed94976904",
+      "bytes": 4490
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "48a8f7200193d699f7298adb0753aa6ed90d3ae3c59a310224b84bd2bf49954b",
+      "bytes": 64728
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "4186c30765092ccf6ab94365e7c26a4bcd215062acf602c5ad41d9587c14b4f4",
+      "bytes": 223
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "b94d564e0d52a0476ddc4a1c734470a997f60671eabe43157b4a1fa049322912",
+      "bytes": 1059
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "8fe00629fbc196abd50edc27e3d3b307ba0f21345904d22471ec22d2b8943dcc",
+      "bytes": 855
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "9f482279a56c666348070275fc2d70dfa0c3ed155a74f86a73572b7c42d49ff3",
+      "bytes": 64658
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "535c1dfff239dd8764ee939d494308dcffe5118cadc9461f89feedf93c641cb2",
+      "bytes": 236
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "18fccf99466a746367123b9a7e27c236daf0ed3bf837050835e89083d6393940",
+      "bytes": 1111
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "181b9a098d00f58cdc4d7acb185ae32651bb3b7c2aa5448d92e1ea57275104b1",
+      "bytes": 4478
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "784db55e058fb0e0b2f762d5247683dec44a9b1c099cd72e838fe0dbe7d87f98",
+      "bytes": 39589
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "2e52bbf77310cf37c3a874fa3f6cbfeca9d5e44c58f65fb794dac2421431ddbe",
+      "bytes": 223
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "36c08ff051f153fbb38f674854141a7745ecf4114b7db5e4c0a6f9f2f6227008",
+      "bytes": 1140
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "7d0b09fdd425481b4965c30c57f79039ae9cb2c0585e5622cf045bb07e38547d",
+      "bytes": 853
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "257152fcd6d1bb15df354faafcfd080c748838d6b23938cbc985d66e4e3157dc",
+      "bytes": 39420
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "847e713eb24405c53cb5995361930137c729d2e2060edf4b7da4f51c278673d9",
+      "bytes": 223
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "6d662af3c557d312582ec5d357596d377264469c7a8708408c1948cfbbc543b1",
+      "bytes": 1122
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "8786ff179bd17430ae4a55888e1d75262cb2ad4208c8b51ae777b89cd587010f",
+      "bytes": 4587
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "4aebe7bb4ebd05d97050c34181a645a3331556cf4535b9dc635a4ebd5a62b118",
+      "bytes": 74137
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "6bc245566540fa63f131ceb1ef943bfbf877b7ba87d194d8e4e756b0def3496a",
+      "bytes": 237
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "513ea46c185fd1fb31ee20b9b23fa681e855279bec8b28c578f5519f67826589",
+      "bytes": 1157
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "4d8a1cf1c8ca07a7a501c7559d36f7a2d349641dcc49b9df15f9228e2148c05f",
+      "bytes": 74086
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "848d174b82b7ee10f96eec18e0980ac1b92a85285b4325cdd04cbd8000c81a8d",
+      "bytes": 221
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "c74e099760eb5031294fd4f3583745d9ad986d1f21404631101282ce7dd959ad",
+      "bytes": 1133
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "aa2867f6d9e5f2fe1ca52db2e5ccb0b8a6550ab9a5c972ac1d79369e7c8b51fb",
+      "bytes": 4488
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "5e3283ec7cb00a37c0e348f5b41e12da809294217b463da004f894d58e26908b",
+      "bytes": 45473
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "39fe05a282defdd2cf11979e7bd1cbd4d6d491ddd9b68a9a6badd14c54221331",
+      "bytes": 236
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "eddba9dbfcaadeb79693107ead9cd970aeeba20502ea94a60f88091e32dc8c66",
+      "bytes": 1120
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "e461f47239d6a092e455229942a0557c17f0545badf12e9bdf92c4e2abe7e288",
+      "bytes": 45271
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "e8c31d5fd9b2e0d327233de38df23eb3c9964dbfed0829e1b9c33caee4b703c9",
+      "bytes": 238
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "51be6ddaf0e0230fcf87a94e3120dfc6b22ec7e66ed01a91c825e2430df65cdd",
+      "bytes": 1094
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/environment.json",
+      "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+      "bytes": 10774
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/report.json",
+      "sha256": "eb5ec24fc142d12187f18c13488a56fe16acfe518ec8b79efdc3082310caa420",
+      "bytes": 1437023
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/summary.json",
+      "sha256": "087b7f47c8aa2f94350a0389c51aef12885d6cf5873240c583e0c48216655d0d",
+      "bytes": 20328
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "79e6019bc8f67e2dd48d454e2cd8f41e39518aedbb93a957e02ea1fe4f133a61",
+      "bytes": 4463
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "33adb8e8fc29acc94e2c7bcc5b92364d5a81615b84c88c2f3d0cd1467b595341",
+      "bytes": 79017
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "e5607d1d9c9864d14ff3f77a0f852fa8279040db599b34ae7bc5d11bb791048c",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "c56926f447783cddc40e961e53636cf26e4951a39ebb56af30740c59000dd2a4",
+      "bytes": 1046
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+      "bytes": 634
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "e72aa693cb1ad095aee1d9a600d0238966a00a0f78ebe7f3714304681cf4cd1e",
+      "bytes": 79015
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "bcfbf0b09e92d2a9b04f30748c9b13604ad88adebd5513f45b3e362b50b15d5d",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "fd2e825e11254264847391e618df9b107651c4f7e140a693acb3ac3b15d0e005",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "2ae3c82672e995fa5fa2ad91c91e7fdb9ca669cd675121d310f412d73e31e840",
+      "bytes": 3091
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "df55d7a65d15f1035dfdfa5c86e7dd802cf7ce1cdfbbdf7e87cfaa132d077be2",
+      "bytes": 49245
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "cf02828dbd0d0a0f8327d06e541214965b9141e4081a30ce6488fe6f9ffd67fe",
+      "bytes": 207
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "64f80c7ff5d529715b05025fb54fecf18d2a957bd5ddeac48e83d5011837e95a",
+      "bytes": 1032
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "df55d7a65d15f1035dfdfa5c86e7dd802cf7ce1cdfbbdf7e87cfaa132d077be2",
+      "bytes": 49245
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "a8f30ecd1bd7aa2a6e7af0acaa11831a73edd4fb3a7ca2cc8818867312968aa9",
+      "bytes": 207
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "0eb4d2a09b76b12bda20ea69ade3faf78c694caee9b9a9237432243897778d4d",
+      "bytes": 1032
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "4bb8f0f578451fb06eb8821dfbb9ee42586f96a7341cc1c10b4ad18835945a44",
+      "bytes": 4574
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "fc9795b8ed1b631f746e546f1e5b9f5fee00b48c6f6b5b9ddb4ad1b460809684",
+      "bytes": 88001
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "43f853515252cbd96af9c399dbad53a342268903a5b80b61e04b0b5a215ef277",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "464ade4e02955ca27a83d6f63a8acc6d980a7ab2a68889074cddf7cb3262ed77",
+      "bytes": 1046
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "d0319faece2e7f6985a7cc857af459f5cbb2b3f74f4e7374b6e5e6d4d0120698",
+      "bytes": 743
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "58d076a294fd5bb33d6d07636e909741c741b7953ba79bd5085fe039ac505a3c",
+      "bytes": 88006
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "7339555066cb93386dfebb31e0e0955bc911642d8c269866a1b2559d139d3601",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "ee898ee70242181e7f84b68d993835fbede3a7761ed48467af2b3a398f231253",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "d6e01221e39869c3defecdb6e6cf50528fcc7d6e3ee6947e5645612c547eeb91",
+      "bytes": 3770
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "6b3ddb26bfcffda7b4244b206b908cf45406a025bda205319b053393bf8d5592",
+      "bytes": 55082
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "1fae9cdd3c48572f1d2d5d0897cbaa75af9b4a2acfa0ac118cd7763f5774915f",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "14a59aa93775eba7ff846a2812c7c191da4c02f30ec745901dfc4b0a4e60e2cd",
+      "bytes": 1032
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "af4d370130d243860addd3bfd4e0ddc27a28a48fc9fc6272805c327ec1b380d9",
+      "bytes": 55112
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "46bec6b7f2b28bc4f1f2a2ecdf19bfadf8cf04c712c4476e5d81be780e85c018",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnosis-native-input/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "30756feadd485812d05ae603ce86ccd1e3e6798eed64683d9991e1c4e5b4e983",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/diagnostic-inputs.json",
+      "sha256": "e2512567b2d417a8329e6cee39294480a1e3eafb40f1a62b8e0fbb08da251e0b",
+      "bytes": 775
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/discovery-audit.json",
+      "sha256": "213fe8949e8a5c78c95d389bc8212fd20c4c5ba237785b1e4a74b0e8463c20e6",
+      "bytes": 122421
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+      "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+      "bytes": 121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+      "sha256": "190fbf8895f7fd0ebd3069942013c279cc734a0b5f2dbe7ddcaa85bd1b56711c",
+      "bytes": 24534
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+      "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+      "bytes": 171
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "bfd0af0aa1392fb572f55482e6720d5caa2562c54a390c1b63017c0dcffaf771",
+      "bytes": 4476
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "48a8f7200193d699f7298adb0753aa6ed90d3ae3c59a310224b84bd2bf49954b",
+      "bytes": 64728
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "db31e093fa2f18d02f0a2bf920fd23bb3dec7bb6196925687252351a6cf87957",
+      "bytes": 236
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "71b005081634916bbdfca43145435789ed726815945f9312274ce05760527336",
+      "bytes": 1155
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "8fe00629fbc196abd50edc27e3d3b307ba0f21345904d22471ec22d2b8943dcc",
+      "bytes": 855
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "9f482279a56c666348070275fc2d70dfa0c3ed155a74f86a73572b7c42d49ff3",
+      "bytes": 64658
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "66c99529abeb752f9cef1404cbae66501778962cde6199307fb87948279870d9",
+      "bytes": 237
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "81c7f28bd1250fc4ad9641838f68d80848549617799638c4fa4024bb308b1b8d",
+      "bytes": 1137
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+      "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+      "bytes": 121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+      "sha256": "77790ab62ccbe0bb22fb885b9aa73772a63234dbd891f6e439ded7c3ec1f8460",
+      "bytes": 26538
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+      "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+      "bytes": 171
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "c15bb4bf3aa0640d67311bba14628322d2f006f9f58e8968a5bb8b28e7a60f90",
+      "bytes": 4593
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "784db55e058fb0e0b2f762d5247683dec44a9b1c099cd72e838fe0dbe7d87f98",
+      "bytes": 39589
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "4898534269b1aad659cba480367095bb7175b81eeb18bd5f356d565cc6e09205",
+      "bytes": 237
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "b3a18614e88b1910707f52d07a8009d8386fff5e9e374c6d1480d352e22ffee8",
+      "bytes": 1124
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "257152fcd6d1bb15df354faafcfd080c748838d6b23938cbc985d66e4e3157dc",
+      "bytes": 39420
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "8a836bdf4e534ca798ae608afa89bb5120cf470708f64bc0b029384b61483982",
+      "bytes": 239
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "a732240bb1e113274feb2062578f08e99310d91f590816f1b8a762b39a79c323",
+      "bytes": 1114
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+      "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+      "bytes": 121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+      "sha256": "527bfa07e0d16dcb4dfd8ebe2035807c523ee36eb50436baffae063b32fca5a4",
+      "bytes": 23708
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+      "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+      "bytes": 171
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "f1b5697217d324351b384d38f687cc3caa56680d6760c5dd91485ebd84379325",
+      "bytes": 4587
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "4aebe7bb4ebd05d97050c34181a645a3331556cf4535b9dc635a4ebd5a62b118",
+      "bytes": 74137
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "0109996667f8fa9bd2cb7c2e2204d65714378e288fc2b804d5154853b44e6e45",
+      "bytes": 236
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "1a12d0815a5c492339baf7614a90ab994d02feda90fa721a8be2cfe8aae1cd02",
+      "bytes": 1135
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "2637e72f6db65c5deb0d2cf234e0acc594199f2f81c528097b3b3b255301b896",
+      "bytes": 74084
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "0e4ba81dae6e5c158b006fc17d02c07c88855b2dad9459c02e9646128d4a1863",
+      "bytes": 221
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "10068282ad4f92999862d77c93eba1a8bdbfb7afa6a3fb93f5797a9c01eeaaf8",
+      "bytes": 1103
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+      "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+      "bytes": 121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+      "sha256": "0437bbb5c4d639f7cb654851257f9ea69552e4e5bb0dddc74bc197ff987a912c",
+      "bytes": 25711
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+      "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+      "bytes": 171
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "453d07c49621ee3fb068f985091161df6314db066163900d59e6d4ccc6fcbe2f",
+      "bytes": 4473
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "5e3283ec7cb00a37c0e348f5b41e12da809294217b463da004f894d58e26908b",
+      "bytes": 45473
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "96d9aba02713f77569bdd00707cc2f49d9e576c120dbcd2dc791c0989971c381",
+      "bytes": 237
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "7f0a9f5f76beacdc93b0b2881bf2efc8f35ce30864587cc14e560a46e37b64f0",
+      "bytes": 1140
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "a176027b922f3fed341a4dca494cfbf7092daab5785057d3b023c69aacbea9e7",
+      "bytes": 45319
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "ecf97ec7230bc94a7fef6fd0d7ec361f0dc6ced81bed35097e20fbb286ecc476",
+      "bytes": 238
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "343ebc4b4b0e522e080d8dfebf76560ed3c576ed8dda3682c45c525be3769e7d",
+      "bytes": 1118
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/environment.json",
+      "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+      "bytes": 10774
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/report.json",
+      "sha256": "42f4eb590b5044303c0dc17969cada25e0ca40129c059e130ea485fca951dc5f",
+      "bytes": 1759365
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/summary.json",
+      "sha256": "7f8f243c57037c67661321b6f8c0c3e3079a7bc68ffb8545ace7b261a489b608",
+      "bytes": 31165
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+      "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+      "bytes": 121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+      "sha256": "810c8771445ce24e9df0908d5118920161565f8c15cf94e5aedfe067d4a54608",
+      "bytes": 29014
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+      "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+      "bytes": 171
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "64d1d3535c587f0792f1defa3978e30628a5f7a06c5fd25bea6323656882c5b6",
+      "bytes": 4458
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "33adb8e8fc29acc94e2c7bcc5b92364d5a81615b84c88c2f3d0cd1467b595341",
+      "bytes": 79017
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "9d54263a1186fc5ff8736d34f3fba8174d6229c056d9913848bbf4ff4e333293",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "7f13eaf0619d6d937458af216ad31bd36eea4a792ebfcbeef8c3c625a25b3e4d",
+      "bytes": 1046
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+      "bytes": 634
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "54e4b770299c2bd827c3f496821c1ddc8100267d3daa1fa3afb44be4dc5dd8f3",
+      "bytes": 79006
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "8e237a989ba31859576238d628f6960f65dbb82a164ec32497681fd3a0dfd8b0",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "8781542c6f263a2fe77008fd5a8aba4f3de49f0d6c6499281075f46a33e29437",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+      "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+      "bytes": 121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+      "sha256": "2ed8214b56d6c0751940572cd0365888cac582aac2b70ee367b14cb1a4a6b21c",
+      "bytes": 32097
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+      "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+      "bytes": 171
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "a95e42d5c9fdd759abc30c79afb6ffab1fe9637e066b4737f0abf5a84fdd3938",
+      "bytes": 4108
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "df55d7a65d15f1035dfdfa5c86e7dd802cf7ce1cdfbbdf7e87cfaa132d077be2",
+      "bytes": 49245
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "877bed5ec11b19240a517bc33d15b9c9019a7b8303e588f2966b7e08e5b61a94",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "a975b87865a3265d094ceb078170d8643e67e6af2d956de57753410ca6e5309c",
+      "bytes": 1032
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "0d8e13833f63b12e9996e18bd59468b7879eb9a7d93bb17609f5e5a7a0520fdf",
+      "bytes": 49256
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "b362ac7748eb5ffbd31457d451e1defc2469df51bd15d21602f97de636ca8a60",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "077a93df41f908cda3ca2e074dbd308b3ccefb5ba64a9c4476127af6f908ee74",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+      "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+      "bytes": 121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+      "sha256": "a6631d68bc94f6ec3c2e4b8499761ee5f1fbdb4571d17173b8c64dff577c04f1",
+      "bytes": 28229
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+      "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+      "bytes": 171
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "5ea552961e02b4ca9dbef1257da449a708a65d34ccc6ca3ce730767f6f28403c",
+      "bytes": 4580
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "fc9795b8ed1b631f746e546f1e5b9f5fee00b48c6f6b5b9ddb4ad1b460809684",
+      "bytes": 88001
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "a49300102abca98ef9e3ee75ba50668cbeccde8250b92577b3d20179bd63a4ca",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "a90ffd0e8944bda61b99abf8fddae8a72e076593df682ede607b7fef2f573a80",
+      "bytes": 1046
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+      "bytes": 634
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "1d76eabff4736f9a99cb1288fd1af78d3c34bb41343f74a54434432737ef4679",
+      "bytes": 88014
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "a91790b3581681b11f074c4c94dd4157688f1537e97e2a124f5c15a90896026b",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "df3c601b64269a8dca5b03af6a63bd1bfe7db06d5906be89b6ca7b2d6eb96cd7",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+      "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+      "bytes": 121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+      "sha256": "aa08666fa974c9d4e32f3f6a18c4b6f537900a21ca8a1de06bc8e26a205be183",
+      "bytes": 31594
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+      "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+      "bytes": 171
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "aa62ba765d478e24c0c3eea54c22fdfb9ec7de902f82067024a004cbf9680c3e",
+      "bytes": 3988
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "6b3ddb26bfcffda7b4244b206b908cf45406a025bda205319b053393bf8d5592",
+      "bytes": 55082
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "47defc79bc1456d9e76c8898a0e4760a939b71fef63e3c969ad75ab5bd8720aa",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "4cacb44baa09410b691c59f6217413ce011d86871c2ce76ec5c6e623ff43bba9",
+      "bytes": 1032
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "d9cd8ca7cf4e89c64ffa074027a9114ec6febab086f4c767fa2b08d58d8d47e5",
+      "bytes": 741
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "1427359df963d8117c626140d86000817cc3cec243c89a99ca2f09f14bf0574c",
+      "bytes": 55098
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "135dc1dfcde538d5927a1e3a7234985349bde3ff56fb4d958c3e29901076a8d1",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-entry/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "a3bd31b1029ef887c7c141d08edbe12efb9506721bd5d0020759b06ed95bc4c4",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "5977904c95b626e89ba16df02b89f8107489bc773a55c10f7faa6390c71de070",
+      "bytes": 858
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "61a222d2ea97b6431c36b5b5539bd2b16de5e8832d6f40753cafba7e357a6e3b",
+      "bytes": 64729
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "91d37869ebcd3a11bc43f7d75f9cca6a2f9e682614caa9e0ee314aa012c5e5ca",
+      "bytes": 236
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+      "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png",
+      "sha256": "4ad465e0d256eabd78e7a4133ef190e614ac81987162f79b376f62dbad8dc5e1",
+      "bytes": 64658
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+      "sha256": "6f34f75ff8def9d2cf7a6b394af057a68c11608d2f94d1538feba69279c79ad5",
+      "bytes": 223
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+      "sha256": "7ef72ca1b255f045cadc6b23510894092cad1feb08ba6e54e20169439bf4b0cf",
+      "bytes": 1153
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+      "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png",
+      "sha256": "4ad465e0d256eabd78e7a4133ef190e614ac81987162f79b376f62dbad8dc5e1",
+      "bytes": 64658
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+      "sha256": "efde886854e8a8f3a89f946de71c35422c2da675418653fa65e5e820923a0088",
+      "bytes": 235
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+      "sha256": "22a0a16feedead4468633bca777e0a7550a63499ce53313f510c4cdb152ca9eb",
+      "bytes": 1091
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+      "sha256": "5977904c95b626e89ba16df02b89f8107489bc773a55c10f7faa6390c71de070",
+      "bytes": 858
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png",
+      "sha256": "cba159a34e4713d68874cc416000aa121472c9bfcfb66b9233f8fc0b073f9cec",
+      "bytes": 64629
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+      "sha256": "54299d954eb0192d6aeab90c30a5e9d87529aacf88b51f0a2a31bb36e7911eda",
+      "bytes": 237
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+      "sha256": "361695e65fc83ff952150ef83e0f21680826b674734173db4689b7881d3e69f0",
+      "bytes": 1151
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+      "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png",
+      "sha256": "4ad465e0d256eabd78e7a4133ef190e614ac81987162f79b376f62dbad8dc5e1",
+      "bytes": 64658
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+      "sha256": "b4cbe832a07a3769af6f15017f5899d8c424ab99923738ee811972c0ad2b8de1",
+      "bytes": 236
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+      "sha256": "c73857f5d9129c62a0048e9dfcf1483c0dfe702ae9c8f41b3dd3817d5e467405",
+      "bytes": 1125
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "8d110e1bb8110e807c2c12ac10727a4952492cafda5cada6a513bd4a269a2787",
+      "bytes": 1133
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "87c65a26a90050af3080551181a77261438408ae069c56d7626378e7612addfd",
+      "bytes": 39446
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "d714bba79aca42fe21e3a6de6bbf3b34c40e003bb8ebdc0c504d87b96b474448",
+      "bytes": 239
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png",
+      "sha256": "257152fcd6d1bb15df354faafcfd080c748838d6b23938cbc985d66e4e3157dc",
+      "bytes": 39420
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+      "sha256": "6275efda2f200bdd6d4994396ce62b9f5e95e04a488d447e5d71db3e011911a9",
+      "bytes": 208
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+      "sha256": "f1950a051e824ca09ea21efe99d87f2377f4a88ba97a9ce54280675ec30bcf67",
+      "bytes": 1140
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+      "sha256": "99f09f6adda26f7cc159e6679c08cdea4c81825a1c541540a2d1f37092bbfb7d",
+      "bytes": 856
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png",
+      "sha256": "24dd885391fc4376cf41e48a403960e77a8bae6e4f1674d4c0e07e81cf912de4",
+      "bytes": 39445
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+      "sha256": "84765425de4ad6dc1442e27630f0f6f8576d43ba075360f6ed20aa859173ac9d",
+      "bytes": 239
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+      "sha256": "a3e649172c7b7ce7fae28b7603bac169b52ed2fa65511715b2f5f99489e9e359",
+      "bytes": 1136
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png",
+      "sha256": "87c65a26a90050af3080551181a77261438408ae069c56d7626378e7612addfd",
+      "bytes": 39446
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+      "sha256": "a1c5740f9fd81c3e13c4ee9a27151ba7087b5c42ba935b00697c52b05dd99368",
+      "bytes": 223
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+      "sha256": "fc41d4f7ae6e77cf8d86cd71b1a0b1b52201ea1ce85fc58690d8efa4eca4b1fb",
+      "bytes": 1120
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+      "sha256": "99f09f6adda26f7cc159e6679c08cdea4c81825a1c541540a2d1f37092bbfb7d",
+      "bytes": 856
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png",
+      "sha256": "87c65a26a90050af3080551181a77261438408ae069c56d7626378e7612addfd",
+      "bytes": 39446
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+      "sha256": "f05b06e1291e15f57cdc04f37ec0c489901b3d06157e7d48e622bf69960ddfd8",
+      "bytes": 237
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+      "sha256": "cf82c1c905888eac66b1e87b55ac45ffa4bbd8214f555f866e0442ef8c69342b",
+      "bytes": 1118
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "88dccdc2c45f653e21b57340036cd778648ead3cb5f557f9eaed4975e0b807f9",
+      "bytes": 1118
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "241a8796b64acd2412f348af778ef9f9ab1a3943bc7f9e541bd96dc0599982c1",
+      "bytes": 967
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "4d8a1cf1c8ca07a7a501c7559d36f7a2d349641dcc49b9df15f9228e2148c05f",
+      "bytes": 74086
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "796fc2556b97265f5941431afb72530da7365b95279adab6c2527a7ab20a4d96",
+      "bytes": 221
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+      "sha256": "8fe00629fbc196abd50edc27e3d3b307ba0f21345904d22471ec22d2b8943dcc",
+      "bytes": 855
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png",
+      "sha256": "4d8a1cf1c8ca07a7a501c7559d36f7a2d349641dcc49b9df15f9228e2148c05f",
+      "bytes": 74086
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+      "sha256": "b4cbe832a07a3769af6f15017f5899d8c424ab99923738ee811972c0ad2b8de1",
+      "bytes": 236
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+      "sha256": "1bdc92b85538f788a98d7a1a6b7ef36bdb4ade931a62db68bc4f30dc2e196540",
+      "bytes": 1149
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+      "sha256": "241a8796b64acd2412f348af778ef9f9ab1a3943bc7f9e541bd96dc0599982c1",
+      "bytes": 967
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png",
+      "sha256": "5d08aada0b6593602c0a4ebac1b9a296bc6154bb39a696eb6d7ec5c843f5b2e1",
+      "bytes": 74118
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+      "sha256": "d9b0e579311be2c2ce94aab6c4a941d772c5b61d6933ccf1d4721f5f169bb598",
+      "bytes": 220
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+      "sha256": "d9e759f70b7f9d1d6e980a48da092d189eb316c89ee7685c6a8cb2d001a1cdba",
+      "bytes": 1153
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+      "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png",
+      "sha256": "69bff7be4626edc4333e50fb80ceba2eb44cf86942662a9230e61b895672a5c8",
+      "bytes": 74123
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+      "sha256": "9a19bc240a3422355ac13ee80a6cb54c8854bb540ea2cb8361449e49cb8f8ee7",
+      "bytes": 237
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+      "sha256": "6c41c01972e99a1e21ff215ea98b73e9e91e01b0baa76bdaae9c469a5f8a8da1",
+      "bytes": 1133
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+      "sha256": "4f0e878194840bbbb0a71dbdf5bb0da99d3f5cede83806b0088592594a026f27",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png",
+      "sha256": "02da103733308af566ff99c5810e362b17c610f5333e457c7a41550390dde772",
+      "bytes": 74119
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+      "sha256": "4e149eac8cb0c1ef58eb7797ff15e8942b998da2b26428a1bebb4dd1691a5dd4",
+      "bytes": 220
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+      "sha256": "c276d173b15b68d134cdea7c2f7f6b3987863aaac6104aaaf6fac739fa90bdf1",
+      "bytes": 1151
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "ad32057a081f2b3dc797aad18112860f75943aa7f47906bd6da6690a0fc4b16d",
+      "bytes": 1133
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "f8b2c7809f642723a9b34d4d638ed6484f9a609ee0a78b0092dfffb64ab2fc82",
+      "bytes": 45323
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "b9ad5e98cecb2a88f0f13332caee2016eb59bc1b2a8caabe0f4a32c6d382333a",
+      "bytes": 238
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+      "sha256": "7d0b09fdd425481b4965c30c57f79039ae9cb2c0585e5622cf045bb07e38547d",
+      "bytes": 853
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png",
+      "sha256": "9fc9442b6c4a6a14316bfdc8639af6ccb9ed2734529d6ec8113dcaa4487a5459",
+      "bytes": 45331
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+      "sha256": "36dec5b64e92350b52ae7b69d5646b2636b788d4eac3d1e567691ec8d1826463",
+      "bytes": 239
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+      "sha256": "5130a5905fcdea539c9b3377f1969915fc578d2027b9085ba3d952789979fa7c",
+      "bytes": 1136
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+      "sha256": "1b86e99696fe749cd604f78a93ea6e7e5d8a5d792eb4546fe2240da443430412",
+      "bytes": 850
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png",
+      "sha256": "e461f47239d6a092e455229942a0557c17f0545badf12e9bdf92c4e2abe7e288",
+      "bytes": 45271
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+      "sha256": "f51448f4acb537269e7e2b49c5c9eadec4e3b46851ba039b72a3a21d6cfb74a8",
+      "bytes": 238
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+      "sha256": "ec1005cc800caa1a523274f04245fbc67bb6c3f249ca4f93864b3ecd2d1dcb52",
+      "bytes": 1132
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png",
+      "sha256": "e461f47239d6a092e455229942a0557c17f0545badf12e9bdf92c4e2abe7e288",
+      "bytes": 45271
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+      "sha256": "31851558f05bc1bca217507b2ea2d30ee90091f60ae9b519b2d98173e7f98c88",
+      "bytes": 238
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+      "sha256": "13cb8d3d48bf5cf01a2fc2afd75e0a2f4375c391edd58a72753584bcda7b269c",
+      "bytes": 1076
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+      "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+      "bytes": 744
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png",
+      "sha256": "7495fdc0d891172aef1fa1dd5b03aa9f42a8548e61043738909e34f1995f7ed4",
+      "bytes": 45278
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+      "sha256": "860f7ee66db0c7b9100283aa69d68e1b59f1dfe7b49043eb5aabf420ad532ede",
+      "bytes": 210
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+      "sha256": "585c283ac5502cba8c82a7cf967c4c88e68c8754b9eacd58da17ba48bef4db15",
+      "bytes": 1136
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "5af93cc5a4be562e2bf43114917e8b4b2726c38930aacfe852cfa6dd85eece53",
+      "bytes": 1136
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/environment.json",
+      "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+      "bytes": 10774
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/report.json",
+      "sha256": "2640ada0304d00c92b1937d4d0e4e2bb694f5dd9f0f74e50bad2173ea6cb6b21",
+      "bytes": 3488846
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/summary.json",
+      "sha256": "8b51da96559214d3948dba91c52762e7332a5f489013b1de29f3a75500dd743e",
+      "bytes": 51444
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "242fce10c7d6d794080603e00895604d7de12ee51d310851065df3bc6f661541",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "a35b1d1d56b2aa3ca6010c4a7e4af83350803e9e92dececfc29e6d8cb6f83153",
+      "bytes": 79024
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "f6a45a085b9453be6b2f51d036dd196d330f8f5576f398cce363ad606b822479",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+      "sha256": "78de4138e44003b434e2da29b0c38af541207adab3fb9900e5da94fbc6c68ca9",
+      "bytes": 858
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png",
+      "sha256": "b8453ba9f703036cd3e191970c4cbd2aa3246d4d1bb798625735e2c3813d8eaa",
+      "bytes": 79003
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+      "sha256": "7339555066cb93386dfebb31e0e0955bc911642d8c269866a1b2559d139d3601",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+      "sha256": "b9097a9709cf6ac0cca1ba3a3535e8d91a0d43a5174fe1f0932aa9640decdc94",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+      "sha256": "242fce10c7d6d794080603e00895604d7de12ee51d310851065df3bc6f661541",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png",
+      "sha256": "b5769c0f59fd61b517b5baa5e1aa78c7cde0fea2301b83273c07efa7271e4126",
+      "bytes": 79020
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+      "sha256": "8e237a989ba31859576238d628f6960f65dbb82a164ec32497681fd3a0dfd8b0",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+      "sha256": "2d68ebb5e3de89c3dad5c21e1934b3c89bb5a94275fa85f5e7e5dca6c8672ca6",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+      "sha256": "d9dde444e80ae99d5ef1535e627c532f3887cb068bd5fde1a87a546b087ae2da",
+      "bytes": 855
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png",
+      "sha256": "2fc283fba3431eb97bd4f6e6483c34888f7489176cb5ef5873a542d94112beed",
+      "bytes": 79038
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+      "sha256": "2f53d10d7bf94788f94cbc25ee973f1b893b310e9e7ae9049e2917d9d86abc91",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+      "sha256": "10065cfe1e393dd0565471791cdf8cc5233ccdb013503648188b9637e455760a",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+      "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+      "bytes": 634
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png",
+      "sha256": "b5769c0f59fd61b517b5baa5e1aa78c7cde0fea2301b83273c07efa7271e4126",
+      "bytes": 79020
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+      "sha256": "be1d3034530559f8325b547e18daf372747fff88d259cc8d467252955a0ff063",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+      "sha256": "33554699fb92e897582b09dddf21ac51bf9ba254c12d523885a11f86ad1e0187",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "ee898ee70242181e7f84b68d993835fbede3a7761ed48467af2b3a398f231253",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "d9cd8ca7cf4e89c64ffa074027a9114ec6febab086f4c767fa2b08d58d8d47e5",
+      "bytes": 741
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "277dd64a571bf130ed00be37c4a489d696c39cf952045cfa8a8ea747591f09b8",
+      "bytes": 49242
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "1268628451846830547830c93584da775c8b4f88a187849bb741a85e74ed940c",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png",
+      "sha256": "838387dc30d398860b74cae1c11363c147fff1381e49a304b8f8fe5f0e080adf",
+      "bytes": 49250
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+      "sha256": "ba735cc674e7d143ae1b6c3f643a660bdaaad8f6b53c91d120a2cd7a4d4e7dc5",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+      "sha256": "5ed670eae07b4544b7c7708949fae0568679803d88e45da846fa83d996f9d457",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png",
+      "sha256": "0265256a5f7c39c99d628550698d436e20f8c6853cb3a1c8359a82acc5d56d23",
+      "bytes": 49248
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+      "sha256": "e91bb1bf9d5d52e757f6ddffcb9ac898c88be2f1a025696bcd78f64959fa6b17",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+      "sha256": "bd2738359397a241e3c1a585ea407eb5f11ee2a876b9092c3107f48649d738de",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png",
+      "sha256": "b077c20e5581a9b53eaea59af7dffe3428756923a45dbaeb7b1b6dcdfc137fa2",
+      "bytes": 49260
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+      "sha256": "46bec6b7f2b28bc4f1f2a2ecdf19bfadf8cf04c712c4476e5d81be780e85c018",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+      "sha256": "e7134c4ec54d58f66e16bd026997d4dafd1ac5f4a3470f90b974ef24f6908ec9",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png",
+      "sha256": "ae5fa37c523e91dd56fad24613bc0b26485d8b093d4047840610ece6606c5d9b",
+      "bytes": 49243
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+      "sha256": "650f88657b61ed6fb82a567b60a5a0c640ded4c7a2f9590589c704073fe8011d",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+      "sha256": "e7134c4ec54d58f66e16bd026997d4dafd1ac5f4a3470f90b974ef24f6908ec9",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "b2ffe76470ecf52bec7804a843f7763ccf94cb709fb6641d01e8aa7ba4196048",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "d0319faece2e7f6985a7cc857af459f5cbb2b3f74f4e7374b6e5e6d4d0120698",
+      "bytes": 743
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "d0658127d668895d08d961736a1cab2b28a53a360ba997cda62000fafe93a9f6",
+      "bytes": 88004
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "bcfbf0b09e92d2a9b04f30748c9b13604ad88adebd5513f45b3e362b50b15d5d",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+      "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+      "bytes": 634
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png",
+      "sha256": "b667ab7fd2aa93913952460b7bc59e51c2eb5bd25d799be1c3a097a3970d2039",
+      "bytes": 88006
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+      "sha256": "2f53d10d7bf94788f94cbc25ee973f1b893b310e9e7ae9049e2917d9d86abc91",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+      "sha256": "9ecbe74fb439b9a4a198e4c9999484165ca1feb80c782ee6c8c29af4f834b4dd",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+      "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb",
+      "bytes": 634
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png",
+      "sha256": "0483e7f4ace3135e7300f4f644510f72a1262590a9ae12d780a69ca831514701",
+      "bytes": 88018
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+      "sha256": "e32ef88fb0c87e77d6afdfc1ab711f0cd1fc4fd50d967eb34b1799b18362b58d",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+      "sha256": "12413824a739d3b5411667b707739c50dccb04fa75eeba12aaddc8e7c52a7810",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+      "sha256": "d0319faece2e7f6985a7cc857af459f5cbb2b3f74f4e7374b6e5e6d4d0120698",
+      "bytes": 743
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png",
+      "sha256": "0483e7f4ace3135e7300f4f644510f72a1262590a9ae12d780a69ca831514701",
+      "bytes": 88018
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+      "sha256": "2f53d10d7bf94788f94cbc25ee973f1b893b310e9e7ae9049e2917d9d86abc91",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+      "sha256": "0b75c6e091eaff80564dfd9a236731e0373facbabf14e634f788935f56632957",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+      "sha256": "242fce10c7d6d794080603e00895604d7de12ee51d310851065df3bc6f661541",
+      "bytes": 746
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png",
+      "sha256": "6478de2a4542d95a27e47e0b92ecabff01919e6f77a609426151d1f329a93e5d",
+      "bytes": 88013
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+      "sha256": "c5b4f9917bfc0f0d8802f0a8d498f42d2e372a3a3b4833b001d5b08cf1978519",
+      "bytes": 203
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+      "sha256": "11c39861fb7c7d5c30b009803a1ca6f8bc58e1a0bc6395cfb9b8f525d7b30187",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "6162e19e9305aa11f66f0c2cad482580fb3a31f66c1d4493ea6c87d1e9915a9f",
+      "bytes": 1042
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+      "sha256": "4215e876db222fea9b08c0f3ffa970d725fbdf1d41b7be0bd6af6cc152b8f195",
+      "bytes": 55104
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+      "sha256": "3d081161e9a67c6d428737cbc8051724b531d8095a450358fd54ef94ecb09944",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-open.png",
+      "sha256": "18c13dac9a7bbb9970c5c9047649b3919659d0fe4b79d5edde521767cfd5a92e",
+      "bytes": 55114
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+      "sha256": "e0ec70d1da8a4af889fe5a89bc3f029e45ff4e9465863da252846ed888013e9b",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+      "sha256": "605f4a0b97070adf0ed8fdb22e6b22788dd2bbdb6c2df1ba2419d936004c25f6",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+      "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+      "bytes": 632
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-open.png",
+      "sha256": "d8e98f4b49767b0fa9bf18f0cd043c117007f4c598baa417c24eea8f3932b3df",
+      "bytes": 55115
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+      "sha256": "22ba14ecb7ea2ec24243e2559fa76b4bb567265f53f2bbb31402e406f7b9d56b",
+      "bytes": 204
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+      "sha256": "5ed670eae07b4544b7c7708949fae0568679803d88e45da846fa83d996f9d457",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+      "sha256": "d9cd8ca7cf4e89c64ffa074027a9114ec6febab086f4c767fa2b08d58d8d47e5",
+      "bytes": 741
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-open.png",
+      "sha256": "6c76865ae147b683ae8b8b77910412ffb8a711378460daa5332f36d4b25276ed",
+      "bytes": 55105
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+      "sha256": "4a34a1ae318eb093ea7c04ebbaef1ae500814f4b4e99de43e15fe45c9bdb2974",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+      "sha256": "00a1b9ff3c948b0ed0818b2067ebafebbbf56394fcac4f2e5fe0f2a6cbe1f85e",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+      "sha256": "d9cd8ca7cf4e89c64ffa074027a9114ec6febab086f4c767fa2b08d58d8d47e5",
+      "bytes": 741
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-open.png",
+      "sha256": "4d3a21675b2f2209cb4e84d2d5f99bfa1eecdd72047a5baef1c75bb17169dd3a",
+      "bytes": 55106
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+      "sha256": "42ff59c6cae1c824370d7239829965b0cb3b1132b4d2e7fa51c635abbb44a251",
+      "bytes": 206
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+      "sha256": "018bac9ab39e60ca1841ffdebf21c35d8efaf7f3e29a7a3972b7d208c98b14ef",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/final-reduced-repeat/webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+      "sha256": "772fb777bd75e1a31bf4c073bcc120299957a245ac817cea1c4ff2b8b11cd207",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-desktop--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "f7d8e623a7237b76afbc7beff1b66c363e379eba671dc69879481b672c08fd4b",
+      "bytes": 43
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "fbbab1a059cb0cf1a5517f7a73341a0d890ab042e2100570aeab4546ef1037ed",
+      "bytes": 1123
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-desktop--observer-rejects-retained-scroll-lock--error-context.md",
+      "sha256": "97802aaf2d0f204fcbacece73a69caf3ee952c8bf8f9667c2dd46b57eb87ae34",
+      "bytes": 780
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "5fc03fb4ee0feaade04e84d68f14d70ad0d5a022128f215a5e154056f23d4161",
+      "bytes": 1121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-desktop--observer-rejects-retained-scroll-lock--trace.zip",
+      "sha256": "c8be60661233b8473586dd4a35450552fc4a812fed8b931695257962eea726e2",
+      "bytes": 14308
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-phone--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "bd94f4bcb097ea83fbb261dfebe009b23491e60aa64454542e7d49532ac6a5ff",
+      "bytes": 43
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "baa2655878c8f2e2071dc7fdfb82500b6d7f2a60db7e1a3df8f2b5db25f88c2a",
+      "bytes": 1074
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-phone--observer-rejects-retained-scroll-lock--error-context.md",
+      "sha256": "97802aaf2d0f204fcbacece73a69caf3ee952c8bf8f9667c2dd46b57eb87ae34",
+      "bytes": 780
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "f5b6444872185fd372adf771a8c239ae5db0568079d0d20cfbb4a7a2180b56d0",
+      "bytes": 1121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-dark-phone--observer-rejects-retained-scroll-lock--trace.zip",
+      "sha256": "b6fd84122ead166edef44284806d9da1273f8128dfac5b70e31f48e287a76006",
+      "bytes": 13855
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-desktop--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "bd94f4bcb097ea83fbb261dfebe009b23491e60aa64454542e7d49532ac6a5ff",
+      "bytes": 43
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "283554e306b403a78110f9cd458941985fc63c26ad8cb44ce8a8e384bf79271b",
+      "bytes": 1105
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-desktop--observer-rejects-retained-scroll-lock--error-context.md",
+      "sha256": "97802aaf2d0f204fcbacece73a69caf3ee952c8bf8f9667c2dd46b57eb87ae34",
+      "bytes": 780
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "85245220cbb37b626e0b9be5b68c85424b583a70d550202dceb8b3b7332fb4d7",
+      "bytes": 1089
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-desktop--observer-rejects-retained-scroll-lock--trace.zip",
+      "sha256": "2f336a6e34f510ada9f61dfe923821ba7c40b98407527b7f51ebed8bfe531e51",
+      "bytes": 14927
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-phone--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "7c74ae66f3981ef08143ad47adf5d81f0e1172b2fa96692659d8c72843804d16",
+      "bytes": 43
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "0a29dd8f37e1d7997c67aa6ad141188da1062368dd5952d3848fa52ab4450526",
+      "bytes": 1095
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-phone--observer-rejects-retained-scroll-lock--error-context.md",
+      "sha256": "97802aaf2d0f204fcbacece73a69caf3ee952c8bf8f9667c2dd46b57eb87ae34",
+      "bytes": 780
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "555a316142797115934d7d3da132ec0bff7b368feb4b583aae79ff8c93869b60",
+      "bytes": 1093
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/chromium-light-phone--observer-rejects-retained-scroll-lock--trace.zip",
+      "sha256": "0a00db4ba61c16b2cc989a053a80f04fc0ffffdf30d492847f49137134352ce7",
+      "bytes": 13915
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/environment.json",
+      "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+      "bytes": 10774
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/report.json",
+      "sha256": "bf4aaa577e4d1f38567f8cb9ee2023a801a2b9d2536b7253db7ca4b037f76c8c",
+      "bytes": 79795
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/summary.json",
+      "sha256": "948404c9307a9cda03d72a6b6080ed3a3d0169bac57500fd092a2e8475e8fad3",
+      "bytes": 12914
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-desktop--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "b7997a4ca71d81c2d841da57c63b8953407c2320591c57da24507e50e1102c02",
+      "bytes": 28
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "2a5ab49a69a30f721630a3e0f5a2fb7ed5430dd2c75a0be9e3461261c482440e",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-desktop--observer-rejects-retained-scroll-lock--error-context.md",
+      "sha256": "4dbe67a0315e595a85e6d07f5b459ab672c2c1c75d1d322558274f75eb754ea8",
+      "bytes": 5322
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "478cdb33e933241e46afbaee9c2190b4c8e75557bbc6afcb0fb6bfc0810a51d2",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-desktop--observer-rejects-retained-scroll-lock--trace.zip",
+      "sha256": "2aafa7e3053359f2d1ed5a0b15afd1c532c07f8111d0d433f20784840275fa9c",
+      "bytes": 17905
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-phone--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "544178fa0458ddab22f1bea82db70e480d043235da03d62e6a69b2d27cb2dd8d",
+      "bytes": 28
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "5ed60e800a10f0499765c873d54cf40113f4661feaa1c1bd29edeb955b82ea53",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-phone--observer-rejects-retained-scroll-lock--error-context.md",
+      "sha256": "4dbe67a0315e595a85e6d07f5b459ab672c2c1c75d1d322558274f75eb754ea8",
+      "bytes": 5322
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "5ed60e800a10f0499765c873d54cf40113f4661feaa1c1bd29edeb955b82ea53",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-dark-phone--observer-rejects-retained-scroll-lock--trace.zip",
+      "sha256": "8b208f09b5ec81e532ad03329e729dd9639fbf60372f7b39976902193034962c",
+      "bytes": 14545
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-desktop--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "544178fa0458ddab22f1bea82db70e480d043235da03d62e6a69b2d27cb2dd8d",
+      "bytes": 28
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "478cdb33e933241e46afbaee9c2190b4c8e75557bbc6afcb0fb6bfc0810a51d2",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-desktop--observer-rejects-retained-scroll-lock--error-context.md",
+      "sha256": "4dbe67a0315e595a85e6d07f5b459ab672c2c1c75d1d322558274f75eb754ea8",
+      "bytes": 5322
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "478cdb33e933241e46afbaee9c2190b4c8e75557bbc6afcb0fb6bfc0810a51d2",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-desktop--observer-rejects-retained-scroll-lock--trace.zip",
+      "sha256": "32f5972d6a1d591ddb4c1ae1241c8987b9635372579ac1eb918a736211e699b1",
+      "bytes": 17911
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-phone--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "544178fa0458ddab22f1bea82db70e480d043235da03d62e6a69b2d27cb2dd8d",
+      "bytes": 28
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "afc032669b8373c73ef67e723f643ebaa1b5fa58c146464c580925f854b406ea",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-phone--observer-rejects-retained-scroll-lock--error-context.md",
+      "sha256": "4dbe67a0315e595a85e6d07f5b459ab672c2c1c75d1d322558274f75eb754ea8",
+      "bytes": 5322
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "e958609d90d8ca9c493168ca68c27c68d4ad546682b9ddf4e6ec707549199460",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-first/webkit-light-phone--observer-rejects-retained-scroll-lock--trace.zip",
+      "sha256": "b2078462bcaede51e1e1f7fb11b5d74b615f3f44af78ba1dba03425e98207a10",
+      "bytes": 14534
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-dark-desktop--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "0cd5fd52ff553934d2cbca7fcec899b6c0c8ffdd5f596b89748e6a404603fec9",
+      "bytes": 43
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-dark-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "09f47e1a447fe4b8dfdf99f47d5c8ba9de7bfabd5ff06d5a67d418a7c7c67b5e",
+      "bytes": 1120
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-dark-desktop--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+      "sha256": "b82cb8a2a2bf9d57d7cc4ff3eb60d939d6d3b0920a79ba673651812ac92d80fd",
+      "bytes": 221
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-dark-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "64d18f68dfa82b0822e924544e42785fd2f7dd29200d49bdae61439dde7f50bf",
+      "bytes": 1105
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-dark-phone--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "ff2761480e0373631380e1879727a6879a90755bd8ac442719a8eb261ed247ae",
+      "bytes": 43
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-dark-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "d291553f66109545187ccbd2cca7ce053fa87e9ff8b6a2079d4e7707f8610062",
+      "bytes": 1121
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-dark-phone--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+      "sha256": "9fe768176b00224aa23f36fd4e50e56b5c2399257eac9b458fe5782befae5a86",
+      "bytes": 224
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-dark-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "5339965a2f6da6f7caeca2f5c1b86369fdff20421dabce7054a7bcb7a3f4fdd2",
+      "bytes": 1123
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-light-desktop--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "bd94f4bcb097ea83fbb261dfebe009b23491e60aa64454542e7d49532ac6a5ff",
+      "bytes": 43
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-light-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "93c3e2e0ff978a7f1a9a627f8d428fb8b59f9a5cb35ca58be646742426d1cb58",
+      "bytes": 1103
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-light-desktop--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+      "sha256": "93f987c3b360d7bc3f309c277d4ec11cd784ea9b31f1ef391ac5015b479ae245",
+      "bytes": 207
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-light-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "4fab28b13d9114f04c28e5c27c67a97eebd35e5a3b14f94dcd2240258add35d0",
+      "bytes": 1084
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-light-phone--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "7c74ae66f3981ef08143ad47adf5d81f0e1172b2fa96692659d8c72843804d16",
+      "bytes": 43
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-light-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "46972e705ac91872b0d5617b8d2a80aa54b053dc010d9a8ba5a531f24fab4386",
+      "bytes": 1084
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-light-phone--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+      "sha256": "1d965820eee941083e530575b06f00d6b809bbd9111276e0eb90dec10aaed7af",
+      "bytes": 224
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/chromium-light-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "4fbadea98fef0d141592cf5405cfa7ea9df46416da10930793dd9ae3fa9dda85",
+      "bytes": 1123
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/environment.json",
+      "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+      "bytes": 10774
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/report.json",
+      "sha256": "fd872cd0985be4a16edade4dd3cfc69813a2df14d9004723ccca997d0f3b5aa0",
+      "bytes": 55865
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/summary.json",
+      "sha256": "03248870db4ef1673c9e21706611bbf7cea2075c0aa32839408a5aa3197bfe43",
+      "bytes": 11330
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-dark-desktop--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "07d09d22524e903f24aea8daa092c523430a3dcf7e1df795a004d28baa7f423f",
+      "bytes": 28
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-dark-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "b135bbe02a9aec8f4aacdf18956211f967122fc37486fef1329374bbe8136ed7",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-dark-desktop--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+      "sha256": "53919fe443cda737ea0203bd2694b0c24f4577edbb3dd1301817150cee5dbe56",
+      "bytes": 205
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-dark-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "75c94a532817037d42ce1d011a2a8339be6f21fa8c4a907e746f52a8c3c4d6d0",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-dark-phone--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "544178fa0458ddab22f1bea82db70e480d043235da03d62e6a69b2d27cb2dd8d",
+      "bytes": 28
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-dark-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "afc032669b8373c73ef67e723f643ebaa1b5fa58c146464c580925f854b406ea",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-dark-phone--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+      "sha256": "fc5f376a1a8b836796b73bb528ea68b37a7cbefbabacc38b214434f8db5df94f",
+      "bytes": 208
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-dark-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "60b5d0448b65e861e2a8d58fea4b681397a4952dd26c2894cf95ca01fb0da970",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-light-desktop--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "544178fa0458ddab22f1bea82db70e480d043235da03d62e6a69b2d27cb2dd8d",
+      "bytes": 28
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-light-desktop--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "2b49046dfe92f67889ee4f743891147e273973a5d9264fea0938964638c3fc3e",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-light-desktop--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+      "sha256": "5a22a077cd5fd4535f901ec8c575c97c793e6f52929498eb07af1b5f395b4d31",
+      "bytes": 205
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-light-desktop--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "bc4ee8a6efabcf0db9d0681c4a229672ffa93e48c35bc1b8b32bfdea5ca81349",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-light-phone--observer-rejects-late-scroll-lock--late-release.json",
+      "sha256": "51a9212c3e97497555587d5245cd029be4f5a449f78031d85aead220d16ffb0a",
+      "bytes": 28
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-light-phone--observer-rejects-late-scroll-lock--rejected-unlock.json",
+      "sha256": "cf151f7d4418e64ac9b09ed04eefb674a24f29ba4c291bde1c8da5efed6d0857",
+      "bytes": 1026
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-light-phone--observer-rejects-retained-scroll-lock--blocked-scroll.json",
+      "sha256": "f7aa71ab7b204d2e3b84b96e1ec8fdce75a085f6ecb2357192568803b841e2b9",
+      "bytes": 209
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/negative-control-standard/webkit-light-phone--observer-rejects-retained-scroll-lock--rejected-unlock.json",
+      "sha256": "406703ba8576030cc65f68f1fa9fc0fa6a99bc9c5ce53743b1b5394590ae5474",
+      "bytes": 1028
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/observations.json",
+      "sha256": "431b34bf251129627a72c2c6d8d8f3d03eb3567c89a894afc7bf58d3b7755a46",
+      "bytes": 201657
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.browser.mjs",
+      "sha256": "c1dc615e253b8b9cb64496bfd0a9d037e3f689159a6008646a548c327a48a337",
+      "bytes": 2519
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.config.mjs",
+      "sha256": "dc0fa8caff885e08c187e2cb3e3559b2a39bbe39842c7b02daf01c86b3ff5134",
+      "bytes": 502
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs",
+      "sha256": "37eb5735477f2cef0157e9686c38b1b0ba86d9dfa6859c433084d3aac35a503c",
+      "bytes": 2427
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.config.mjs",
+      "sha256": "3df021268650b38267bf5538ae9eba27ac89aca8a4578ea8fca1d61b9f9c4a21",
+      "bytes": 493
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation-final.mjs",
+      "sha256": "d130b8b6f6751153ffc5320b68019ae311ac5a59cedd12a10ae4b17499a68d55",
+      "bytes": 3910
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-observation.mjs",
+      "sha256": "8f5871dba682aa82c99d4b7b0ee0b1ab007ae3163d0aa6644fcf2e0a04989e25",
+      "bytes": 3606
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs",
+      "sha256": "5a1a6b94e2e5e3dac321525fd504169589276ec3822a8c28c74bc70a25f8f4f6",
+      "bytes": 5647
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.config.mjs",
+      "sha256": "619622e812f8783ac5b06ae4fb86adc13bf7c3477b2c7fa06136966436c58b4e",
+      "bytes": 488
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.browser.mjs",
+      "sha256": "3beadca17a6996fb57c8df716f96e6dc70b1709f274ebe861736a60ae57af672",
+      "bytes": 5619
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.config.mjs",
+      "sha256": "863288ba218f44d6bb11d75b66736d8a67db0b6a657256bd0704fccce40ac632",
+      "bytes": 482
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/source-and-history-audit.json",
+      "sha256": "dd9dd56581d2a58626c0e3b8c491a2968da9657849724f3c5bd33cf2765c4870",
+      "bytes": 847
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/test-only-change.patch",
+      "sha256": "9491b8ede7a205e7953ed507d2824ca6337c3f9f6b605c269a3604cdaa4c76b4",
+      "bytes": 6534
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p2.2/revision-4/tool-call-refs.json",
+      "sha256": "1211f4247a8346bc0a84a8e1771fb36340421fb9eed01df6f43a0277e3e92c75",
+      "bytes": 2832
+    }
+  ]
+}

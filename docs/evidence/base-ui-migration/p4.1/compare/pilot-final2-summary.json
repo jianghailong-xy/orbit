@@ -1,0 +1,781 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      1247,
+      1247
+     ],
+     [
+      28,
+      30
+     ],
+     2,
+     15
+    ],
+    [
+     [
+      1246,
+      1247
+     ],
+     [
+      37,
+      39
+     ],
+     3,
+     11
+    ],
+    [
+     [
+      721,
+      722
+     ],
+     [
+      325,
+      326
+     ],
+     3,
+     1
+    ],
+    [
+     [
+      721,
+      722
+     ],
+     [
+      347,
+      348
+     ],
+     3,
+     1
+    ],
+    [
+     [
+      722,
+      722
+     ],
+     [
+      358,
+      358
+     ],
+     1,
+     1
+    ],
+    [
+     [
+      722,
+      723
+     ],
+     [
+      377,
+      378
+     ],
+     3,
+     1
+    ]
+   ],
+   "max": 15,
+   "pixels": 17,
+   "shot": "chromium-dark-desktop/pilot-delete-confirm.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      1247,
+      1247
+     ],
+     [
+      28,
+      30
+     ],
+     2,
+     20
+    ],
+    [
+     [
+      1246,
+      1247
+     ],
+     [
+      37,
+      39
+     ],
+     3,
+     16
+    ],
+    [
+     [
+      640,
+      642
+     ],
+     [
+      572,
+      573
+     ],
+     4,
+     1
+    ],
+    [
+     [
+      1252,
+      1254
+     ],
+     [
+      572,
+      573
+     ],
+     5,
+     1
+    ]
+   ],
+   "max": 20,
+   "pixels": 14,
+   "shot": "chromium-light-desktop/pilot-delete-confirm.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      312,
+      313
+     ],
+     [
+      174,
+      176
+     ],
+     3,
+     1
+    ],
+    [
+     [
+      642,
+      651
+     ],
+     [
+      185,
+      194
+     ],
+     62,
+     20
+    ]
+   ],
+   "max": 20,
+   "pixels": 65,
+   "shot": "chromium-light-desktop/pilot-share-loading.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      106,
+      106
+     ],
+     [
+      423,
+      437
+     ],
+     15,
+     1
+    ],
+    [
+     [
+      190,
+      195
+     ],
+     [
+      438,
+      450
+     ],
+     19,
+     3
+    ],
+    [
+     [
+      276,
+      276
+     ],
+     [
+      439,
+      439
+     ],
+     1,
+     3
+    ],
+    [
+     [
+      188,
+      194
+     ],
+     [
+      514,
+      545
+     ],
+     65,
+     2
+    ]
+   ],
+   "max": 3,
+   "pixels": 100,
+   "shot": "webkit-dark-phone/pilot-dependencies.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      106,
+      106
+     ],
+     [
+      423,
+      437
+     ],
+     15,
+     1
+    ],
+    [
+     [
+      190,
+      195
+     ],
+     [
+      438,
+      450
+     ],
+     19,
+     3
+    ],
+    [
+     [
+      276,
+      276
+     ],
+     [
+      439,
+      439
+     ],
+     1,
+     3
+    ],
+    [
+     [
+      188,
+      194
+     ],
+     [
+      514,
+      545
+     ],
+     65,
+     2
+    ]
+   ],
+   "max": 3,
+   "pixels": 100,
+   "shot": "webkit-dark-phone/pilot-dependency-view-hover.png"
+  }
+ ],
+ "missing": [
+  "webkit-dark-desktop/pilot-delete-confirm.png",
+  "webkit-dark-desktop/pilot-list-open.png",
+  "webkit-dark-desktop/pilot-list-search.png",
+  "webkit-dark-desktop/pilot-run-hint.png"
+ ],
+ "screenshots": {
+  "antialias": 47,
+  "beyond": 5,
+  "identical": 200,
+  "missing": 4
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-desktop :: record pilot performance",
+   "chromium-dark-phone :: record pilot performance",
+   "chromium-light-phone :: record pilot performance",
+   "webkit-dark-desktop :: record pilot performance",
+   "webkit-dark-desktop :: task detail pilot › fields, pickers and the panel header",
+   "webkit-dark-phone :: record pilot performance",
+   "webkit-light-desktop :: record pilot performance",
+   "webkit-light-phone :: record pilot performance"
+  ],
+  "notPassedRef": [
+   "chromium-dark-desktop :: record pilot performance",
+   "chromium-dark-phone :: record pilot performance",
+   "chromium-light-phone :: record pilot performance",
+   "webkit-dark-desktop :: record pilot performance",
+   "webkit-dark-phone :: record pilot performance",
+   "webkit-light-desktop :: record pilot performance",
+   "webkit-light-phone :: record pilot performance"
+  ],
+  "total": 88
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-desktop :: task detail pilot › fields, pickers and the panel header": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"model\":\"claude-sonnet-5-5\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "model pick Sonnet"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "",
+       "role": "combobox"
+      },
+      "listbox": [
+       {
+        "name": "Opus 5.5",
+        "selected": true
+       },
+       {
+        "name": "Sonnet 5.5",
+        "selected": false
+       },
+       {
+        "name": "Haiku 4.5",
+        "selected": false
+       }
+      ],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"model\":\"claude-sonnet-5-5\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "model pick Sonnet"
+     },
+     "step": "model pick Sonnet"
+    }
+   ],
+   "chromium-dark-phone :: task detail pilot › dependencies, inputs and comments": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Remove input",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/attachments/2zwQZ2hd93IvLb59t6pYP"
+       }
+      ],
+      "step": "input removed"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Remove this input?"
+      ],
+      "focus": {
+       "name": "Remove",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/attachments/2zwQZ2hd93IvLb59t6pYP"
+       }
+      ],
+      "step": "input removed"
+     },
+     "step": "input removed"
+    }
+   ],
+   "chromium-dark-phone :: task detail pilot › fields, pickers and the panel header": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"model\":\"claude-sonnet-5-5\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "model pick Sonnet"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "",
+       "role": "combobox"
+      },
+      "listbox": [
+       {
+        "name": "Opus 5.5",
+        "selected": true
+       },
+       {
+        "name": "Sonnet 5.5",
+        "selected": false
+       },
+       {
+        "name": "Haiku 4.5",
+        "selected": false
+       }
+      ],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"model\":\"claude-sonnet-5-5\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "model pick Sonnet"
+     },
+     "step": "model pick Sonnet"
+    }
+   ],
+   "chromium-light-desktop :: task detail pilot › dependencies, inputs and comments": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Remove input",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/attachments/2zwQZ2hd93IvLb59t6pYP"
+       }
+      ],
+      "step": "input removed"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Remove this input?"
+      ],
+      "focus": {
+       "name": "Remove",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/attachments/2zwQZ2hd93IvLb59t6pYP"
+       }
+      ],
+      "step": "input removed"
+     },
+     "step": "input removed"
+    }
+   ],
+   "chromium-light-desktop :: task detail pilot › fields, pickers and the panel header": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"model\":\"claude-sonnet-5-5\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "model pick Sonnet"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "",
+       "role": "combobox"
+      },
+      "listbox": [
+       {
+        "name": "Opus 5.5",
+        "selected": true
+       },
+       {
+        "name": "Sonnet 5.5",
+        "selected": false
+       },
+       {
+        "name": "Haiku 4.5",
+        "selected": false
+       }
+      ],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"model\":\"claude-sonnet-5-5\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "model pick Sonnet"
+     },
+     "step": "model pick Sonnet"
+    }
+   ],
+   "chromium-light-phone :: task detail pilot › dependencies, inputs and comments": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Remove input",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/attachments/2zwQZ2hd93IvLb59t6pYP"
+       }
+      ],
+      "step": "input removed"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Remove this input?"
+      ],
+      "focus": {
+       "name": "Remove",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/attachments/2zwQZ2hd93IvLb59t6pYP"
+       }
+      ],
+      "step": "input removed"
+     },
+     "step": "input removed"
+    }
+   ],
+   "webkit-dark-desktop :: task detail pilot › fields, pickers and the panel header": [],
+   "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Share task"
+      ],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W/share"
+       }
+      ],
+      "step": "turned off"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Share task"
+      ],
+      "focus": {
+       "name": "Access",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W/share"
+       }
+      ],
+      "step": "turned off"
+     },
+     "step": "turned off"
+    }
+   ],
+   "webkit-light-phone :: share dialog pilot › from Only you to a public link and back": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Share task"
+      ],
+      "focus": {
+       "name": "Access",
+       "role": "button"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W/share"
+       }
+      ],
+      "step": "turned off"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Share task"
+      ],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W/share"
+       }
+      ],
+      "step": "turned off"
+     },
+     "step": "turned off"
+    }
+   ],
+   "webkit-light-phone :: task detail pilot › fields, pickers and the panel header": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"listId\":\"2zwQZ2hd93IvLb59t6pdq\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "list pick Later"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "",
+       "role": "combobox"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"listId\":\"2zwQZ2hd93IvLb59t6pdq\"}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "list pick Later"
+     },
+     "step": "list pick Later"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "L · Opus 5.5 · high",
+       "role": "combobox"
+      },
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"modelHint\":\"L\",\"modelHintReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "suggested pick L"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "listbox": [],
+      "menu": [],
+      "panel": 1,
+      "requests": [
+       {
+        "body": "{\"modelHint\":\"L\",\"modelHintReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6p5W"
+       }
+      ],
+      "step": "suggested pick L"
+     },
+     "step": "suggested pick L"
+    }
+   ]
+  },
+  "equal": 62,
+  "total": 72
+ }
+}

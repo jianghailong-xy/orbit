@@ -1,0 +1,170 @@
+[
+  {
+    "source": "main",
+    "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      360,
+      128
+    ],
+    "sizeAfter": [
+      360,
+      128
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "project",
+    "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      360,
+      128
+    ],
+    "sizeAfter": [
+      360,
+      128
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "main",
+    "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      360,
+      128
+    ],
+    "sizeAfter": [
+      360,
+      128
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "project",
+    "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      360,
+      128
+    ],
+    "sizeAfter": [
+      360,
+      128
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "main",
+    "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      360,
+      128
+    ],
+    "sizeAfter": [
+      360,
+      128
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "project",
+    "file": "chromium-light-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      360,
+      128
+    ],
+    "sizeAfter": [
+      360,
+      128
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "main",
+    "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      350,
+      144
+    ],
+    "sizeAfter": [
+      350,
+      144
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "project",
+    "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      350,
+      144
+    ],
+    "sizeAfter": [
+      350,
+      144
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "main",
+    "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      350,
+      144
+    ],
+    "sizeAfter": [
+      350,
+      144
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "project",
+    "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Dialog-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      350,
+      144
+    ],
+    "sizeAfter": [
+      350,
+      144
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "main",
+    "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      350,
+      144
+    ],
+    "sizeAfter": [
+      350,
+      144
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  },
+  {
+    "source": "project",
+    "file": "webkit-dark-phone--existing-notifications-remain-accessible-in-Drawer-with-unchanged-appearance--with-overlay.png",
+    "sizeBefore": [
+      350,
+      144
+    ],
+    "sizeAfter": [
+      350,
+      144
+    ],
+    "changedPixels": 0,
+    "bounds": null
+  }
+]
