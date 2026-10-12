@@ -107,7 +107,7 @@ def item(item_id, escalated_at, required, **extra):
     row = {
         "itemId": item_id, "kind": "INTEGRATION_CHECK_FAILED", "title": TITLE_ITEM,
         "detailLine": DETAIL, "assignee": "OWNER", "assigneeReason": "ESCALATED",
-        "waitingSince": iso(300), "escalateAt": None, "escalatedAt": escalated_at,
+        "waitingSince": iso(125), "escalateAt": None, "escalatedAt": escalated_at,
         "taskId": None, "sessionId": COORD, "promotionId": PROMOTION, "fuseEpisodeId": None,
         "delivery": {"state": "NOT_REQUIRED", "sessionId": None, "at": None},
         "question": None,
@@ -122,11 +122,19 @@ def item(item_id, escalated_at, required, **extra):
 
 
 def build():
+    """The three items, escalated just NOW.
+
+    Their `escalatedAt` sits after the conversation's last event on purpose: an exception card is
+    placed by its own moment (`DeliveryAnchor.exception`), so a clock that ran minutes ago puts the
+    cards at the TAIL — where the reader opens, and where the bar over the transcript can point DOWN
+    at them once they scroll back up ("the reader is above the cards" is the state the bar's
+    direction word exists for). The wait itself is two hours, so the footer's two clauses differ.
+    """
     s = {}
-    s["escalated"] = item("t11-escalated-item", iso(240), REQUIRED_ESCALATED)
-    s["handling"] = item("t11-handling-item", iso(180), REQUIRED_HANDLING, handledBy=[
+    s["escalated"] = item("t11-escalated-item", iso(3.5), REQUIRED_ESCALATED)
+    s["handling"] = item("t11-handling-item", iso(2.5), REQUIRED_HANDLING, handledBy=[
         {"taskId": REPAIR_TASK, "title": "Repair the combined-tree baseline", "state": "IN_PROGRESS"}])
-    s["handedOver"] = item("t11-handed-over-item", iso(120), REQUIRED_HANDED_OVER,
+    s["handedOver"] = item("t11-handed-over-item", iso(1.5), REQUIRED_HANDED_OVER,
                            assigneeReason="HANDED_OVER", handoverNote=HANDOVER_NOTE)
     return s
 
@@ -185,7 +193,7 @@ def summary(last_active):
         "attention": {"userBlockers": 0, "coordinatorBlockers": 0, "systemBlockers": 0,
                       "maxSeverity": None, "attentionSinceAt": None, "nextCheckAt": None,
                       "ownerItems": [{"itemId": STATE["escalated"]["itemId"], "kind": "ESCALATED",
-                                      "title": TITLE_ITEM, "since": iso(300), "need": "Checks failed",
+                                      "title": TITLE_ITEM, "since": iso(125), "need": "Checks failed",
                                       "mainBranch": "main"}],
                       "coordinatorItems": None, "startRequest": None, "doneRequest": None},
         "integration": {"line": "PROJECT_BRANCH", "ref": f"project/{PROJECT}"},
@@ -204,7 +212,7 @@ def coordinator_session():
                               "projectStatus": "OPEN", "role": "COORDINATOR"},
         "taskId": None, "pendingApprovals": 1, "waitingKind": "OWNER_ITEM",
         "ownerItems": [{"itemId": STATE["escalated"]["itemId"], "kind": "ESCALATED",
-                        "title": TITLE_ITEM, "since": iso(300), "need": "Checks failed",
+                        "title": TITLE_ITEM, "since": iso(125), "need": "Checks failed",
                         "mainBranch": "main"}],
         "lastAssistantText": "The combined-tree check is red. I can’t rerun it until the baseline "
                              "is repaired, so it is the owner’s now.",

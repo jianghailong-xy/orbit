@@ -209,23 +209,6 @@ final class T11ShotTests: XCTestCase {
         }
     }
 
-    /// A button inside a card, not the navigation bar's namesake above it.
-    private func cardButton(_ label: String, _ app: XCUIApplication, timeout: TimeInterval = 10) -> XCUIElement? {
-        let query = app.buttons.matching(NSPredicate(format: "label == %@", label))
-        guard query.firstMatch.waitForExistence(timeout: timeout) else {
-            missing("card-\(label)", app)
-            return nil
-        }
-        for _ in 0..<12 {
-            if let element = query.allElementsBoundByIndex.first(where: { $0.isHittable && $0.frame.minY > 110 }) {
-                return element
-            }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        missing("card-\(label)-hittable", app)
-        return nil
-    }
-
     /// The session row says WHY ("Escalated to you · Checks failed"), and the conversation's three
     /// states each open with what has to happen next: the sentence, the fix already filed under it,
     /// and the doors — each with its one line of consequence, the Check row, and the log under it.
@@ -242,9 +225,11 @@ final class T11ShotTests: XCTestCase {
         shoot("01-session-row-escalated-to-you-need", settle: 1.5)
 
         guard openSession(app, project) else { return }
-        let first = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", escalated)).firstMatch
-        if !first.waitForExistence(timeout: 40) { missing("escalated-card", app) }
+        // The cards are delivered at the tail (their own clock ran minutes ago), so opening the
+        // conversation lands on the last of them. Read back up to the very top first: every row is
+        // realized then, and each card can be walked down to by name.
         Thread.sleep(forTimeInterval: 3.0)
+        for _ in 0..<8 { drag(app, by: 380) }
         texts("conversation-landed", app)
         shoot("02-conversation-as-it-opens", settle: 1.0)
 
@@ -260,53 +245,59 @@ final class T11ShotTests: XCTestCase {
             drag(app, by: -320)
             texts("\(name)-lower", app)
             shoot("\(name)-lower", settle: 1.0)
-            drag(app, by: 320)
         }
 
-        // The Review door scrolls to the merge card it names rather than opening anything.
-        if let review = cardButton("Review", app, timeout: 5) {
-            review.tap()
-            let merge = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Merge "))
-                .firstMatch
-            if merge.waitForExistence(timeout: 15) {
-                Thread.sleep(forTimeInterval: 1.5)
-                texts("merge-card", app)
-                shoot("06-review-scrolled-to-the-merge-card", settle: 1.5)
-            } else {
-                missing("merge-card", app)
-            }
-        }
-
-        // The owner's own ending: the reason field, empty, with its confirm waiting for one.
-        if let mark = cardButton("Mark as handled", app, timeout: 10) {
-            bringToTop(mark, app, top: 320)
+        // The owner's own ending: the reason field, kept empty, with its confirm waiting for one.
+        // Found by walking down the cards until one of the links is on screen — every card draws
+        // one, and the top-most is usually scrolled past.
+        if let mark = hittableButton("Mark as handled", app, walking: true) {
+            bringToTop(mark, app, top: 360)
             mark.tap()
             let title = app.staticTexts["Mark this item as handled?"]
             if title.waitForExistence(timeout: 10) {
                 Thread.sleep(forTimeInterval: 1.0)
                 texts("mark-handled-panel", app)
-                shoot("07-mark-as-handled-reason-field", settle: 1.5)
-                if let back = cardButton("Back", app, timeout: 5) { back.tap() }
+                shoot("06-mark-as-handled-reason-field", settle: 1.5)
+                if let back = hittableButton("Back", app, timeout: 5) { back.tap() }
             } else {
                 missing("mark-handled-panel", app)
             }
         }
     }
 
-    /// With the cards scrolled away above, the bar over the transcript says how many are waiting
-    /// BELOW — and the copy on every one of those screens is in the report beside the pictures.
+    /// The first button wearing `label` that is on screen, reading further down the transcript to
+    /// find it when the cards above the fold are the ones that carry it.
+    private func hittableButton(_ label: String, _ app: XCUIApplication, timeout: TimeInterval = 10,
+                                walking: Bool = false) -> XCUIElement? {
+        let query = app.buttons.matching(NSPredicate(format: "label == %@", label))
+        guard query.firstMatch.waitForExistence(timeout: timeout) else {
+            missing("card-\(label)", app)
+            return nil
+        }
+        for step in 0..<(walking ? 24 : 12) {
+            if let element = query.allElementsBoundByIndex.first(where: { $0.isHittable && $0.frame.minY > 110 }) {
+                return element
+            }
+            if walking, step % 2 == 1 { drag(app, by: -260) }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        missing("card-\(label)-hittable", app)
+        return nil
+    }
+
+    /// With the cards scrolled away BELOW, the bar over the transcript says how many are waiting
+    /// below — and the copy on every one of those screens is in the report beside the pictures.
     func test2WaitingBelow() {
         reset()
         let app = launch()
         signIn(app)
         guard openSession(app, project) else { return }
-        let first = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", escalated)).firstMatch
-        if !first.waitForExistence(timeout: 40) { missing("escalated-card", app) }
-        Thread.sleep(forTimeInterval: 3.0)
+        Thread.sleep(forTimeInterval: 4.0)
 
-        // Read back up, past the whole conversation: the cards are below the reader now.
-        for _ in 0..<4 { drag(app, by: 380) }
-        Thread.sleep(forTimeInterval: 1.0)
+        // Read back up until a MESSAGE is at the top of the viewport and the cards are under it:
+        // the direction word is the reader's own place, which only the transcript can report.
+        for _ in 0..<3 { drag(app, by: 300) }
+        Thread.sleep(forTimeInterval: 1.5)
         texts("waiting-below", app)
         shoot("08-waiting-below", settle: 1.5)
     }
