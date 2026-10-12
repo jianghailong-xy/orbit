@@ -39,11 +39,12 @@ still one clock, and it is still not a scheduler
 1. It **reconciles** first: an exception item nobody owes any more is closed in that same tick with
    a `resolution_note` that starts `backstop:` (contract §4.2). What it covers is the `owed`
    predicate's false answers — a merge card whose candidate is no longer READY, an integration
-   item whose candidate left the live states or whose task was cancelled or replaced, a delivery
-   review whose task left its DONE delivery — and the ending it writes is one of two
-   (`PROMOTION_MOVED_ON`, or `TASK_CLOSED`), which need not be the one the missed edge would have
-   written. The kinds the predicate always says are owed (a task failure, a question, a pause, a
-   request) are never touched. That is not a second clock either: it is one statement with its
+   item whose candidate left the live states or whose task was cancelled or replaced, a task's
+   failure whose task is DONE, cancelled, replaced or being attempted again, a delivery review
+   whose task left its DONE delivery — and it writes the ending that fact's own edge writes,
+   `resolveByFact`'s CASE family by family and `PROMOTION_MOVED_ON` for one about a candidate. The
+   kinds the predicate always says are owed (a question, a pause, a request) are never touched.
+   That is not a second clock either: it is one statement with its
    selection in it, it writes an item's ending and nothing an agent would run, and every reader
    already asks the same predicate — the tick only makes the `state` agree within the minute.
 2. It **escalates** what somebody still owes: an unhandled open item becomes the account owner's.
