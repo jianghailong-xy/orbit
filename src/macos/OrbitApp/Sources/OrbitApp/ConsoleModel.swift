@@ -5052,6 +5052,66 @@ final class ConsoleModel {
         }
     }
 
+    /// Run the work the item is about again (§4.7 H1, T5): the owner's own route through the pair
+    /// of doors the browser's RETRY sends through — a candidate's failed check for a row that names
+    /// one, a failed task landing otherwise.
+    ///
+    /// The reason the door requires is the item's own sentence about what failed
+    /// (`ExceptionCards.retryReason`), so a press never travels empty and the rerun's record says
+    /// why it was made. A refusal leaves the card standing and says which refusal it met; a taken
+    /// press re-reads the item list, which is where the rerun shows itself — the item is being
+    /// handled from then on, and the bar over its card says so (§4.7 H1–H3).
+    @discardableResult
+    func retryIntegration(_ row: ProjectOpenItemRow) async -> IntegrationRetryReceipt? {
+        guard let projectID, ExceptionCards.addressed(row, .retry) else { return nil }
+        let reason = ExceptionCards.retryReason(row)
+        let headline = row.promotionId != nil ? ExceptionCards.notRerunCheck
+                                              : ExceptionCards.notRetriedLanding
+        do {
+            let receipt: IntegrationRetryReceipt
+            if let promotionID = row.promotionId {
+                receipt = try await api.retryPromotionCheck(
+                    projectID: projectID, promotionID: promotionID,
+                    IntegrationRetryRequest(reason: reason))
+            } else if let taskID = row.taskId {
+                receipt = try await api.retryTaskIntegration(
+                    projectID: projectID, taskID: taskID,
+                    IntegrationRetryRequest(reason: reason))
+            } else {
+                return nil
+            }
+            await refreshRulerQuestions(force: true)
+            return receipt
+        } catch {
+            statusMessage = "\(headline) — \(APIClient.failureReason(error))."
+            return nil
+        }
+    }
+
+    /// The merge candidate whose card this conversation has delivered, or nil when it has none.
+    ///
+    /// The browser's `currentPromotionId`, which is what decides whether a `Review` door is drawn
+    /// at all (`ExceptionCards.addressed`): reviewing means reading the merge card, so the door
+    /// exists exactly where that card is on screen — and a card delivered for an older candidate,
+    /// which the read has since superseded, is not this one.
+    var mergeCardPromotionID: String? {
+        decisionCards.compactMap { card in
+            if case .promotionApproval(let promotionID) = card.kind { return promotionID }
+            return nil
+        }.first
+    }
+
+    /// Scroll to the merge card a `Review` press names. Nothing happens when that card is not on
+    /// screen: the door is drawn only where it is, and a press that raced the read would otherwise
+    /// scroll to a row nothing draws.
+    func revealPromotionCard(_ promotionID: String) {
+        guard let card = decisionCards.first(where: {
+            if case .promotionApproval(let id) = $0.kind { return id == promotionID }
+            return false
+        }) else { return }
+        requestScroll(to: card.id)
+    }
+
     /// Lift the pause (§6.3 F-T4, mock 6 ①) — the owner's alone, and the one press that starts a
     /// stopped conversation again. The episode the card was drawn from rides along, so a press
     /// made after the pause was lifted is refused by the door rather than resuming the next one.

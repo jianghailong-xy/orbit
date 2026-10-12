@@ -363,7 +363,7 @@ struct SessionFolderPage: View {
                                   onShare: { sharingSession = s }, onMove: { movingSession = s })
                 .tag(s.id)
         case .push:
-            Button { app.push(.console(sessionID: s.id, origin: .list)) } label: {
+            Button { app.openSessionRow(s) } label: {
                 row.foregroundStyle(.primary)
             }
             .sessionRowActions(s, scope: address.view, onTag: { taggingSession = s },

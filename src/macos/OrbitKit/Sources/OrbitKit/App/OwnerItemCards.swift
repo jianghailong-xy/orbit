@@ -998,23 +998,62 @@ public enum ExceptionCards {
 
     // MARK: - the fact block (§7.5, mock 5)
 
-    /// One row of the card's fact block: a label, its value, and whether the value is a machine
-    /// string — the rows the browser draws in its mono face end to end (the files a merge conflicted
-    /// on, an integration's error code).
+    /// One row of the card's fact block: a label, its value, and how each run of that value is
+    /// drawn — the two faces the browser's own rows wear (its `project-open-item-mono` and
+    /// `project-open-item-bad` spans).
     ///
     /// The VALUE is the browser's own string, character for character, and nothing here composes one
     /// of its own: the block is a reading of the item's payload, and a second reading of the same
-    /// fact is the thing free to disagree with the row beside it.
+    /// fact is the thing free to disagree with the row beside it. What this end adds is the FACES —
+    /// which run of a sentence is the machine's own text, and which is a check's verdict — because
+    /// SwiftUI has no spans: a row of one string could only be all one font and all one colour, and
+    /// the browser sets a failed check's command in the mono face and its verdict in red
+    /// (`ItemFactRows`).
     public struct FactRow: Equatable, Sendable {
-        public let label: String
-        public let value: String
-        public let mono: Bool
-
-        public init(label: String, value: String, mono: Bool = false) {
-            self.label = label
-            self.value = value
-            self.mono = mono
+        /// How one run of a row's value is drawn.
+        public enum Face: String, Equatable, Sendable {
+            /// The card's own prose.
+            case plain
+            /// The browser's mono face: a command, a ref, a list of paths — the machine's own words.
+            case mono
+            /// The browser's alert colour: a check's verdict, which is the fact that disagrees.
+            case bad
         }
+
+        public struct Run: Equatable, Sendable {
+            public let text: String
+            public let face: Face
+
+            public init(text: String, face: Face = .plain) {
+                self.text = text
+                self.face = face
+            }
+        }
+
+        public let label: String
+        /// The value in the runs it is drawn in. Joining them is `value`, which is what every
+        /// reader that only wants the sentence reads.
+        public let runs: [Run]
+        /// The failed check's own log, hung off the row it belongs to — the browser draws it
+        /// directly under the Check row, between that row and whatever follows
+        /// (`ItemFactRows`' own fragment), and a block that drew it after every row put the log
+        /// under the wrong fact.
+        public let logTail: CheckTail?
+
+        public init(label: String, runs: [Run], logTail: CheckTail? = nil) {
+            self.label = label
+            self.runs = runs
+            self.logTail = logTail
+        }
+
+        /// The whole value as one string, with its faces off.
+        public init(label: String, value: String, mono: Bool = false, logTail: CheckTail? = nil) {
+            self.init(label: label, runs: [Run(text: value, face: mono ? .mono : .plain)],
+                      logTail: logTail)
+        }
+
+        /// The value, faces off — the one sentence this row says.
+        public var value: String { runs.map(\.text).joined() }
     }
 
     /// What a failed check printed, folded from the END (mock 5) — which is where the reason a check
@@ -1061,15 +1100,18 @@ public enum ExceptionCards {
         }
     }
 
-    /// What the card draws where a payload was read: the rows, and the failed check's own log.
+    /// What the card draws where a payload was read: the rows, in the order the browser draws them.
     public struct FactBlock: Equatable, Sendable {
         public let rows: [FactRow]
-        public let logTail: CheckTail?
 
-        public init(rows: [FactRow], logTail: CheckTail? = nil) {
+        public init(rows: [FactRow]) {
             self.rows = rows
-            self.logTail = logTail
         }
+
+        /// The failed check's log, wherever its row is: the tail rides on the row it explains, so a
+        /// reader that only wants the log (a test, a chat about the item) asks the block rather than
+        /// hunting for which row carried it.
+        public var logTail: CheckTail? { rows.compactMap(\.logTail).first }
     }
 
     /// What a card draws in place of the item's sentence. `detailLine` is what every card drew
@@ -1103,9 +1145,14 @@ public enum ExceptionCards {
             rows.append(FactRow(label: afterAFixLabel, value: afterAFix))
         }
         if let check = facts.check {
+            // The browser's own three runs of this row: the command in its mono face, the verdict in
+            // its alert colour, and the measurement between them in prose.
             rows.append(FactRow(label: checkLabel,
-                                value: "\(check.command) · \(checkVerdict(check)) after "
-                                    + checkDuration(check.durationMs ?? 0)))
+                                runs: [.init(text: check.command, face: .mono),
+                                       .init(text: " · "),
+                                       .init(text: checkVerdict(check), face: .bad),
+                                       .init(text: " after \(checkDuration(check.durationMs ?? 0))")],
+                                logTail: CheckTail.of(check.outputTail)))
         }
         if facts.branchUnchanged {
             rows.append(FactRow(label: branchLabel, value: branchUnchanged))
@@ -1119,7 +1166,7 @@ public enum ExceptionCards {
         if let errorCode = facts.errorCode {
             rows.append(FactRow(label: errorLabel, value: errorCode, mono: true))
         }
-        return .rows(FactBlock(rows: rows, logTail: CheckTail.of(facts.check?.outputTail)))
+        return .rows(FactBlock(rows: rows))
     }
 
     /// The block's labels, in mock 5's words.
@@ -1216,14 +1263,25 @@ public enum ExceptionCards {
         case link
     }
 
-    /// One press of a card, by the action the server named and the weight the card gave it.
+    /// One press of a card, by the action the server named and the weight the card gave it — and
+    /// the two sentences the card draws with it: what the press is called, and the one line under
+    /// it saying what pressing it does (§7.5's doors, each with its consequence).
+    ///
+    /// Both strings are composed HERE rather than in the view, so the browser's own answer cannot
+    /// be re-derived a second time on the way to the screen: a label a card made up would be a
+    /// door named differently from the one the row beside it wears.
     public struct CardPress: Equatable, Sendable {
         public let action: ProjectOpenItemAction
         public let tier: PressTier
+        public let label: String
+        public let consequence: String
 
-        public init(action: ProjectOpenItemAction, tier: PressTier) {
+        public init(action: ProjectOpenItemAction, tier: PressTier, label: String,
+                    consequence: String) {
             self.action = action
             self.tier = tier
+            self.label = label
+            self.consequence = consequence
         }
     }
 
@@ -1238,6 +1296,76 @@ public enum ExceptionCards {
     /// doors of that map are drawn by cards this one is not: the pause's `Resume`, the merge's
     /// `Review`, and the two the owner's card reaches through its own controls.
     public static let openTaskSession = "Open task session"
+    /// The door that runs the work again, and the same door said of a candidate's check — the
+    /// browser's `RETRY_ACTION_LABEL` and `RERUN_CHECK_ACTION_LABEL`. Which of the two a press
+    /// wears depends on what it reruns: a row that names a merge candidate re-runs that candidate's
+    /// check, and one that names no candidate retries a task's landing (`actionLabel`).
+    public static let retry = "Retry"
+    public static let rerunCheck = "Re-run the check"
+    /// The label every door of the browser's `ACTION_LABEL` map wears, this client's spelling of it.
+    /// A door the map has no label for is not drawn at all on either end.
+    static let actionLabels: [ProjectOpenItemAction: String] = [
+        .review: PromotionCards.review,
+        .answer: "Answer",
+        .resume: resume,
+        .openCoordinator: "Open coordinator",
+        .openTaskSession: openTaskSession,
+        .retry: retry,
+        .cancelTask: "Cancel task",
+        .askCoordinatorAgain: askCoordinatorAgain,
+    ]
+
+    /// One line per door saying what pressing it does — the browser's `ACTION_CONSEQUENCES`, and the
+    /// reason a door is never a bare word on either end: a reader weighing "Cancel task" against
+    /// "Retry" is being asked to know what each one leaves behind.
+    static let actionConsequences: [ProjectOpenItemAction: String] = [
+        .review: "Open the current merge card.",
+        .answer: "Record your answer on the coordinator question.",
+        .resume: "The coordinator resumes and held work can continue.",
+        .openCoordinator: "Open the coordinator conversation.",
+        .openTaskSession: "Open the task session to repair the branch.",
+        .retry: "A new integration attempt is queued with your reason.",
+        .cancelTask: "The task is cancelled and its open item closes.",
+        .askCoordinatorAgain: "It goes back to the coordinator with a fresh escalation clock.",
+    ]
+    /// The same press said of a candidate's check: a re-run re-checks the CURRENT candidate with
+    /// the reason the reader gives — the browser's `PROMOTION_RETRY_CONSEQUENCE`.
+    public static let promotionRetryConsequence =
+        "The current candidate is checked again with your reason."
+    /// What a RETRY press carries as its reason when the row has no `requiredAction` of its own —
+    /// the browser's `RETRY_REASON_FALLBACK`. The door requires a reason (`RetryIntegrationDto`), so
+    /// a press never travels empty.
+    public static let retryReasonFallback = "Retry the integration after the failed check."
+    /// The line under the owner's own ending, in the browser's map.
+    public static let markHandledConsequence =
+        "Only if you dealt with it yourself. Your reason goes on the record."
+
+    /// What one door is called: the map above, and — for a RETRY on a row that names a merge
+    /// candidate — the re-check wording rather than the task-retry one, which is the same door
+    /// wearing the words for what it actually re-runs (the browser's `actionLabel`). Nil for a door
+    /// the browser has no label for, which `drawn` leaves undrawn.
+    public static func actionLabel(_ row: ProjectOpenItemRow,
+                                   _ action: ProjectOpenItemAction) -> String? {
+        if action == .retry, row.promotionId != nil { return rerunCheck }
+        return actionLabels[action]
+    }
+
+    /// What that door's one line under it says: the map above, and the candidate wording for a
+    /// RETRY that names one (the browser's `actionConsequence`). Empty for a door with no label,
+    /// which is never drawn with a line either.
+    public static func actionConsequence(_ row: ProjectOpenItemRow,
+                                         _ action: ProjectOpenItemAction) -> String {
+        if action == .retry, row.promotionId != nil { return promotionRetryConsequence }
+        return actionConsequences[action] ?? ""
+    }
+
+    /// What a RETRY press carries: the item's own `requiredAction` when the server named one, and
+    /// the standing sentence for a failed check when it did not — the browser's own reading
+    /// (`RetryPress`). Trimmed, because the door takes a reason and the sentence is not a blank.
+    public static func retryReason(_ row: ProjectOpenItemRow) -> String {
+        let said = row.requiredAction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return said.isEmpty ? retryReasonFallback : said
+    }
 
     /// What the next step is for a kind of exception, where the design names one (mock 7 ①②③). A
     /// conflict and a failed combined-tree check both want the branch fixed, so the way onto that
@@ -1261,11 +1389,21 @@ public enum ExceptionCards {
     /// `actionHref` / `writeTarget` answer it. A press the row cannot reach is not drawn, never
     /// drawn and refused: the two task presses act on the task the item is about, and the rest are
     /// about the item itself.
-    public static func addressed(_ row: ProjectOpenItemRow, _ action: ProjectOpenItemAction) -> Bool {
+    ///
+    /// `mergeCard` is the web's `currentPromotionId`: the merge candidate whose card THIS page has
+    /// delivered, for the one door that scrolls to it (`Review`). Nil is "the card is not here",
+    /// and then the door is not drawn — a Review pointing at a card that was never mounted is the
+    /// dead link the account owner found on 2026-10-02.
+    public static func addressed(_ row: ProjectOpenItemRow, _ action: ProjectOpenItemAction,
+                                 mergeCard: String? = nil) -> Bool {
         switch action {
         case .askCoordinatorAgain, .answer: return true
-        case .retry, .cancelTask: return row.taskId != nil
-        case .review: return row.promotionId != nil
+        // A RETRY is two doors under one name (§4.8, `open-item-doors.ts` integration-retry-task
+        // and -promotion): a landing retry needs the task, a check re-run needs the candidate, and
+        // the row carries whichever it is about.
+        case .retry: return row.taskId != nil || row.promotionId != nil
+        case .cancelTask: return row.taskId != nil
+        case .review: return row.promotionId != nil && row.promotionId == mergeCard
         case .openCoordinator: return row.delivery?.sessionId != nil
         case .openTaskSession: return row.sessionId != nil || row.taskId != nil
         case .resume: return true
@@ -1276,8 +1414,11 @@ public enum ExceptionCards {
     /// The presses a card draws: the same list the server serves, minus what this build cannot draw
     /// and minus the doors this row carries no address for. Never more than the server listed, so a
     /// card cannot come to offer something no door answers.
-    public static func drawn(_ row: ProjectOpenItemRow) -> [ProjectOpenItemAction] {
-        row.actions.filter { $0 != .unknown && addressed(row, $0) }
+    public static func drawn(_ row: ProjectOpenItemRow,
+                             mergeCard: String? = nil) -> [ProjectOpenItemAction] {
+        row.actions.filter {
+            $0 != .unknown && actionLabel(row, $0) != nil && addressed(row, $0, mergeCard: mergeCard)
+        }
     }
 
     /// The presses a card leads with, in the order it draws them: the step this kind of exception is
@@ -1285,6 +1426,12 @@ public enum ExceptionCards {
     /// server's own list, so a card never offers a door that is not there.
     public static func leadingDoors(_ row: ProjectOpenItemRow,
                                     _ actions: [ProjectOpenItemAction]) -> [ProjectOpenItemAction] {
+        // T9's `primaryAction` is the server's own decision about the first door, and the browser
+        // leads with it whenever the row carries one. The kind fallback below is for rows from a
+        // server that predates the field.
+        if let primary = row.primaryAction, actions.contains(primary) {
+            return [primary] + actions.filter { $0 != primary }
+        }
         let leading = actions.filter { leadingActions.contains($0) }
         // An item that has become the owner's leads with the way back to the coordinator that should
         // have had it (§4.7): the work is not the owner's to run again, and the server lists no
@@ -1297,17 +1444,21 @@ public enum ExceptionCards {
 
     /// The card's whole action row, in the weights of mock 7 方案 B: the pair it leads with in their
     /// own order, then the rest of the server's list — so a card reads left to right as what to do,
-    /// what else would do it, and the ways in and out.
+    /// what else would do it, and the ways in and out. Each press carries its own label and its one
+    /// line of consequence, both the browser's.
     ///
     /// `Mark as handled` is NOT one of these: see `markable`.
-    public static func presses(_ row: ProjectOpenItemRow) -> [CardPress] {
-        let actions = drawn(row)
+    public static func presses(_ row: ProjectOpenItemRow,
+                               mergeCard: String? = nil) -> [CardPress] {
+        let actions = drawn(row, mergeCard: mergeCard)
         let leading = leadingDoors(row, actions)
         let primary = leading.first
         let secondary = leading.dropFirst().first
         return (leading + actions.filter { !leading.contains($0) }).map { action in
             CardPress(action: action,
-                      tier: action == primary ? .primary : action == secondary ? .secondary : .link)
+                      tier: action == primary ? .primary : action == secondary ? .secondary : .link,
+                      label: actionLabel(row, action) ?? action.rawValue,
+                      consequence: actionConsequence(row, action))
         }
     }
 
@@ -1325,6 +1476,10 @@ public enum ExceptionCards {
     public static let markHandledReason = "Why is it no longer open?"
     /// What a refused ending says, in the browser's own headline.
     public static let notMarkedHandled = "The item was not closed"
+    /// What a refused rerun says, in the browser's own headline — two of them, because the two
+    /// routes are two different things to have failed to do.
+    public static let notRerunCheck = "The check was not re-run"
+    public static let notRetriedLanding = "The task integration was not retried"
     /// What the receipt says, for a press made on this screen. Native-only, like the hand-back's:
     /// the browser re-derives its cards from the read and the card simply goes.
     public static let handled = "Marked as handled"
@@ -1421,6 +1576,27 @@ public enum ExceptionCards {
         heading(row, now: now) == nil ? nil : row.title
     }
 
+    /// The sentence a card opens its body with: what has to happen next, in the server's own words
+    /// (§7.5, T9's `requiredAction`) — the whole point of the card being a decision rather than a
+    /// status. The two fallbacks are the browser's own chain: an item whose payload predates the
+    /// field still has its `detailLine` (the fact that opened it), and one with neither gets the
+    /// standing sentence rather than a blank line.
+    public static let requiredActionFallback = "Review what needs to happen next."
+
+    public static func requiredAction(_ row: ProjectOpenItemRow) -> String {
+        if let said = row.requiredAction { return said }
+        return row.detailLine.isEmpty ? requiredActionFallback : row.detailLine
+    }
+
+    /// What the card says about the tasks filed as this item's fixes (§4.7): one sentence per task,
+    /// so a reader knows somebody is already on it before weighing a press. Nil when none is
+    /// linked — the browser draws the line only where there is one to draw.
+    public static func handledByLine(_ row: ProjectOpenItemRow) -> String? {
+        guard let tasks = row.handledBy, !tasks.isEmpty else { return nil }
+        return tasks.map { "The coordinator is fixing this in \($0.title)." }
+            .joined(separator: " · ")
+    }
+
     /// How long the coordinator had it before the clock took it away — the window the project set,
     /// read off the two instants rather than off the setting, so a window that was changed
     /// afterwards cannot make this sentence lie about what happened. `a while` when the read does
@@ -1437,10 +1613,21 @@ public enum ExceptionCards {
         return RelativeTime.span(now.timeIntervalSince(since))
     }
 
+    /// What an escalated row's footer adds after the wait: WHEN the clock handed it over, in the
+    /// words of the coordinator's own footer — the browser's `ownerLine`, owner arm. Without it the
+    /// line said only that the item had been waiting, which the heading above it already said.
+    public static let cameToOwnerAt = " · came to the owner at "
+
     /// §7.5's footer: who owes an answer, and for how long. The owner arm of the browser's
     /// `ownerLine` — the coordinator arm belongs to the rows this client does not draw.
+    ///
+    /// An item a clock already moved says when it moved: the wait it had BEFORE that is the fact
+    /// the escalation heading is about, and the two ends write the same sentence (`ExceptionCardsTests`
+    /// reads the browser's own).
     public static func ownerLine(_ row: ProjectOpenItemRow, now: Date = Date()) -> String {
-        "\(ownerPrefix) · waiting \(waited(row, now: now))"
+        let waited = "\(ownerPrefix) · waiting \(waited(row, now: now))"
+        guard row.escalatedAt != nil else { return waited }
+        return waited + cameToOwnerAt + waitedBeforeEscalation(row)
     }
 
     /// What the next send carries ahead of the typed sentence: the item as it stands.

@@ -308,7 +308,7 @@ final class ComposerHandoffWiringTests: XCTestCase {
         // call still contains its own words, and the day the handoff is undone is the day this
         // check exists for.
         let press = try section(card, from: "// And the other way out, which is a sentence",
-                                to: "Text(ExceptionCards.ownerLine(row))")
+                                to: "if !isPause && ExceptionCards.markable(row) {")
         let statements = press.split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && !$0.hasPrefix("//") }
