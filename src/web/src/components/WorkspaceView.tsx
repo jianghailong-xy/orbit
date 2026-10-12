@@ -63,6 +63,8 @@ import {
   RECORD_FLASH_MS,
   RECORD_NOT_FOUND,
   RECORD_PARAM,
+  itemAtOf,
+  sessionItemHref,
   recordAtOf,
   recordScrollDelta,
 } from '../lib/transcriptDeepLink';
@@ -308,6 +310,7 @@ import {
   REVIEW_CARD_REVEALED,
   revealOpenItemCard,
   revealSettlementCard,
+  revealOwnerItemCard,
   type PendingDecisionRow,
 } from './DecisionRail';
 import {
@@ -1081,7 +1084,9 @@ const sentLine = (text: string): SessionLine => ({
 // banner and card say these same words, and `OwnerItemCardsTests` holds the two ends to each other.
 const OWNER_ITEM_APPROVE_MERGE = 'Approve merge to main';
 const OWNER_ITEM_COORDINATOR_QUESTION = 'Question from coordinator';
-const OWNER_ITEM_ESCALATED = 'Escalated to you';
+// Keep this literal declaration: native parity tests read the web source directly.
+export const OWNER_ITEM_ESCALATED = 'Escalated to you';
+export const OWNER_ITEM_NEED_SEPARATOR = ' · ';
 const OWNER_ITEM_PAUSED = 'Paused';
 
 /** The kinds this row can name, and the words it says for each. A kind missing here — one this
@@ -1106,7 +1111,9 @@ const ownerItemWords = (main: string): Record<string, string> =>
 const ownerItemWord = (s: any): string | null => {
   let oldest: { word: string; at: number } | null = null;
   for (const item of s.ownerItems ?? []) {
-    const word = ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];
+    const word = item?.kind === 'ESCALATED' && item?.need
+      ? `${OWNER_ITEM_ESCALATED}${OWNER_ITEM_NEED_SEPARATOR}${item.need}`
+      : ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];
     if (!word) continue;
     const at = Date.parse(item?.since ?? '');
     const key = Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at;
@@ -2048,6 +2055,10 @@ export function WorkspaceView({
   const recordAt = recordAtOf(searchParams);
   const recordAtRef = useRef(recordAt);
   recordAtRef.current = recordAt;
+  // The owner-item card a list/banner deep link should reveal after the open-items read and its
+  // transcript insert have rendered. Kept separate from `at`, because an item is not a transcript
+  // record and must not reseed the transcript window.
+  const itemAt = itemAtOf(searchParams);
   // Inline header-title rename: double-click swaps the title for an input. `editingTitle`
   // gates the editor, `titleDraft` holds the in-progress text, `cancelTitleEdit` lets
   // Escape skip the blur-commit. Switching sessions closes any open editor (effect below).
@@ -2383,6 +2394,7 @@ export function WorkspaceView({
   const [recordTick, setRecordTick] = useState(0);
   // The `?at=` already followed (`<session> <record>`), so one link is followed once, not on every render.
   const followedRecordRef = useRef<string | null>(null);
+  const followedItemRef = useRef<string | null>(null);
   // Set by the session effect, which owns the stream: open a record of the session already open, join
   // the live stream once a detached window reaches the latest event, and trade a detached window for
   // the tail.
@@ -3289,6 +3301,17 @@ export function WorkspaceView({
   const listSearch = openProjectId
     ? `?project=${encodeId(openProjectId)}${effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : folderSearch;
   const sessionPath = useCallback((id: string) => `/sessions/${encodeId(id)}${listSearch}`, [listSearch]);
+  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }) => {
+    const item = [...(session.ownerItems ?? [])]
+      .filter((candidate) => candidate.itemId)
+      .sort((a, b) => {
+        const at = Date.parse(a.since ?? '');
+        const bt = Date.parse(b.since ?? '');
+        return (Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at)
+          - (Number.isNaN(bt) ? Number.MAX_SAFE_INTEGER : bt);
+      })[0];
+    return item?.itemId ? sessionItemHref(session.id, item.itemId) : sessionPath(session.id);
+  }, [sessionPath]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
@@ -3416,7 +3439,7 @@ export function WorkspaceView({
     if (foldersQ.isPending) return;
     const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
     const target = listedSessions.find((s) => s.id === remembered) ?? listedSessions[0];
-    if (target) navigate(sessionPath(target.id), { replace: true });
+    if (target) navigate(sessionItemPath(target), { replace: true });
   }, [
     isMobile,
     openProjectId,
@@ -3428,7 +3451,7 @@ export function WorkspaceView({
     listedSessions,
     scopeWorkspaceId,
     navigate,
-    sessionPath,
+    sessionItemPath,
   ]);
 
   // Step the open session up/down the visible list, for the window-level Up/Down handler
@@ -3446,10 +3469,10 @@ export function WorkspaceView({
         next = cur + dir;
         if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(sessionPath(orderedSessions[next].id));
+      navigate(sessionItemPath(orderedSessions[next]));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionPath],
+    [orderedSessions, selectedId, view, navigate, sessionItemPath],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -5455,11 +5478,26 @@ export function WorkspaceView({
           anchor,
           moment: row.escalatedAt ?? row.waitingSince,
           key: `open-item:${row.itemId}`,
-          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} onChat={chatAboutThis}
-            main={coordinatedMain} />,
+          element: (
+            <ItemAsCard
+              projectId={coordinatedProjectId}
+              row={row}
+              now={Date.now()}
+              currentPromotionId={currentPromotion.data?.promotionId ?? null}
+              onChat={chatAboutThis}
+              main={coordinatedMain} />
+          ),
         }];
       }),
-    [chatAboutThis, coordinatedMain, coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
+    [
+      chatAboutThis,
+      coordinatedMain,
+      coordinatedProjectId,
+      currentPromotion.data?.promotionId,
+      openItems.data,
+      openItems.dataUpdatedAt,
+      transcriptEvents,
+    ],
   );
 
   // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
@@ -5551,6 +5589,23 @@ export function WorkspaceView({
     () => [...decisionReceipts, ...questionRecords, ...blockedPromotionCard, ...exceptionCards],
     [decisionReceipts, questionRecords, blockedPromotionCard, exceptionCards],
   );
+
+  // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
+  // same helper handles pause cards (`fuse-` ids), so list rows and the pinned strip share one jump.
+  useEffect(() => {
+    if (!selectedId || !itemAt) {
+      followedItemRef.current = null;
+      return;
+    }
+    const key = `${selectedId} ${itemAt}`;
+    if (followedItemRef.current === key) return;
+    const frame = requestAnimationFrame(() => {
+      if (revealOwnerItemCard(itemAt, scrollRef.current ?? document)) {
+        followedItemRef.current = key;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, itemAt, transcriptInserts, ownerExceptionIds]);
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
   // delivered and put down are the card's own state, so the strip is told rather than left to work
@@ -9603,7 +9658,7 @@ export function WorkspaceView({
                     setMenuOpenId(null);
                     if (s.target.kind === 'project') enterProjectSessions(s.target.id);
                     else navigateWithPaneSlide('push', () =>
-                      navigate(sessionPath(s.target.id), { state: stampFromList() }));
+                      navigate(sessionItemPath(s.target), { state: stampFromList() }));
                   };
                   const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                   const offset = drag?.dx ?? restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null,
@@ -9744,7 +9799,7 @@ export function WorkspaceView({
                       setMenuOpenId(null);
                       if (openable)
                         navigateWithPaneSlide('push', () =>
-                          navigate(sessionPath(s.id), { state: stampFromList() }),
+                          navigate(sessionItemPath(actionSession), { state: stampFromList() }),
                         );
                     }}
                     onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe); }}
@@ -10278,12 +10333,16 @@ export function WorkspaceView({
             }
             // The exception cards the owner presses, with how long each has been theirs and which
             // side of the reader it sits on now: unlike a question, one can be above.
-            exceptions={ownerExceptionRows.map((row) => ({
+            needsYou={ownerExceptionRows.map((row) => ({
               row,
-              ageSeconds: Math.max(
-                0,
-                Math.floor((Date.now() - Date.parse(row.escalatedAt ?? row.waitingSince)) / 1000),
-              ),
+              need: selectedSession?.ownerItems?.find((item: any) => item.itemId === row.itemId)?.need
+                ?? null,
+              ageSeconds: (() => {
+                const at = Date.parse(row.escalatedAt ?? row.waitingSince);
+                return Number.isFinite(at)
+                  ? Math.max(0, Math.floor((Date.now() - at) / 1000))
+                  : null;
+              })(),
               above: openItemsAbove.split(' ').includes(row.itemId),
             }))}
             // The strip states the fact and this takes the reader to the one place it can be

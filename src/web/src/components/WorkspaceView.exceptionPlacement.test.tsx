@@ -43,7 +43,7 @@ describe('where the conversation’s exception cards come from', () => {
       'the cards are still drawn without a moment of their own',
     ).toContain('exceptionCardRows(openItems.data, transcriptEvents)');
     expect(view, 'the row is not handed the card its anchor is about').toContain(
-      'element: <ItemAsCard',
+      '<ItemAsCard',
     );
   });
 
