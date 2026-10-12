@@ -758,6 +758,10 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
     public let title: String
     /// Since when it has been waiting on the owner (ISO-8601). The bar shows the oldest.
     public let since: String
+    /// The short reason an escalated item carries — the server's one clause about what it is
+    /// (T9), which the session ROW says after the word "Escalated to you". Absent for the other
+    /// three kinds and from a server that predates it, and then the row says the word alone.
+    public let need: String?
     /// The item's project's main branch by name, which a merge approval asks to merge into. Nil
     /// with no repository bound and from an older server, and then it is main.
     public let mainBranch: String?
@@ -765,11 +769,12 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
     public var id: String { itemId }
 
     public init(itemId: String, kind: OwnerItemKind, title: String, since: String,
-                mainBranch: String? = nil) {
+                need: String? = nil, mainBranch: String? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
         self.since = since
+        self.need = need
         self.mainBranch = mainBranch
     }
 
@@ -779,8 +784,9 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
         kind = try c.decode(OwnerItemKind.self, forKey: .kind)
         title = try c.decode(String.self, forKey: .title)
         since = try c.decode(String.self, forKey: .since)
-        // A branch this build cannot read is an older server's absence: the item, and the row it
-        // arrived on, still stand.
+        // A field this build cannot read is an older server's absence: the item, and the row it
+        // arrived on, still stand. Same reading as the branch below.
+        need = try? c.decodeIfPresent(String.self, forKey: .need)
         mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
     }
 }

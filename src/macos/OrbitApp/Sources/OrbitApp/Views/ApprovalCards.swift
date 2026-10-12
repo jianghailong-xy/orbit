@@ -3937,42 +3937,13 @@ private struct OwnerItemCardView: View {
                     .font(.orbitProse)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if case .open(let row) = standing {
-                item(row)
-                ApprovalActions {
-                    // The card's own presses, in the three weights of mock 7 方案 B and the order
-                    // the browser draws the same doors in. A pause is a card of its own on both
-                    // clients — one press, and not one of these weights.
-                    if isPause {
-                        if pressable(row) {
-                            Button { press(row) } label: {
-                                Text(ExceptionCards.resume).approvalActionLabel()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(sending)
-                        }
-                    } else {
-                        ForEach(ExceptionCards.presses(row), id: \.action) { cardPress in
-                            cardPressButton(cardPress, row: row)
-                        }
-                    }
-                    // And the other way out, which is a sentence rather than a press: the card
-                    // hands the item to the composer, and the coordinator is told what to do about
-                    // it. The same control — and the same word — as the four other cards that do
-                    // this (`Approvals.chatAction`).
-                    Button {
-                        PlatformHaptics.tap()
-                        console.startOwnerItemReply(row, isPause: isPause)
-                    } label: {
-                        Text(Approvals.chatAction).approvalActionLabel()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(sending)
-                    // The owner's own ending, drawn last and quietest (方案 B): it is for an
-                    // exception nobody has to act on any more, offered to the one reader who knows.
-                    if !isPause && ExceptionCards.markable(row) {
-                        markHandledButton()
-                    }
-                }
+                heading(row)
+                // What has to happen next, and the doors that do it — ahead of the facts, because
+                // it is the thing the reader came for (§7.5, T9), and in the browser's own order
+                // for the same reason.
+                nextBlock(row)
+                factBlock(row)
+                if askingToHandle { markHandledPanel() }
                 Text(ExceptionCards.ownerLine(row))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -3987,29 +3958,118 @@ private struct OwnerItemCardView: View {
             }
         }
         .approvalChrome(.orange, dimmed: receipt != nil || !ExceptionCards.isOpen(standing))
-        .alert(ExceptionCards.markHandledTitle, isPresented: $askingToHandle) {
-            TextField(ExceptionCards.markHandledReason, text: $reason, axis: .vertical)
-            Button(ExceptionCards.markHandled) { markHandled() }
-            Button("Back", role: .cancel) {}
-        } message: {
-            Text(ExceptionCards.markHandledBody)
+    }
+
+    /// The decision block a card opens with (§7.5, T9): the server's one sentence about what has to
+    /// happen next, who is already fixing it, and the doors — each with the one line that says what
+    /// pressing it does. The browser draws the same three in one washed panel at the top of its
+    /// body (`project-open-item-next`), and reading order is the whole point of it: the reader knows
+    /// what is being asked before they are shown what happened.
+    @ViewBuilder private func nextBlock(_ row: ProjectOpenItemRow) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(ExceptionCards.requiredAction(row))
+                .font(.orbitProse.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let fixing = ExceptionCards.handledByLine(row) {
+                Text(fixing)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.tint)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ApprovalActions {
+                // The card's own presses, in the three weights of mock 7 方案 B and the order the
+                // browser draws the same doors in — from the console's own read, which is what says
+                // whether the merge card a `Review` points at is on screen. A pause is a card of its
+                // own on both clients: one press, and not one of these weights.
+                if isPause {
+                    if pressable(row) {
+                        doorRow(ExceptionCards.actionConsequence(row, .resume)) {
+                            Button { press(row) } label: {
+                                Text(ExceptionCards.resume).approvalActionLabel()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(sending)
+                        }
+                    }
+                } else {
+                    ForEach(ExceptionCards.presses(row, mergeCard: console.mergeCardPromotionID),
+                            id: \.action) { cardPress in
+                        cardPressDoor(cardPress, row: row)
+                    }
+                }
+                // And the other way out, which is a sentence rather than a press: the card hands the
+                // item to the composer, and the coordinator is told what to do about it. The same
+                // control — and the same word — as the four other cards that do this
+                // (`Approvals.chatAction`).
+                Button {
+                    PlatformHaptics.tap()
+                    console.startOwnerItemReply(row, isPause: isPause)
+                } label: {
+                    Text(Approvals.chatAction).approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(sending)
+                // The owner's own ending, drawn last and quietest (方案 B): it is for an exception
+                // nobody has to act on any more, offered to the one reader who knows.
+                if !isPause && ExceptionCards.markable(row) {
+                    markHandledButton()
+                }
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.22))
         }
     }
 
+    /// One door and the line that says what pressing it does. On a phone the line goes UNDER the
+    /// press; on a Mac it sits beside it, in the browser's own two shapes for this row (its
+    /// `project-open-item-door` grid stacks under 600px and pairs them above it).
+    @ViewBuilder private func doorRow<Content: View>(_ consequence: String,
+                                                     @ViewBuilder _ button: () -> Content) -> some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 3) {
+            button()
+            Text(consequence)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        #else
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            button()
+                .layoutPriority(1)
+            Text(consequence)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        #endif
+    }
+
+    /// The card's heading slot: how it became the owner's, or the item's own title — the line the
+    /// browser draws in its head, above everything the body says.
+    @ViewBuilder private func heading(_ row: ProjectOpenItemRow) -> some View {
+        Text(ExceptionCards.headingLine(row))
+            .font(.orbitProse)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     /// What happened, in the rows of mock 5's fact block — or, for an item whose payload this build
-    /// cannot read, in the three lines it drew before the rows existed: how it became the owner's,
-    /// what escalated, and the fact that opened it.
+    /// cannot read, in the two lines it drew before the rows existed: what escalated, and the fact
+    /// that opened it.
     ///
     /// The rows are `ExceptionCards.facts`, which is the browser's `ItemFactRows` field for field,
     /// and the card draws the block INSTEAD of those lines — not above them. The block's first row
     /// is what the item is about, so the title beside it would print the same task twice.
-    @ViewBuilder private func item(_ row: ProjectOpenItemRow) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(ExceptionCards.headingLine(row))
-                .font(.orbitProse)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            switch ExceptionCards.facts(row) {
-            case .detailLine(let line):
+    @ViewBuilder private func factBlock(_ row: ProjectOpenItemRow) -> some View {
+        switch ExceptionCards.facts(row) {
+        case .detailLine(let line):
+            VStack(alignment: .leading, spacing: 4) {
                 if let subject = ExceptionCards.subject(row) {
                     Text(subject)
                         .font(.orbitProse)
@@ -4021,22 +4081,40 @@ private struct OwnerItemCardView: View {
                         .font(.orbitLabel).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            case .rows(let block):
-                ForEach(block.rows, id: \.label) { fact in factRow(fact) }
-                if let tail = block.logTail { logTail(tail) }
+            }
+        case .rows(let block):
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(block.rows, id: \.label) { fact in
+                    factRow(fact)
+                    // The failed check's own log, directly under the row it belongs to — the
+                    // browser draws it inside the Check row's own fragment, and a block that drew
+                    // it after every row put the log under a fact it did not come from.
+                    if let tail = fact.logTail { logTail(tail) }
+                }
             }
         }
     }
 
-    /// One row of the fact block: the mock's label column and the value beside it.
+    /// One row of the fact block: the mock's label column and the value beside it, in the faces the
+    /// model gave each run — the browser's own two spans (`project-open-item-mono` on a command,
+    /// `project-open-item-bad` on a check's verdict). A row of one string could only be all one
+    /// font and one colour, which is how the check row used to be drawn.
     private func factRow(_ fact: ExceptionCards.FactRow) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(fact.label)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(width: 62, alignment: .leading)
             VStack(alignment: .leading, spacing: 4) {
-                Text(fact.value)
-                    .font(fact.mono ? .orbitMono : .orbitLabel)
+                // Every run wears its own font rather than one font on the joined text: a modifier
+                // applied after the concatenation would set one face for the whole row, which is
+                // exactly what this row stopped being.
+                fact.runs.map { run in
+                    switch run.face {
+                    case .plain: return Text(run.text).font(.orbitLabel)
+                    case .mono:  return Text(run.text).font(.orbitMono)
+                    case .bad:   return Text(run.text).font(.orbitLabel).foregroundColor(.red)
+                    }
+                }.reduce(Text("")) { $0 + $1 }
                     .lineLimit((fact.value.count > 120 || fact.value.contains("\n"))
                                && !expandedFacts.contains(fact.label) ? 3 : nil)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -4074,36 +4152,56 @@ private struct OwnerItemCardView: View {
         }
     }
 
-    /// One press, in the weight the card gave it (mock 7 方案 B). A door this client has no press
-    /// for — `Cancel task`, which this console stops by no door of its own — draws nothing at all,
+    /// One press, in the weight the card gave it (mock 7 方案 B) and under it the line the model
+    /// wrote about what pressing it does. A door this client has no press for — `Cancel task`, which
+    /// this console stops by no door of its own — draws nothing at all, consequence line included,
     /// which is the rule the card has always followed: a control that goes nowhere is worse than no
     /// control.
-    @ViewBuilder private func cardPressButton(_ cardPress: ExceptionCards.CardPress,
-                                              row: ProjectOpenItemRow) -> some View {
-        switch cardPress.action {
-        case .askCoordinatorAgain:
-            if pressable(row) {
+    @ViewBuilder private func cardPressDoor(_ cardPress: ExceptionCards.CardPress,
+                                            row: ProjectOpenItemRow) -> some View {
+        if let make = makePress(cardPress, row: row) {
+            doorRow(cardPress.consequence) {
                 weighted(cardPress.tier) {
-                    Button { press(row) } label: {
-                        Text(ExceptionCards.askCoordinatorAgain).approvalActionLabel()
+                    Button(action: make) {
+                        Text(cardPress.label).approvalActionLabel()
                     }
                 }
                 .disabled(sending)
             }
+        }
+    }
+
+    /// What one door's press does, or nil for a door this client cannot make from here — the
+    /// row's own addresses, re-read rather than the ones the press was rendered from, so a card
+    /// that raced a read cannot hand out an address the row no longer carries.
+    private func makePress(_ cardPress: ExceptionCards.CardPress,
+                           row: ProjectOpenItemRow) -> (() -> Void)? {
+        switch cardPress.action {
+        case .askCoordinatorAgain:
+            guard pressable(row) else { return nil }
+            return { press(row) }
         case .openTaskSession:
             // The way onto the work the item is about — the attempt that opened it, or the task
             // when that attempt has no session left. The app's own door for both ids, the one the
             // delivery card's links open and both shells route.
-            if let url = ExceptionCards.openTaskSessionLink(row) {
-                weighted(cardPress.tier) {
-                    Button { openURL(url) } label: {
-                        Text(ExceptionCards.openTaskSession).approvalActionLabel()
-                    }
-                }
-                .disabled(sending)
-            }
+            guard let url = ExceptionCards.openTaskSessionLink(row) else { return nil }
+            return { PlatformHaptics.tap(); openURL(url) }
+        case .retry:
+            // `Run it again` (§4.7 H1, T5): the owner's own route through the browser's same pair —
+            // a candidate's check re-run when the item names one, a failed landing's retry
+            // otherwise. The reason the door requires is the item's own sentence about the failure.
+            guard ExceptionCards.addressed(row, .retry) else { return nil }
+            return { retry(row) }
+        case .review:
+            // Only where the merge card is HERE: reviewing means reading that card, and a press
+            // that scrolled to a card which was never mounted is the dead link the account owner
+            // found (2026-10-02). `ExceptionCards.drawn` was told the same thing by the console, so
+            // a drawn Review is one whose card is on screen.
+            guard let promotionID = row.promotionId,
+                  console.mergeCardPromotionID == promotionID else { return nil }
+            return { PlatformHaptics.tap(); console.revealPromotionCard(promotionID) }
         default:
-            EmptyView()
+            return nil
         }
     }
 
@@ -4122,10 +4220,13 @@ private struct OwnerItemCardView: View {
     }
 
     /// The owner's own ending: the press, and the reason it is not allowed to go without (§4.7).
+    ///
+    /// Opening the field keeps whatever reason is already in it: a press that was refused, or a
+    /// panel the reader closed to look at the card again, must not cost them the sentence they
+    /// typed. The draft is cleared where it is spent — on the door taking it — not here.
     private func markHandledButton() -> some View {
         Button {
             PlatformHaptics.tap()
-            reason = ""
             askingToHandle = true
         } label: {
             Text(ExceptionCards.markHandled).approvalActionLabel()
@@ -4134,6 +4235,59 @@ private struct OwnerItemCardView: View {
         .font(.orbitLabel)
         .foregroundStyle(.secondary)
         .disabled(sending)
+    }
+
+    /// The reason the ending requires, asked for in place (§4.7, mock 7 方案 B — the browser's
+    /// dialog, drawn here as the panel the sibling record-as-done card asks its own note in).
+    ///
+    /// The confirm waits for a reason: empty is not a press, and the door would refuse one. That is
+    /// a rule about what is sent as much as about the button, so `markHandled` holds the same line
+    /// — a disabled control is not a rule.
+    @ViewBuilder private func markHandledPanel() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(ExceptionCards.markHandledTitle)
+                .font(.orbitProse.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(ExceptionCards.markHandledBody)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            TextField(ExceptionCards.markHandledReason, text: $reason, axis: .vertical)
+                .lineLimit(2...5)
+                .font(.orbitProse)
+                .textFieldStyle(.roundedBorder)
+                .disabled(sending)
+                // The door's own ceiling (`markHandledMaxLength`, the browser's `maxLength`): the
+                // field stops where the server's validation would, so nothing the reader types is
+                // taken and then refused for its length.
+                .onChange(of: reason) { _, typed in
+                    if typed.count > ExceptionCards.markHandledMaxLength {
+                        reason = String(typed.prefix(ExceptionCards.markHandledMaxLength))
+                    }
+                }
+            HStack(spacing: 8) {
+                Button {
+                    askingToHandle = false
+                } label: {
+                    Text("Back").approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(sending)
+                Button {
+                    markHandled()
+                } label: {
+                    Text(ExceptionCards.markHandled).approvalActionLabel()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(sending || ExceptionCards.markHandledRequest(reason) == nil)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12))
+        }
     }
 
     /// Whether the door would take the press from here. Both are the server's own list, so a
@@ -4145,6 +4299,10 @@ private struct OwnerItemCardView: View {
 
     /// The ending holds the same line the door does: a reason the server would refuse is not a press,
     /// so the field is what is on screen and nothing is sent (`markItemHandled` guards it too).
+    ///
+    /// The draft is cleared only when the door TOOK it — on success — and the panel closes with it.
+    /// A refusal leaves both the panel and the words where they were, which is where the reader can
+    /// read what the server said and answer it, rather than losing the sentence with the question.
     private func markHandled() {
         guard case .open(let row) = standing,
               ExceptionCards.markHandledRequest(reason) != nil else { return }
@@ -4153,7 +4311,23 @@ private struct OwnerItemCardView: View {
         Task {
             if await console.markItemHandled(row, note: reason) != nil {
                 receipt = ExceptionCards.handled
+                reason = ""
+                askingToHandle = false
             }
+            sending = false
+        }
+    }
+
+    /// Run the work the item is about again (§4.7 H1, T5) — through the console, which owns the
+    /// credential, chooses the route the row names (a candidate's check or a task's landing) and
+    /// re-reads the item list afterwards: what a rerun leaves is the item being handled, which is
+    /// that read's to say.
+    private func retry(_ row: ProjectOpenItemRow) {
+        guard !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            await console.retryIntegration(row)
             sending = false
         }
     }
