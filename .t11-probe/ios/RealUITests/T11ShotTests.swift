@@ -296,14 +296,26 @@ final class T11ShotTests: XCTestCase {
 
         // Read back up in small steps until the bar's line carries a direction word: it is the
         // reader's own place — reported by the transcript once a MESSAGE sits at the top of the
-        // viewport with the cards under it — and it says nothing until then.
-        let bar = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "waiting")).firstMatch
-        for _ in 0..<8 {
-            if bar.exists, bar.label.contains("below") || bar.label.contains("above") { break }
-            drag(app, by: 200)
+        // viewport with the cards under it — and it says nothing until then. The bar is found by
+        // its own words and its place on screen: a drawer row says "1 waiting for you" too, and
+        // matching that one made the first capture walk straight past the state.
+        func barText() -> String? {
+            for query in [app.buttons, app.staticTexts] {
+                let hits = query.matching(NSPredicate(format: "label CONTAINS %@", "waiting"))
+                    .allElementsBoundByIndex.filter { $0.frame.minY > 80 && $0.frame.minY < 420 }
+                if let bar = hits.first { return bar.label }
+            }
+            return nil
+        }
+        var said: String?
+        for _ in 0..<12 {
+            said = barText()
+            if let said, said.contains("below") || said.contains("above") { break }
+            drag(app, by: 160)
+            Thread.sleep(forTimeInterval: 0.5)
         }
         Thread.sleep(forTimeInterval: 1.5)
-        note("bar: \(bar.exists ? bar.label : "(none)")")
+        note("bar: \(said ?? "(none)")")
         texts("waiting-below", app)
         shoot("08-waiting-below", settle: 1.5)
     }
