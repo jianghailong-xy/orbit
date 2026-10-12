@@ -4012,9 +4012,13 @@ private struct OwnerItemCardView: View {
                 .buttonStyle(.bordered)
                 .disabled(sending)
                 // The owner's own ending, drawn last and quietest (方案 B): it is for an exception
-                // nobody has to act on any more, offered to the one reader who knows.
+                // nobody has to act on any more, offered to the one reader who knows — and it is a
+                // door like every other one here, so it wears its own line saying what it ends
+                // (the browser draws it inside `CardActions` with the same consequence).
                 if !isPause && ExceptionCards.markable(row) {
-                    markHandledButton()
+                    doorRow(ExceptionCards.markHandledConsequence) {
+                        markHandledButton()
+                    }
                 }
             }
         }

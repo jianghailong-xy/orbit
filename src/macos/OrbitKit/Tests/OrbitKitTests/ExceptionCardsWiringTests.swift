@@ -332,6 +332,10 @@ final class ExceptionCardsWiringTests: XCTestCase {
                               to: "            }\n        }\n        .padding(.horizontal, 10)")
         XCTAssertTrue(row.contains("markHandledButton()"),
                       "and it comes after the handoff, at the end of the action row")
+        XCTAssertTrue(row.contains("doorRow(ExceptionCards.markHandledConsequence)"),
+                      "drawn as a DOOR like every other one here: the browser gives it the same one "
+                          + "line of consequence, and a quiet link with no line is the one control on "
+                          + "the card that would say nothing about what it ends")
 
         let button = try section(card, from: "private func markHandledButton() -> some View {",
                                  to: "/// The reason the ending requires,")
