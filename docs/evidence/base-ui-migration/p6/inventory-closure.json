@@ -1,0 +1,1067 @@
+{
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json",
+  "2026-10-09.json",
+  "2026-10-09b.json",
+  "2026-10-09c.json",
+  "2026-10-10.json",
+  "2026-10-10b.json"
+ ],
+ "before": {
+  "baseline": {
+   "commit": "f78e93f615fceda94eeea0c9cdd400fb44b7949e",
+   "scopeHash": "84cc9bb4854f8339a0b3340342599ef50d39935cdef4f377bbde2f46ec748ca3"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P6": 42
+  },
+  "unowned": [],
+  "pending": [],
+  "retirementBlockers": [
+   "package-lock.json",
+   "src/web/package.json",
+   "src/web/src/App.infrastructure.test.tsx",
+   "src/web/src/components/ProjectDoneConversation.test.tsx",
+   "src/web/src/components/ProjectWhyNotDoneGate.test.tsx",
+   "src/web/src/components/StatusTag.tsx",
+   "src/web/src/components/TaskDetailPanel.test.tsx",
+   "src/web/src/components/ToastViewport.tsx",
+   "src/web/src/components/WikiMarks.tsx",
+   "src/web/src/components/ui/Empty.tsx",
+   "src/web/src/components/ui/Floating.css",
+   "src/web/src/components/ui/MultiSelect.tsx",
+   "src/web/src/components/ui/README.md",
+   "src/web/src/components/ui/Select.tsx",
+   "src/web/src/components/ui/SelectEmpty.tsx",
+   "src/web/src/components/ui/TextControls.css",
+   "src/web/src/components/ui/Textarea.tsx",
+   "src/web/src/components/ui/__fixtures__/ChoicesFixture.css",
+   "src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+   "src/web/src/components/ui/__fixtures__/ComposerFixture.css",
+   "src/web/src/components/ui/__fixtures__/ComposerFixture.tsx",
+   "src/web/src/components/ui/__fixtures__/ControlsFixture.css",
+   "src/web/src/components/ui/__fixtures__/ControlsFixture.tsx",
+   "src/web/src/components/ui/__fixtures__/FoundationFixture.tsx",
+   "src/web/src/components/ui/__fixtures__/OverlaysFixture.tsx",
+   "src/web/src/components/ui/__fixtures__/ToastsFixture.tsx",
+   "src/web/src/components/ui/boundary.test.ts",
+   "src/web/src/firstPageStylesheet.test.ts",
+   "src/web/src/index.css",
+   "src/web/src/indexCss.test.ts",
+   "src/web/src/lib/toast.test.tsx",
+   "src/web/src/lib/toast.tsx",
+   "src/web/src/lib/toastStore.ts",
+   "src/web/src/main.tsx",
+   "src/web/src/pages/InfrastructurePage.overview.test.tsx",
+   "src/web/src/pages/RunnerDetailPage.engines.test.tsx",
+   "src/web/src/theme.ts"
+  ],
+  "points": {
+   "P6": [
+    {
+     "path": "src/web/src/App.infrastructure.test.tsx",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/components/ProjectDoneConversation.test.tsx",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/components/ProjectWhyNotDoneGate.test.tsx",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/components/StatusTag.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/TaskDetailPanel.test.tsx",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/components/ToastViewport.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/Empty.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/Floating.css",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/MultiSelect.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/README.md",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/Select.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/SelectEmpty.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/TextControls.css",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/Textarea.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/ChoicesFixture.css",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/ComposerFixture.css",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/ComposerFixture.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/ControlsFixture.css",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/ControlsFixture.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/FoundationFixture.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/OverlaysFixture.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/__fixtures__/ToastsFixture.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/components/ui/boundary.test.ts",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/firstPageStylesheet.test.ts",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 4,
+     "kind": "antd-reference",
+     "text": "same names. AntD components are themed separately in theme.ts (darkAlgorithm)."
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 12704,
+     "kind": "antd-reference",
+     "text": "/* The Reopen question replaced an AntD Modal, whose line height is unitless: text of another size"
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 14212,
+     "kind": "ant-class",
+     "text": ".ant-input,"
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 14213,
+     "kind": "ant-class",
+     "text": ".ant-input-affix-wrapper input,"
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 14214,
+     "kind": "ant-class",
+     "text": "textarea.ant-input,"
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 14219,
+     "kind": "antd-reference",
+     "text": "/* AntD Select focuses this hidden search input on tap — a <16px font here is what"
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 14221,
+     "kind": "antd-reference",
+     "text": "AntD sizes it from the Select's own font token through a rule that outranks a plain"
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 14224,
+     "kind": "ant-class",
+     "text": ".ant-select-input {"
+    },
+    {
+     "path": "src/web/src/index.css",
+     "line": 14882,
+     "kind": "antd-reference",
+     "text": "/* Unitless line height, as the AntD Modal this dialog replaced: smaller text inside keeps its own"
+    },
+    {
+     "path": "src/web/src/indexCss.test.ts",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/lib/toast.test.tsx",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/lib/toast.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/lib/toastStore.ts",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/main.tsx",
+     "category": "production"
+    },
+    {
+     "path": "src/web/src/pages/InfrastructurePage.overview.test.tsx",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/pages/RunnerDetailPage.engines.test.tsx",
+     "category": "test"
+    },
+    {
+     "path": "src/web/src/theme.ts",
+     "category": "production"
+    }
+   ],
+   "KEEP": [
+    {
+     "path": "src/web/src/components/WikiMarks.tsx",
+     "category": "production"
+    }
+   ]
+  },
+  "declared": [
+   {
+    "section": "dependencies",
+    "name": "@ant-design/icons",
+    "version": "^6.3.4",
+    "family": "icons"
+   },
+   {
+    "section": "dependencies",
+    "name": "antd",
+    "version": "^6.6.5",
+    "family": "antd"
+   }
+  ],
+  "locked": [
+   "@ant-design/colors@8.0.1",
+   "@ant-design/cssinjs@2.1.2",
+   "@ant-design/cssinjs-utils@2.1.2",
+   "@ant-design/fast-color@3.0.1",
+   "@ant-design/icons@6.3.4",
+   "@ant-design/icons-svg@4.6.0",
+   "@ant-design/react-slick@2.0.0",
+   "@rc-component/async-validator@6.0.0",
+   "@rc-component/cascader@1.22.0",
+   "@rc-component/checkbox@2.0.0",
+   "@rc-component/collapse@1.2.0",
+   "@rc-component/color-picker@3.1.1",
+   "@rc-component/context@2.0.2",
+   "@rc-component/dialog@1.10.0",
+   "@rc-component/drawer@1.4.2",
+   "@rc-component/dropdown@1.0.3",
+   "@rc-component/form@1.8.6",
+   "@rc-component/image@1.10.0",
+   "@rc-component/input@1.3.1",
+   "@rc-component/input-number@1.6.2",
+   "@rc-component/listy@1.2.3",
+   "@rc-component/mentions@1.12.0",
+   "@rc-component/menu@1.5.0",
+   "@rc-component/mini-decimal@1.1.4",
+   "@rc-component/motion@1.3.3",
+   "@rc-component/mutate-observer@2.0.1",
+   "@rc-component/notification@2.0.8",
+   "@rc-component/overflow@1.0.1",
+   "@rc-component/pagination@1.4.0",
+   "@rc-component/picker@1.12.2",
+   "@rc-component/portal@2.2.1",
+   "@rc-component/progress@1.0.3",
+   "@rc-component/qrcode@2.0.0",
+   "@rc-component/rate@1.0.1",
+   "@rc-component/resize-observer@1.1.2",
+   "@rc-component/segmented@1.4.0",
+   "@rc-component/select@1.10.1",
+   "@rc-component/slider@1.1.1",
+   "@rc-component/steps@1.2.3",
+   "@rc-component/switch@1.0.3",
+   "@rc-component/table@1.11.1",
+   "@rc-component/tabs@1.13.0",
+   "@rc-component/tooltip@1.5.2",
+   "@rc-component/tour@2.4.0",
+   "@rc-component/tree@1.4.0",
+   "@rc-component/tree-select@1.16.1",
+   "@rc-component/trigger@3.10.1",
+   "@rc-component/upload@1.1.1",
+   "@rc-component/util@1.13.0",
+   "@rc-component/virtual-list@1.5.1",
+   "antd@6.6.5"
+  ]
+ },
+ "after": {
+  "baseline": {
+   "commit": "6879542dc23a10a74417002810331a7e73778842",
+   "scopeHash": "c8b9a37a83401601d9ce7f8061ecf343b6874e94924980ab0b5c25bb403fa990"
+  },
+  "owners": {},
+  "unowned": [],
+  "pending": [],
+  "retirementBlockers": [],
+  "points": {
+   "P6": [],
+   "KEEP": []
+  },
+  "declared": [
+   {
+    "section": "dependencies",
+    "name": "@ant-design/icons",
+    "version": "^6.3.4",
+    "family": "icons"
+   }
+  ],
+  "locked": [
+   "@ant-design/colors@8.0.1",
+   "@ant-design/fast-color@3.0.1",
+   "@ant-design/icons@6.3.4",
+   "@ant-design/icons-svg@4.6.0",
+   "@rc-component/util@1.13.0"
+  ]
+ },
+ "counts": {
+  "scannedFiles": [
+   791,
+   792
+  ],
+  "productionFiles": [
+   389,
+   390
+  ],
+  "testFiles": [
+   400,
+   400
+  ],
+  "antdProductionFiles": [
+   9,
+   0
+  ],
+  "antdTestFiles": [
+   3,
+   0
+  ],
+  "antSelectorTestFiles": [
+   0,
+   0
+  ],
+  "antClassTestFiles": [
+   0,
+   0
+  ],
+  "iconProductionFiles": [
+   114,
+   114
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   178,
+   154
+  ],
+  "retirementBlockingFiles": [
+   37,
+   0
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   10,
+   0
+  ],
+  "ant-design-support": [
+   19,
+   6
+  ],
+  "ant-selector": [
+   9,
+   0
+  ],
+  "antd-reference": [
+   84,
+   0
+  ],
+  "icon-class": [
+   88,
+   88
+  ],
+  "icon-reference": [
+   125,
+   125
+  ],
+  "imperative-confirm": [
+   3,
+   1
+  ],
+  "imperative-feedback": [
+   220,
+   220
+  ],
+  "internal-ref": [
+   1,
+   0
+  ],
+  "provider": [
+   13,
+   0
+  ],
+  "rc-support": [
+   237,
+   23
+  ],
+  "ref-focus": [
+   24,
+   24
+  ],
+  "theme": [
+   1,
+   0
+  ],
+  "use-app": [
+   2,
+   0
+  ]
+ },
+ "files": {
+  "package-lock.json": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-design-support": 19,
+     "antd-reference": 3,
+     "icon-reference": 7,
+     "rc-support": 217
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-design-support": 6,
+     "icon-reference": 6,
+     "rc-support": 3
+    }
+   }
+  },
+  "src/web/package.json": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/App.infrastructure.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectDoneConversation.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectWhyNotDoneGate.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/StatusTag.tsx": {
+   "before": {
+    "antdImports": [
+     "Tag"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": null
+  },
+  "src/web/src/components/TaskDetailPanel.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ToastViewport.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiMarks.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 2
+    }
+   }
+  },
+  "src/web/src/components/ui/AppRoot.tsx": {
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/Empty.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/Floating.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-class": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/MultiSelect.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/README.md": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 14,
+     "icon-reference": 1,
+     "rc-support": 3,
+     "ref-focus": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "rc-support": 3,
+     "ref-focus": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/Select.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "rc-support": 1,
+     "ref-focus": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "rc-support": 1,
+     "ref-focus": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/SelectEmpty.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/TextControls.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 5
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/Textarea.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ChoicesFixture.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "ConfigProvider",
+     "Drawer",
+     "Dropdown",
+     "Modal",
+     "Popconfirm",
+     "Popover",
+     "Select",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "icon-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ComposerFixture.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ComposerFixture.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Avatar",
+     "Button",
+     "ConfigProvider",
+     "Image",
+     "Input"
+    ],
+    "hitKinds": {
+     "antd-reference": 3,
+     "icon-reference": 1,
+     "internal-ref": 1,
+     "provider": 1,
+     "ref-focus": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "ref-focus": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ControlsFixture.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ControlsFixture.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "App",
+     "Button",
+     "Card",
+     "Checkbox",
+     "ConfigProvider",
+     "Empty",
+     "Input",
+     "List",
+     "Radio",
+     "Skeleton",
+     "Spin",
+     "Switch",
+     "Tag",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "icon-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/FoundationFixture.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "ConfigProvider",
+     "Modal"
+    ],
+    "hitKinds": {
+     "antd-reference": 7,
+     "provider": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/OverlaysFixture.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "ConfigProvider",
+     "Drawer",
+     "Input",
+     "Modal",
+     "Popconfirm",
+     "Select"
+    ],
+    "hitKinds": {
+     "antd-reference": 5,
+     "imperative-confirm": 1,
+     "provider": 2,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ToastsFixture.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "ConfigProvider"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-confirm": 1,
+     "provider": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/boundary.test.ts": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/reset.css": {
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ui/root.css": {
+   "before": null,
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/firstPageStylesheet.test.ts": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/index.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 5,
+     "icon-class": 30
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 30
+    }
+   }
+  },
+  "src/web/src/indexCss.test.ts": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/lib/toast.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/lib/toast.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 1
+    }
+   }
+  },
+  "src/web/src/lib/toastStore.ts": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/main.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "ConfigProvider"
+    ],
+    "hitKinds": {
+     "antd-reference": 4,
+     "provider": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/InfrastructurePage.overview.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/RunnerDetailPage.engines.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/theme.ts": {
+   "before": {
+    "antdImports": [
+     "ThemeConfig",
+     "theme"
+    ],
+    "hitKinds": {
+     "antd-reference": 3,
+     "theme": 1
+    }
+   },
+   "after": null
+  }
+ }
+}

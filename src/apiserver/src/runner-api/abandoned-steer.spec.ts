@@ -60,7 +60,7 @@ function harness({
   };
   const prisma = {
     session: {
-      findUnique: async () => ({
+      findFirst: async () => ({
         inboxLeaseOwner: LEASE_OWNER,
         inboxLeaseGeneration: installed ? GENERATION : null,
         status: RunStatus.RUNNING,

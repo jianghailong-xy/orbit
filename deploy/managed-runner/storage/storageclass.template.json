@@ -1,0 +1,30 @@
+{
+  "apiVersion": "storage.k8s.io/v1",
+  "kind": "StorageClass",
+  "metadata": {
+    "name": "${storage.className}",
+    "annotations": {
+      "storageclass.kubernetes.io/is-default-class": "false"
+    }
+  },
+  "provisioner": "${csi.driver}",
+  "parameters": {
+    "clusterID": "${csi.clusterID}",
+    "pool": "${ceph.pool}",
+    "imageFeatures": "layering",
+    "mounter": "rbd",
+    "tryOtherMounters": "false",
+    "csi.storage.k8s.io/fstype": "ext4",
+    "csi.storage.k8s.io/provisioner-secret-name": "${csi.secretRefs.provisioner.name}",
+    "csi.storage.k8s.io/provisioner-secret-namespace": "${csi.secretRefs.provisioner.namespace}",
+    "csi.storage.k8s.io/controller-publish-secret-name": "${csi.secretRefs.controllerPublish.name}",
+    "csi.storage.k8s.io/controller-publish-secret-namespace": "${csi.secretRefs.controllerPublish.namespace}",
+    "csi.storage.k8s.io/controller-expand-secret-name": "${csi.secretRefs.controllerExpand.name}",
+    "csi.storage.k8s.io/controller-expand-secret-namespace": "${csi.secretRefs.controllerExpand.namespace}",
+    "csi.storage.k8s.io/node-stage-secret-name": "${csi.secretRefs.nodeStage.name}",
+    "csi.storage.k8s.io/node-stage-secret-namespace": "${csi.secretRefs.nodeStage.namespace}"
+  },
+  "reclaimPolicy": "Retain",
+  "allowVolumeExpansion": false,
+  "volumeBindingMode": "Immediate"
+}

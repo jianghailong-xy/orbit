@@ -56,6 +56,12 @@ const skip = !URL;
  * — and every reader of these codes (the clients, the blocker kinds, the decision spec's own
  * reachability census) would have to be told. Nothing below moved; the derivation above the rules
  * did. `project-scope-decision.spec.ts` still owns what each of these rules DOES.
+ *
+ * One row has been added since, and not by a bug fix: R8B, the account owner's decision of
+ * 2026-10-06 that a settled project may give up — by a confirmed move — a task none of its criteria
+ * count, and refuses one that serves them with a code of its own
+ * (`task-move-out-of-settled.pg.spec.ts`). It is written in here so the lock keeps meaning what it
+ * meant: any OTHER change to the table still has to come with its own reason.
  */
 const FROZEN_SCOPE_RULES: ReadonlyArray<{
   id: string; code: string | null; requiredAction: string | null;
@@ -68,6 +74,7 @@ const FROZEN_SCOPE_RULES: ReadonlyArray<{
   { id: 'R6_OUT_OF_SCOPE', code: 'PROJECT_SCOPE_MISMATCH', requiredAction: 'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF' },
   { id: 'R7_UNDECLARED_CROSSING', code: 'PROJECT_SCOPE_MISMATCH', requiredAction: 'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF' },
   { id: 'R8_SETTLED_PROJECT', code: 'PROJECT_REOPEN_REQUIRED', requiredAction: 'REOPEN_PROJECT_FIRST' },
+  { id: 'R8B_SETTLED_CRITERION_SERVED', code: 'MOVE_TASK_SERVES_SETTLED_CRITERION', requiredAction: 'REOPEN_PROJECT_FIRST' },
   { id: 'R9_APPROVAL_TARGET_MISMATCH', code: 'APPROVAL_TARGET_MISMATCH', requiredAction: 'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF' },
   { id: 'R10_NO_APPROVAL', code: 'CROSS_PROJECT_APPROVAL_REQUIRED', requiredAction: 'AWAIT_HANDOFF_APPROVAL' },
   { id: 'R11_APPROVAL_PENDING', code: 'APPROVAL_PENDING', requiredAction: 'AWAIT_HANDOFF_APPROVAL' },

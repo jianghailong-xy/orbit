@@ -1,0 +1,13 @@
+[WebServer] (node:1261374) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences.
+
+Running 1 test using 1 worker
+
+(node:1261758) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p32acc/runs/after-2925958ae-profile-rerun/snapshots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p32acc/runs/after-2925958ae-profile-rerun/snapshots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  1 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (4.3s)
+
+  1 passed (7.0s)

@@ -1,0 +1,362 @@
+{
+  "final": {
+    "stats": {
+      "startTime": "2026-10-04T07:03:17.183Z",
+      "duration": 17963.968,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 7,
+      "flaky": 0
+    },
+    "tests": [
+      {
+        "test": "existing notification stays at viewport origin during Dialog entry",
+        "project": "chromium-light-desktop",
+        "status": "unexpected",
+        "before": {
+          "x": 904,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 14,
+        "outsideFrames": 14,
+        "firstShift": [
+          {
+            "t": 63.099999994039536,
+            "x": 1219.5999755859375,
+            "y": 126.70000457763672,
+            "width": 324,
+            "height": 115.19998931884766,
+            "card": {
+              "x": 1234,
+              "y": 126.70000457763672,
+              "width": 324,
+              "height": 115.19998931884766,
+              "top": 126.70000457763672,
+              "right": 1558,
+              "bottom": 241.89999389648438,
+              "left": 1234
+            },
+            "scale": "0.9",
+            "translate": "none",
+            "insideViewport": false
+          }
+        ]
+      },
+      {
+        "test": "existing notification stays at viewport origin during Drawer entry",
+        "project": "chromium-light-desktop",
+        "status": "unexpected",
+        "before": {
+          "x": 904,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 20,
+        "outsideFrames": 20,
+        "firstShift": [
+          {
+            "t": 59.599999994039536,
+            "x": 2184,
+            "y": 16,
+            "width": 360,
+            "height": 128,
+            "card": {
+              "x": 2200,
+              "y": 16,
+              "width": 360,
+              "height": 128,
+              "top": 16,
+              "right": 2560,
+              "bottom": 144,
+              "left": 2200
+            },
+            "scale": "none",
+            "translate": "100%",
+            "insideViewport": false
+          }
+        ]
+      },
+      {
+        "test": "existing notification stays at viewport origin during Bottom drawer entry",
+        "project": "chromium-light-desktop",
+        "status": "unexpected",
+        "before": {
+          "x": 904,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 22,
+        "outsideFrames": 12,
+        "firstShift": [
+          {
+            "t": 55.599999994039536,
+            "x": 904,
+            "y": 916,
+            "width": 360,
+            "height": 128,
+            "card": {
+              "x": 920,
+              "y": 916,
+              "width": 360,
+              "height": 128,
+              "top": 916,
+              "right": 1280,
+              "bottom": 1044,
+              "left": 920
+            },
+            "scale": "none",
+            "translate": "0px 100%",
+            "insideViewport": false
+          }
+        ]
+      },
+      {
+        "test": "hover pause releases after a keyboard opened and closed overlay changes portal",
+        "project": "chromium-light-desktop",
+        "status": "expected",
+        "timer": {
+          "after": 0,
+          "releasedAfterMs": 6001
+        },
+        "errors": []
+      },
+      {
+        "test": "existing notification stays at viewport origin during Dialog entry",
+        "project": "webkit-light-desktop",
+        "status": "unexpected",
+        "before": {
+          "x": 896,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 13,
+        "outsideFrames": 13,
+        "firstShift": [
+          {
+            "t": 68,
+            "x": 1212.4000244140625,
+            "y": 127,
+            "width": 324,
+            "height": 115.19999694824219,
+            "card": {
+              "x": 1226.800048828125,
+              "y": 127,
+              "width": 324,
+              "height": 115.19999694824219,
+              "top": 127,
+              "right": 1550.800048828125,
+              "bottom": 242.1999969482422,
+              "left": 1226.800048828125
+            },
+            "scale": "0.9",
+            "translate": "none",
+            "insideViewport": false
+          }
+        ]
+      },
+      {
+        "test": "existing notification stays at viewport origin during Drawer entry",
+        "project": "webkit-light-desktop",
+        "status": "unexpected",
+        "before": {
+          "x": 896,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 19,
+        "outsideFrames": 19,
+        "firstShift": [
+          {
+            "t": 70,
+            "x": 2176,
+            "y": 16,
+            "width": 360,
+            "height": 128,
+            "card": {
+              "x": 2192,
+              "y": 16,
+              "width": 360,
+              "height": 128,
+              "top": 16,
+              "right": 2552,
+              "bottom": 144,
+              "left": 2192
+            },
+            "scale": "none",
+            "translate": "100%",
+            "insideViewport": false
+          }
+        ]
+      },
+      {
+        "test": "existing notification stays at viewport origin during Bottom drawer entry",
+        "project": "webkit-light-desktop",
+        "status": "unexpected",
+        "before": {
+          "x": 896,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 20,
+        "outsideFrames": 10,
+        "firstShift": [
+          {
+            "t": 78,
+            "x": 896,
+            "y": 915.859375,
+            "width": 360,
+            "height": 128,
+            "card": {
+              "x": 912,
+              "y": 915.859375,
+              "width": 360,
+              "height": 128,
+              "top": 915.859375,
+              "right": 1272,
+              "bottom": 1043.859375,
+              "left": 912
+            },
+            "scale": "none",
+            "translate": "0px 100%",
+            "insideViewport": false
+          }
+        ]
+      },
+      {
+        "test": "hover pause releases after a keyboard opened and closed overlay changes portal",
+        "project": "webkit-light-desktop",
+        "status": "unexpected",
+        "timer": {
+          "after": 1,
+          "releasedAfterMs": 6001
+        },
+        "errors": [
+          "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  63 |   const after = await region.count();\n  64 |   await info.attach('timer-after-portal', { body: JSON.stringify({ after, releasedAfterMs: 6001 }), contentType: 'application/json' });\n> 65 |   expect(after).toBe(0);\n     |           "
+        ]
+      }
+    ]
+  },
+  "reference": {
+    "stats": {
+      "startTime": "2026-10-04T07:03:35.470Z",
+      "duration": 16957.081000000002,
+      "expected": 8,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "tests": [
+      {
+        "test": "existing notification stays at viewport origin during Dialog entry",
+        "project": "chromium-light-desktop",
+        "status": "expected",
+        "before": {
+          "x": 904,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 0,
+        "outsideFrames": 0,
+        "firstShift": []
+      },
+      {
+        "test": "existing notification stays at viewport origin during Drawer entry",
+        "project": "chromium-light-desktop",
+        "status": "expected",
+        "before": {
+          "x": 904,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 0,
+        "outsideFrames": 0,
+        "firstShift": []
+      },
+      {
+        "test": "existing notification stays at viewport origin during Bottom drawer entry",
+        "project": "chromium-light-desktop",
+        "status": "expected",
+        "before": {
+          "x": 904,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 0,
+        "outsideFrames": 0,
+        "firstShift": []
+      },
+      {
+        "test": "hover pause releases after a keyboard opened and closed overlay changes portal",
+        "project": "chromium-light-desktop",
+        "status": "expected",
+        "timer": {
+          "after": 0,
+          "releasedAfterMs": 6001
+        },
+        "errors": []
+      },
+      {
+        "test": "existing notification stays at viewport origin during Dialog entry",
+        "project": "webkit-light-desktop",
+        "status": "expected",
+        "before": {
+          "x": 896,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 0,
+        "outsideFrames": 0,
+        "firstShift": []
+      },
+      {
+        "test": "existing notification stays at viewport origin during Drawer entry",
+        "project": "webkit-light-desktop",
+        "status": "expected",
+        "before": {
+          "x": 896,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 0,
+        "outsideFrames": 0,
+        "firstShift": []
+      },
+      {
+        "test": "existing notification stays at viewport origin during Bottom drawer entry",
+        "project": "webkit-light-desktop",
+        "status": "expected",
+        "before": {
+          "x": 896,
+          "y": 16,
+          "width": 360,
+          "height": 128
+        },
+        "shiftedFrames": 0,
+        "outsideFrames": 0,
+        "firstShift": []
+      },
+      {
+        "test": "hover pause releases after a keyboard opened and closed overlay changes portal",
+        "project": "webkit-light-desktop",
+        "status": "expected",
+        "timer": {
+          "after": 0,
+          "releasedAfterMs": 6001
+        },
+        "errors": []
+      }
+    ]
+  }
+}

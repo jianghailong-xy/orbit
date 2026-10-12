@@ -1,11 +1,23 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
-import { Alert, Button, Spin, Typography } from 'antd';
-import { INTEGRATION_CLAIM_STALE_MS, type ProjectIntegrationView, type ProjectManualReady } from '@orbit/shared';
+import {
+  INTEGRATION_CLAIM_STALE_MS,
+  type IntegrationJobPhase,
+  type ProjectIntegrationJob,
+  type ProjectIntegrationView,
+  type ProjectManualReady,
+} from '@orbit/shared';
 import { api } from '../api';
+import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
+import { LandingJobsSheet } from './LandingJobsSheet';
+import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectTaskLink } from './ProjectTaskLink';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Spinner } from './ui/Spinner';
+import './ui/Typography.css';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -109,7 +121,9 @@ export type BucketGlyph =
   // Two more for the lanes `done` splits into: work the platform still has in hand, and work
   // that reached the project's own branch but not main.
   | 'spinner'
-  | 'branch';
+  | 'branch'
+  // And the landing row's mark for a job whose runner went quiet past its limit — no bucket's.
+  | 'exclamation';
 
 /** The seven lanes EVERY project reports, integration line or not. Spelled out rather than
  *  `keyof ProjectPanoramaBuckets`, which now also covers the integration lanes: those are an
@@ -169,10 +183,13 @@ export function reportsIntegrationLanes(buckets: ProjectPanoramaBuckets): boolea
  * `On project branch` is dropped on a `MAIN` line rather than shown as a zero: a project landing
  * straight into main has no branch for work to be stranded on, and a lane saying "0 stranded"
  * answers a question nobody asked.
+ *
+ * `main` is the project's main branch by name, which the lanes about it say.
  */
 export function integrationLanes(
   buckets: ProjectPanoramaBuckets,
   line: 'MAIN' | 'PROJECT_BRANCH' | null,
+  main: string = DEFAULT_MAIN_BRANCH,
 ): ReadonlyArray<{ key: string; label: string; value: number; footnote: string; glyph: BucketGlyph; color: string }> {
   const at = (value: number | undefined) => value ?? 0;
   const lanes = [
@@ -190,13 +207,13 @@ export function integrationLanes(
       glyph: 'hourglass' as BucketGlyph, color: 'var(--text-3)' },
     ...(line === 'MAIN' ? [] : [{
       key: 'onIntegrationLine', label: 'On project branch', value: at(buckets.onIntegrationLine),
-      footnote: 'not on main yet', glyph: 'branch' as BucketGlyph, color: 'var(--success)',
+      footnote: `not on ${main} yet`, glyph: 'branch' as BucketGlyph, color: 'var(--success)',
     }]),
     // The two greens are deliberately different, and the meter is why: these lanes are adjacent
     // segments on one bar, and two touching blocks of the same colour read as a single larger
     // block — which is exactly the reading this split exists to break up. `--success-solid` is the
     // brighter of the pair, so main is the one that stands out.
-    { key: 'onUpstream', label: 'On main', value: at(buckets.onUpstream), footnote: 'landed on main',
+    { key: 'onUpstream', label: `On ${main}`, value: at(buckets.onUpstream), footnote: `landed on ${main}`,
       glyph: 'check' as BucketGlyph, color: 'var(--success-solid)' },
   ];
   const extras = [
@@ -238,26 +255,55 @@ export const READY_WHILE_PAUSED = 'project is paused';
  */
 export interface LandingLine {
   word: string;
-  /** The task being landed, `N jobs` when more than one is in flight, or null when the job names no
-   *  single task (a promotion, a merge check) — the row then draws its word and state alone. */
+  /** The task being landed, `N jobs` (and how many of them timed out) when more than one is in
+   *  flight, or null when the job names no single task (a promotion, a merge check) — the row then
+   *  draws its word and state alone. */
   what: string | null;
   /** Whether the job is running, as opposed to still waiting its turn.
    *  What the ring's spin and the two brand-blue words are drawn from; the `state` word is what
    *  carries the same fact to a reader who cannot use motion. */
   running: boolean;
-  /** The runner's current phase, or "queued". */
+  /** Whether the server judged the job timed out: its runner said nothing for longer than the
+   *  step's limit. Drawn as a still warning mark in amber instead of the ring; "Timed out" is the
+   *  word that says it without colour. */
+  timedOut: boolean;
+  /** The runner's current phase, "queued", or "Timed out". */
   state: string;
-  /** "1m 20s". See `landingClock`. */
+  /** "1m 20s" (see `landingClock`), or "110m" without a report on a timed-out job. */
   clock: string;
   clockLabel: string;
+  /** How fresh the line is, or the limit a timed-out job ran over ("limit 10m"). */
   updated: string | null;
+  /** "2m 24s" — what the job waited for a runner before it was claimed, or null when it never
+   *  waited, the read does not say, or it has not been claimed at all (a queued job's whole clock
+   *  is that wait, said by `clockLabel`). */
+  wait: string | null;
 }
 
-const JOB_WORDS = {
+export const JOB_WORDS = {
   LAND_TASK: 'Landing',
   CHECK_PROMOTION: 'Merge check',
   LAND_PROMOTION: 'Merge to main',
 };
+
+/** The words above for a project whose main branch is `main` by name: a merge names the branch it
+ *  goes into. */
+export function jobWords(main: string = DEFAULT_MAIN_BRANCH): typeof JOB_WORDS {
+  return { ...JOB_WORDS, LAND_PROMOTION: `Merge to ${main}` };
+}
+
+/**
+ * The state word for a job whose runner has stopped reporting.
+ *
+ * A fact about the REPORTS and nothing else: the runner is silent, which is not the same claim as
+ * "this job is broken", and emphatically not the same claim as "this job timed out" — a timeout is
+ * the job's own verdict, and only the server's `blockingReason` ever words one.
+ */
+export const LANDING_NO_REPORT = 'No report';
+/** The same fact with its age, for the row's right-hand slot: `No report for 11m`. */
+export const landingNoReportFor = (minutes: number): string => `No report for ${minutes}m`;
+/** And for a job claimed whose runner has never reported at all — the report that never came. */
+export const LANDING_NO_REPORT_YET = 'No report yet';
 
 export const JOB_PHASES = {
   FETCH: 'fetching',
@@ -268,6 +314,44 @@ export const JOB_PHASES = {
   VERIFY: 'verifying',
   PUSH: 'pushing',
 };
+
+/** The phases above for a project whose main branch is `main` by name: the sync takes that branch in. */
+export function jobPhases(main: string = DEFAULT_MAIN_BRANCH): typeof JOB_PHASES {
+  return { ...JOB_PHASES, MAIN_SYNC: `syncing ${main}` };
+}
+
+export const LANDING_WORDS = {
+  TIMED_OUT: 'Timed out',
+  NO_REPORT_FOR: 'No report for',
+  RETRY: 'Retry',
+  RETRY_FAILED: 'Retry failed',
+  NO_PUSH_RECORDED: 'no push recorded',
+  MAY_HAVE_BEEN_PUSHED: 'may have been pushed',
+  RETRIED_BY_OWNER: 'retried by you',
+  RETRIED_BY_COORDINATOR: 'retried by the coordinator',
+};
+
+/** "2 jobs · 1 timed out" — the row's name slot while several jobs are in flight; "2 jobs" when none timed out. */
+export function landingJobsCount(jobs: number, timedOut: number): string {
+  return timedOut > 0 ? `${jobs} jobs · ${timedOut} timed out` : `${jobs} jobs`;
+}
+
+/** "limit 10m" — how long a timed-out job's step could go without a report, in whole minutes. */
+export function landingLimit(seconds: number): string {
+  return `limit ${Math.round(seconds / 60)}m`;
+}
+
+/** "2 jobs in flight" — the title of the list the landing row opens; "1 job" when there is one. */
+export function landingJobsTitle(jobs: number): string {
+  return `${jobs} ${jobs === 1 ? 'job' : 'jobs'} in flight`;
+}
+
+/** "20:07" — an instant on the reader's own 24-hour clock, or "--:--" for one it cannot read. */
+export function landingClockTime(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '--:--';
+  return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+}
 
 /**
  * "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
@@ -294,6 +378,13 @@ export function landingClock(ms: number): string {
  * The name slot takes the job's task, or the COUNT when there is more than one: "Landing 2 jobs"
  * says what a single task's title would have pretended to — that this is the oldest of several, not
  * the only thing the queue is doing.
+ *
+ * A server that lists its jobs (`inFlightJobs`) also judges which of them timed out, and the row
+ * takes its word: "Timed out" when the job it describes did, and the count says how many did.
+ * "Update unavailable" then means only that this app cannot read the server. A server older than the
+ * list leaves the reading of the reports here, from the runner's heartbeat: a claimed job whose
+ * runner has gone quiet reads "No report" for as long as it stays quiet — never "timed out", which
+ * is the job's own verdict to give and arrives as the server's `blockingReason`.
  */
 export function landingLine(
   view: ProjectIntegrationView,
@@ -304,53 +395,329 @@ export function landingLine(
   if (!inFlight) return null;
   const running = inFlight.state === 'RUNNING';
   const jobs = view.integratingCount + view.queuedCount;
-  const startedAt = Date.parse(inFlight.startedAt);
+  const listed = view.inFlightJobs;
+  const lead = listed?.[0];
+  const timedOutJobs = listed ? listed.filter((job) => job.timedOut).length : 0;
   const heartbeatAt = Date.parse(inFlight.heartbeatAt ?? '');
-  const heartbeatStale = running && Number.isFinite(heartbeatAt)
-    && now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS;
+  // A claimed job whose runner has gone quiet: no report at all, or none since the claim lease the
+  // server itself uses (`INTEGRATION_CLAIM_STALE_MS`). Read only where the server hands over no
+  // verdict of its own (a server that does not list its jobs) — one that lists them judges the
+  // timeouts, and this row takes that word instead. Even here it is a fact about the REPORTS and
+  // never a verdict: "No report", not "timed out", which is the job's own to say.
+  const silent = !listed && running
+    && (!Number.isFinite(heartbeatAt) || now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS);
+  const unavailable = unreadable(now, observation);
+  const main = mainBranchName(view.upstreamRef);
+  const named = {
+    word: inFlight.kind ? jobWords(main)[inFlight.kind] ?? 'Integration' : 'Integration',
+    what: jobs > 1 ? landingJobsCount(jobs, timedOutJobs) : inFlight.taskTitle,
+  };
+  // What the job waited for a runner before it was claimed — the row's own `inFlight` carries it,
+  // and only a CLAIMED job has one to show: a queued job's whole clock already is that wait.
+  const waitMs = running ? inFlight.waitMs : null;
+  if (!unavailable && lead?.timedOut) return { ...named, ...timedOutLine(lead, now, waitMs) };
+  return { ...named, ...liveLine(inFlight, now, observation, unavailable, silent, main, waitMs) };
+}
+
+/** Whether this app has lost the server: its last read failed, or is more than 90 s old. */
+function unreadable(now: number, observation: { updatedAt?: number; failed?: boolean }): boolean {
   const readStale = observation.updatedAt !== undefined && now - observation.updatedAt > 90_000;
-  const unavailable = observation.failed === true || readStale || heartbeatStale;
-  const updatedAt = running && Number.isFinite(heartbeatAt) ? heartbeatAt : observation.updatedAt;
-  const elapsedAt = unavailable ? Math.min(now, updatedAt ?? now) : now;
+  return observation.failed === true || readStale;
+}
+
+/** A running or queued job's half of a line: its state, its clock and how fresh the line is —
+ *  frozen at the last word anyone had when `unavailable`, and at the last report when `silent`
+ *  (the same freeze, reached from the runner's silence rather than this app's read). `main` is the
+ *  project's main branch by name, which a sync names. */
+function liveLine(
+  job: { state: 'RUNNING' | 'QUEUED'; phase?: IntegrationJobPhase | null; startedAt: string; heartbeatAt?: string | null },
+  now: number,
+  observation: { updatedAt?: number },
+  unavailable: boolean,
+  silent: boolean,
+  main: string,
+  waitMs?: number | null,
+): Omit<LandingLine, 'word' | 'what'> {
+  const running = job.state === 'RUNNING';
+  const startedAt = Date.parse(job.startedAt);
+  const heartbeatAt = Date.parse(job.heartbeatAt ?? '');
+  const reported = Number.isFinite(heartbeatAt);
+  // What this row has evidence for. A read that failed or went stale is evidence only of itself, so
+  // the row freezes at that read; a read that worked carries the runner's own last report, which is
+  // what the line's freshness follows — a successful refresh does not make a silent job look active.
+  const updatedAt = unavailable ? observation.updatedAt : running && reported ? heartbeatAt : observation.updatedAt;
+  const elapsedAt = unavailable || silent ? Math.min(now, updatedAt ?? now) : now;
   const age = updatedAt === undefined ? null : Math.max(0, Math.floor((now - updatedAt) / 60_000));
   return {
-    word: inFlight.kind ? JOB_WORDS[inFlight.kind] ?? 'Integration' : 'Integration',
-    what: jobs > 1 ? `${jobs} jobs` : inFlight.taskTitle,
-    running: running && !unavailable,
+    running: running && !unavailable && !silent,
+    timedOut: false,
     state: unavailable ? 'Update unavailable'
-      : running ? (inFlight.phase ? JOB_PHASES[inFlight.phase] ?? 'running' : 'running') : 'queued',
+      : silent ? LANDING_NO_REPORT
+        : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
     clockLabel: running ? 'Elapsed' : 'Queued for',
-    updated: age === null ? null : age === 0 ? 'Updated just now' : `Updated ${age}m ago`,
+    // A read that failed or went stale says how old the read is; a read that WORKED says where the
+    // reports stand — and a silent job says that rather than putting a false "Updated" on itself.
+    updated: silent ? (reported && age !== null ? landingNoReportFor(age) : LANDING_NO_REPORT_YET)
+      : age === null ? null : age === 0 ? 'Updated just now' : `Updated ${age}m ago`,
+    wait: running && waitMs ? landingClock(waitMs) : null,
   };
 }
 
+/** A job the server judged timed out: how long its runner has said nothing — since its last report,
+ *  or since the claim when it never made one — and the limit it ran over. */
+function timedOutLine(
+  job: ProjectIntegrationJob,
+  now: number,
+  waitMs?: number | null,
+): Omit<LandingLine, 'word' | 'what'> {
+  const silentSince = Date.parse(job.heartbeatAt ?? job.startedAt);
+  return {
+    running: false,
+    timedOut: true,
+    state: LANDING_WORDS.TIMED_OUT,
+    clock: Number.isFinite(silentSince) ? `${Math.max(0, Math.floor((now - silentSince) / 60_000))}m` : '0m',
+    clockLabel: LANDING_WORDS.NO_REPORT_FOR,
+    updated: landingLimit(job.limitSeconds ?? 600),
+    wait: waitMs ? landingClock(waitMs) : null,
+  };
+}
+
+/** One job of the list the landing row opens (`LandingJobsSheet`). */
+export interface LandingJobLine {
+  jobId: string;
+  /** The task it lands, which its row opens; null for a promotion or a merge check. */
+  taskId: string | null;
+  line: LandingLine;
+  /** Where a timed-out job's runner stopped, or which generation a retried job is; null otherwise. */
+  detail: string | null;
+  /** Whether the owner's Retry takes this job now — the server's answer, not `line.timedOut`. */
+  retryable: boolean;
+}
+
 /**
- * The live line itself: a ring, what is being landed, which half of the wait it is in, and how long
- * it has been there.
+ * Every job in flight, one line each, in the server's order — running first, then the queue oldest
+ * first — so the first is the job the row outside describes. Empty from a server that does not list
+ * them.
  *
- * The ring SPINS while the job runs and stands still while it is queued, and its colour
- * follows the same two states — but neither is the only channel: `checking` and `queued` are the
- * words, and `prefers-reduced-motion` takes the spin away without touching them.
+ * Each line is drawn as the row draws its own, in the same words: the task's title in the name slot
+ * (null for a promotion or a merge check), "Update unavailable" while this app cannot read the
+ * server, "Timed out" for a job the server judged so. The detail says what a timed-out job's runner
+ * did before it went quiet — who took it, when, where it stopped, and whether a push may already have
+ * happened — or which generation a retried job is and who asked for it.
  */
-function LandingRow({ line }: { line: LandingLine }) {
+export function landingJobLines(
+  view: ProjectIntegrationView,
+  now: number,
+  observation: { updatedAt?: number; failed?: boolean } = {},
+): LandingJobLine[] {
+  const unavailable = unreadable(now, observation);
+  const main = mainBranchName(view.upstreamRef);
+  return (view.inFlightJobs ?? []).map((job) => {
+    const named = { word: jobWords(main)[job.kind] ?? 'Integration', what: job.taskTitle };
+    const stoppedAt = job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running';
+    const pushed = job.phase === 'PUSH' || job.phase === 'VERIFY';
+    return {
+      jobId: job.jobId,
+      taskId: job.taskId,
+      line: !unavailable && job.timedOut
+        ? { ...named, ...timedOutLine(job, now) }
+        : { ...named, ...liveLine(job, now, observation, unavailable, false, main, null) },
+      detail: job.timedOut
+        ? `${job.runnerName ? `Runner ${job.runnerName}` : 'The runner'} took it at ${landingClockTime(job.startedAt)} · stopped at ${stoppedAt} · ${pushed ? LANDING_WORDS.MAY_HAVE_BEEN_PUSHED : LANDING_WORDS.NO_PUSH_RECORDED}`
+        : job.retriedBy
+          ? `Generation ${job.generation} · ${job.retriedBy === 'OWNER' ? LANDING_WORDS.RETRIED_BY_OWNER : LANDING_WORDS.RETRIED_BY_COORDINATOR} at ${landingClockTime(job.queuedAt)}`
+          : null,
+      retryable: job.retryable,
+    };
+  });
+}
+
+/**
+ * One job of the landing card's body — the landing row's own reading of it, plus the two facts only
+ * a list of them carries: which job it is, and whether the server offers Retry for it.
+ */
+export interface LandingCardJob {
+  jobId: string;
+  /** The task the job lands, which its row opens; null for a promotion or a merge check. */
+  taskId: string | null;
+  title: string | null;
+  state: string;
+  running: boolean;
+  timedOut: boolean;
+  /** The server's `retryable`, never inferred from `timedOut`. */
+  retryable: boolean;
+  /** What a timed-out runner did before it stopped; the job list's own sentence. */
+  detail: string | null;
+}
+
+/**
+ * The landing in flight as a card of its own (owner decision 2026-10-11, mocks in
+ * docs/mocks/project-landing-card): the merge card's shape and language, for the job that lands a
+ * task on the project branch.
+ *
+ * It says what the row could not: which branch the work goes onto, who the several jobs are when
+ * there are several, and — when the server judged a runner silent — where it stopped and whether a
+ * Retry takes it. Nothing here is a new read: every field is the landing line's own, the job list's
+ * own, or the project's own `landTask.targetRef`. Native: `ProjectPage.LandingCard`.
+ */
+export interface LandingCard {
+  /** What is in flight, in the landing row's own word: "Landing", "Merge check". */
+  word: string;
+  /** The head's title: the word alone, or the word and the count while several jobs are in flight
+   *  — "Landing 2 jobs", the row's name slot with the word in front of it. */
+  title: string;
+  state: string;
+  running: boolean;
+  /** The server judged the lead job's runner silent past its limit: the card draws in the warning
+   *  ink, with a triangle where the ring was, and nothing spins. */
+  timedOut: boolean;
+  /** One job's task title, or null while several are in flight — the count is the head's, and the
+   *  bodies are `jobs`. */
+  what: string | null;
+  /** Every job in flight, in the server's order (running first, then the queue oldest first);
+   *  empty from a server that does not list them. */
+  jobs: LandingCardJob[];
+  /** The branch the lead job lands on, short; null when the job is not among the project's
+   *  landings — a promotion, a merge check, or a server that does not list its jobs. */
+  target: string | null;
+  clock: string;
+  clockLabel: string;
+  wait: string | null;
+  updated: string | null;
+  /** What the timed-out lead job's runner did before it stopped, or null. */
+  detail: string | null;
+  /** The job Retry takes, when the server says a retry takes one. */
+  retryJobId: string | null;
+}
+
+/** The card's own three: the branch the work lands on, the sentence that takes the reader off the
+ *  hook while it lands, and the way into the jobs from the card that also offers Retry. */
+export const landingOnto = (ref: string): string => `onto ${ref}`;
+export const LANDING_NOTHING_TO_DO = 'Nothing to do — it lands on its own.';
+export const LANDING_ALL_JOBS = 'All jobs';
+
+/**
+ * The card, or null when nothing is landing — which is what removes it from the page.
+ *
+ * The head is the landing row's: the same word, the same state, the same clock, the same `wait` and
+ * freshness. What the card adds is the branch, the several jobs and the detail under a timed-out
+ * one, all of them read from what the same integration read already carries.
+ */
+export function landingCard(
+  view: ProjectIntegrationView,
+  now: number,
+  observation: { updatedAt?: number; failed?: boolean } = {},
+): LandingCard | null {
+  const line = landingLine(view, now, observation);
+  if (!line) return null;
+  const jobs = landingJobLines(view, now, observation).map((job) => ({
+    jobId: job.jobId,
+    taskId: job.taskId,
+    title: job.line.what,
+    state: job.line.state,
+    running: job.line.running,
+    timedOut: job.line.timedOut,
+    retryable: job.retryable,
+    detail: job.detail,
+  }));
+  // The row's own rule for the name slot, one row down: several jobs are a count in the head and a
+  // row each in the body; one job is its title in the body.
+  const several = view.integratingCount + view.queuedCount > 1;
+  const lead = jobs[0];
+  const landed = lead ? (view.landTasks ?? []).find((task) => task.integration?.landTask?.jobId === lead.jobId) : undefined;
+  const ref = landed?.integration?.landTask?.targetRef;
+  return {
+    word: line.word,
+    title: several && line.what ? `${line.word} ${line.what}` : line.word,
+    state: line.state,
+    running: line.running,
+    timedOut: line.timedOut,
+    what: several ? null : line.what,
+    jobs,
+    target: ref ? shortRef(ref) : null,
+    clock: line.clock,
+    clockLabel: line.clockLabel,
+    wait: line.wait,
+    updated: line.updated,
+    detail: line.timedOut ? lead?.detail ?? null : null,
+    retryJobId: lead?.retryable ? lead.jobId : null,
+  };
+}
+
+/** A branch as a person says it: `project/x`, not `refs/heads/project/x`. */
+function shortRef(ref: string): string {
+  return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+}
+
+/** "waited 1m 20s" — the wait as a clause of the head's one line rather than a field label: the
+ *  label the row used ("Waited") is a column heading, and this is a sentence. */
+export const LANDING_WAITED = 'waited';
+
+/**
+ * The head's two slots (iOS `ProjectPage.landingHead`), from the row's own facts: the live clock at
+ * the right of the title — or the state word for a job that has no clock left that moves — and the
+ * one line under it, where the state, the wait and the freshness go.
+ *
+ * A timed-out job's line is the silence measured against the limit it went past, "No report for
+ * 110m · limit 10m". An older server's "No report" is that same fact said once, so the line is its
+ * own "No report for 5m" and never "No report · No report for 5m". Everything else reads as one
+ * sentence: "checking · waited 1m 20s · updated just now", the freshness's capital folded away.
+ */
+export interface LandingHeadShape {
+  right: string;
+  isClock: boolean;
+  detail: string;
+}
+
+export function landingHead(
+  line: Pick<LandingLine, 'state' | 'timedOut' | 'clockLabel' | 'clock' | 'wait' | 'updated'>,
+): LandingHeadShape {
+  if (line.timedOut) {
+    const silence = `${line.clockLabel} ${line.clock}`;
+    return { right: line.state, isClock: false, detail: [silence, line.updated].filter(Boolean).join(' · ') };
+  }
+  if (line.state === LANDING_NO_REPORT) {
+    return { right: line.clock, isClock: true, detail: line.updated ?? line.state };
+  }
+  const parts = [line.state];
+  if (line.wait) parts.push(`${LANDING_WAITED} ${line.wait}`);
+  if (line.updated) parts.push(line.updated[0].toLowerCase() + line.updated.slice(1));
+  return { right: line.clock, isClock: true, detail: parts.join(' · ') };
+}
+
+/**
+ * The head the merge check card and the landing card wear over a job in flight (owner decision
+ * 2026-10-11, board docs/mocks/project-merge-check-row): the timeline's "Merged into main" row one
+ * moment earlier — the same 28px circle, the word, the live clock at the right of it, and one line
+ * under both. The check and the merge it becomes are then one shape instead of a card collapsing
+ * into a row. iOS draws the same head from the same slots.
+ *
+ * The chevron the heads used to carry is gone: the whole row is the press (the merged line opens its
+ * receipt the same way), and the words beside the clock say what they have to say.
+ */
+export function LandingHead({ title, head, running, timedOut }: {
+  title: string;
+  head: LandingHeadShape;
+  running: boolean;
+  timedOut: boolean;
+}) {
+  const shape = timedOut ? ' is-timed-out' : running ? ' is-running' : '';
   return (
-    <div className={line.running ? 'project-landing project-landing-running' : 'project-landing'}>
-      <div className="project-landing-heading">
-        <span className="project-landing-ring">
-          <Glyph shape="spinner" color="currentColor" size={13} />
+    <span className={`landing-head${shape}`}>
+      <span className="landing-head-mark">
+        <Glyph shape={timedOut ? 'exclamation' : 'spinner'} color="currentColor" size={15} />
+      </span>
+      <span className="landing-head-body">
+        <span className="landing-head-line">
+          <span className="landing-head-title">{title}</span>
+          <span className={`landing-head-right${head.isClock ? '' : ' is-word'}`}>{head.right}</span>
         </span>
-        <span className="project-landing-word">{line.word}</span>
-        <span className="project-landing-state">{line.state}</span>
-      </div>
-      {line.what ? <div className="project-landing-what">{line.what}</div> : null}
-      <div className="project-landing-meta">
-        <span>{line.clockLabel} <span className="project-landing-clock">{line.clock}</span></span>
-        {line.updated ? <span>{line.updated}</span> : null}
-      </div>
-    </div>
+        <span className="landing-head-detail">{head.detail}</span>
+      </span>
+    </span>
   );
 }
 
@@ -407,6 +774,13 @@ export function Glyph({
           <circle cx="3" cy="9.4" r="1.2" />
           <circle cx="9" cy="4.1" r="1.2" />
           <path d="M3 3.8v4.4M9 5.3c0 2.2-2.2 2.4-4.8 3.4" strokeLinecap="round" />
+        </g>
+      ) : shape === 'exclamation' ? (
+        // A warning triangle: drawn still, so it cannot be read as the spinning ring it replaces.
+        <g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 1.2 L10.9 10.6 H1.1 Z" />
+          <path d="M6 5 V6.9" />
+          <circle cx="6" cy="8.75" r="0.75" fill="currentColor" stroke="none" />
         </g>
       ) : (
         <path
@@ -620,9 +994,9 @@ function Card({ hint, children }: { hint?: string; children: ReactNode }) {
       }}
     >
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-        <Typography.Title level={5} style={{ margin: 0 }}>
+        <h5 className="orbit-typography" style={{ margin: 0 }}>
           Work overview
-        </Typography.Title>
+        </h5>
         {hint ? <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{hint}</span> : null}
       </header>
       {children}
@@ -669,6 +1043,10 @@ export function ProjectPanoramaHeader({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [counting]);
+  // A server that lists the jobs in flight is one whose row opens that list; an older one has
+  // nothing to list, and its row stays a line to read.
+  const listed = integration.data?.inFlightJobs !== undefined;
+  const [jobsOpen, setJobsOpen] = useState(false);
 
   // `isPending`, not `isLoading`: a first render that has not dispatched its fetch yet (which is
   // every static render, and the first paint of a live one) is pending with `fetchStatus: 'idle'`,
@@ -678,7 +1056,7 @@ export function ProjectPanoramaHeader({
     return (
       <Card>
         <div style={{ padding: 24, textAlign: 'center' }}>
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       </Card>
     );
@@ -689,8 +1067,7 @@ export function ProjectPanoramaHeader({
       <Card>
         <Alert
           type="error"
-          showIcon
-          message="Project panorama could not be loaded"
+          title="Project panorama could not be loaded"
           description={panorama.error instanceof Error ? panorama.error.message : undefined}
           action={
             <Button size="small" danger onClick={() => panorama.refetch()}>
@@ -703,18 +1080,27 @@ export function ProjectPanoramaHeader({
   }
 
   return (
-    <ProjectPanoramaCard
-      panorama={panorama.data}
-      projectStatus={projectStatus}
-      integrationLine={integrationLine}
-      started={started}
-      paused={paused}
-      projectId={projectId}
-      manualReady={ready.isError ? null : ready.data?.manualReady ?? null}
-      landing={integration.data ? landingLine(integration.data, now, {
-        updatedAt: integration.dataUpdatedAt, failed: integration.isError,
-      }) : null}
-    />
+    <>
+      <ProjectPanoramaCard
+        panorama={panorama.data}
+        projectStatus={projectStatus}
+        integrationLine={integrationLine}
+        mainBranch={mainBranchName(integration.data?.upstreamRef)}
+        started={started}
+        paused={paused}
+        projectId={projectId}
+        manualReady={ready.isError ? null : ready.data?.manualReady ?? null}
+        landing={integration.data ? landingCard(integration.data, now, {
+          updatedAt: integration.dataUpdatedAt, failed: integration.isError,
+        }) : null}
+        onOpenLanding={listed ? () => setJobsOpen(true) : undefined}
+      />
+      {/* Kept while open even if the row goes, so a list being read does not vanish under the
+          reader when its last job lands. */}
+      {listed || jobsOpen ? (
+        <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
+      ) : null}
+    </>
   );
 }
 
@@ -727,8 +1113,10 @@ export function ProjectPanoramaCard({
   panorama,
   projectStatus,
   integrationLine,
+  mainBranch = DEFAULT_MAIN_BRANCH,
   banners = true,
   landing = null,
+  onOpenLanding,
   started,
   paused = false,
   projectId,
@@ -737,15 +1125,21 @@ export function ProjectPanoramaCard({
   panorama: ProjectPanorama;
   projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
   integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
+  /** The project's main branch by name, which the lanes about it say; main where the page holds no
+   *  read that names it. */
+  mainBranch?: string;
   banners?: boolean;
   /** Whether the project has been started; `false` says ready work waits for the start. */
   started?: boolean | null;
   paused?: boolean;
   projectId?: string;
   manualReady?: ProjectManualReady | null;
-  /** The landing in flight, from the header's own integration read. A public project page has no
-   *  such read, so it draws the card without the row. */
-  landing?: LandingLine | null;
+  /** The landing in flight, as the card of its own it is drawn as (`landingCard`). A public
+   *  project page has no such read, so it draws the card without it. */
+  landing?: LandingCard | null;
+  /** Opens the list of every job in flight, given when the server lists them: the card is then a
+   *  press. Without it the card is only read. */
+  onOpenLanding?: () => void;
 }) {
   const { shape } = panorama;
   const loaded = panorama.buckets;
@@ -755,7 +1149,7 @@ export function ProjectPanoramaCard({
   const readyFootnote = notStarted ? READY_UNTIL_STARTED : paused ? READY_WHILE_PAUSED
     : manual?.count === loaded.ready ? 'can start manually' : 'can start now';
   const lanes = reportsIntegrationLanes(loaded)
-    ? integrationLanes(loaded, integrationLine ?? null).map((lane) =>
+    ? integrationLanes(loaded, integrationLine ?? null, mainBranch).map((lane) =>
         lane.key === 'ready' ? { ...lane, footnote: readyFootnote } : lane)
     : null;
   const awaitingVerification = loaded.awaitingVerification ?? 0;
@@ -802,9 +1196,9 @@ export function ProjectPanoramaCard({
       {/* Above the cells, because it is the card's one moving part: what the platform is doing with
           work that is already done, while every count over it stands still. It draws nothing at all
           when nothing is landing — an empty state here would be a permanent "0 jobs" row. */}
-      {landing ? (
+      {landing && projectId ? (
         <div style={{ marginBottom: 12 }}>
-          <LandingRow line={landing} />
+          <ProjectLandingCard projectId={projectId} card={landing} onPress={onOpenLanding} dialog />
         </div>
       ) : null}
       <div

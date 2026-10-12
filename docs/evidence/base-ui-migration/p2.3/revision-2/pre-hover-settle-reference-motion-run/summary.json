@@ -1,0 +1,1132 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:05:37.482Z",
+    "duration": 68957.851,
+    "expected": 32,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "7c836097b97dad7c76eec77fa410d2ffc07be1fc9fc027e3db6fa3a681a19fd7"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "2667944abfd208bbfda8c4f5db4173d6eb0498fee8f5e46aa4b3f39f5548558c"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "94013f02328b352ff2bd409243d03b2f0852385617713c193ff580b114687bac"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "e7d10d0cd41f789fd7585a9e8bc62d2063f512bc088dbbc1a9990967201475db"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "989622e17df3b385f05beac1cdb711363af0541f7069dcb27d2fa88b74437c5c"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "5d754e6e8a11e5767ac7b54ce72fdad8d5925e555db49b2f512050b5f809573f"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "c9970a254f6caa0376842ce82c655505ff67109c5eff2bba60ca7e12682c6a76"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "0d40d1a40bbbd01d45da496676f8b60a0be0ef35a54b33eececd31b2a00871bb"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "4e3d2033218bd01b7a6dca87b46284f9cd44835cc135f4acaea770f0f10e266c"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "f1f083193b1211d161be99b8a6bc00543d8988891ab45076248fdf5d42cfd4c2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "811ddad9f17af3445401f351e5e01ec6e991e577452baa07daec5e53e3346a4d"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "3536953be6e96ae3ac220c967314b7689622036e1549313d454d433cbe8b81b7"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "6b427e24ec261834c9a9e378336a763caa33732082e2addd409e8f4f6257e132"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "b3577ae393b001e48df9f452171b7b573a470fa30e8683c038179b4034f0df87"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "e7d10d0cd41f789fd7585a9e8bc62d2063f512bc088dbbc1a9990967201475db"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "6925d51df6792ae64f1af67d7866256c8784fdd8b015b46b48b3eb178850f731"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "a1f7af418d7f21dc8f0704812f822f1eb0d9f301531610e1582297004941e4bb"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "39e8bc91ff923aa097bb9b462c571010d01ae44c579e90a325e4db44583c187c"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "8db2931c4beec3422a28615f4b21b4559897287392a105b0ec5a2f577706b60a"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "56a9a98fe5dd92c63c2fdaf5452e8ea36fb716da06726dc43952bb8a93fe7188"
+        },
+        {
+          "file": "chromium-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "56ba71577286448c58c65882452728ef806e338d7b14cfc42305b48e29461aee"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "d4cd58a6f3f7012b8030aa03edc12e526cc3b29b826dc26e11924eb9dc93d5d2"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "76567f22d26170af15cc15484062a3fe016d9d85c018695424889eb8473a4fd2"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "32b57ef456264f4185b334d4f76271032a83658b381d649be08eee592099f3e6"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "8360424e05a8c45f7ea69a38f92d486f02519ec0f6bfd44edb4374cfada7952f"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "8d9ef0f19e27ebbcde149f641e4daf89eee53cca39c471b8ca1f5acc252892da"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "c9970a254f6caa0376842ce82c655505ff67109c5eff2bba60ca7e12682c6a76"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "5c3a874409defcbd1612d7f068b9fa68b8bdcd831e1e45b7c9ae81700227a553"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "7c89bc14a387e18d5a21ecd3c2ec7cd0350c825e6cea8bcf55e9c47339bbfe54"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "f1f083193b1211d161be99b8a6bc00543d8988891ab45076248fdf5d42cfd4c2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "072ea4344fec8c276453258e98c743ca1a5c25a215b2dc677607924de3ec15d8"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "69d7589a824ff8c91427ddef1697f9d75137a99cf69babde811b709475de0df8"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "6b427e24ec261834c9a9e378336a763caa33732082e2addd409e8f4f6257e132"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "68bef0f57ab65b5d3687b9a999cb880e239cd997a505e88964d837fdc792f41b"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "8f4592c091bcf85de34cc6b70262f3c3c66317e2d4d3d7a9166b9abffe15578c"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "6925d51df6792ae64f1af67d7866256c8784fdd8b015b46b48b3eb178850f731"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "408253cd9d4911b26ee00b253b9c301d13d9b0f5ca7fb340da7e73921751532e"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "b2d154c34a7457e92b09eb4c80bd5d766050f842c687704dc8cf777703042b46"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "1dd14c84e20b064fd991fa6f090e8f7fec533568849bdc906780489c2c355de8"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "c23ab94b86590247cc215de92fdb6852dae0abc79ddd8b6e56d62c39e4870808"
+        },
+        {
+          "file": "chromium-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "bb1a5573ad573e2ee89e760035cb897298aa45f59d5b8efd4b6423a8355c8167"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "52a9baac0912d52bb80fe4472caf44de7ea3c2a624c11d0bf8818e4fe92816d7"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "211589136792f6e214fd2887d95030b4ecbc84ea5a7587e746113489e3827a82"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "3047c6e65562aa27934589a7fa1d8c3ce93eb4c7ddaed40ed910723986f79c4e"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "7e61a255d5ef25cba894f06462bc6c25403d05c667ff90113d59b412af8baa68"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "a8fa230926af7e2115f1774331ec1341467f997ba400c1f71891c7951b348a55"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "c9970a254f6caa0376842ce82c655505ff67109c5eff2bba60ca7e12682c6a76"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "2047a194dfdc9c0b89389d60b77e2874e2dcd7ac695b52c2ac86d0e920cfc768"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "afdf75acace70c7ed4708101dcaeec7533736e87c201de8e5e75e1dcf7b3f507"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "f1f083193b1211d161be99b8a6bc00543d8988891ab45076248fdf5d42cfd4c2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "b900f0e11cbae766fb3c50a91ad122ab37c15280a3a83a8f1419ca9595cea724"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "52a9baac0912d52bb80fe4472caf44de7ea3c2a624c11d0bf8818e4fe92816d7"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "6b427e24ec261834c9a9e378336a763caa33732082e2addd409e8f4f6257e132"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "9aa8b56e7e9500cf1fbadd32252c0c2a57acdfe0525d178431f5cf6863663c8f"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "3047c6e65562aa27934589a7fa1d8c3ce93eb4c7ddaed40ed910723986f79c4e"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "6925d51df6792ae64f1af67d7866256c8784fdd8b015b46b48b3eb178850f731"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "61f5637639a82ded264d22c83b78e53be5f61b2ab01475de774036d446ec3a82"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "4da7466a09258dcbea2708b962ef4efb6561ea968a33a3726735555474d7f2cd"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "c148cc5d44b38ad8871fa32b00eccc6fd24c7e712242c32543dd07d5dcdd2490"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "ca9b9eb760eee5630ebac7ccf4ebb9eee0acf96cc3e8972c2313cda629e8082a"
+        },
+        {
+          "file": "chromium-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "f6155431c784ac1e1bc906e3c3f2d74b37380701b5403ab6ae49d1f77eb97493"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "c0dfb220b4cae89ecbe15d745802e0e68a3aded7829288851de73107d30fb518"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "5f3da14c42b65ecd4a121c512d58bfaf0fde056b33d7b46b1d53262094acc917"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "5eefdf07c4ba097de3a82b4c04771e3f784a855ac4d095885244db709be87af2"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "f6278a46ede14b29272c8d4d6485b6170157c17ce97676296f47945d7adfad85"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "7d2da90b57e6ede300a1847095d81e07ca76ff4c90750a93f1c41e2261e8a857"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "c9970a254f6caa0376842ce82c655505ff67109c5eff2bba60ca7e12682c6a76"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "de8dff8b38c37266985f0d6e7fd779bfe88d27d455d5d6ce03c7d6dee0f4e398"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "819c161a57361a7928e0dd23ac60564bf2d89ae8855767f3cc34113fe0560eac"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "f1f083193b1211d161be99b8a6bc00543d8988891ab45076248fdf5d42cfd4c2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "6c9c9c519f14f212a1c29e64958cb98ab56dc8782df1c5d5dc476e85af584fd1"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "f9f12601715be88699e813b6b876b1857cf20a9256ef3a67a7a3ec73cd37c559"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "6b427e24ec261834c9a9e378336a763caa33732082e2addd409e8f4f6257e132"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "bb28c2274095b413b2eea9432d070f0b44e8f8dafc0626ff2d51ca70fbdfefef"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "0117d5600065c1ff6973e33e4eb296b4fb635cf98e728d6dd6302d99a1fa60bf"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "6925d51df6792ae64f1af67d7866256c8784fdd8b015b46b48b3eb178850f731"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "b91a60011f655698444a7700fde1d8d25b4bfaf344b2a6ae499282817384163f"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "b8ef29e559719fff8d97697ca5a84aead0114595f5a6ec776891cc714e34c45a"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "5de1d1c0563a62e8728e1f44498ee35be9a148038827043904709837c0cfd348"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "a88fbb52b9d13ea2ba4ace2b4650ee27f1b100b998cfea547bdf9784e344d478"
+        },
+        {
+          "file": "chromium-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "f61687b3b38a065bdbb0ae1a46376c2fabbfc0547026b1646d06bed4210b0b84"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "ec7fe7260b530916ca0048dadbcdbd4c0f7ea184085f8147991fc17edbb9cfff"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "bbfcfb7d8063c54a630949515cef9063e6a5c42a66d67efc06ba40c6bee93d5e"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "a9721e128d79134acba947bd47fa6e211af8090122a088397efc11e58b961cb8"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "1aff6e8acd3fcdda6885c5d20cde4de4175bcfd9e45ebe4166dbefb414c0e2d4"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "9ef7349338d01325451ff773b72db2572072af767c7d29cd0095da3868aefacc"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "599fb6acdd75f0e6696b06fcbcdc79cc52c282c6c6bba4f9673ecc85daf61729"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "696e9709693fb549d44bea4dbbe7de41d386daf9e0723d261c3f55722902462b"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "9f2f347cb48a7ee00460e3258d9ec0ad5d328b612dfb794b54b2892eac03f647"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "75743de95bd0fb325086ae202c5892f1bee6874a297ee0130cc3aedfb329a322"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "960cff4ad1e18594e0fb52434d999264d309b19cbd4bd2d533b0771f546350ef"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "a9721e128d79134acba947bd47fa6e211af8090122a088397efc11e58b961cb8"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "208036c115fc350b1ad97ddf4c0623de1cb57833aadfdbf3349c3fbf98f28dc2"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "29ab23214a50c8baab6246e3b7e39c7e02c06a38d77ecc484fa7a28eeffaff34"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "b72668b5319aa9e18ca107365f978e8ae38110220d8f656124025d66f6133667"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "81f9a020c1e16539a64cc81353a78e937425f3d735ae69ae1a865c47d106e5d8"
+        },
+        {
+          "file": "webkit-light-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "0d1f777df1b3ae5ae9a5e17d92be99bc1d5ba046f70f78a59385fc9c736a2a1c"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "b8deb3db5bf2d00d190d82df0f1c244fe1b8c90a2956b8015529084fd986db03"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "f4313d98c50b82367130233142c67ee9cedaab2ea8408fae9c44bdc0b6beeccc"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "d640b0e21983e5cc045d5a6eda46d13983fc6f6f534fa798e712918d50d541dc"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "d5541b8318844cd2c320c91584e8af75ef4f6e9d664637226825ccbd5e41f31a"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "f349dd30a57eab749ff03cf1d36b4456db18354f5adbe6f619d3cfab724a3802"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "569cb675603239b6de7dfbe57b2d90d07da851de030a1a6b0d2abed4a3f51687"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "7c3170199f06f3f44bc4f376e12dcceabedbb6e20175607d5fd7bdef67aab63c"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "fa021aed4959c0264db6af2d1ee65508084cb0cd9a1090534355d143f6c6a4d6"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "170285c655993b5a79ab6c8a17dc30c32567e69de7ec070a883970625941733d"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "1a945e8c538d94940fdcbf165c5aab1c13f07be239515a15c7559d5e6ee4767f"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "d6a6ccbbeb98335ef9be0eb5ff609af6f3830298ef6051ecbac2d07838539ace"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "0266a8db7eef8da57ae651077d4de4d4167d621d662b5160287806ee76df106d"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "eb99e8e2f230d49a4944c7e5f944a767d38537dc4bea420a9253f8574731b39f"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "a852aa5a88c94fe35ec47e0dd333d13958d67b6b7dcbd3e4cfede9af03d1aa67"
+        },
+        {
+          "file": "webkit-light-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "f87a4b2fe2e2dd35a057c9e847f7531a9ff5179935dc2ae8e24f6e66d5b22425"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "a143fce71bfa994d9596ad6ada76acfd10d11fabb5bde92dc71ec15dda3faf38"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "acf8baba4daebf312945675420b8742a12842d038d9378ed96c39e53b850ba8e"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "d58c3baddf7edec4b70196bd5e54f7c32bd82bf4ea3259d4fae9fffbefe8c99b"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "05a487b7799fd25c62e7b9bbf3f847b4a524d25524b48e3c8c2e2fa73078524e"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "b6f5da54280b7145627203e670365796d94cb4d590c11187a394fd95be732a7c"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "a00c47ee8431ea569ccd7b963d9eda540a8ffbf7f35119a029be1be4b64b59ed"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "886e780dc9085920707523fe452b63629d4cee36c15247bec6d4abee268eeb49"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "711d466bf2f5253c4d3579364affefbf64be8ad1522b1e2b5dda97d82f715911"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "71498f8e033a2f72191d73852cc395058f6afd1325235987a79dba651e6cce40"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "7483560aca22c48eb2762e4dec3cf148bf95c1f2c8be6cd647ef68affbefc7e9"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "d58c3baddf7edec4b70196bd5e54f7c32bd82bf4ea3259d4fae9fffbefe8c99b"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "c3477938abf225276e3ef766404bff50d8c7f8c46f330d67086a07fd33ded80c"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "05a63a3b52dd13f43cc804a6e8744d81d8703506f51831fbca151e9a3d4c0223"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "80fa355f0a9663a5cdc69d437b4df3bfe3abd674889aa94063db62f95a17c731"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "69979426a9bcb975c85ff63ae98c11e128c4d263e3e6d0e3d1a725136d2ba538"
+        },
+        {
+          "file": "webkit-dark-desktop--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--before-motion.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-page.png",
+          "sha256": "9355e322bb8a35fa6d7af8445bde68ed8eb93974417dd5187567909c9511d490"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-notification.png",
+          "sha256": "f810310a5924fe4c1ce2c7ef7412fa08e0ef90a6bf5b9144301c0c435b39b368"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--opening-animation.json",
+          "sha256": "0efb5b7489a7341ea6ea0013456400798764ed804e7bdc3061132079c8dafc6f"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-page.png",
+          "sha256": "ed6018451208a0274adb9b71ec7246c371dfc7b8dadbd53f01a736d63d8fec0e"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-notification.png",
+          "sha256": "a99856da80eedafceb7ab85a829e9c85798e9c01e415e6e61c32bcc961e75ef4"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Dialog-opening-and-closing--closing-animation.json",
+          "sha256": "7ebab9952bee9243bfbf5c95c5804faf41b5bf04616a0563e09928e4d72c81b5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--before-motion.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+          "sha256": "565565681e45d45b136a47e35f3492c07eaeeebed9d473a6204703e0ad560409"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-notification.png",
+          "sha256": "dc814b675637bacfce0ad3ec96013d7ab08c8e0228fd4c11f9b3519c0f82085b"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-animation.json",
+          "sha256": "572391c0202c4ab6e9ceec0e486e0293d088b0c8989b1bbe7a40062ab0fa01e7"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-page.png",
+          "sha256": "b245a00e57f9ae19c8e7c9fc994feb8dc492edb5cf6a1f80247bcd9db11b6006"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-notification.png",
+          "sha256": "a025292d1c815cbece3c219a818c110bcf32c74975b8ccea769c29fd01247153"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Drawer-opening-and-closing--closing-animation.json",
+          "sha256": "20510ad685157d827f47846a29483edf9083cb11b3599a1668dc6e0a1573b417"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--before-motion.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-page.png",
+          "sha256": "68e64d4fd03a57e235573423aeaff2a62447732866f55cb1498f24a97dc5b096"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-notification.png",
+          "sha256": "c18e6967f4445b13ac157f0ead8d58dd0702f3ff4c27c9e887f0a9a0e2a00804"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--opening-animation.json",
+          "sha256": "95fbfb4a6dc9406d0b9154ef45e52f0b4c5e43f325ce8ce8efc1295b16efb916"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+          "sha256": "523fae53a70eb911178ca8eb8c99bf7b84e51a336a7df663ab8954bb5af05ff3"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-notification.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-animation.json",
+          "sha256": "29a771975495107d49854570e71f8541ad9605c5fc0d72f545ff0fc41fa83ae2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--before-motion.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png",
+          "sha256": "1365b5e0d2fe8e0a91405a691d867127ff855e855dcffd89c11118eee3d3e044"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-notification.png",
+          "sha256": "51a2d9a618da098b29bd3744bb20733aeab36d8b18ec07b529e15112f3db7cab"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-animation.json",
+          "sha256": "c48af970f04753e7b71b7d0c577809c3971561aa410663a1bb18eceaf5308b42"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-page.png",
+          "sha256": "3e86056581e58773785e455bae98415892b147d95ad005cd694200378b01d573"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-notification.png",
+          "sha256": "c55922e5f46481aea5e6a648f1c26f370ed7ca232aac9af19d2d36f05b8210f1"
+        },
+        {
+          "file": "webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--closing-animation.json",
+          "sha256": "1c4eef03e65767d95c7fbc0f20d1c8785699e5f7f46dbf24faaffe655f2d9082"
+        }
+      ]
+    }
+  ]
+}

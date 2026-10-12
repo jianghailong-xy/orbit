@@ -1,0 +1,15 @@
+4fb7ee43f fix(web): let Menu keys that beat the focus move act on the open menu
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/components/ui/Menu.test.tsx
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.2 [39m[90m/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/src/web[39m
+
+ [32m✓[39m src/components/ui/Menu.test.tsx [2m([22m[2m18 tests[22m[2m)[22m[33m 408[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m18 passed[39m[22m[90m (18)[39m
+[2m   Start at [22m 12:13:32
+[2m   Duration [22m 1.38s[2m (environment 32%, import 31%, tests 31%, transform 5%)[22m
+

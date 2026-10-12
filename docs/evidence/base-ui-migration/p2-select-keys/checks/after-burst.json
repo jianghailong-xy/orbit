@@ -1,0 +1,13 @@
+{
+ "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs --project chromium-dark-desktop",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_08d993c67ede",
+ "cwd": "/root/.orbit/worktrees/f9ffd160-2464-5af0-9d66-5af91c8bd5ab",
+ "commit": "632b7950ea2c303b7fab6856365ac233f6359f45",
+ "webTree": "35301ab31d4cd93761cad55eb7bc2bf1f7a3fa98",
+ "outputLastWritten": "2026-10-06T08:05:19.649240+00:00",
+ "exitCode": 1,
+ "outputSha256": "295a1372bcb0992134b9066291db181ac8de59c03a8db1507c9a86f72f9821d2",
+ "outputBytes": 50791,
+ "note": "275 passed / 1 failed: orbit-sample down-up-enter burst sample 11 never mounted the fixture; its trace shows 2 module requests aborted with net::ERR_NETWORK_CHANGED before any key was pressed (another session created containers sudo-rollout-pg/-host at 08:02:09/08:02:46Z; the page load started 08:02:41Z)."
+}

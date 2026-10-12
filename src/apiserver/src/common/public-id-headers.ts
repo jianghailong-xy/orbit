@@ -24,7 +24,7 @@ import { toUuid } from '@orbit/shared';
  * Runs as middleware rather than a pipe because guards see headers before handler parameters are
  * resolved, so normalizing later would leave a second spelling reachable from a guard.
  */
-const ID_HEADERS = ['x-orbit-session-id', 'x-orbit-workspace-id', 'x-orbit-agent-id'] as const;
+export const ID_HEADERS = ['x-orbit-session-id', 'x-orbit-workspace-id', 'x-orbit-agent-id'] as const;
 
 export function publicIdHeaders(req: Request, _res: Response, next: NextFunction): void {
   for (const name of ID_HEADERS) {

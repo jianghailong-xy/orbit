@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { AuditOutlined, RollbackOutlined } from '@ant-design/icons';
-import { Button } from 'antd';
-import { useNavigate } from 'react-router-dom';
+import { useInRouterContext, useNavigate } from 'react-router-dom';
 import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
 import { AppLink } from './AppLink';
+import { Button } from './ui/Button';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import {
   REVIEWER_FALLBACK,
@@ -30,6 +30,25 @@ import {
 /** The press onto the run's session — the exception card's words for the same door. */
 export const OPEN_TASK_SESSION = 'Open task session';
 
+/**
+ * The press itself, where there is a router to route with — a route, so the app does not reload.
+ *
+ * The hook lives here rather than in the card because `useNavigate` throws outside a router
+ * ("may be used only in the context of a <Router> component"), and the card is drawn outside one:
+ * the standalone HTML export renders the transcript through `renderToStaticMarkup` into a fresh
+ * tree (lib/sessionExport), which is why a reviewer's conversation — the one place a review request
+ * appears — could not be exported at all. The card draws this component only inside a router and
+ * the whole URL without one, the way AppLink draws every other door on this card.
+ */
+function OpenTaskSessionPress({ sessionId }: { sessionId: string }) {
+  const navigate = useNavigate();
+  return (
+    <Button size="small" onClick={() => navigate(`/sessions/${encodeURIComponent(sessionId)}`)}>
+      {OPEN_TASK_SESSION}
+    </Button>
+  );
+}
+
 export function ReviewRequestedCard({
   card,
   seq,
@@ -47,7 +66,7 @@ export function ReviewRequestedCard({
   /** The queue's own line, while the turn still waits behind a running one. */
   queued?: ReactNode;
 }) {
-  const navigate = useNavigate();
+  const inRouter = useInRouterContext();
   // Out of a payload read defensively, so through the codec that degrades on a spelling it does not
   // know instead of the one that throws: a card must not take the transcript down with it.
   const task = routeId(card.taskId);
@@ -73,9 +92,9 @@ export function ReviewRequestedCard({
         </div>
         {run ? (
           <div className="crc-actions">
-            <Button size="small" onClick={() => navigate(`/sessions/${encodeURIComponent(run)}`)}>
-              {OPEN_TASK_SESSION}
-            </Button>
+            {inRouter
+              ? <OpenTaskSessionPress sessionId={run} />
+              : <AppLink to={`/sessions/${encodeURIComponent(run)}`}>{OPEN_TASK_SESSION}</AppLink>}
           </div>
         ) : null}
         {undelivered && <div className="crc-undelivered">The session has not confirmed it received this.</div>}

@@ -600,8 +600,8 @@ describe('ProjectCoordinatorCard — colour is never the only channel', () => {
     for (const name of new Set(ours)) {
       expect(css, `${name} is declared in index.css`).toContain(`${name}:`);
     }
-    // No literal colours smuggled in beside the tokens. antd supplies its own, so only the card's
-    // inline styles are searched.
+    // No literal colours smuggled in beside the tokens. The controls take theirs from their own
+    // stylesheet, so only the card's inline styles are searched.
     for (const style of [...html.matchAll(/style="([^"]*)"/g)].map((m) => m[1])) {
       expect(style, 'no hex literal').not.toMatch(/#[0-9a-f]{3,8}\b/i);
       expect(style, 'no rgb()/hsl() literal').not.toMatch(/\b(rgba?|hsla?)\(/i);

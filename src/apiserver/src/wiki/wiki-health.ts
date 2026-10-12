@@ -9,9 +9,12 @@ import {
   type WikiSpaceHealth,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { readWikiRepoReadiness } from '../wiki-worker/wiki-repo-ops';
+import { currentWikiExecutorSwitch, wikiExecutorView } from './wiki-executor-switch';
 import { countBacklog, spaceScope, type FactPosition } from './wiki-maintenance';
 import { wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
 import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
+import { WikiSystemModelReads } from './wiki-system-model';
 
 /**
  * A space's health, as the Wiki home's status line reads it (contracts/wiki.contract.json
@@ -61,11 +64,20 @@ export class WikiHealth {
       oldestPendingAt = counted.oldestPendingAt;
     }
     const today = await wikiMaintenanceRunsToday(this.prisma, ownerId, spaceId, now);
+    // The server's half (contract `jobs.executor.read`, P9): whether the server executes this account's wiki,
+    // and the System model it calls while it does — what the line's server reasons are said from. Under runner
+    // the model is none of this account's business, and is not read.
+    const executor = wikiExecutorView(currentWikiExecutorSwitch(), ownerId);
     // A run made in active catch-up on a local endpoint is not counted against the day (contract
-    // `maintenance.job.catchUp.dailyLimit`): while that holds, the day's limit holds no run back.
+    // `maintenance.job.catchUp.dailyLimit`): while that holds, the day's limit holds no run back. An account
+    // the server executes has no provider to read (P8): the run row says whether the System model's endpoint
+    // was the machine's own or a private one — the worker records it when it starts the run — and nothing
+    // about a provider is validated here.
     const uncounted = settings.enabled
       && (await wikiMaintenanceCatchUpOf(this.prisma, ownerId, spaceId, oldestPendingAt, now)).state === 'active'
-      && (await wikiMaintenanceProviderIsLocal(this.prisma, ownerId, settings.provider));
+      && (executor.serverExecutes
+        ? await this.latestRunIsLocal(ownerId, spaceId)
+        : await wikiMaintenanceProviderIsLocal(this.prisma, ownerId, settings.provider));
 
     const maintenance: Omit<WikiMaintenanceHealth, 'look'> = {
       enabled: settings.enabled,
@@ -83,38 +95,96 @@ export class WikiHealth {
       lastRun: await this.lastRun(ownerId, spaceId),
       lastFailure: await this.lastFailure(ownerId, spaceId),
     };
-    return { spaceId, entries, maintenance: { look: wikiMaintenanceLook(maintenance, now), ...maintenance } };
+    // The repository half of the line (contract `maintenance.health.repo`, design §2.2): whether the steps
+    // that need a repository can run at all, and why not when they cannot — an old runner is the one a
+    // person can act on, so it is named as such rather than as a wait.
+    const repo = await readWikiRepoReadiness(this.prisma, { ownerId, spaceId, now });
+    return {
+      spaceId,
+      entries,
+      maintenance: { look: wikiMaintenanceLook(maintenance, now), ...maintenance },
+      // The wire carries what the contract names (maintenance.health.repo): the machine's capability and
+      // whether it beats. A runner that declared only `wiki-repo-op/v1` reads the old bounded window rather
+      // than whole files, and that too reads as `runner_upgrade` — the one word a client acts on.
+      repo: {
+        look: repo.look,
+        workspace: repo.workspace,
+        runner: repo.runner && {
+          id: repo.runner.id,
+          name: repo.runner.name,
+          version: repo.runner.version,
+          capability: repo.runner.capability,
+          online: repo.runner.online,
+        },
+        pending: repo.pending,
+      },
+      executor,
+      systemModel: executor.serverExecutes ? await new WikiSystemModelReads(this.prisma).read(now) : null,
+    };
   }
 
   /**
-   * The run under way: the latest that started and has not ended, while its task has not ended either —
-   * started when its latest attempt did (a retry's or a rerun's start, not the run's first).
+   * Whether the space's latest maintenance run was made on an endpoint of this machine or a private network
+   * (P8): the run row's `localEndpoint`, which the worker writes when it starts a run the server executes
+   * from the System model's address. A space that has not run reads as not local, as a provider nothing
+   * holds does.
+   */
+  private async latestRunIsLocal(ownerId: string, spaceId: string): Promise<boolean> {
+    const run = await this.prisma.wikiMaintenanceRun.findFirst({
+      where: { ownerId, spaceId, jobId: { not: null } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { localEndpoint: true },
+    });
+    return run?.localEndpoint === true;
+  }
+
+  /**
+   * The run under way: the latest that started and has not ended, while its maker has not ended either —
+   * started when its latest attempt did (a retry's or a rerun's start, not the run's first). A run of a
+   * task is under way while that task is (the session died without saying how: the task's end is the
+   * answer); a run of a wiki job is under way while the job is (migration 0401, the server path).
    */
   private async running(ownerId: string, spaceId: string): Promise<WikiMaintenanceHealth['running']> {
     const run = await this.prisma.wikiMaintenanceRun.findFirst({
       where: { ownerId, spaceId, startedAt: { not: null }, endedAt: null },
       orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
-      select: { taskId: true, sessionId: true, startedAt: true, lastStartedAt: true },
+      select: { taskId: true, jobId: true, sessionId: true, startedAt: true, lastStartedAt: true },
     });
     const startedAt = run?.lastStartedAt ?? run?.startedAt;
     if (!run || !startedAt) return null;
+    if (run.jobId) {
+      const job = await this.prisma.wikiJob.findFirst({
+        where: { id: run.jobId, ownerId, state: { in: ['queued', 'running', 'waiting'] } },
+        select: { id: true },
+      });
+      return job ? { sessionId: run.sessionId, jobId: run.jobId, startedAt: startedAt.toISOString() } : null;
+    }
+    if (!run.taskId) return null;
     // A run whose session died without saying how it ended leaves its row open; its task has ended.
     const task = await this.prisma.task.findFirst({
       where: { id: run.taskId, ownerId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
       select: { id: true },
     });
-    return task ? { sessionId: run.sessionId, startedAt: startedAt.toISOString() } : null;
+    return task ? { sessionId: run.sessionId, jobId: null, startedAt: startedAt.toISOString() } : null;
   }
 
-  /** The run that ended last, and how: the session the status line's View run opens. */
+  /**
+   * The run that ended last, and how: what the status line's View run opens — the session of a run a maintenance
+   * session made, or the row on Activity of a run the server's job made (`jobId`, which has no session).
+   */
   private async lastRun(ownerId: string, spaceId: string): Promise<WikiMaintenanceHealth['lastRun']> {
     const run = await this.prisma.wikiMaintenanceRun.findFirst({
       where: { ownerId, spaceId, endedAt: { not: null } },
       orderBy: [{ endedAt: 'desc' }, { id: 'desc' }],
-      select: { sessionId: true, outcome: true, endedAt: true },
+      select: { sessionId: true, jobId: true, outcome: true, endedAt: true },
     });
     return run?.endedAt
-      ? { sessionId: run.sessionId, outcome: (run.outcome as WikiCursorOutcome | null) ?? null, endedAt: run.endedAt.toISOString() }
+      ? {
+        sessionId: run.sessionId,
+        jobId: run.jobId,
+        outcome: (run.outcome as WikiCursorOutcome | null) ?? null,
+        endedAt: run.endedAt.toISOString(),
+      }
       : null;
   }
 
@@ -127,7 +197,7 @@ export class WikiHealth {
     const run = await this.prisma.wikiMaintenanceRun.findFirst({
       where: { ownerId, spaceId, outcome: { in: ['failed', 'truncated'] }, endedAt: { not: null } },
       orderBy: [{ endedAt: 'desc' }, { id: 'desc' }],
-      select: { sessionId: true, failureKind: true, error: true, endedAt: true },
+      select: { sessionId: true, jobId: true, failureKind: true, error: true, endedAt: true },
     });
     return run?.endedAt
       ? {
@@ -135,6 +205,7 @@ export class WikiHealth {
         reason: run.error,
         at: run.endedAt.toISOString(),
         sessionId: run.sessionId,
+        jobId: run.jobId,
       }
       : null;
   }

@@ -62,9 +62,25 @@ struct RunnerControlPane: View {
                     .font(.caption)
                 }
 
+                if c.installing {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Downloading and installing the runner…")
+                    }
+                    .font(.callout).foregroundStyle(.secondary)
+                } else if let failure = c.installError {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Text(failure).textSelection(.enabled)
+                        Spacer(minLength: 8)
+                        Button("Try Again") { Task { await c.installService() } }
+                    }
+                    .font(.callout)
+                }
+
                 HStack {
                     Button { Task { await c.start() } } label: { Label("Start", systemImage: "play.fill") }
-                        .disabled(c.status.running)
+                        .disabled(c.status.running || c.installing)
                     Button { Task { await c.stop() } } label: { Label("Stop", systemImage: "stop.fill") }
                         .disabled(!c.status.running)
                     Button { Task { await c.restart() } } label: { Label("Restart", systemImage: "arrow.clockwise") }
@@ -97,8 +113,8 @@ struct RunnerControlPane: View {
         VStack(spacing: 14) {
             Image(systemName: "desktopcomputer").font(.orbitHeroGlyph).foregroundStyle(.secondary)
             Text("No runner on this Mac").font(.headline)
-            Text("Enroll this Mac to run agents here. Enrollment fetches a credential and installs "
-                 + "the background runner service automatically — no Terminal needed.")
+            Text("Enroll this Mac to run agents here. Enrollment fetches a credential, downloads the "
+                 + "runner from your Orbit server and installs it as a background service — no Terminal needed.")
                 .font(.callout).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center).frame(maxWidth: 400)
             TextField("Runner name", text: $enrollName).textFieldStyle(.roundedBorder).frame(width: 240)

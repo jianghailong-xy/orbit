@@ -1,0 +1,21 @@
+
+Running 16 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:47:1 › failure copy link opens its session from a Dialog-owned notification by pointer (3.3s)
+  ✓   2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:54:1 › failure copy link is reached with Tab inside the Dialog and opens its session with Enter (1.7s)
+  ✓   3 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:47:1 › failure copy link opens its session from a Dialog-owned notification by pointer (1.5s)
+  ✓   4 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:54:1 › failure copy link is reached with Tab inside the Dialog and opens its session with Enter (1.3s)
+  ✓   5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:47:1 › failure copy link opens its session from a Dialog-owned notification by pointer (1.4s)
+  ✓   6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:54:1 › failure copy link is reached with Tab inside the Dialog and opens its session with Enter (1.3s)
+  ✓   7 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:47:1 › failure copy link opens its session from a Dialog-owned notification by pointer (1.4s)
+  ✓   8 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:54:1 › failure copy link is reached with Tab inside the Dialog and opens its session with Enter (1.3s)
+  ✓   9 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:47:1 › failure copy link opens its session from a Dialog-owned notification by pointer (1.2s)
+  ✓  10 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:54:1 › failure copy link is reached with Tab inside the Dialog and opens its session with Enter (1.2s)
+  ✓  11 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:47:1 › failure copy link opens its session from a Dialog-owned notification by pointer (1.2s)
+  ✓  12 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:54:1 › failure copy link is reached with Tab inside the Dialog and opens its session with Enter (1.2s)
+  ✓  13 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:47:1 › failure copy link opens its session from a Dialog-owned notification by pointer (1.2s)
+  ✓  14 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:54:1 › failure copy link is reached with Tab inside the Dialog and opens its session with Enter (1.2s)
+  ✓  15 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:47:1 › failure copy link opens its session from a Dialog-owned notification by pointer (1.2s)
+  ✓  16 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-8/attention-link.browser.mjs:54:1 › failure copy link is reached with Tab inside the Dialog and opens its session with Enter (1.2s)
+
+  16 passed (27.1s)

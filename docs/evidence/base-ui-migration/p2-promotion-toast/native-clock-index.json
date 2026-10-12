@@ -1,0 +1,1115 @@
+{
+  "note": "Native elapsed values are observations including browser assertion polling and the 250ms exit. Exact 3000/6000ms dwell and 249/250ms exit are independently asserted by Playwright clock; native animation samples retain actual requestAnimationFrame timing.",
+  "native": [
+    {
+      "file": "latest-toasts-run/chromium-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+      "kind": "native-entrance-transfer",
+      "firstFrameMs": 8,
+      "intermediateInModal": true,
+      "opacityNeverDecreases": true,
+      "finalOpacity": 1
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "no-preference",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 13.200000017881393,
+      "lastConnectedMs": 243.80000001192093,
+      "firstDisconnectedMs": 260.59999999403954,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "reduce",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 13.200000017881393,
+      "lastConnectedMs": 242.80000001192093,
+      "firstDisconnectedMs": 259.40000000596046,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+      "kind": "native-timer",
+      "elapsedMs": 6299,
+      "count": 0
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+      "kind": "native-stationary-arrival",
+      "elapsedMs": 6504,
+      "remaining": 1,
+      "nativeEvents": [
+        {
+          "type": "mouseout",
+          "at": 1791117381507,
+          "target": "",
+          "inResult": false
+        },
+        {
+          "type": "mouseover",
+          "at": 1791117381508,
+          "target": "toast-action",
+          "inResult": true
+        }
+      ]
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+      "kind": "native-stationary-release",
+      "elapsedMs": 6322,
+      "remaining": 0
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+      "kind": "native-entrance-transfer",
+      "firstFrameMs": 4.699999988079071,
+      "intermediateInModal": true,
+      "opacityNeverDecreases": true,
+      "finalOpacity": 1
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "no-preference",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 3.7000000178813934,
+      "lastConnectedMs": 236.90000000596046,
+      "firstDisconnectedMs": 253.40000000596046,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "reduce",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 2.5999999940395355,
+      "lastConnectedMs": 252.09999999403954,
+      "firstDisconnectedMs": 268.69999998807907,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+      "kind": "native-timer",
+      "elapsedMs": 6305,
+      "count": 0
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+      "kind": "native-stationary-arrival",
+      "elapsedMs": 6505,
+      "remaining": 1,
+      "nativeEvents": [
+        {
+          "type": "mouseout",
+          "at": 1791117456238,
+          "target": "",
+          "inResult": false
+        },
+        {
+          "type": "mouseover",
+          "at": 1791117456238,
+          "target": "toast-action",
+          "inResult": true
+        }
+      ]
+    },
+    {
+      "file": "latest-toasts-run/chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+      "kind": "native-stationary-release",
+      "elapsedMs": 6316,
+      "remaining": 0
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+      "kind": "native-entrance-transfer",
+      "firstFrameMs": 8.099999994039536,
+      "intermediateInModal": true,
+      "opacityNeverDecreases": true,
+      "finalOpacity": 1
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "no-preference",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 14.199999988079071,
+      "lastConnectedMs": 244,
+      "firstDisconnectedMs": 260.59999999403954,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "reduce",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 13.5,
+      "lastConnectedMs": 243.69999998807907,
+      "firstDisconnectedMs": 260.2999999821186,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+      "kind": "native-timer",
+      "elapsedMs": 6300,
+      "count": 0
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+      "kind": "native-stationary-arrival",
+      "elapsedMs": 6505,
+      "remaining": 1,
+      "nativeEvents": [
+        {
+          "type": "mouseout",
+          "at": 1791117225697,
+          "target": "",
+          "inResult": false
+        },
+        {
+          "type": "mouseover",
+          "at": 1791117225697,
+          "target": "toast-action",
+          "inResult": true
+        }
+      ]
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+      "kind": "native-stationary-release",
+      "elapsedMs": 6305,
+      "remaining": 0
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+      "kind": "native-entrance-transfer",
+      "firstFrameMs": 3.9000000059604645,
+      "intermediateInModal": true,
+      "opacityNeverDecreases": true,
+      "finalOpacity": 1
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "no-preference",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 2.9000000059604645,
+      "lastConnectedMs": 252.2000000178814,
+      "firstDisconnectedMs": 269.90000000596046,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "reduce",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 4.4000000059604645,
+      "lastConnectedMs": 237.69999998807907,
+      "firstDisconnectedMs": 254.19999998807907,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+      "kind": "native-timer",
+      "elapsedMs": 6301,
+      "count": 0
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+      "kind": "native-stationary-arrival",
+      "elapsedMs": 6506,
+      "remaining": 1,
+      "nativeEvents": [
+        {
+          "type": "mouseout",
+          "at": 1791117302444,
+          "target": "",
+          "inResult": false
+        },
+        {
+          "type": "mouseover",
+          "at": 1791117302444,
+          "target": "toast-action",
+          "inResult": true
+        }
+      ]
+    },
+    {
+      "file": "latest-toasts-run/chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+      "kind": "native-stationary-release",
+      "elapsedMs": 6357,
+      "remaining": 0
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+      "kind": "native-entrance-transfer",
+      "firstFrameMs": 41,
+      "intermediateInModal": true,
+      "opacityNeverDecreases": true,
+      "finalOpacity": 1
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "no-preference",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 13,
+      "lastConnectedMs": 250,
+      "firstDisconnectedMs": 266,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "reduce",
+      "firstFrameOpacity": 0.996513,
+      "firstFrameMs": 13,
+      "lastConnectedMs": 237,
+      "firstDisconnectedMs": 254,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+      "kind": "native-timer",
+      "elapsedMs": 6306,
+      "count": 0
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+      "kind": "native-stationary-arrival",
+      "elapsedMs": 6506,
+      "remaining": 1,
+      "nativeEvents": [
+        {
+          "type": "mouseout",
+          "at": 1791117673936,
+          "target": "",
+          "inResult": false
+        },
+        {
+          "type": "mouseover",
+          "at": 1791117673936,
+          "target": "toast-action",
+          "inResult": true
+        }
+      ]
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+      "kind": "native-stationary-release",
+      "elapsedMs": 6308,
+      "remaining": 0
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+      "kind": "native-entrance-transfer",
+      "firstFrameMs": 41,
+      "intermediateInModal": true,
+      "opacityNeverDecreases": true,
+      "finalOpacity": 1
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "no-preference",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 7,
+      "lastConnectedMs": 248,
+      "firstDisconnectedMs": 264,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "reduce",
+      "firstFrameOpacity": 0.999732,
+      "firstFrameMs": 5,
+      "lastConnectedMs": 246,
+      "firstDisconnectedMs": 262,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+      "kind": "native-timer",
+      "elapsedMs": 6309,
+      "count": 0
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+      "kind": "native-stationary-arrival",
+      "elapsedMs": 6506,
+      "remaining": 1,
+      "nativeEvents": [
+        {
+          "type": "mouseout",
+          "at": 1791117743034,
+          "target": "",
+          "inResult": false
+        },
+        {
+          "type": "mouseover",
+          "at": 1791117743034,
+          "target": "toast-action",
+          "inResult": true
+        }
+      ]
+    },
+    {
+      "file": "latest-toasts-run/webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+      "kind": "native-stationary-release",
+      "elapsedMs": 6311,
+      "remaining": 0
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-desktop--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+      "kind": "native-entrance-transfer",
+      "firstFrameMs": 45,
+      "intermediateInModal": true,
+      "opacityNeverDecreases": true,
+      "finalOpacity": 1
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "no-preference",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 15,
+      "lastConnectedMs": 238,
+      "firstDisconnectedMs": 254,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-desktop--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "reduce",
+      "firstFrameOpacity": 0.99988,
+      "firstFrameMs": 4,
+      "lastConnectedMs": 243,
+      "firstDisconnectedMs": 259,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+      "kind": "native-timer",
+      "elapsedMs": 6310,
+      "count": 0
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+      "kind": "native-stationary-arrival",
+      "elapsedMs": 6505,
+      "remaining": 1,
+      "nativeEvents": [
+        {
+          "type": "mouseout",
+          "at": 1791117535860,
+          "target": "",
+          "inResult": false
+        },
+        {
+          "type": "mouseover",
+          "at": 1791117535860,
+          "target": "toast-action",
+          "inResult": true
+        }
+      ]
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+      "kind": "native-stationary-release",
+      "elapsedMs": 6320,
+      "remaining": 0
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-phone--entrance-progress-survives-a-modal-transfer-before-its-first-180ms-completes--native-entrance-transfer.json",
+      "kind": "native-entrance-transfer",
+      "firstFrameMs": 41,
+      "intermediateInModal": true,
+      "opacityNeverDecreases": true,
+      "finalOpacity": 1
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-no-preference-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "no-preference",
+      "firstFrameOpacity": 1,
+      "firstFrameMs": 8,
+      "lastConnectedMs": 248,
+      "firstDisconnectedMs": 265,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-phone--exit-keeps-its-own-native-progress-through-modal-transfers-with-reduce-motion--native-exit.json",
+      "kind": "native-exit",
+      "motion": "reduce",
+      "firstFrameOpacity": 0.996513,
+      "firstFrameMs": 13,
+      "lastConnectedMs": 252,
+      "firstDisconnectedMs": 268,
+      "ownerCount": 2,
+      "allInertAndHidden": true,
+      "opacityNeverIncreases": true
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-phone--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+      "kind": "native-timer",
+      "elapsedMs": 6304,
+      "count": 0
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+      "kind": "native-stationary-arrival",
+      "elapsedMs": 6510,
+      "remaining": 1,
+      "nativeEvents": [
+        {
+          "type": "mouseout",
+          "at": 1791117605075,
+          "target": "",
+          "inResult": false
+        },
+        {
+          "type": "mouseover",
+          "at": 1791117605075,
+          "target": "toast-action",
+          "inResult": true
+        }
+      ]
+    },
+    {
+      "file": "latest-toasts-run/webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+      "kind": "native-stationary-release",
+      "elapsedMs": 6306,
+      "remaining": 0
+    }
+  ],
+  "controlledClock": {
+    "stationary-hover": [
+      {
+        "file": "latest-toasts-run/chromium-dark-desktop--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "pausedBeforeTransfersMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-dark-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "pausedBeforeTransfersMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-desktop--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "pausedBeforeTransfersMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "pausedBeforeTransfersMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-desktop--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "pausedBeforeTransfersMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "pausedBeforeTransfersMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-desktop--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "pausedBeforeTransfersMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-phone--stationary-hover-stays-paused-across-nested-modal-owners-then-resumes-for-exactly-six-seconds--stationary-hover.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "pausedBeforeTransfersMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      }
+    ],
+    "unchanged-deadline": [
+      {
+        "file": "latest-toasts-run/chromium-dark-desktop--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+        "visibleAtTotalMs": 5999,
+        "expiredAtTotalMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-dark-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+        "visibleAtTotalMs": 5999,
+        "expiredAtTotalMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-desktop--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+        "visibleAtTotalMs": 5999,
+        "expiredAtTotalMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+        "visibleAtTotalMs": 5999,
+        "expiredAtTotalMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-desktop--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+        "visibleAtTotalMs": 5999,
+        "expiredAtTotalMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+        "visibleAtTotalMs": 5999,
+        "expiredAtTotalMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-desktop--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+        "visibleAtTotalMs": 5999,
+        "expiredAtTotalMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-phone--unhovered-notifications-retain-their-original-deadline-through-modal-owner-changes--unchanged-deadline.json",
+        "visibleAtTotalMs": 5999,
+        "expiredAtTotalMs": 6000
+      }
+    ],
+    "stationary-replacement": [
+      {
+        "file": "latest-toasts-run/chromium-dark-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "replacedFeedPausedMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "replacedFeedPausedMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "replacedFeedPausedMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "replacedFeedPausedMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "replacedFeedPausedMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "replacedFeedPausedMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "replacedFeedPausedMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+        "pausedAcrossFourTransfersMs": 40800,
+        "replacedFeedPausedMs": 10000,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      }
+    ],
+    "stationary-layout": [
+      {
+        "file": "latest-toasts-run/chromium-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+        "entered": [
+          {
+            "type": "mouseout",
+            "at": 1791072003050,
+            "target": "",
+            "inResult": false
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072003050,
+            "target": "toast-action",
+            "inResult": true
+          }
+        ],
+        "left": [
+          {
+            "type": "mouseout",
+            "at": 1791072007850,
+            "target": "toast-action",
+            "inResult": true
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072007850,
+            "target": "",
+            "inResult": false
+          }
+        ],
+        "releaseAt": 1791072007850,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+        "entered": [
+          {
+            "type": "mouseout",
+            "at": 1791072003050,
+            "target": "",
+            "inResult": false
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072003050,
+            "target": "toast-action",
+            "inResult": true
+          }
+        ],
+        "left": [
+          {
+            "type": "mouseout",
+            "at": 1791072007850,
+            "target": "toast-action",
+            "inResult": true
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072007850,
+            "target": "",
+            "inResult": false
+          }
+        ],
+        "releaseAt": 1791072007850,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+        "entered": [
+          {
+            "type": "mouseout",
+            "at": 1791072003050,
+            "target": "",
+            "inResult": false
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072003050,
+            "target": "toast-action",
+            "inResult": true
+          }
+        ],
+        "left": [
+          {
+            "type": "mouseout",
+            "at": 1791072007850,
+            "target": "toast-action",
+            "inResult": true
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072007850,
+            "target": "",
+            "inResult": false
+          }
+        ],
+        "releaseAt": 1791072007850,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+        "entered": [
+          {
+            "type": "mouseout",
+            "at": 1791072003050,
+            "target": "",
+            "inResult": false
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072003050,
+            "target": "toast-action",
+            "inResult": true
+          }
+        ],
+        "left": [
+          {
+            "type": "mouseout",
+            "at": 1791072007850,
+            "target": "toast-action",
+            "inResult": true
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072007850,
+            "target": "",
+            "inResult": false
+          }
+        ],
+        "releaseAt": 1791072007850,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+        "entered": [
+          {
+            "type": "mouseout",
+            "at": 1791072003050,
+            "target": "",
+            "inResult": false
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072003050,
+            "target": "toast-action",
+            "inResult": true
+          }
+        ],
+        "left": [
+          {
+            "type": "mouseout",
+            "at": 1791072007850,
+            "target": "toast-action",
+            "inResult": true
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072007850,
+            "target": "",
+            "inResult": false
+          }
+        ],
+        "releaseAt": 1791072007850,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+        "entered": [
+          {
+            "type": "mouseout",
+            "at": 1791072003050,
+            "target": "",
+            "inResult": false
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072003050,
+            "target": "toast-action",
+            "inResult": true
+          }
+        ],
+        "left": [
+          {
+            "type": "mouseout",
+            "at": 1791072007850,
+            "target": "toast-action",
+            "inResult": true
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072007850,
+            "target": "",
+            "inResult": false
+          }
+        ],
+        "releaseAt": 1791072007850,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+        "entered": [
+          {
+            "type": "mouseout",
+            "at": 1791072003050,
+            "target": "",
+            "inResult": false
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072003050,
+            "target": "toast-action",
+            "inResult": true
+          }
+        ],
+        "left": [
+          {
+            "type": "mouseout",
+            "at": 1791072007850,
+            "target": "toast-action",
+            "inResult": true
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072007850,
+            "target": "",
+            "inResult": false
+          }
+        ],
+        "releaseAt": 1791072007850,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+        "entered": [
+          {
+            "type": "mouseout",
+            "at": 1791072003050,
+            "target": "",
+            "inResult": false
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072003050,
+            "target": "toast-action",
+            "inResult": true
+          }
+        ],
+        "left": [
+          {
+            "type": "mouseout",
+            "at": 1791072007850,
+            "target": "toast-action",
+            "inResult": true
+          },
+          {
+            "type": "mouseover",
+            "at": 1791072007850,
+            "target": "",
+            "inResult": false
+          }
+        ],
+        "releaseAt": 1791072007850,
+        "visibleAfterReleaseMs": 5999,
+        "expiredAfterReleaseMs": 6000
+      }
+    ],
+    "clear-lifecycle": [
+      {
+        "file": "latest-toasts-run/chromium-dark-desktop--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+        "inert": true,
+        "hidden": "true",
+        "focused": false,
+        "shape": "toast toast--card toast--live",
+        "retainedUntilMs": 249,
+        "removedAtMs": 250,
+        "successorDwellMs": 3000,
+        "undoCalls": 0
+      },
+      {
+        "file": "latest-toasts-run/chromium-dark-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+        "inert": true,
+        "hidden": "true",
+        "focused": false,
+        "shape": "toast toast--card toast--live",
+        "retainedUntilMs": 249,
+        "removedAtMs": 250,
+        "successorDwellMs": 3000,
+        "undoCalls": 0
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-desktop--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+        "inert": true,
+        "hidden": "true",
+        "focused": false,
+        "shape": "toast toast--card toast--live",
+        "retainedUntilMs": 249,
+        "removedAtMs": 250,
+        "successorDwellMs": 3000,
+        "undoCalls": 0
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+        "inert": true,
+        "hidden": "true",
+        "focused": false,
+        "shape": "toast toast--card toast--live",
+        "retainedUntilMs": 249,
+        "removedAtMs": 250,
+        "successorDwellMs": 3000,
+        "undoCalls": 0
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-desktop--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+        "inert": true,
+        "hidden": "true",
+        "focused": false,
+        "shape": "toast toast--card toast--live",
+        "retainedUntilMs": 249,
+        "removedAtMs": 250,
+        "successorDwellMs": 3000,
+        "undoCalls": 0
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+        "inert": true,
+        "hidden": "true",
+        "focused": false,
+        "shape": "toast toast--card toast--live",
+        "retainedUntilMs": 249,
+        "removedAtMs": 250,
+        "successorDwellMs": 3000,
+        "undoCalls": 0
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-desktop--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+        "inert": true,
+        "hidden": "true",
+        "focused": false,
+        "shape": "toast toast--card toast--live",
+        "retainedUntilMs": 249,
+        "removedAtMs": 250,
+        "successorDwellMs": 3000,
+        "undoCalls": 0
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-phone--clear-retains-the-last-shape-for-exactly-250ms-but-immediately-blocks-focus-and-actions--clear-lifecycle.json",
+        "inert": true,
+        "hidden": "true",
+        "focused": false,
+        "shape": "toast toast--card toast--live",
+        "retainedUntilMs": 249,
+        "removedAtMs": 250,
+        "successorDwellMs": 3000,
+        "undoCalls": 0
+      }
+    ],
+    "timers": [
+      {
+        "file": "latest-toasts-run/chromium-dark-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+        "shortMs": 3000,
+        "actionMs": 6000,
+        "hoverHeldMs": 10000,
+        "fullDwellRestarted": true,
+        "warningStillPresentAfterMs": 66000,
+        "phoneFolds": false
+      },
+      {
+        "file": "latest-toasts-run/chromium-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+        "shortMs": 3000,
+        "actionMs": 6000,
+        "hoverHeldMs": 10000,
+        "fullDwellRestarted": true,
+        "warningStillPresentAfterMs": 66000,
+        "phoneFolds": true
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+        "shortMs": 3000,
+        "actionMs": 6000,
+        "hoverHeldMs": 10000,
+        "fullDwellRestarted": true,
+        "warningStillPresentAfterMs": 66000,
+        "phoneFolds": false
+      },
+      {
+        "file": "latest-toasts-run/chromium-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+        "shortMs": 3000,
+        "actionMs": 6000,
+        "hoverHeldMs": 10000,
+        "fullDwellRestarted": true,
+        "warningStillPresentAfterMs": 66000,
+        "phoneFolds": true
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+        "shortMs": 3000,
+        "actionMs": 6000,
+        "hoverHeldMs": 10000,
+        "fullDwellRestarted": true,
+        "warningStillPresentAfterMs": 66000,
+        "phoneFolds": false
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+        "shortMs": 3000,
+        "actionMs": 6000,
+        "hoverHeldMs": 10000,
+        "fullDwellRestarted": true,
+        "warningStillPresentAfterMs": 66000,
+        "phoneFolds": true
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-desktop--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+        "shortMs": 3000,
+        "actionMs": 6000,
+        "hoverHeldMs": 10000,
+        "fullDwellRestarted": true,
+        "warningStillPresentAfterMs": 66000,
+        "phoneFolds": false
+      },
+      {
+        "file": "latest-toasts-run/webkit-light-phone--short-and-lifecycle-dwell-hover-restart-phone-folding-and-permanent-warnings-keep-their-rules--timers.json",
+        "shortMs": 3000,
+        "actionMs": 6000,
+        "hoverHeldMs": 10000,
+        "fullDwellRestarted": true,
+        "warningStillPresentAfterMs": 66000,
+        "phoneFolds": true
+      }
+    ]
+  }
+}

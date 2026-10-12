@@ -32,9 +32,8 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useLocation, useMatch, useNavigate } from 'react-router-dom';
+import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import type {
   PlanUsage,
   RunnerAntigravityState,
@@ -42,15 +41,18 @@ import type {
   RunnerEngineHealth,
   RunnerInstallState,
   RunnerModelCatalog,
+  RunnerSelfUpdate,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { useIsMobile } from '../lib/useMediaQuery';
 import {
   avatarQuery,
   meQuery,
   openProjectsQuery,
+  projectDetailsQuery,
   sessionQuery,
   wikiSpacesQuery,
   workspaceSessionCountsQuery,
@@ -64,8 +66,12 @@ import {
   sidebarProjects,
   type SidebarProject,
 } from '../lib/projectAttention';
-import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
+import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
+import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
+import { Avatar } from './ui/Avatar';
+import { Menu } from './ui/Menu';
+import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -140,10 +146,12 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  { key: 'runners', icon: <SidebarNavIcon name="runners" />, label: 'Runners' },
-  // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
-  // manage the shared ones on the same page.
-  { key: 'providers', icon: <SidebarNavIcon name="providers" />, label: 'Providers' },
+  // Infrastructure is where agents run and whose quota they spend — what the Runners and Providers
+  // rows used to split between them: the user's own machines and API keys, and the account pools
+  // they own or were added to. Shared providers (those with no owner) are not on it, an admin's
+  // included: admins manage them through /api/admin/providers alone, and the UI manages only each
+  // user's own (PROVIDERS_BASE).
+  { key: 'infrastructure', icon: <SidebarNavIcon name="runners" />, label: 'Infrastructure' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -155,6 +163,13 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
+
+/** Infrastructure's own page, and the pages under the Runners and Providers addresses it took over. */
+export function isInfrastructureRoute(pathname: string): boolean {
+  return ['/infrastructure', '/runners', '/providers'].some(
+    (root) => pathname === root || pathname.startsWith(`${root}/`),
+  );
+}
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -201,7 +216,7 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
-  // Persisted order of the Runners page's cards; null until assigned by migration or a reorder.
+  // Persisted order of Infrastructure's machine cards; null until assigned by migration or a reorder.
   position?: number | null;
   // Live sessions currently occupying this runner's slots (of maxConcurrent).
   activeSessions?: number;
@@ -230,6 +245,10 @@ export interface Runner {
   // Bypass under root and exits before its first message. undefined/null = a runner too old to
   // report it, which stays unrestricted.
   runsAsRoot?: boolean | null;
+  // Where this runner's updates of itself stand, as it last reported: why it is or isn't on the
+  // latest release, and the last update it installed. undefined/null = a runner too old to report
+  // it, which runnerAttention judges by runsAsRoot as it always has.
+  selfUpdate?: RunnerSelfUpdate | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -293,9 +312,15 @@ async function logout() {
   location.href = '/login';
 }
 
-export function TasksSidePanel({ open = false }: { open?: boolean }) {
+// Every row is a destination, as on the iPhone drawer (OrbitKit `DrawerDestination`): a section, a
+// workspace's session list, or a project's sessions page. A row is lit while the screen belongs to
+// it, a click on the lit row goes nowhere, and any other click lands on its destination's root.
+// `onNavigate` is told of every click, so the narrow layout's drawer closes even when the click
+// changed nothing, or only the query (a project's page is a `?project=` on the console).
+export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; onNavigate?: () => void }) {
   const loc = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
@@ -303,11 +328,12 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  // The Wiki's amber count: the proposals waiting for the owner, summed over every space (a wiki
-  // belongs to the account, and Review's own page asks across all of them). Its own key root, so the
-  // control plane's `wiki.changed` refresh reaches it and nothing else has to.
+  // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
+  // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
+  // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
+  // else has to.
   const wikiSpaces = useQuery({ ...wikiSpacesQuery(), enabled: !!me.data });
-  const wikiPending = (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0);
+  const wikiWaitingCount = wikiWaiting(wikiSpaces.data ?? []);
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
@@ -323,6 +349,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const agentsMatch = useMatch('/agents/:id/*');
   const openWorkspaceId = routeId((workspacesMatch ?? agentsMatch)?.params.id);
   const sessionId = routeId(useMatch('/sessions/:id')?.params.id);
+  const narrow = useIsMobile();
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),
     // Keep the previous session's data while the next one loads so activeWorkspaceId
@@ -360,18 +387,41 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     openProjectId && openProjects.some((p) => encodeId(p.id) === openProjectId)
       ? `project:${openProjectId}`
       : null;
+  // A project's sessions page — the console with `?project=` — is that project's row's, over
+  // whichever workspace or member session it shows, and the workspace's row is not lit there.
+  const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
+  const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
+  const projectPageKey =
+    projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
+      ? `project:${projectPageId}`
+      : null;
+  const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
+
+  // Where this tab is, for the space `/wiki` opens (design §12.3.4): the active workspace, or on a
+  // project's page or its sessions page the workspace the project's coordinator runs in. A page that
+  // is neither — the Projects or Tasks list — is nowhere, and the Wiki's own pages keep what the page
+  // before them said.
+  const projectInViewId = openProjectId ?? projectPageId;
+  const projectInView = useQuery({ ...projectDetailsQuery(projectInViewId ?? ''), enabled: !!projectInViewId });
+  const hereWorkspaceId = projectInViewId ? routeId(projectInView.data?.coordinatorWorkspaceId) : activeWorkspaceId;
+  const onWiki = loc.pathname === '/wiki' || loc.pathname.startsWith('/wiki/');
+  useEffect(() => {
+    if (!onWiki) writeWikiFromWorkspace(hereWorkspaceId);
+  }, [onWiki, hereWorkspaceId]);
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
-  // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
-  // remains scoped to Runners.
-  const routeKey = activeWorkspaceId
+  // row, while an unresolved deep link briefly leaves the fixed nav unselected. A machine's page, a
+  // key's and a pool's are Infrastructure's, under the addresses Runners and Providers gave them.
+  const routeKey = projectPageKey
+    ? projectPageKey
+    : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/agents/')
       ? ''
-      : loc.pathname.startsWith('/runner')
-        ? 'runners'
+      : isInfrastructureRoute(loc.pathname)
+        ? 'infrastructure'
         : loc.pathname.startsWith('/projects/')
           ? (projectRowKey ?? 'projects')
           // Every wiki route — a space, a topic, an entry's drawer, Review — is the Wiki's own
@@ -451,7 +501,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   };
 
   // Runners carry the computed `online` flag and the names the rows show. Poll on the same 15s
-  // cadence as the Runners page so status stays in sync while the sidebar is up.
+  // cadence as a machine's page so status stays in sync while the sidebar is up.
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
@@ -475,7 +525,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
 
-  // Each drop is saved at once, the Runners page's way: the rows (and their ⌘N) move immediately,
+  // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
   // the server's list settles it, and a refusal puts them back.
   const qc = useQueryClient();
   const message = useToast();
@@ -554,17 +604,23 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
   // Open a workspace's console — the same destination the runner detail page uses.
   // Config-only workspaces (no runner) have no console to open.
+  // The lit workspace's row goes nowhere: its list is already showing.
   const openWorkspace = useCallback(
     (a: Workspace) => {
-      if (!(a.runner?.id ?? a.runnerId)) return;
+      onNavigate?.();
+      if (!(a.runner?.id ?? a.runnerId) || a.id === litWorkspaceId) return;
       navigate(`/workspaces/${encodeId(a.id)}`);
     },
-    [navigate],
+    [navigate, onNavigate, litWorkspaceId],
   );
 
   const openTopNav = useCallback(
-    (key: string) => navigate(`/${key}`),
-    [navigate],
+    (key: string) => {
+      onNavigate?.();
+      if (key === sel) return;
+      navigate(`/${key}`);
+    },
+    [navigate, onNavigate, sel],
   );
 
   // Cmd/Ctrl + P opens Projects from every route. Like the other modifier shortcuts, it remains
@@ -615,10 +671,22 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeWorkspaceId, orderedWorkspaces, openWorkspace]);
 
+  // A project's row opens its sessions page over the workspace showing (members span workspaces,
+  // so the workspace only decides where the page's back leads), or the first one; with no
+  // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
+  // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
+  // shows one pane, so there the page is what opens.
   const openProject = (project: SidebarProject) => {
+    onNavigate?.();
     const key = encodeId(project.id);
+    if (sel === `project:${key}`) return;
     setSel(`project:${key}`);
-    navigate(`/projects/${key}`);
+    if (sessionId && !narrow) {
+      navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
+      return;
+    }
+    const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
+    navigate(over ? `/workspaces/${encodeId(over)}?project=${key}` : `/projects/${key}`);
   };
 
   return (
@@ -672,8 +740,14 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
-            {t.key === 'wiki' && wikiPending > 0 && (
-              <span className="tp-rail-badge needs-you">{wikiPending}</span>
+            {t.key === 'wiki' && wikiWaitingCount > 0 && (
+              <span
+                className="tp-rail-badge needs-you"
+                title={wikiWaitingOnYou(wikiWaitingCount)}
+                aria-label={wikiWaitingOnYou(wikiWaitingCount)}
+              >
+                {wikiWaitingCount}
+              </span>
             )}
           </div>
         ))}
@@ -692,7 +766,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           return (
             <div
               key={a.id}
-              className={`tp-rail-item ${a.id === activeWorkspaceId ? 'active' : ''}`}
+              className={`tp-rail-item ${a.id === litWorkspaceId ? 'active' : ''}`}
               onClick={() => openWorkspace(a)}
               title={`${a.name} · ${runnerLabel}${shortcutLabel ? `  ${shortcutLabel}` : ''}`}
             >
@@ -727,13 +801,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
-              {t.key === 'wiki' && wikiPending > 0 ? (
+              {t.key === 'wiki' && wikiWaitingCount > 0 ? (
                 <span
                   className="tp-count needs-you"
-                  title={wikiProposalsToReview(wikiPending)}
-                  aria-label={wikiProposalsToReview(wikiPending)}
+                  title={wikiWaitingOnYou(wikiWaitingCount)}
+                  aria-label={wikiWaitingOnYou(wikiWaitingCount)}
                 >
-                  {wikiPending}
+                  {wikiWaitingCount}
                 </span>
               ) : (
                 t.shortcut && (
@@ -791,7 +865,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                       key={a.id}
                       workspace={a}
                       runnerLabel={runnerLabel}
-                      active={a.id === activeWorkspaceId}
+                      active={a.id === litWorkspaceId}
                       offline={workspaceRunnerIsOffline(
                         runnerId,
                         runnerId ? runnerOnlineById.get(runnerId) : undefined,
@@ -847,117 +921,114 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       </div>
 
       <div className="tp-user">
-        <Dropdown
-          trigger={['click']}
-          placement="topLeft"
+        <Menu
+          side="top"
+          align="start"
           open={accountMenuOpen}
           onOpenChange={setAccountMenuOpen}
-          menu={{
-            className: 'tp-account-menu',
-            items: [
-              {
-                key: 'profile',
-                className: 'tp-account-profile',
-                label: (
-                  <span className="tp-account-profile-content">
-                    <Avatar
-                      size={36}
-                      src={avatar.data}
-                      icon={<UserOutlined />}
-                      style={{ background: 'var(--brand)', flex: 'none' }}
-                    />
-                    <span className="tp-account-identity">
-                      <span className="tp-account-name">
-                        {me.data?.name || me.data?.email || 'Profile'}
-                      </span>
-                      <span className="tp-account-detail">
-                        {me.data?.name && me.data.name !== me.data.email ? me.data.email : 'View profile'}
-                      </span>
+          popupClassName="tp-account-menu"
+          items={[
+            {
+              key: 'profile',
+              className: 'tp-account-profile',
+              label: (
+                <span className="tp-account-profile-content">
+                  <Avatar
+                    size={36}
+                    src={avatar.data}
+                    icon={<UserOutlined />}
+                    style={{ background: 'var(--brand)', flex: 'none' }}
+                  />
+                  <span className="tp-account-identity">
+                    <span className="tp-account-name">
+                      {me.data?.name || me.data?.email || 'Profile'}
+                    </span>
+                    <span className="tp-account-detail">
+                      {me.data?.name && me.data.name !== me.data.email ? me.data.email : 'View profile'}
                     </span>
                   </span>
-                ),
-                onClick: () => navigate('/settings/profile'),
-              },
-              { type: 'divider' },
-              {
-                key: 'appearance',
-                icon: <BgColorsOutlined />,
-                label: (
-                  <span className="tp-account-appearance-label">
-                    <span>Appearance</span>
-                    <span className="tp-account-current-theme">
-                      {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
-                    </span>
+                </span>
+              ),
+              onSelect: () => navigate('/settings/profile'),
+            },
+            { type: 'separator', key: 'identity' },
+            {
+              key: 'appearance',
+              icon: <BgColorsOutlined />,
+              label: (
+                <span className="tp-account-appearance-label">
+                  <span>Appearance</span>
+                  <span className="tp-account-current-theme">
+                    {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
                   </span>
-                ),
-                children: (
-                  [
-                    { key: 'system', label: 'System' },
-                    { key: 'light', label: 'Light' },
-                    { key: 'dark', label: 'Dark' },
-                  ] as { key: ThemeMode; label: string }[]
-                ).map((it) => ({
-                  key: `theme-${it.key}`,
-                  label: it.label,
-                  icon:
-                    mode === it.key ? (
-                      <CheckOutlined />
-                    ) : (
-                      <span style={{ display: 'inline-block', width: 14 }} />
-                    ),
-                  onClick: () => {
-                    if (mode !== it.key) setMode(it.key);
+                </span>
+              ),
+              children: (
+                [
+                  { key: 'system', label: 'System' },
+                  { key: 'light', label: 'Light' },
+                  { key: 'dark', label: 'Dark' },
+                ] as { key: ThemeMode; label: string }[]
+              ).map((it) => ({
+                key: `theme-${it.key}`,
+                label: it.label,
+                icon:
+                  mode === it.key ? (
+                    <CheckOutlined />
+                  ) : (
+                    <span style={{ display: 'inline-block', width: 14 }} />
+                  ),
+                onSelect: () => {
+                  if (mode !== it.key) setMode(it.key);
+                },
+              })),
+            },
+            {
+              key: 'settings',
+              icon: <SettingOutlined />,
+              label: 'Settings',
+              onSelect: () => navigate('/settings'),
+            },
+            // User management, for admins only. It opens a settings page as the row above does, so
+            // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
+            // Admin stays reachable with the panel collapsed.
+            ...(me.data?.role === 'ADMIN'
+              ? [
+                  {
+                    key: 'admin',
+                    icon: <TeamOutlined />,
+                    label: 'Admin',
+                    onSelect: () => navigate('/admin'),
                   },
-                })),
-              },
-              {
-                key: 'settings',
-                icon: <SettingOutlined />,
-                label: 'Settings',
-                onClick: () => navigate('/settings'),
-              },
-              // User management, for admins only. It opens a settings page as the row above does, so
-              // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
-              // Admin stays reachable with the panel collapsed.
-              ...(me.data?.role === 'ADMIN'
-                ? [
-                    {
-                      key: 'admin',
-                      icon: <TeamOutlined />,
-                      label: 'Admin',
-                      onClick: () => navigate('/admin'),
-                    },
-                  ]
-                : []),
-              { type: 'divider' },
-              {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Log out',
-                danger: true,
-                onClick: logout,
-              },
-            ],
-          }}
-        >
-          <button
-            type="button"
-            className={`tp-user-trigger ${accountMenuOpen ? 'open' : ''}`}
-            aria-label={`Account menu, ${me.data?.name || me.data?.email || 'Profile'}`}
-            aria-haspopup="menu"
-            aria-expanded={accountMenuOpen}
-          >
-            <Avatar
-              size={32}
-              src={avatar.data}
-              icon={<UserOutlined />}
-              style={{ background: 'var(--brand)', flex: 'none' }}
-            />
-            {me.data && (
-              <span className="tp-user-name">{me.data.name || me.data.email}</span>
-            )}
-          </button>
-        </Dropdown>
+                ]
+              : []),
+            { type: 'separator', key: 'session' },
+            {
+              key: 'logout',
+              icon: <LogoutOutlined />,
+              label: 'Log out',
+              danger: true,
+              onSelect: () => void logout(),
+            },
+          ]}
+          trigger={
+            <button
+              type="button"
+              className={`tp-user-trigger ${accountMenuOpen ? 'open' : ''}`}
+              aria-label={`Account menu, ${me.data?.name || me.data?.email || 'Profile'}`}
+            >
+              <Avatar
+                size={32}
+                src={avatar.data}
+                icon={<UserOutlined />}
+                style={{ background: 'var(--brand)', flex: 'none' }}
+              />
+              {me.data && (
+                <span className="tp-user-name">{me.data.name || me.data.email}</span>
+              )}
+            </button>
+          }
+        />
       </div>
 
       <div
@@ -1049,7 +1120,7 @@ export function WorkspaceStateMark({
     if (badge) return badge;
     const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
     return (
-      <Tooltip title={title}>
+      <Tooltip content={title}>
         <DisconnectOutlined
           className="tp-rail-offline"
           aria-label={title}
@@ -1061,7 +1132,7 @@ export function WorkspaceStateMark({
   if (running) {
     return (
       <>
-        <Tooltip title="Running">
+        <Tooltip content="Running">
           <LoadingOutlined
             className="tp-rail-running"
             spin
@@ -1080,7 +1151,7 @@ export function WorkspaceStateMark({
     const title = `${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`;
     return (
       <>
-        <Tooltip title={title}>
+        <Tooltip content={title}>
           <CodeOutlined
             // In the collapsed rail this mark sits at the avatar's corner like the spinner it
             // replaces, and the desktop rule below turns it into a quiet dot there.
@@ -1174,7 +1245,7 @@ export function WorkspaceRow({
       >
         <FolderOutlined aria-hidden="true" />
         {offline && (
-          <Tooltip title={offlineTitle}>
+          <Tooltip content={offlineTitle}>
             <DisconnectOutlined
               className="tp-workspace-icon-offline"
               aria-hidden="true"
@@ -1211,7 +1282,7 @@ export function WorkspaceRow({
 }
 
 /** A Workspace row while the list is being arranged, dragged by its handle with the pointer or the
- *  keyboard — the Runners page's `SortableRunnerCard` idiom. */
+ *  keyboard — the idiom of Infrastructure's machine cards (`RunnerEngineCard`). */
 function SortableWorkspaceRow({
   workspace,
   disabled,

@@ -151,11 +151,13 @@ scenario('the words are found when a run has buried them thousands of events dee
   assert.equal(answer.text, BURIED_MESSAGE);
 });
 
-scenario('a session with nothing to re-send says so, so no dead button is offered', async () => {
+scenario('a session with nothing to re-send says so, so the card offers Continue rather than a dead Retry', async () => {
   await seedSession(WORDLESS_SESSION, OWNER_ID);
 
   const answer = await autoRetry.retryMessage(OWNER_ID, WORDLESS_SESSION);
-  assert.equal(answer.text, '', 'the same conclusion that disarms a sweep: nothing to re-send');
+  assert.equal(answer.text, '', 'nothing of anybody\'s to re-send');
+  assert.equal(answer.nothingToResend, true,
+    'and nothing of the failure\'s own kind either — the card swaps the verb for a continue');
 });
 
 scenario("someone else's session is not a session this door knows", async () => {
@@ -191,11 +193,13 @@ async function answeredThenBackgroundFailure(sessionId: string, reply: string): 
   );
 }
 
-scenario('a background turn failing after the message was answered offers nothing to re-send', async () => {
+scenario('a background turn failing after the message was answered offers a continue, not a re-send', async () => {
   await answeredThenBackgroundFailure(ANSWERED_SESSION, 'Here is the review you asked for.');
 
   const answer = await autoRetry.retryMessage(OWNER_ID, ANSWERED_SESSION);
   assert.equal(answer.text, '', 'the message was answered; re-sending it repeats a settled question');
+  assert.equal(answer.nothingToResend, true,
+    'so the card offers Continue — the same turn the armed retry sends at the reset');
 });
 
 scenario('a message whose own turn failed is still re-sent after a background turn fails too', async () => {

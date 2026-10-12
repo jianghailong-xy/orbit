@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Modal, Spin } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { SessionSearchHit, WikiSearchRow } from '@orbit/shared';
@@ -12,6 +11,8 @@ import { wikiAnchorMark, wikiKindWord, WIKI_TRUST_LABELS, WIKI_TITLE } from '../
 import { useWikiShown } from '../lib/useWikiShown';
 import { WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { StatusIcon, statusLabel } from './WorkspaceView';
+import { Dialog } from './ui/Dialog';
+import { Spinner } from './ui/Spinner';
 
 // Matches the server's CONTENT_MIN_CHARS. Below it the search only matches names (session title,
 // branch, workspace, task) — the palette says so rather than letting the narrower result set read as
@@ -156,12 +157,12 @@ export function SessionSearch() {
   // whole point. `/` is not bound — it would collide with the composer's slash-command menu.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      // Esc is handled here rather than left to the Modal: AntD binds its own Esc to a keydown on
-      // `.ant-modal-wrap`, so it only fires while focus sits inside the dialog. Focus lands there
-      // via afterOpenChange, but anything that moves it out — tabbing to another window and back,
-      // a click that ends up on the body — silently kills the key while the footer still promises
-      // "esc close". Not preventDefault'd, and a no-op state set while closed, so every other Esc
-      // consumer (the composer's slash menu, an open AntD dropdown) is unaffected.
+      // Esc is handled here rather than left to the dialog, whose own Esc only fires while focus
+      // sits inside it. Focus lands in the field when the palette opens, but anything that moves it
+      // out — tabbing to another window and back, a click that ends up on the body — would silently
+      // kill the key while the footer still promises "esc close". Not preventDefault'd, and a no-op
+      // state set while closed, so every other Esc consumer (the composer's slash menu, an open
+      // dropdown) is unaffected.
       if (e.key === 'Escape') {
         setOpen(false);
         return;
@@ -247,8 +248,8 @@ export function SessionSearch() {
   // friends) treats the first Esc as "leave insert mode", blurs the field and swallows the key
   // with stopImmediatePropagation, which beats even the window-capture listener above and left the
   // palette sitting there until a second press. A click on the palette's own chrome carries a
-  // relatedTarget — AntD's modal wrap is tabindex="-1" and takes the focus — so it doesn't count,
-  // and neither does the field going quiet because the whole window moved to another app.
+  // relatedTarget — the dialog is tabindex="-1" and takes the focus — so it doesn't count, and
+  // neither does the field going quiet because the whole window moved to another app.
   const onInputBlur = (e: React.FocusEvent<HTMLInputElement>): void => {
     if (e.relatedTarget || !document.hasFocus()) return;
     setOpen(false);
@@ -286,17 +287,15 @@ export function SessionSearch() {
   const capped = total > hits.length;
 
   return (
-    <Modal
+    // Sits high on the screen like every other command palette (88px down, see .ssearch-modal), with
+    // no title row, close button or footer of a dialog: the field is the palette's one control.
+    <Dialog
       open={open}
-      onCancel={() => setOpen(false)}
-      footer={null}
+      onClose={() => setOpen(false)}
+      title={null}
       closable={false}
-      destroyOnClose
       width={640}
-      // Sits high on the screen like every other command palette, instead of centred.
-      style={{ top: 88 }}
-      styles={{ body: { padding: 0 } }}
-      afterOpenChange={(o) => o && inputRef.current?.focus()}
+      initialFocus={inputRef}
       className="ssearch-modal"
     >
       <div className="ssearch-head">
@@ -312,7 +311,7 @@ export function SessionSearch() {
           spellCheck={false}
           autoComplete="off"
         />
-        {(search.isFetching || wiki.isFetching) && <Spin size="small" />}
+        {(search.isFetching || wiki.isFetching) && <Spinner size="small" />}
       </div>
 
       <div className="ssearch-list" ref={listRef}>
@@ -409,6 +408,6 @@ export function SessionSearch() {
           <kbd>↑↓</kbd> navigate <kbd>↵</kbd> open <kbd>esc</kbd> close
         </span>
       </div>
-    </Modal>
+    </Dialog>
   );
 }

@@ -50,6 +50,7 @@ type sessionProcessArgs struct {
 	completeTurn      turnCompleter
 	waitTurnPermit    turnPermitWaiter
 	onLeaseLost       leaseLossHandler
+	dshLaunchSpec     *DshLaunchSpec
 }
 
 type providerRuntime struct {
@@ -71,6 +72,10 @@ type providerRuntime struct {
 // providerRuntimes is the set of engines this runner can drive: a name absent from it is
 // not a provider (runtimeProvider falls back to the default for anything else).
 var providerRuntimes = map[string]providerRuntime{
+	providerDsh: {
+		transport: transportJSONRPC,
+		run:       runDshSessionProcess,
+	},
 	providerClaude: {
 		transport:     transportStreamJSON,
 		steersMidTurn: true, // a `user` frame on a stdin that stays open across the turn

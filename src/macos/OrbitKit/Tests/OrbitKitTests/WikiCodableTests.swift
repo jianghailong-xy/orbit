@@ -19,6 +19,26 @@ final class WikiCodableTests: XCTestCase {
         XCTAssertNil(spaces[0].usage, "only the one-space read carries usage")
     }
 
+    func testTheSpacesListCarriesWhatThePlanWaitsOnTheBindingsAndTheDocuments() throws {
+        let rows = try JSONDecoder().decode([WikiSpace].self, from: Data(#"""
+        [{"id":"34WOrbit","slug":"orbit","title":"Orbit","pendingOps":1,"planWaiting":3,
+          "workspaceIds":["34WWorkA","34WWorkB"],"docs":{"written":5,"total":35}},
+         {"id":"34WNoPlan","slug":"no-plan","pendingOps":0,"planWaiting":1,"workspaceIds":[],"docs":null},
+         {"id":"34WOlder","slug":"older","pendingOps":2}]
+        """#.utf8))
+        XCTAssertEqual(rows[0].planWaiting, 3)
+        XCTAssertEqual(rows[0].workspaceIds, ["34WWorkA", "34WWorkB"])
+        XCTAssertEqual(rows[0].docs?.written, 5)
+        XCTAssertEqual(rows[0].docs?.total, 35)
+        XCTAssertEqual(rows[1].workspaceIds, [])
+        XCTAssertNil(rows[1].docs, "a space with no confirmed plan")
+        // A server older than the three: the row reads as it always did.
+        XCTAssertEqual(rows[2].pendingOps, 2)
+        XCTAssertNil(rows[2].planWaiting)
+        XCTAssertNil(rows[2].workspaceIds)
+        XCTAssertNil(rows[2].docs)
+    }
+
     func testOneSpaceCarriesItsUsageWindow() throws {
         let space = try WikiFixtures.decode(WikiSpace.self, WikiFixtures.space)
         XCTAssertNil(space.pendingOps, "the one-space read carries no count")

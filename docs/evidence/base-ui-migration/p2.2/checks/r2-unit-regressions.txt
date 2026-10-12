@@ -1,0 +1,16 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/lib/theme.test.tsx src/components/ui/boundary.test.ts src/components/ShareModal.test.tsx src/components/WorkspaceView.composerMenu.test.tsx
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web
+
+
+ Test Files  4 passed (4)
+      Tests  22 passed (22)
+   Start at  17:05:00
+   Duration  2.92s (tests 34%, import 31%, environment 19%, transform 15%)
+
+    Isolate  4 workers spawned · ~316ms startup each (spawn + environment, per file)
+             at least ~316ms faster with isolate: false — reuses workers across files instead of one per file
+

@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "/tmp/promotion-toast-main-reference/src/web/ui-migration/toasts-reference.config.mjs",
+    "--grep",
+    "mixed pinned"
+  ],
+  "cwd": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0",
+  "sourceCommitAtStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+  "sourceCommitAtEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+  "finishedAt": "2026-10-04T12:08:12.041304+00:00",
+  "seconds": 18.128076369990595,
+  "exitCode": 0
+}

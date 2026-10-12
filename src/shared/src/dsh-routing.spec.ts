@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunnerModelCatalog } from './dto';
-import { AgentProvider, PermissionMode } from './enums';
+import { AgentProvider, DSH_PERMISSION_MODES, PermissionMode } from './enums';
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   fastModeAvailable,
@@ -89,27 +89,30 @@ describe('P1a dsh shared routing', () => {
 
   it('P1a refuses unsupported Harness permission and fast-mode claims including defaults', () => {
     expect(runtimeApprovalSupport(AgentProvider.DSH)).toBe('partial');
-    for (const mode of [undefined, null, ...Object.values(PermissionMode), 'unknown-mode']) {
+    // P4 measured Default, Auto and Don't Ask; every other mode stays refused, defaults included.
+    for (const mode of [PermissionMode.PLAN, PermissionMode.ACCEPT_EDITS, PermissionMode.BYPASS, 'unknown-mode']) {
       for (const runsAsRoot of [undefined, false, true]) {
         const semantics = derivePermissionSemantics(
           AgentProvider.DSH, mode, 'opaque-model', runsAsRoot,
         );
         expect(semantics.honored).toBe(false);
         expect(semantics.unapproved).toBe('deny');
-        expect(semantics.mode).toBe(mode ?? PermissionMode.DONT_ASK);
+        expect(semantics.mode).toBe(mode);
         expect(semantics.approvalSupport).toBe('partial');
-        expect(semantics.note).toContain('does not support these permission modes');
-        expect(semantics.note).toContain('rejected until an enforced file policy is available');
+        expect(semantics.note).toContain('does not support this permission mode');
         expect(semantics.shortNote).toContain('session configuration is rejected');
         expect(semantics.note).not.toMatch(/runs as Default|runs as Don't Ask/);
       }
+    }
+    for (const mode of DSH_PERMISSION_MODES) {
+      expect(derivePermissionSemantics(AgentProvider.DSH, mode, 'opaque-model').honored).toBe(true);
     }
     const catalog: RunnerModelCatalog = {
       [AgentProvider.DSH]: [{
         value: 'opaque-model', label: 'Model', permissionModes: [PermissionMode.AUTO], fastMode: true,
       }],
     };
-    expect(autoAvailable(AgentProvider.DSH, 'opaque-model', true, catalog)).toBe(false);
+    expect(autoAvailable(AgentProvider.DSH, 'opaque-model', true, catalog)).toBe(true);
     expect(fastModeAvailable(AgentProvider.DSH, 'opaque-model', catalog)).toBe(false);
   });
 

@@ -1,0 +1,78 @@
+{
+  "phase": "P3a ACP base driver",
+  "sourceBaseline": "b489cca63ea80cc66fdece0a00d8cce64c780316",
+  "platform": "linux/amd64",
+  "node": "v26.10.0",
+  "go": "go1.27.1",
+  "fixedCLI": {
+    "npm": "@deepseek-ai/dsh@0.2.0-rc.2",
+    "tag": "dsh-v0.2.0-rc.2",
+    "sourceCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+    "cliSha256": "1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f",
+    "lock": "scripts/deepseek-harness-p0/package-lock.json",
+    "lockSha256": "dbec679507e76e3591fe875b7b8e7c59f24f275f9af88058797891fbe0d10c85",
+    "lockNote": "Canonical P0 lock with the libreoffice-kit fflate 0.8.3 security override (docs/dependency-security.md); the acceptance script hashes it at run time and checks the dsh integrity and the override. The P0 recording keeps the pre-override historical lockSha256 479e917f…c2.",
+    "npmIntegrity": "sha512-EAJ3gPNcVt/uv8X19PMm9NkVhWgT7xXNMk0UKCVm+IQ5rpSQOcsMUa0HWlnYYVybKMsccjcRB21vVVsaXQ6IdA==",
+    "fflateOverride": "0.8.3"
+  },
+  "acceptance": {
+    "command": "bash scripts/test-dsh-acp-driver.sh",
+    "exitCode": 0,
+    "requiredNamedScenarios": 37,
+    "missing": 0,
+    "skipped": 0,
+    "stdout": "acceptance-output.txt",
+    "goElapsedSeconds": 0.909
+  },
+  "runtimeEvidence": {
+    "entry": "providerRuntimeFor(runtimeProvider(job)).run with Provider=\"dsh\"",
+    "launchSpec": "P0 interface; test supplies isolated home/patch and synthetic key, not a substitute CLI",
+    "runtimeSessionId": "afaaa6fb-8fee-480d-97d0-8d83655da4f6",
+    "persisted": "scratch/meta.json runtimeSessionId equals real session/new id",
+    "cliLaunches": 1,
+    "turns": 2,
+    "settlementsPerTurn": 1,
+    "modelRequests": 3,
+    "model": "deepseek-v4-pro",
+    "reasoningEffort": "low",
+    "nativeTool": "write",
+    "nativeEffect": "P3A real dsh tool effect",
+    "messagePresentation": "committed assistant/thinking blocks; no text_delta/thinking_delta",
+    "context": "usage_update.used/size; unknown omitted"
+  },
+  "regression": {
+    "command": "go test -count=1 -v -timeout 5m -run '^(TestEverySessionLoopThatCannotSteerRefusesOne|TestOnlyAnImplementedSteerIsDeclaredToTheControlPlane|TestRuntimeProviderRecognizesKimi|TestApplyProviderEnv.*|TestReloadAppliesTheSwitchedModelAndEnvironmentTogether)$' .",
+    "workingDirectory": "src/runner-go",
+    "inheritedOrbitEnvironment": "all ORBIT_* removed",
+    "exitCode": 0,
+    "testsPassed": 7
+  },
+  "race": {
+    "workingDirectory": "src/runner-go",
+    "inheritedOrbitEnvironment": "all ORBIT_* removed",
+    "goCache": "/tmp/orbit-dsh-process-race-cache",
+    "commands": [
+      {
+        "command": "go test -race -run \"^(TestDshACPProcessMultiTurn|TestDshACPResponseBarrier|TestDshACPStartupAndProtocolFailures|TestDshACPRunnerProcessFailure|TestDshACPRunnerMultiTurn|TestDshACPEventMappingFixtures|TestDshACPCommittedBlocksAndContextUnknown|TestDshACPBasicStatusesAndUnfinishedTools|TestEverySessionLoopThatCannotSteerRefusesOne|TestOnlyAnImplementedSteerIsDeclaredToTheControlPlane)$\" -count=1 -v -timeout 3m",
+        "exitCode": 0,
+        "parentTestsPassed": 7,
+        "elapsedSeconds": 3.375,
+        "note": "Three placeholder mapper alternatives matched nothing; the second command verified all three actual mapper tests."
+      },
+      {
+        "command": "go test -race -run \"^(TestDshACPRecordedEventMapping|TestDshACPStatusAndUnclosedTools|TestDshACPEventAttribution)$\" -count=1 -v -timeout 3m",
+        "exitCode": 0,
+        "parentTestsPassed": 3,
+        "elapsedSeconds": 2.474
+      }
+    ]
+  },
+  "boundaries": [
+    "No real API key or external model service used.",
+    "The default environment preparer intentionally fails explicitly until P2 is wired in P3b; this driver does not duplicate credentials/configuration preparation.",
+    "Existing runtime ids are retained and recovery currently fails explicitly; P3b implements resume/restart/cancel/lease race semantics.",
+    "Reverse permission requests return cancelled until the P4 permission/MCP bridge is connected; no permissive fallback.",
+    "Ordinary Go tests use fake processes. The fixed CLI scenario is opt-in via dsh_integration and mandatory in the acceptance script.",
+    "Only Linux amd64/Node26 was reproduced; other platforms and production deployment remain outside this task."
+  ]
+}

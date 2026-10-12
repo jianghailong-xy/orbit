@@ -1,0 +1,2410 @@
+{
+ "targets": [
+  "chromium-dark-desktop/breakpoint-959-wiki.png",
+  "chromium-dark-desktop/breakpoint-961-wiki.png",
+  "chromium-dark-desktop/profile-validation.png",
+  "chromium-dark-desktop/profile.png",
+  "chromium-dark-desktop/wiki-home.png",
+  "chromium-dark-desktop/wiki-new-entry.png",
+  "chromium-dark-phone/profile-validation.png",
+  "chromium-dark-phone/profile.png",
+  "chromium-dark-phone/wiki-contents.png",
+  "chromium-dark-phone/wiki-home.png",
+  "chromium-dark-phone/wiki-new-entry.png",
+  "chromium-light-desktop/breakpoint-959-wiki.png",
+  "chromium-light-desktop/breakpoint-961-wiki.png",
+  "chromium-light-desktop/profile-validation.png",
+  "chromium-light-desktop/profile.png",
+  "chromium-light-desktop/wiki-home.png",
+  "chromium-light-desktop/wiki-new-entry.png",
+  "chromium-light-phone/profile-validation.png",
+  "chromium-light-phone/profile.png",
+  "chromium-light-phone/wiki-contents.png",
+  "chromium-light-phone/wiki-home.png",
+  "chromium-light-phone/wiki-new-entry.png",
+  "webkit-dark-desktop/breakpoint-959-wiki.png",
+  "webkit-dark-desktop/breakpoint-961-wiki.png",
+  "webkit-dark-desktop/profile-validation.png",
+  "webkit-dark-desktop/profile.png",
+  "webkit-dark-desktop/settings-saved.png",
+  "webkit-dark-desktop/settings.png",
+  "webkit-dark-desktop/wiki-home.png",
+  "webkit-dark-desktop/wiki-new-entry.png",
+  "webkit-dark-phone/profile-validation.png",
+  "webkit-dark-phone/profile.png",
+  "webkit-dark-phone/settings.png",
+  "webkit-dark-phone/wiki-contents.png",
+  "webkit-dark-phone/wiki-home.png",
+  "webkit-dark-phone/wiki-new-entry.png",
+  "webkit-light-desktop/breakpoint-959-wiki.png",
+  "webkit-light-desktop/breakpoint-961-wiki.png",
+  "webkit-light-desktop/profile-validation.png",
+  "webkit-light-desktop/profile.png",
+  "webkit-light-desktop/settings-saved.png",
+  "webkit-light-desktop/settings.png",
+  "webkit-light-desktop/wiki-home.png",
+  "webkit-light-desktop/wiki-new-entry.png",
+  "webkit-light-phone/profile-validation.png",
+  "webkit-light-phone/profile.png",
+  "webkit-light-phone/settings.png",
+  "webkit-light-phone/wiki-contents.png",
+  "webkit-light-phone/wiki-home.png",
+  "webkit-light-phone/wiki-new-entry.png"
+ ],
+ "failing": [
+  "chromium-dark-desktop/breakpoint-959-wiki.png",
+  "chromium-dark-desktop/breakpoint-961-wiki.png",
+  "chromium-dark-desktop/profile-validation.png",
+  "chromium-dark-desktop/profile.png",
+  "chromium-dark-desktop/wiki-home.png",
+  "chromium-dark-desktop/wiki-new-entry.png",
+  "chromium-dark-phone/profile-validation.png",
+  "chromium-dark-phone/profile.png",
+  "chromium-dark-phone/wiki-contents.png",
+  "chromium-dark-phone/wiki-home.png",
+  "chromium-dark-phone/wiki-new-entry.png",
+  "chromium-light-desktop/breakpoint-959-wiki.png",
+  "chromium-light-desktop/breakpoint-961-wiki.png",
+  "chromium-light-desktop/profile-validation.png",
+  "chromium-light-desktop/profile.png",
+  "chromium-light-desktop/wiki-home.png",
+  "chromium-light-desktop/wiki-new-entry.png",
+  "chromium-light-phone/profile-validation.png",
+  "chromium-light-phone/profile.png",
+  "chromium-light-phone/wiki-contents.png",
+  "chromium-light-phone/wiki-home.png",
+  "chromium-light-phone/wiki-new-entry.png",
+  "webkit-dark-desktop/breakpoint-959-wiki.png",
+  "webkit-dark-desktop/breakpoint-961-wiki.png",
+  "webkit-dark-desktop/profile-validation.png",
+  "webkit-dark-desktop/profile.png",
+  "webkit-dark-desktop/wiki-home.png",
+  "webkit-dark-desktop/wiki-new-entry.png",
+  "webkit-dark-phone/profile-validation.png",
+  "webkit-dark-phone/profile.png",
+  "webkit-dark-phone/wiki-contents.png",
+  "webkit-dark-phone/wiki-home.png",
+  "webkit-dark-phone/wiki-new-entry.png",
+  "webkit-light-desktop/breakpoint-959-wiki.png",
+  "webkit-light-desktop/breakpoint-961-wiki.png",
+  "webkit-light-desktop/profile-validation.png",
+  "webkit-light-desktop/profile.png",
+  "webkit-light-desktop/wiki-home.png",
+  "webkit-light-desktop/wiki-new-entry.png",
+  "webkit-light-phone/profile-validation.png",
+  "webkit-light-phone/profile.png",
+  "webkit-light-phone/wiki-contents.png",
+  "webkit-light-phone/wiki-home.png",
+  "webkit-light-phone/wiki-new-entry.png"
+ ],
+ "facts": {
+  "A6": {
+   "X": "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+   "subject": "feat(auth): add access token management and /pat/self introspection",
+   "parents": [
+    "e6786d077cbba6e5e4d8eea29e4bcdf78d77c605"
+   ],
+   "onOriginMain": true,
+   "mergedBy": "86c6d2d4df03f541a9ef6b5c57bf2ee0e365c181",
+   "mergeIsMainFirstParentOf_f86211ec3": true,
+   "mergeSubject": "Merge refs/heads/project/34ajNeEYWbtCQL3gazPPj into refs/heads/main",
+   "webCommitsInMerge": [
+    "d233a6cd0 feat(auth): add access token management and /pat/self introspection",
+    "e6786d077 Merge refs/heads/main into refs/heads/project/34ajNeEYWbtCQL3gazPPj"
+   ]
+  },
+  "A7": {
+   "X": "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+   "subject": "feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+   "parents": [
+    "e3c7eee693b956399b5207c1fd72996dbdff7b6d"
+   ],
+   "onOriginMain": true,
+   "mergedBy": "dcfb5adf622147edb5f25126cb735ad12e43e1cf",
+   "mergeIsMainFirstParentOf_f86211ec3": true,
+   "mergeSubject": "Merge refs/heads/project/34b6G5PenLgreIF9F7qQZ into refs/heads/main",
+   "webCommitsInMerge": [
+    "6c4e0ac0e feat(wiki): Activity page, the head's Activity badge, one number waiting, space names and defaults",
+    "e3c7eee69 Merge refs/heads/main into refs/heads/project/34b6G5PenLgreIF9F7qQZ"
+   ]
+  },
+  "A8": {
+   "X": "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+   "subject": "refactor(wiki): list topic articles on the Wiki home, drop status cards",
+   "parents": [
+    "903e03fd482f2871512cc765a9ee689ea1b89481"
+   ],
+   "onOriginMain": true,
+   "mergedBy": "be0f8c22a5891c98806eee135c132dbea138c698",
+   "mergeIsMainFirstParentOf_f86211ec3": true,
+   "mergeSubject": "Merge refs/heads/project/34b6G5PenLgreIF9F7qQZ into refs/heads/main",
+   "webCommitsInMerge": [
+    "2f9cc095f refactor(wiki): list topic articles on the Wiki home, drop status cards"
+   ]
+  },
+  "A9": {
+   "X": "a884fda36851b6257d6777efbc038c325cd75a45",
+   "subject": "feat(wiki): show other spaces' pending work on the desktop Activity page",
+   "parents": [
+    "2a2e889e5e2d2c306d8c5620562ccb57124db4c5"
+   ],
+   "onOriginMain": true,
+   "mergedBy": "30cf8978649e37f6f59979975a52a3a12b3cea05",
+   "mergeIsMainFirstParentOf_f86211ec3": true,
+   "mergeSubject": "Merge refs/heads/project/34b6G5PenLgreIF9F7qQZ into refs/heads/main",
+   "webCommitsInMerge": [
+    "a884fda36 feat(wiki): show other spaces' pending work on the desktop Activity page"
+   ]
+  }
+ },
+ "rows": {
+  "chromium-dark-desktop/breakpoint-959-wiki.png": {
+   "tipVsExpectation": {
+    "differentPixels": 202131,
+    "maxChannelDelta": 220,
+    "p0Comparator": "8787 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "noise",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-dark-desktop/breakpoint-961-wiki.png": {
+   "tipVsExpectation": {
+    "differentPixels": 268499,
+    "maxChannelDelta": 223,
+    "p0Comparator": "13701 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "noise",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "noise"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-dark-desktop/profile-validation.png": {
+   "tipVsExpectation": {
+    "differentPixels": 64302,
+    "maxChannelDelta": 223,
+    "p0Comparator": "9340 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "noise",
+    "4f567434c->fffcdb532": "changed(fails P0 comparator)"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "noise",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "noise",
+    "b2e05492f->30cf89786": "noise",
+    "30cf89786->f86211ec3": "noise"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-xfix-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "n/a (B1 present at the interval end, fixed in the generation tree)",
+    "vsTip fffcdb532": "noise"
+   }
+  },
+  "chromium-dark-desktop/profile.png": {
+   "tipVsExpectation": {
+    "differentPixels": 64203,
+    "maxChannelDelta": 223,
+    "p0Comparator": "9400 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-dark-desktop/wiki-home.png": {
+   "tipVsExpectation": {
+    "differentPixels": 430860,
+    "maxChannelDelta": 223,
+    "p0Comparator": "14029 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "noise",
+    "4f567434c->fffcdb532": "noise"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "noise",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-dark-desktop/wiki-new-entry.png": {
+   "tipVsExpectation": {
+    "differentPixels": 304872,
+    "maxChannelDelta": 121,
+    "p0Comparator": "3826 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "noise",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-dark-phone/profile-validation.png": {
+   "tipVsExpectation": {
+    "differentPixels": 72037,
+    "maxChannelDelta": 223,
+    "p0Comparator": "21662 pixels (ratio 0.07 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "noise",
+    "4f567434c->fffcdb532": "changed"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "noise",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "noise",
+    "be0f8c22a->b2e05492f": "noise",
+    "b2e05492f->30cf89786": "noise",
+    "30cf89786->f86211ec3": "noise"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-xfix-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "n/a (B1 present at the interval end, fixed in the generation tree)",
+    "vsTip fffcdb532": "noise"
+   }
+  },
+  "chromium-dark-phone/profile.png": {
+   "tipVsExpectation": {
+    "differentPixels": 8192,
+    "maxChannelDelta": 212,
+    "p0Comparator": "4795 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-dark-phone/wiki-contents.png": {
+   "tipVsExpectation": {
+    "differentPixels": 18063,
+    "maxChannelDelta": 127,
+    "p0Comparator": "531 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "noise",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-dark-phone/wiki-home.png": {
+   "tipVsExpectation": {
+    "differentPixels": 169908,
+    "maxChannelDelta": 220,
+    "p0Comparator": "8812 pixels (ratio 0.03 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "noise",
+    "b2e05492f->30cf89786": "noise",
+    "30cf89786->f86211ec3": "noise"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-dark-phone/wiki-new-entry.png": {
+   "tipVsExpectation": {
+    "differentPixels": 31948,
+    "maxChannelDelta": 98,
+    "p0Comparator": "793 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "noise",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "noise"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-light-desktop/breakpoint-959-wiki.png": {
+   "tipVsExpectation": {
+    "differentPixels": 74726,
+    "maxChannelDelta": 224,
+    "p0Comparator": "8872 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "noise",
+    "4f567434c->fffcdb532": "noise"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "noise",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "noise",
+    "30cf89786->f86211ec3": "noise"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "noise"
+   }
+  },
+  "chromium-light-desktop/breakpoint-961-wiki.png": {
+   "tipVsExpectation": {
+    "differentPixels": 73410,
+    "maxChannelDelta": 243,
+    "p0Comparator": "13693 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "noise",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-light-desktop/profile-validation.png": {
+   "tipVsExpectation": {
+    "differentPixels": 13867,
+    "maxChannelDelta": 224,
+    "p0Comparator": "9076 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "noise",
+    "4f567434c->fffcdb532": "changed(fails P0 comparator)"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "noise",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "noise",
+    "30cf89786->f86211ec3": "noise"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-xfix-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "n/a (B1 present at the interval end, fixed in the generation tree)",
+    "vsTip fffcdb532": "noise"
+   }
+  },
+  "chromium-light-desktop/profile.png": {
+   "tipVsExpectation": {
+    "differentPixels": 13862,
+    "maxChannelDelta": 224,
+    "p0Comparator": "9144 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-light-desktop/wiki-home.png": {
+   "tipVsExpectation": {
+    "differentPixels": 92685,
+    "maxChannelDelta": 243,
+    "p0Comparator": "14051 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "noise",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-light-desktop/wiki-new-entry.png": {
+   "tipVsExpectation": {
+    "differentPixels": 42858,
+    "maxChannelDelta": 134,
+    "p0Comparator": "3930 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "noise",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-light-phone/profile-validation.png": {
+   "tipVsExpectation": {
+    "differentPixels": 47282,
+    "maxChannelDelta": 224,
+    "p0Comparator": "22041 pixels (ratio 0.07 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "changed(fails P0 comparator)"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "noise",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "noise",
+    "be0f8c22a->b2e05492f": "noise",
+    "b2e05492f->30cf89786": "noise",
+    "30cf89786->f86211ec3": "noise"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-xfix-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "n/a (B1 present at the interval end, fixed in the generation tree)",
+    "vsTip fffcdb532": "noise"
+   }
+  },
+  "chromium-light-phone/profile.png": {
+   "tipVsExpectation": {
+    "differentPixels": 7133,
+    "maxChannelDelta": 224,
+    "p0Comparator": "4721 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-light-phone/wiki-contents.png": {
+   "tipVsExpectation": {
+    "differentPixels": 5304,
+    "maxChannelDelta": 135,
+    "p0Comparator": "577 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "noise",
+    "4f567434c->fffcdb532": "noise"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "noise",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-light-phone/wiki-home.png": {
+   "tipVsExpectation": {
+    "differentPixels": 42896,
+    "maxChannelDelta": 224,
+    "p0Comparator": "8860 pixels (ratio 0.03 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "noise",
+    "4f567434c->fffcdb532": "noise"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "noise",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "chromium-light-phone/wiki-new-entry.png": {
+   "tipVsExpectation": {
+    "differentPixels": 5260,
+    "maxChannelDelta": 123,
+    "p0Comparator": "796 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "noise",
+    "aa163019d->25cfa3b72": "noise",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "noise",
+    "4920dab40->8d2c52f2a": "noise",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "noise",
+     "X^1 vs merge^1": "noise"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-desktop/breakpoint-959-wiki.png": {
+   "tipVsExpectation": {
+    "differentPixels": 202230,
+    "maxChannelDelta": 220,
+    "p0Comparator": "8840 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-desktop/breakpoint-961-wiki.png": {
+   "tipVsExpectation": {
+    "differentPixels": 274907,
+    "maxChannelDelta": 223,
+    "p0Comparator": "14665 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-desktop/profile-validation.png": {
+   "tipVsExpectation": {
+    "differentPixels": 96402,
+    "maxChannelDelta": 223,
+    "p0Comparator": "15248 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-desktop/profile.png": {
+   "tipVsExpectation": {
+    "differentPixels": 92330,
+    "maxChannelDelta": 223,
+    "p0Comparator": "13762 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-desktop/settings-saved.png": {
+   "tipVsExpectation": {
+    "differentPixels": 780,
+    "maxChannelDelta": 35,
+    "p0Comparator": "match"
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-desktop/settings.png": {
+   "tipVsExpectation": {
+    "differentPixels": 780,
+    "maxChannelDelta": 35,
+    "p0Comparator": "match"
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-desktop/wiki-home.png": {
+   "tipVsExpectation": {
+    "differentPixels": 431336,
+    "maxChannelDelta": 223,
+    "p0Comparator": "14106 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-desktop/wiki-new-entry.png": {
+   "tipVsExpectation": {
+    "differentPixels": 304944,
+    "maxChannelDelta": 121,
+    "p0Comparator": "3794 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-phone/profile-validation.png": {
+   "tipVsExpectation": {
+    "differentPixels": 71518,
+    "maxChannelDelta": 223,
+    "p0Comparator": "21323 pixels (ratio 0.07 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "changed(fails P0 comparator)"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-xfix-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "n/a (B1 present at the interval end, fixed in the generation tree)",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-phone/profile.png": {
+   "tipVsExpectation": {
+    "differentPixels": 8595,
+    "maxChannelDelta": 212,
+    "p0Comparator": "4702 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-phone/settings.png": {
+   "tipVsExpectation": {
+    "differentPixels": 428,
+    "maxChannelDelta": 35,
+    "p0Comparator": "match"
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-phone/wiki-contents.png": {
+   "tipVsExpectation": {
+    "differentPixels": 18071,
+    "maxChannelDelta": 127,
+    "p0Comparator": "576 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-phone/wiki-home.png": {
+   "tipVsExpectation": {
+    "differentPixels": 170000,
+    "maxChannelDelta": 220,
+    "p0Comparator": "8821 pixels (ratio 0.03 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-dark-phone/wiki-new-entry.png": {
+   "tipVsExpectation": {
+    "differentPixels": 31958,
+    "maxChannelDelta": 98,
+    "p0Comparator": "817 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-desktop/breakpoint-959-wiki.png": {
+   "tipVsExpectation": {
+    "differentPixels": 75191,
+    "maxChannelDelta": 225,
+    "p0Comparator": "9047 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-desktop/breakpoint-961-wiki.png": {
+   "tipVsExpectation": {
+    "differentPixels": 82762,
+    "maxChannelDelta": 243,
+    "p0Comparator": "14817 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-desktop/profile-validation.png": {
+   "tipVsExpectation": {
+    "differentPixels": 41905,
+    "maxChannelDelta": 224,
+    "p0Comparator": "15649 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-desktop/profile.png": {
+   "tipVsExpectation": {
+    "differentPixels": 37825,
+    "maxChannelDelta": 224,
+    "p0Comparator": "13970 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-desktop/settings-saved.png": {
+   "tipVsExpectation": {
+    "differentPixels": 780,
+    "maxChannelDelta": 33,
+    "p0Comparator": "match"
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-desktop/settings.png": {
+   "tipVsExpectation": {
+    "differentPixels": 780,
+    "maxChannelDelta": 33,
+    "p0Comparator": "match"
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-desktop/wiki-home.png": {
+   "tipVsExpectation": {
+    "differentPixels": 93193,
+    "maxChannelDelta": 243,
+    "p0Comparator": "14244 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-desktop/wiki-new-entry.png": {
+   "tipVsExpectation": {
+    "differentPixels": 43088,
+    "maxChannelDelta": 134,
+    "p0Comparator": "3993 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "changed(fails P0 comparator)",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A9": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+    "a884fda36851b6257d6777efbc038c325cd75a45"
+   ],
+   "generation": {
+    "run": "full-maint-a884fda36",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-phone/profile-validation.png": {
+   "tipVsExpectation": {
+    "differentPixels": 47403,
+    "maxChannelDelta": 224,
+    "p0Comparator": "21858 pixels (ratio 0.07 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "changed(fails P0 comparator)"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-xfix-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "n/a (B1 present at the interval end, fixed in the generation tree)",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-phone/profile.png": {
+   "tipVsExpectation": {
+    "differentPixels": 7562,
+    "maxChannelDelta": 224,
+    "p0Comparator": "4626 pixels (ratio 0.02 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed(fails P0 comparator)",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-phone/settings.png": {
+   "tipVsExpectation": {
+    "differentPixels": 428,
+    "maxChannelDelta": 33,
+    "p0Comparator": "match"
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "changed",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "same",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A6": {
+     "X^1->X": "changed",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+   ],
+   "generation": {
+    "run": "full-maint-d233a6cd0",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-phone/wiki-contents.png": {
+   "tipVsExpectation": {
+    "differentPixels": 5349,
+    "maxChannelDelta": 135,
+    "p0Comparator": "626 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "same",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-phone/wiki-home.png": {
+   "tipVsExpectation": {
+    "differentPixels": 43324,
+    "maxChannelDelta": 225,
+    "p0Comparator": "9002 pixels (ratio 0.03 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  },
+  "webkit-light-phone/wiki-new-entry.png": {
+   "tipVsExpectation": {
+    "differentPixels": 5301,
+    "maxChannelDelta": 123,
+    "p0Comparator": "814 pixels (ratio 0.01 of all image pixels) are different."
+   },
+   "projectLine": {
+    "da13423d3->dd1d197ef": "changed(fails P0 comparator)",
+    "dd1d197ef->4f567434c": "same",
+    "4f567434c->fffcdb532": "same"
+   },
+   "mainLine": {
+    "162774e52->aa163019d": "same",
+    "aa163019d->25cfa3b72": "same",
+    "25cfa3b72->86c6d2d4d": "same",
+    "86c6d2d4d->4920dab40": "same",
+    "4920dab40->8d2c52f2a": "same",
+    "8d2c52f2a->dcfb5adf6": "changed(fails P0 comparator)",
+    "dcfb5adf6->51f0cdfee": "same",
+    "51f0cdfee->be0f8c22a": "changed(fails P0 comparator)",
+    "be0f8c22a->b2e05492f": "same",
+    "b2e05492f->30cf89786": "same",
+    "30cf89786->f86211ec3": "same"
+   },
+   "singles": {
+    "A7": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    },
+    "A8": {
+     "X^1->X": "changed(fails P0 comparator)",
+     "X vs merge": "same",
+     "X^1 vs merge^1": "same"
+    }
+   },
+   "mainCommits": [
+    "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+    "2f9cc095f83f199997909e64dfdf7f2c0e023b2b"
+   ],
+   "generation": {
+    "run": "full-maint-2f9cc095f",
+    "vsIntervalEnd f86211ec3": "same",
+    "vsTip fffcdb532": "same"
+   }
+  }
+ },
+ "wikiLocator": {
+  "903e03fd4 (X^1 of 2f9cc095f)": {
+   "run": "wiki-orig-903e03fd4",
+   "passed": 8,
+   "failed": 0,
+   "locators": []
+  },
+  "2f9cc095f (X)": {
+   "run": "wiki-orig-2f9cc095f",
+   "passed": 0,
+   "failed": 8,
+   "locators": [
+    "locator('.wk-card').first()"
+   ]
+  },
+  "be0f8c22a (main merge)": {
+   "run": "wiki-orig-be0f8c22a",
+   "passed": 0,
+   "failed": 8,
+   "locators": [
+    "locator('.wk-card').first()"
+   ]
+  },
+  "dd1d197ef (project line)": {
+   "run": "wiki-orig-dd1d197ef",
+   "passed": 0,
+   "failed": 8,
+   "locators": [
+    "locator('.wk-card').first()"
+   ]
+  }
+ }
+}

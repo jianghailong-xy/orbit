@@ -85,6 +85,81 @@ describe('runnerAttention.cases.json', () => {
   });
 });
 
+// Antigravity's accounts are judged as Claude's and Codex's are, from the quota its engine reports on
+// its own health. Here rather than in the case file, which the Swift port runs as it stands.
+describe('Antigravity’s Google accounts near their limits', () => {
+  const nowMs = Date.parse('2026-09-29T00:15:00Z');
+  const bucket = (id: string, window: string, remainingFraction: number, resetTime: string) => ({
+    id,
+    window,
+    remainingFraction,
+    resetTime,
+  });
+  const input = (over: Record<string, unknown>, accounts: Array<{ id: string; auth: 'yes' | 'no' }>, usage: unknown) =>
+    ({
+      runner: {
+        name: 'hpc',
+        hostname: 'hpc',
+        version: '0.1.216',
+        online: true,
+        engines: [
+          {
+            engine: 'antigravity',
+            installed: true,
+            auth: 'yes',
+            authSource: 'google',
+            accounts: accounts.map((account) => ({ ...account, home: `/root/.orbit/antigravity-accounts/${account.id}` })),
+            planUsage: usage,
+            ...over,
+          },
+        ],
+      },
+      workspaces: [{ id: 'ws-app', name: 'app', lastProvider: 'antigravity' }],
+      nowMs,
+      latestVersion: '0.1.216',
+    }) as RunnerAttentionInput;
+  const nearly = {
+    provider: 'antigravity',
+    buckets: [bucket('gemini-weekly', 'weekly', 0.5, '2026-10-02T00:00:00Z'), bucket('gemini-5h', '5h', 0.03, '2026-09-29T03:00:00Z')],
+    accounts: {
+      '5c2e91a0': {
+        provider: 'antigravity',
+        buckets: [bucket('gemini-5h', '5h', 0.06, '2026-09-29T04:00:00Z'), bucket('3p-5h', '5h', 0.08, '2026-09-29T04:00:00Z')],
+      },
+    },
+  };
+  const both = [
+    { id: 'default', auth: 'yes' as const },
+    { id: '5c2e91a0', auth: 'yes' as const },
+  ];
+
+  it('warns once every account is nearly spent, by the account with most left and its emptiest bucket, in what is used', () => {
+    const [quota] = runnerAttention(input({}, both, nearly));
+    expect(quota.kind).toBe('quotaNearLimit');
+    // Work has the most left; of its buckets gemini-5h has least: 6% left is 94% used.
+    expect(quota.short).toBe('Antigravity 5-hour limit 94%');
+    expect(quota.params).toEqual({
+      engine: 'antigravity',
+      window: '5-hour limit',
+      percent: 94,
+      resetsAt: '2026-09-29T04:00:00Z',
+      workspaces: ['app'],
+    });
+  });
+
+  it('says nothing while one account still has room', () => {
+    const roomy = { ...nearly, accounts: { '5c2e91a0': { provider: 'antigravity', buckets: [bucket('gemini-5h', '5h', 0.6, '2026-09-29T04:00:00Z')] } } };
+    expect(runnerAttention(input({}, both, roomy))).toEqual([]);
+  });
+
+  it('never counts a Default on the machine’s Gemini key as out of quota', () => {
+    const onKey = { provider: 'antigravity', accounts: nearly.accounts };
+    expect(
+      runnerAttention(input({ authSource: 'env_key' }, [{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'yes' }], onKey)),
+    ).toEqual([]);
+  });
+});
+
 describe('the four runners of 2026-09-29, as the project states them', () => {
   const real = (runner: string) => {
     const found = CASES.filter((c) => c.name.startsWith('real ') && c.input.runner.name === runner);
@@ -358,6 +433,7 @@ describe('runnerCopy', () => {
     expect(copy.runnerEnginesChecked('6 min ago')).toBe('Checked 6 min ago');
     expect(copy.runnerEnginesReported('Sep 14')).toBe('Reported Sep 14');
     expect(copy.runnerEngineAccountsSignedIn(2)).toBe('2 accounts signed in');
+    expect(copy.runnerEngineNext('Work')).toBe('Next: Work');
     expect(copy.runnerEngineUpdateFailed('2.1.270', 'Sep 13')).toBe('Update to 2.1.270 failed Sep 13');
     expect(copy.runnerWorkspaceRunning(4)).toBe('4 running');
     expect(copy.runnerInstallCommandUnix('https://orbitd.io')).toBe(

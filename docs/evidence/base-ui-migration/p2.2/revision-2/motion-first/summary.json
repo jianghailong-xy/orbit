@@ -1,0 +1,114 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:36:23.239Z",
+    "duration": 23830.309999999998,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-attachment",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4237
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-attachment--motion.json",
+          "sha256": "509b5e09a26c7bec6624c00c2480e625241a509124752ffc32e7786fa8ba0a2f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-expiry",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3499
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-expiry--motion.json",
+          "sha256": "509b5e09a26c7bec6624c00c2480e625241a509124752ffc32e7786fa8ba0a2f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-search",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3629
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-search--motion.json",
+          "sha256": "509b5e09a26c7bec6624c00c2480e625241a509124752ffc32e7786fa8ba0a2f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-multiple",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3328
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-multiple--motion.json",
+          "sha256": "509b5e09a26c7bec6624c00c2480e625241a509124752ffc32e7786fa8ba0a2f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-popover",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3671
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-popover--motion.json",
+          "sha256": "560f6462c43eb2b512defd2105fdc48d12256f5a5314e98bad2960467c7e6b8e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-tooltip",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3381
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--normal-entrance-and-exit-motion-matches-tooltip--motion.json",
+          "sha256": "1ae67ebef5b5d7cc44d781e17bcf7a4de07650f61d5b1748b3c5cf36033e418b"
+        }
+      ]
+    }
+  ]
+}

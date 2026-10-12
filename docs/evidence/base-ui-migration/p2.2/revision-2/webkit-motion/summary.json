@@ -1,0 +1,516 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T09:02:29.556Z",
+    "duration": 49898.727,
+    "expected": 24,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1778
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-enter-midpoint.png",
+          "sha256": "902f680e9c530b9a2b8b0afa619ea1c9df2093224d790952ce641fdb4a20e25a"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--antd-exit-midpoint.png",
+          "sha256": "9205b5f186a720b5761c6b6437d058c5d649ef32d85083a67e9f76360c6cae95"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-enter-midpoint.png",
+          "sha256": "246990e658bb87a31f0724a623fb0bb20e6a2973f9e8b36751244be698eecf9c"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--orbit-exit-midpoint.png",
+          "sha256": "ea0b2fbc63d798fdcdc3ab24c5cbf26e1adfe19ef0f9c86093c297987234f542"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-attachment--motion.json",
+          "sha256": "a1e011ecf997c06a407d2f1d05ba0948392088de6c54237c641e40615ab647d2"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-attachment",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1977
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-attachment--motion.json",
+          "sha256": "1ebe870c26e66ab5c8b3b23f563b2e491174f93d0353d7b760eed77bd97f9922"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1932
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--motion.json",
+          "sha256": "813ab5042455e4bde18bf76b18263c06fd58263af7aa8daf2eb1a02847dcda0e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1648
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-enter-midpoint.png",
+          "sha256": "b9ed088fb5f2de9fc87febb61c614bfbb2e0051dae2ea36a649f80ab03a4eaa3"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--antd-exit-midpoint.png",
+          "sha256": "814579e67fb9208a47a8605afdcecc2bdc6278eb6c0c879d2b760c3d59ae7a4e"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-enter-midpoint.png",
+          "sha256": "018ca3ec92066eb477ecd50884867ef1065bf5300d98f1128f42e3cdb611d832"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--orbit-exit-midpoint.png",
+          "sha256": "fc05a60e8c783dec29e4a7a5bf7881ee30123f109ec1526f792035db5efb9580"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-expiry--motion.json",
+          "sha256": "636dfd840a4cf2c63208315a08f615bb2fbfb7bbec410a0bb2d8dd006183c3fa"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-expiry",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1976
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-expiry--motion.json",
+          "sha256": "89bf6ed087096801ea988873cc9f84d61bc2dde98abc9efcfb9007ac83741359"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-expiry",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2175
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-expiry--motion.json",
+          "sha256": "e9c7460e51e36ae2a4629d3f110c8b536ec57590c897ffc4459e6a2b8f268fb5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1773
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-enter-midpoint.png",
+          "sha256": "9b3374ec58a4ea8aa20d37b976b9b0e764f13006a82e836897c9f359983f56e5"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--antd-exit-midpoint.png",
+          "sha256": "89ff611066c792802c1350b83866695c9dc8b2d0aca1252e99434a2450bdc0f9"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-enter-midpoint.png",
+          "sha256": "125a2822866e1e558da278fa9581d9ac29927012ad0cea2e499ba15ffdf4d4ab"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--orbit-exit-midpoint.png",
+          "sha256": "b966093378d62a10cbaea9380f45524df598060fbf7c3cc44c46c06c9ee9d5bf"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-search--motion.json",
+          "sha256": "98366974c85d13386b2d1b27cf9ab68fd969a705e189e6d78335dd6583f9f5a1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-search",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1996
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-search--motion.json",
+          "sha256": "666f5d019ce9ecd01e4c5f4d4eb0ea069b05e4a713b5720d2d55b0c0fee8d751"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1995
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+          "sha256": "2014b4b830bfc3bc483613dd59f062ef9725afde9bf0e60382679ee6da5f30d1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1604
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-enter-midpoint.png",
+          "sha256": "4dbdd58ed16fd1d3e19e6122cf8c3180d17785436a0ee70adb7831debd960b4e"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--antd-exit-midpoint.png",
+          "sha256": "b6b88877e8936732d6bbb04d419288eddb036b079b07126d816d09f8f86488bd"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-enter-midpoint.png",
+          "sha256": "713e790c12d120ef465daa20ade33db653b1235609c7cc73c1420f5857cb1af9"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--orbit-exit-midpoint.png",
+          "sha256": "fba51d7ca35a2a2ebef44ef53b335e57439ef57f255c16096332e3996e81e638"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-multiple--motion.json",
+          "sha256": "2e3e52eb16c9ebbec7770a92021530f93fe047d4458a84dee4a1e406fdf87b9a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-multiple",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2078
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-multiple--motion.json",
+          "sha256": "05d60b87802e5a99fa5b79028e8f00a6871bb178c28ab10bea2e73eb6d6746a1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-multiple",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2043
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-multiple--motion.json",
+          "sha256": "c3abe7fdca1eb3d7498ab8a0bbd93f7edf9ba9b71dd623c6d81cfde5d5ba914c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1615
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-enter-midpoint.png",
+          "sha256": "7e72a0fac4adb8dcaf6ac40bbc158e8bd13799eb4e43ca1f7fd8c9019d2d5ca6"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--antd-exit-midpoint.png",
+          "sha256": "62063a95df5a585c937d3e1537a915eb1b40ed2574000f559a55cf7e5003bc62"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-enter-midpoint.png",
+          "sha256": "e01c86e0099c9e4339571a246b12f0663d669f28780d0c9813cde33a0f4d94ce"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--orbit-exit-midpoint.png",
+          "sha256": "8b2918286cb013eebdd285119833e1f75a9ca8acdfea2e394317cc2b6691efed"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-popover--motion.json",
+          "sha256": "f6fb947849b4e037f6715665523b4a96f538a14d6a121aac7f7b9015e4f718c0"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-popover",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2038
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-popover--motion.json",
+          "sha256": "6ec9032b6040bf7239c9411a7fc1150b006cfc31a4c5200293ef23c24c672c3e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-popover",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1957
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-popover--motion.json",
+          "sha256": "032a4f277d0b43e7e9ba9b5e1a2e1c21556d57b2c9048aa06ef8a3a316a0e07a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1907
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-enter-midpoint.png",
+          "sha256": "d5f075f19ba16faddd7f07befb3fb37ac2d87f9fe3f9c41b52bcc8f012e3f56e"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--antd-exit-midpoint.png",
+          "sha256": "c6957e64788be7909548778d15c8285b453236b97756eaf2f38d4544cdd14727"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-enter-midpoint.png",
+          "sha256": "d5f075f19ba16faddd7f07befb3fb37ac2d87f9fe3f9c41b52bcc8f012e3f56e"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--orbit-exit-midpoint.png",
+          "sha256": "dfc0d20e6cab66b068a5c38467abf4c367bf8bee43be8705c4294b98de585776"
+        },
+        {
+          "file": "webkit-dark-phone--normal-bottom-entrance-and-exit-motion-matches-tooltip--motion.json",
+          "sha256": "0c0ac17f6877e37621e8970ad609afa662ee1e6d178bf7b70eb2e468bf55acaa"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-tooltip",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1974
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-top-entrance-and-exit-motion-matches-tooltip--motion.json",
+          "sha256": "b804d5b1a3c904aa8932e498c701c5c0cf9068b1a14a5cfec215de60059c7108"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-tooltip",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2014
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-tooltip--motion.json",
+          "sha256": "e81fbd0b7548513c68dacdb7740bf7cf47ab73a2082c7155a096f8edfad00558"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--popover-center-zoom-origin-matches",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2075
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--popover-center-zoom-origin-matches--motion.json",
+          "sha256": "2cde5c93ef568875a1fee2e4fb3118ee6ab7190761077a8c742d59eedc6ac91f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--popover-end-zoom-origin-matches",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2053
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--popover-end-zoom-origin-matches--motion.json",
+          "sha256": "0dd7ff7f2405e34b1158523350522180ede34c2b539e688ef0e561c6cd2e386c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--tooltip-center-zoom-origin-matches",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2059
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--tooltip-center-zoom-origin-matches--motion.json",
+          "sha256": "184b8c49d12cf92ef9a56dffaeb67d23a71c6f7b7087000748fb1e79cba0f8a1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--tooltip-end-zoom-origin-matches",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2030
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--tooltip-end-zoom-origin-matches--motion.json",
+          "sha256": "4c6c3ed10d7da0bf055dd3e580ad2047b3fe460174fcca81b7405d1735514a19"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--submenu-left-edge-zoom-matches-and-stays-in-view",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2930
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--submenu-left-edge-zoom-matches-and-stays-in-view--motion.json",
+          "sha256": "17a41aefdd5367b5fea084c156906b083c2c9f5627218df3b9234749326ca62e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--submenu-right-edge-zoom-matches-and-stays-in-view",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3209
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--submenu-right-edge-zoom-matches-and-stays-in-view--motion.json",
+          "sha256": "cc6497de5d88a57f908736f68e248d9665027e993be3096bd9905c70e992b16e"
+        }
+      ]
+    }
+  ]
+}

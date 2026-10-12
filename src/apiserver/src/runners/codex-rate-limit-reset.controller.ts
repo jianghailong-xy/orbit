@@ -17,6 +17,7 @@ import type {
 import type { Response } from 'express';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { CodexRateLimitResetService } from './codex-rate-limit-reset.service';
@@ -35,6 +36,7 @@ export class CodexRateLimitResetController {
   constructor(private readonly resets: CodexRateLimitResetService) {}
 
   /** 201 with the operation this confirmation created, 200 with the one it had already created. */
+  @PatForbidden('RUNNER_CONTROL')
   @Post(':id/codex-rate-limit-reset')
   async create(
     @CurrentUser() user: AuthUser,
@@ -53,12 +55,14 @@ export class CodexRateLimitResetController {
     return created;
   }
 
+  @PatScope('runners:read', { workspaceConfinable: false })
   @Get(':id/codex-rate-limit-reset')
   list(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<CodexRateLimitResetOperations> {
     return this.resets.operationsFor(user.userId, id);
   }
 
   // Either spelling of the operation id: a view names it by public id, a refusal by the stored UUID.
+  @PatScope('runners:read', { workspaceConfinable: false })
   @Get(':id/codex-rate-limit-reset/:operationId')
   get(
     @CurrentUser() user: AuthUser,

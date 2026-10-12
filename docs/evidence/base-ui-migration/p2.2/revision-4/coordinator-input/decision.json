@@ -1,0 +1,19 @@
+{
+  "id": "6UJ5y55Qlsm5WDeOGbLp2h",
+  "taskId": "34Za394q2ZEgr7TKprjkF",
+  "evidenceId": "6FyJfODTaspT0qEQ0wMthQ",
+  "evidenceRevision": "3",
+  "criterionRevision": "3eae570ea54ff258b81eff30da6d8db0df6f40bd04c755a70fae494bb7ae955d",
+  "evidenceDigest": "b9993fc0a9b43777a78cc7938f3b9041f872d1931fb905c1ce2f5eb4d4f944ce",
+  "decision": "SEND_BACK",
+  "note": "SEND_BACK，仅针对组合后滚动解锁的稳定验证补证。已独立核对489941cf0942f71edad00ecbc14d5a53aeb5da0b及双父合并e1eb1d3796a6086f413a6dd57bee228c2fa59c85：三份配置确实取双方并集，README自动合并；其余双方变更无丢失，208份新原件及95份源码哈希通过，r2证据保留，最终Web树与被测树相同。协调者独立四套类型检查、发现列表520/232/112、标准build && test均通过（295文件3661测试）。这些有效结果无需重做无关截图矩阵。\n\n但独立原样运行32项入口得到31通过/1失败（retries=0，无skip）：chromium-dark-desktop 的 reduce Dialog Popover Select exits restore one layer at a time，choices-lifecycle.browser.mjs:94，Dialog不可见和焦点归还断言已过，立即读到overflow仍锁定。执行者首轮在亮色桌面同一断言失败，随后5/5重复不能覆盖这次独立再现。固定依赖ScrollLocker.release通过0ms Timeout异步解除；执行者原trace在读值后清空BODY样式，协调trace最后锁定快照在读值后1.154ms，后续恢复尚缺直接记录。此时不能把检查称为稳定通过，也尚不足以宣布组件存在永久滚动锁缺陷。\n\n下一版请先记录关闭后的实际解除时序及用户可滚动状态，区分测试抢在合法异步清理前读取与真实残留锁。若仅是测试同步，最小修正等待合法解除的观察方式，使用有明确短时界限的最终状态/真实滚动验证，并保留内层关闭时父层仍锁定、逐层焦点归还及无残留锁断言；原第一次读值和恢复耗时应保留以证明没有把延迟隐藏。不得用长sleep、放宽通用timeout、增加retries、skip或删断言通过。只有证明运行时问题才改组件。固定新提交上跑八环境32项入口和减少动效关闭的重复场景，保留每轮原始结果；若仅测试同步变化，Web完整build/test与本轮代码/配置相同的已通过证据可明确复用，运行时变化则重跑受影响回归及标准检查。继续保留r2 519/520及r3原始失败边界。\n\n独立原件：/root/.orbit/uploads/01a1023e-9bb2-75b0-8a60-7d4b29ba57ed/p22-r3-coordinator-review.zip，SHA256 fc73b225948d6f5a18a635b8d7f77703fd41adf31c78b61674c608fb038dfbdf；工作目录/tmp/orbit-p22-r3-coordinator-review-htl046lc，含报告/trace/源码审计/构建输出及两次trace比较。初次审查归档缺少tsconfig.base与归档辅助命令中断另列为审查环境记录，不归咎交付。提交第4版结构化证据，继续codex/gpt-6-astra。",
+  "decidedAt": "2026-10-04T11:35:48.778Z",
+  "decidedByType": "AGENT",
+  "decidedById": "34ZHGcIxwsZUxkgh2z65V",
+  "decidingSessionId": "34ZYgWv9tyVjbJij7zwq5",
+  "publicId": "6UJ5y55Qlsm5WDeOGbLp2h",
+  "taskPublicId": "34Za394q2ZEgr7TKprjkF",
+  "decidedByPublicId": "34ZHGcIxwsZUxkgh2z65V",
+  "evidencePublicId": "6FyJfODTaspT0qEQ0wMthQ",
+  "decidingSessionPublicId": "34ZYgWv9tyVjbJij7zwq5"
+}

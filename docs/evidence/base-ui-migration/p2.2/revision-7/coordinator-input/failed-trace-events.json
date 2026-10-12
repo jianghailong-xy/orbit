@@ -1,0 +1,1671 @@
+[
+  {
+    "type": "before",
+    "callId": "hook@1",
+    "stepId": "hook@1",
+    "startTime": 119544.014,
+    "class": "Test",
+    "method": "hook",
+    "title": "Before Hooks",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "before",
+    "callId": "hook@2",
+    "stepId": "hook@2",
+    "parentId": "hook@1",
+    "startTime": 119544.046,
+    "class": "Test",
+    "method": "hook",
+    "title": "beforeEach hook",
+    "params": {},
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 11,
+        "column": 6
+      }
+    ]
+  },
+  {
+    "type": "before",
+    "callId": "fixture@22",
+    "stepId": "fixture@22",
+    "parentId": "hook@2",
+    "startTime": 119545.833,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"context\"",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@23",
+    "stepId": "pw:api@23",
+    "parentId": "fixture@22",
+    "startTime": 119546.148,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Create context",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@23",
+    "endTime": 119549.411,
+    "annotations": []
+  },
+  {
+    "type": "after",
+    "callId": "fixture@22",
+    "endTime": 119550.292,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@24",
+    "stepId": "fixture@24",
+    "parentId": "hook@2",
+    "startTime": 119550.471,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"page\"",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@25",
+    "stepId": "pw:api@25",
+    "parentId": "fixture@24",
+    "startTime": 119550.915,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Create page",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@25",
+    "endTime": 119673.987,
+    "annotations": []
+  },
+  {
+    "type": "after",
+    "callId": "fixture@24",
+    "endTime": 119674.018,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@26",
+    "stepId": "pw:api@26",
+    "parentId": "hook@2",
+    "startTime": 119674.334,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Add init script",
+    "params": {},
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/fixtures.mjs",
+        "line": 11,
+        "column": 3,
+        "function": "installFixedDate"
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@26",
+    "endTime": 119675.137,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@27",
+    "stepId": "pw:api@27",
+    "parentId": "hook@2",
+    "startTime": 119675.417,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Navigate",
+    "subtitle": "/ui-migration/toasts.html",
+    "params": {
+      "url": "/ui-migration/toasts.html"
+    },
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 15,
+        "column": 14
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@27",
+    "endTime": 120157.564,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "expect@28",
+    "stepId": "expect@28",
+    "parentId": "hook@2",
+    "startTime": 120158.138,
+    "class": "Test",
+    "method": "expect",
+    "title": "Expect \"toHaveText\"",
+    "subtitle": "getByTestId('theme')",
+    "params": {
+      "locator": "getByTestId('theme')",
+      "expected": "dark"
+    },
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 16,
+        "column": 43
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "expect@28",
+    "endTime": 120182.023,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@29",
+    "stepId": "pw:api@29",
+    "parentId": "hook@2",
+    "startTime": 120182.353,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Evaluate",
+    "params": {},
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 17,
+        "column": 14
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@29",
+    "endTime": 120185.981,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@30",
+    "stepId": "pw:api@30",
+    "parentId": "hook@2",
+    "startTime": 120186.287,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Evaluate",
+    "params": {},
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 18,
+        "column": 21
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@30",
+    "endTime": 120187.719,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "expect@31",
+    "stepId": "expect@31",
+    "parentId": "hook@2",
+    "startTime": 120187.968,
+    "class": "Test",
+    "method": "expect",
+    "title": "Expect \"toEqual\"",
+    "params": {
+      "expected": "Object"
+    },
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 19,
+        "column": 6
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "expect@31",
+    "endTime": 120188.008,
+    "annotations": []
+  },
+  {
+    "type": "after",
+    "callId": "hook@2",
+    "endTime": 120188.023,
+    "annotations": []
+  },
+  {
+    "type": "after",
+    "callId": "hook@1",
+    "endTime": 120188.068,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@32",
+    "stepId": "pw:api@32",
+    "startTime": 120188.383,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Click",
+    "subtitle": "getByRole('button', { name: 'Legacy confirm', exact: true })",
+    "params": {
+      "locator": "getByRole('button', { name: 'Legacy confirm', exact: true })"
+    },
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 243,
+        "column": 40
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@32",
+    "endTime": 120286.085,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "expect@33",
+    "stepId": "expect@33",
+    "startTime": 120286.703,
+    "class": "Test",
+    "method": "expect",
+    "title": "Expect \"toBeVisible\"",
+    "subtitle": "getByRole('dialog', { name: 'Legacy confirmation', exact: true })",
+    "params": {
+      "locator": "getByRole('dialog', { name: 'Legacy confirmation', exact: true })"
+    },
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 245,
+        "column": 24
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "expect@33",
+    "endTime": 120299.56,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@34",
+    "stepId": "pw:api@34",
+    "startTime": 120299.97,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Click",
+    "subtitle": "getByRole('dialog', { name: 'Legacy confirmation', exact: true }).getByRole('button', { name: 'OK', exact: true })",
+    "params": {
+      "locator": "getByRole('dialog', { name: 'Legacy confirmation', exact: true }).getByRole('button', { name: 'OK', exact: true })"
+    },
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 246,
+        "column": 65
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@34",
+    "endTime": 120339.207,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "expect@35",
+    "stepId": "expect@35",
+    "startTime": 120339.532,
+    "class": "Test",
+    "method": "expect",
+    "title": "Expect \"not toBeVisible\"",
+    "subtitle": "getByRole('dialog', { name: 'Legacy confirmation', exact: true })",
+    "params": {
+      "locator": "getByRole('dialog', { name: 'Legacy confirmation', exact: true })"
+    },
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 247,
+        "column": 28
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "expect@35",
+    "endTime": 135342.543,
+    "annotations": [],
+    "error": {
+      "name": "",
+      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Legacy confirmation', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Legacy confirmation', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Legacy confirmation', exact: true })\u001b[22m\n\u001b[2m    4 \u00d7 locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm ant-zoom-appear ant-zoom-appear-active ant-zoom\">\u2026</div>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\u001b[2m    30 \u00d7 locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n",
+      "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('dialog', { name: 'Legacy confirmation', exact: true })\nExpected: not visible\nReceived: visible\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" getByRole('dialog', { name: 'Legacy confirmation', exact: true }) with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Legacy confirmation', exact: true })\u001b[22m\n\u001b[2m    4 \u00d7 locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm ant-zoom-appear ant-zoom-appear-active ant-zoom\">\u2026</div>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\u001b[2m    30 \u00d7 locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>\u001b[22m\n\u001b[2m       - unexpected value \"visible\"\u001b[22m\n\n    at /tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs:247:28"
+    }
+  },
+  {
+    "type": "before",
+    "callId": "hook@36",
+    "stepId": "hook@36",
+    "startTime": 135342.845,
+    "class": "Test",
+    "method": "hook",
+    "title": "After Hooks",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "before",
+    "callId": "hook@37",
+    "stepId": "hook@37",
+    "parentId": "hook@36",
+    "startTime": 135342.897,
+    "class": "Test",
+    "method": "hook",
+    "title": "afterEach hook",
+    "params": {},
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 21,
+        "column": 6
+      }
+    ]
+  },
+  {
+    "type": "before",
+    "callId": "expect@38",
+    "stepId": "expect@38",
+    "parentId": "hook@37",
+    "startTime": 135343.193,
+    "class": "Test",
+    "method": "expect",
+    "title": "Expect \"toEqual\"",
+    "params": {
+      "expected": "[]"
+    },
+    "stack": [
+      {
+        "file": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source/src/web/ui-migration/toasts.browser.mjs",
+        "line": 21,
+        "column": 63
+      }
+    ]
+  },
+  {
+    "type": "after",
+    "callId": "expect@38",
+    "endTime": 135343.225,
+    "annotations": []
+  },
+  {
+    "type": "after",
+    "callId": "hook@37",
+    "endTime": 135343.251,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@39",
+    "stepId": "fixture@39",
+    "parentId": "hook@36",
+    "startTime": 135343.365,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"page\"",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "after",
+    "callId": "fixture@39",
+    "endTime": 135343.384,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@40",
+    "stepId": "fixture@40",
+    "parentId": "hook@36",
+    "startTime": 135343.456,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"context\"",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "before",
+    "callId": "pw:api@41",
+    "stepId": "pw:api@41",
+    "parentId": "fixture@40",
+    "startTime": 135380.481,
+    "class": "Test",
+    "method": "pw:api",
+    "title": "Close context",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "after",
+    "callId": "pw:api@41",
+    "endTime": 135381.224,
+    "annotations": []
+  },
+  {
+    "type": "after",
+    "callId": "fixture@40",
+    "endTime": 135381.236,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "attach@5791e16ce3ad7a1bbc6125ed06d50674",
+    "stepId": "attach@5791e16ce3ad7a1bbc6125ed06d50674",
+    "startTime": 135382.464,
+    "class": "Test",
+    "method": "test.attach",
+    "title": "Attach \"error-context\"",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "after",
+    "callId": "attach@5791e16ce3ad7a1bbc6125ed06d50674",
+    "endTime": 135382.47,
+    "attachments": [
+      {
+        "name": "error-context",
+        "contentType": "text/markdown",
+        "file": "attachments/01bcd83a5b47a6e0ef74ebef065a3224beeee28b"
+      }
+    ]
+  },
+  {
+    "type": "before",
+    "callId": "fixture@49",
+    "stepId": "fixture@49",
+    "parentId": "hook@36",
+    "startTime": 135382.618,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"serviceWorkers\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@49",
+    "endTime": 135382.624,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@50",
+    "stepId": "fixture@50",
+    "parentId": "hook@36",
+    "startTime": 135382.628,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"baseURL\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@50",
+    "endTime": 135382.632,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@52",
+    "stepId": "fixture@52",
+    "parentId": "hook@36",
+    "startTime": 135382.717,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"timezoneId\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@52",
+    "endTime": 135382.721,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@53",
+    "stepId": "fixture@53",
+    "parentId": "hook@36",
+    "startTime": 135382.724,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"viewport\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@53",
+    "endTime": 135382.727,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@55",
+    "stepId": "fixture@55",
+    "parentId": "hook@36",
+    "startTime": 135382.805,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"reducedMotion\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@55",
+    "endTime": 135382.809,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@59",
+    "stepId": "fixture@59",
+    "parentId": "hook@36",
+    "startTime": 135383.038,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"locale\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@59",
+    "endTime": 135383.042,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@61",
+    "stepId": "fixture@61",
+    "parentId": "hook@36",
+    "startTime": 135383.117,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"isMobile\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@61",
+    "endTime": 135383.121,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@65",
+    "stepId": "fixture@65",
+    "parentId": "hook@36",
+    "startTime": 135383.356,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"hasTouch\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@65",
+    "endTime": 135383.361,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@68",
+    "stepId": "fixture@68",
+    "parentId": "hook@36",
+    "startTime": 135383.521,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"deviceScaleFactor\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@68",
+    "endTime": 135383.525,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@70",
+    "stepId": "fixture@70",
+    "parentId": "hook@36",
+    "startTime": 135383.597,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"colorScheme\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@70",
+    "endTime": 135383.601,
+    "annotations": []
+  },
+  {
+    "type": "after",
+    "callId": "hook@36",
+    "endTime": 135383.966,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "hook@75",
+    "stepId": "hook@75",
+    "startTime": 135384.035,
+    "class": "Test",
+    "method": "hook",
+    "title": "Worker Cleanup",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@80",
+    "stepId": "fixture@80",
+    "parentId": "hook@75",
+    "startTime": 135384.527,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"browser\"",
+    "params": {},
+    "stack": []
+  },
+  {
+    "type": "after",
+    "callId": "fixture@80",
+    "endTime": 135414.686,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "fixture@83",
+    "stepId": "fixture@83",
+    "parentId": "hook@75",
+    "startTime": 135414.908,
+    "class": "Test",
+    "method": "fixture",
+    "title": "Fixture \"browserName\"",
+    "params": {},
+    "stack": [
+      {
+        "file": "project#webkit-dark-desktop",
+        "line": 1,
+        "column": 1
+      }
+    ],
+    "group": "configuration"
+  },
+  {
+    "type": "after",
+    "callId": "fixture@83",
+    "endTime": 135414.913,
+    "annotations": []
+  },
+  {
+    "type": "after",
+    "callId": "hook@75",
+    "endTime": 135415.192,
+    "annotations": []
+  },
+  {
+    "type": "before",
+    "callId": "call@1107",
+    "startTime": 119551.049,
+    "class": "BrowserContext",
+    "method": "newPage",
+    "params": {},
+    "stepId": "pw:api@25"
+  },
+  {
+    "type": "after",
+    "callId": "call@1107",
+    "endTime": 119673.692,
+    "result": {
+      "page": "<Page>"
+    }
+  },
+  {
+    "type": "before",
+    "callId": "call@1109",
+    "startTime": 119674.443,
+    "class": "Page",
+    "method": "addInitScript",
+    "params": {
+      "source": "(timestamp => {\n    window.Date = new Proxy(Date, {\n      construct: (OriginalDate, args) => Reflect.construct(OriginalDate, args.length ? args : [timestamp]),\n      apply: OriginalDate => new OriginalDate(timestamp).toString(),\n      get: (OriginalDate, key) => key === 'now' ? () => timestamp : Reflect.get(OriginalDate, key)\n    });\n  })(1790596800000)"
+    },
+    "stepId": "pw:api@26"
+  },
+  {
+    "type": "after",
+    "callId": "call@1109",
+    "endTime": 119675.062,
+    "result": {
+      "disposable": "<Disposable>"
+    }
+  },
+  {
+    "type": "before",
+    "callId": "call@1111",
+    "startTime": 119675.488,
+    "class": "Frame",
+    "method": "goto",
+    "params": {
+      "url": "/ui-migration/toasts.html",
+      "waitUntil": "load"
+    },
+    "stepId": "pw:api@27"
+  },
+  {
+    "type": "log",
+    "callId": "call@1111",
+    "time": 119677.96,
+    "message": "navigating to \"http://127.0.0.1:14408/ui-migration/toasts.html\", waiting until \"load\""
+  },
+  {
+    "type": "after",
+    "callId": "call@1111",
+    "endTime": 120127.931,
+    "result": {
+      "response": "<Response>"
+    }
+  },
+  {
+    "type": "before",
+    "callId": "call@1113",
+    "startTime": 120158.752,
+    "title": "Expect \"toHaveText\"",
+    "class": "Frame",
+    "method": "expect",
+    "params": {
+      "selector": "internal:testid=[data-testid=\"theme\"s]",
+      "expression": "to.have.text",
+      "expectedText": [
+        {
+          "string": "dark",
+          "normalizeWhiteSpace": true
+        }
+      ],
+      "expectedValue": {
+        "value": {
+          "v": "undefined"
+        },
+        "handles": []
+      },
+      "isNot": false,
+      "timeout": 15000
+    },
+    "stepId": "expect@28"
+  },
+  {
+    "type": "log",
+    "callId": "call@1113",
+    "time": 120160.477,
+    "message": "Expect \"toHaveText\" getByTestId('theme') with timeout 15000ms"
+  },
+  {
+    "type": "log",
+    "callId": "call@1113",
+    "time": 120160.483,
+    "message": "waiting for getByTestId('theme')"
+  },
+  {
+    "type": "after",
+    "callId": "call@1113",
+    "endTime": 120181.149
+  },
+  {
+    "type": "before",
+    "callId": "call@1115",
+    "startTime": 120182.463,
+    "class": "Frame",
+    "method": "evaluateExpression",
+    "params": {
+      "expression": "() => document.fonts.ready",
+      "isFunction": true,
+      "arg": {
+        "value": {
+          "v": "undefined"
+        },
+        "handles": []
+      }
+    },
+    "stepId": "pw:api@29"
+  },
+  {
+    "type": "after",
+    "callId": "call@1115",
+    "endTime": 120183.914,
+    "result": {
+      "value": {
+        "o": [],
+        "id": 1
+      }
+    }
+  },
+  {
+    "type": "before",
+    "callId": "call@1117",
+    "startTime": 120186.383,
+    "class": "Frame",
+    "method": "evaluateExpression",
+    "params": {
+      "expression": "() => ({\n    width: innerWidth,\n    dpr: devicePixelRatio,\n    scale: visualViewport.scale\n  })",
+      "isFunction": true,
+      "arg": {
+        "value": {
+          "v": "undefined"
+        },
+        "handles": []
+      }
+    },
+    "stepId": "pw:api@30"
+  },
+  {
+    "type": "after",
+    "callId": "call@1117",
+    "endTime": 120187.274,
+    "result": {
+      "value": {
+        "o": [
+          {
+            "k": "width",
+            "v": {
+              "n": 1280
+            }
+          },
+          {
+            "k": "dpr",
+            "v": {
+              "n": 1
+            }
+          },
+          {
+            "k": "scale",
+            "v": {
+              "n": 1
+            }
+          }
+        ],
+        "id": 1
+      }
+    }
+  },
+  {
+    "type": "before",
+    "callId": "call@1119",
+    "startTime": 120188.473,
+    "class": "Frame",
+    "method": "click",
+    "params": {
+      "selector": "internal:role=button[name=\"Legacy confirm\"s]",
+      "strict": true
+    },
+    "stepId": "pw:api@32"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120190.808,
+    "message": "waiting for getByRole('button', { name: 'Legacy confirm', exact: true })"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120194.685,
+    "message": "  locator resolved to <button tabindex=\"0\" type=\"button\" class=\"orbit-button orbit-button-default orbit-button-middle\">\u2026</button>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120195.033,
+    "message": "attempting click action"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120195.052,
+    "message": "  waiting for element to be visible, enabled and stable"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120220.762,
+    "message": "  element is visible, enabled and stable"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120220.781,
+    "message": "  scrolling into view if needed"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120222.436,
+    "message": "  done scrolling"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120224.541,
+    "message": "  performing click action"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120283.017,
+    "message": "  click action done"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120283.029,
+    "message": "  waiting for scheduled navigations to finish"
+  },
+  {
+    "type": "log",
+    "callId": "call@1119",
+    "time": 120283.141,
+    "message": "  navigations have finished"
+  },
+  {
+    "type": "after",
+    "callId": "call@1119",
+    "endTime": 120283.18
+  },
+  {
+    "type": "before",
+    "callId": "call@1121",
+    "startTime": 120287.182,
+    "title": "Expect \"toBeVisible\"",
+    "class": "Frame",
+    "method": "expect",
+    "params": {
+      "selector": "internal:role=dialog[name=\"Legacy confirmation\"s]",
+      "expression": "to.be.visible",
+      "expectedValue": {
+        "value": {
+          "v": "undefined"
+        },
+        "handles": []
+      },
+      "isNot": false,
+      "timeout": 15000
+    },
+    "stepId": "expect@33"
+  },
+  {
+    "type": "log",
+    "callId": "call@1121",
+    "time": 120289.027,
+    "message": "Expect \"toBeVisible\" getByRole('dialog', { name: 'Legacy confirmation', exact: true }) with timeout 15000ms"
+  },
+  {
+    "type": "log",
+    "callId": "call@1121",
+    "time": 120289.033,
+    "message": "waiting for getByRole('dialog', { name: 'Legacy confirmation', exact: true })"
+  },
+  {
+    "type": "after",
+    "callId": "call@1121",
+    "endTime": 120298.144
+  },
+  {
+    "type": "before",
+    "callId": "call@1123",
+    "startTime": 120300.101,
+    "class": "Frame",
+    "method": "click",
+    "params": {
+      "selector": "internal:role=dialog[name=\"Legacy confirmation\"s] >> internal:role=button[name=\"OK\"s]",
+      "strict": true
+    },
+    "stepId": "pw:api@34"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120300.811,
+    "message": "waiting for getByRole('dialog', { name: 'Legacy confirmation', exact: true }).getByRole('button', { name: 'OK', exact: true })"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120302.261,
+    "message": "  locator resolved to <button type=\"button\" class=\"ant-btn css-dev-only-do-not-override-oc1rc0 css-var-_r_0_ ant-btn-primary ant-btn-color-primary ant-btn-variant-solid\">\u2026</button>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120302.535,
+    "message": "attempting click action"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120302.552,
+    "message": "  waiting for element to be visible, enabled and stable"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120316.921,
+    "message": "  element is visible, enabled and stable"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120316.934,
+    "message": "  scrolling into view if needed"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120319.077,
+    "message": "  done scrolling"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120327.933,
+    "message": "  performing click action"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120337.64,
+    "message": "  click action done"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120337.649,
+    "message": "  waiting for scheduled navigations to finish"
+  },
+  {
+    "type": "log",
+    "callId": "call@1123",
+    "time": 120337.723,
+    "message": "  navigations have finished"
+  },
+  {
+    "type": "after",
+    "callId": "call@1123",
+    "endTime": 120337.755
+  },
+  {
+    "type": "before",
+    "callId": "call@1125",
+    "startTime": 120339.844,
+    "title": "Expect \"not toBeVisible\"",
+    "class": "Frame",
+    "method": "expect",
+    "params": {
+      "selector": "internal:role=dialog[name=\"Legacy confirmation\"s]",
+      "expression": "to.be.visible",
+      "expectedValue": {
+        "value": {
+          "v": "undefined"
+        },
+        "handles": []
+      },
+      "isNot": true,
+      "timeout": 15000
+    },
+    "stepId": "expect@35"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120340.514,
+    "message": "Expect \"not toBeVisible\" getByRole('dialog', { name: 'Legacy confirmation', exact: true }) with timeout 15000ms"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120340.518,
+    "message": "waiting for getByRole('dialog', { name: 'Legacy confirmation', exact: true })"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120352.33,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm ant-zoom-appear ant-zoom-appear-active ant-zoom\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120352.342,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120374.235,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm ant-zoom-appear ant-zoom-appear-active ant-zoom\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120374.245,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120425.926,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm ant-zoom-appear ant-zoom-appear-active ant-zoom\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120425.939,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120528.521,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm ant-zoom-appear ant-zoom-appear-active ant-zoom\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120528.534,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120632.059,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 120632.08,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 121135.371,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 121135.392,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 121638.185,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 121638.201,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 122145.422,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 122145.442,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 122647.525,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 122647.539,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 123150.772,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 123150.792,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 123654.078,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 123654.097,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 124161.522,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 124161.54,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 124665.579,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 124665.596,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 125169.169,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 125169.191,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 125672.239,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 125672.257,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 126175.279,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 126175.295,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 126677.901,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 126677.921,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 127180.382,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 127180.4,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 127682.161,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 127682.177,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 128185.471,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 128185.494,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 128690.023,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 128690.057,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 129192.696,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 129192.714,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 129695.531,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 129695.57,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 130198.372,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 130198.389,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 130700.094,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 130700.111,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 131202.903,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 131202.92,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 131705.717,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 131705.738,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 132208.823,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 132208.84,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 132711.407,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 132711.427,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 133213.132,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 133213.15,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 133715.938,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 133715.958,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 134218.585,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 134218.601,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 134721.504,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 134721.516,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 135224.395,
+    "message": "  locator resolved to <div role=\"dialog\" tabindex=\"-1\" aria-modal=\"true\" aria-labelledby=\"_r_b_\" class=\"ant-modal css-dev-only-do-not-override-oc1rc0 ant-modal-confirm ant-modal-confirm-confirm\">\u2026</div>"
+  },
+  {
+    "type": "log",
+    "callId": "call@1125",
+    "time": 135224.41,
+    "message": "  unexpected value \"visible\""
+  },
+  {
+    "type": "after",
+    "callId": "call@1125",
+    "endTime": 135339.375,
+    "error": {
+      "message": "Expect failed",
+      "stack": "ExpectError: Expect failed\n    at _Frame.expect (/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/node_modules/playwright-core/lib/coreBundle.js:24312:17)\n    at _FrameDispatcher.expect (/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/node_modules/playwright-core/lib/coreBundle.js:54886:11)\n    at _ProgressController.run (/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/node_modules/playwright-core/lib/coreBundle.js:12374:27)\n    at DispatcherConnection.dispatch (/root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/node_modules/playwright-core/lib/coreBundle.js:19135:27)",
+      "name": "ExpectError"
+    }
+  }
+]

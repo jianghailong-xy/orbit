@@ -32,7 +32,7 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { WIKI_LIMITS, WIKI_REVIEW_RULES, toUuid, type WikiKind } from '@orbit/shared';
+import { WIKI_LIMITS, WIKI_MAINTENANCE_LIST_TITLE, WIKI_REVIEW_RULES, toUuid, type WikiKind } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -376,6 +376,43 @@ async function listed(h: Harness, who: Caller, spaceId: string): Promise<Verific
   throw new Error('the verification list never ended');
 }
 
+/**
+ * A maintenance run of the space, as `isWikiMaintenanceSession` reads one: a session whose task is in the
+ * space's «Wiki maintenance» list (`settings.maintenance.listId`). What the server's own verification must
+ * leave exactly as it was (contract `reviewModes.verification.servedBy`): the run verifies its own ops in
+ * its own process until P8.
+ */
+async function maintenanceSession(h: Harness, owner: Account, machine: string, spaceId: string, workspaceId: string): Promise<string> {
+  const listId = randomUUID();
+  await h.prisma.taskList.create({
+    data: { id: listId, ownerId: owner.id, title: WIKI_MAINTENANCE_LIST_TITLE, hidden: true, maxConcurrent: 1 },
+  });
+  await h.sql.query(
+    `UPDATE "wiki_space" SET "settings" = jsonb_set(COALESCE("settings", '{}'::jsonb), '{maintenance}',
+                                                    jsonb_build_object('listId', $2::text)) WHERE "id" = $1`,
+    [spaceId, listId],
+  );
+  const taskId = randomUUID();
+  await h.sql.query(
+    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","list_id","completion_criterion","updated_at")
+     VALUES ($1,'a maintenance run',$2,'USER',$2,'OPEN',$3,'OWNER_CONFIRMED', now())`,
+    [taskId, owner.id, listId],
+  );
+  const sessionId = await session(h, owner.id, workspaceId, machine);
+  await h.sql.query(`UPDATE "session" SET "task_id" = $2 WHERE "id" = $1`, [sessionId, taskId]);
+  return sessionId;
+}
+
+/** How many verify jobs this session and space are owed (contract `jobs.make`). */
+async function verifyJobs(h: Harness, ownerId: string, spaceId: string, sessionId: string): Promise<number> {
+  const { rows } = await h.sql.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM "wiki_job"
+      WHERE "owner_id" = $1 AND "space_id" = $2 AND "kind" = 'verify' AND "input" ->> 'sessionId' = $3`,
+    [ownerId, spaceId, sessionId],
+  );
+  return Number(rows[0].n);
+}
+
 function verdict(opId: string, value: string, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     opId,
@@ -715,6 +752,92 @@ test('verification · only the session that proposed reports, and another owner\
   });
   expectStatus(own, 200, 'the proposer reports');
   assert.equal((await opRow(h, opId)).verificationVerdict, 'supported');
+});
+
+// ── Where the server verifies, and what this door still hands out ───────────────────────────────
+
+test('verification · the server executes: the door hands out no material, accepts no verdicts, and a run is untouched', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await boot();
+  const owner = await account(h, 'server-executes');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const space = await modeSpace(h, owner, 'automatic', ws);
+
+  const first = await session(h, owner.id, ws, machine);
+  const cite1 = await toolCall(h, first, 'Bash', 'what was observed first');
+  const asFirst = { runner: machine, headers: { 'x-orbit-session-id': first } };
+  const propose = (sessionId: string, cite: string, title: string) => call(h, { runner: machine, headers: { 'x-orbit-session-id': sessionId } }, 'POST',
+    '/runner/wiki/changesets', {
+      rationale: `the spec records ${title}`, idempotencyKey: `server-executes-${randomUUID()}`,
+      ops: [{ op: 'add', entry: draft('pitfall', title), sources: [{ kind: 'tool_call', ref: cite }] }],
+    });
+
+  t.after(() => {
+    delete process.env.ORBIT_WIKI_EXECUTOR;
+    delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
+  });
+
+  // The default runner mode, first: the field is absent, the session's own list is what it always was, and
+  // its own verdict is accepted.
+  const proposed = await propose(first, cite1, 'A pitfall the session verifies itself');
+  expectStatus(proposed, 200, 'the proposal');
+  assert.equal(proposed.body.servedBy, undefined, 'the default runner mode says nothing about who verifies');
+  assert.equal((await listed(h, asFirst, space)).length, 1, "runner mode lists the session's own ops");
+
+  // The server executes for this account: the list is empty and says who verifies and how many wait, and a
+  // verdict of the session's own is refused — its provider is not to be asked about any of this.
+  process.env.ORBIT_WIKI_EXECUTOR = 'canary';
+  process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = owner.id;
+  const page = await call(h, asFirst, 'GET', `/runner/wiki/spaces/${space}/verifications`);
+  expectStatus(page, 200, 'the list where the server executes');
+  assert.deepEqual(page.body.items, [], 'no material is handed out');
+  assert.equal(page.body.servedBy, 'server', 'the list says who verifies');
+  assert.equal(page.body.waiting, 1, "and how many of the session's ops wait");
+  const refused = await call(h, asFirst, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
+    verdicts: [verdict(String(proposed.body.ops[0].opId), 'supported')],
+  });
+  expectStatus(refused, 409, 'a verdict where the server verifies');
+  assert.equal(refused.body.code, 'WIKI_SERVER_EXECUTES', 'the refusal names the code');
+  assert.equal((await opRow(h, String(proposed.body.ops[0].opId))).decision, 'verifying', 'nothing was recorded');
+
+  // A submission's answer carries the same field, queues the one job, and asking for a verification is that
+  // same job rather than a second one.
+  const second = await session(h, owner.id, ws, machine);
+  const cite2 = await toolCall(h, second, 'Bash', 'what was observed second');
+  const asSecond = { runner: machine, headers: { 'x-orbit-session-id': second } };
+  const proposed2 = await propose(second, cite2, 'A pitfall the server verifies');
+  expectStatus(proposed2, 200, 'the proposal where the server executes');
+  assert.equal(proposed2.body.servedBy, 'server', 'the answer says who verifies');
+  assert.equal(await verifyJobs(h, owner.id, space, second), 1, 'the submission queued one job');
+  const asked = await call(h, asSecond, 'POST', `/runner/wiki/spaces/${space}/verifications/request`);
+  expectStatus(asked, 200, 'asking for a verification');
+  assert.equal(asked.body.servedBy, 'server');
+  assert.ok(asked.body.jobId, 'the ask names the job it waits on');
+  assert.equal(await verifyJobs(h, owner.id, space, second), 1, 'asking again is the same job');
+
+  // A maintenance run of the space: its own list, its own verdicts, and no job of its own.
+  const run = await maintenanceSession(h, owner, machine, space, ws);
+  const cite3 = await toolCall(h, run, 'Bash', 'what the run observed');
+  const asRun = { runner: machine, headers: { 'x-orbit-session-id': run } };
+  const runProposed = await propose(run, cite3, 'A pitfall the run verifies itself');
+  expectStatus(runProposed, 200, 'the run proposes');
+  assert.equal(runProposed.body.servedBy, undefined, "a maintenance run is told nothing of the server's own verification");
+  const runItems = await listed(h, asRun, space);
+  assert.equal(runItems.length, 1, 'a maintenance run reads its own ops');
+  assert.equal(await verifyJobs(h, owner.id, space, run), 0, 'a maintenance run queues no job');
+  const runVerdict = await call(h, asRun, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
+    verdicts: [verdict(String(runProposed.body.ops[0].opId), 'supported')],
+  });
+  expectStatus(runVerdict, 200, 'a maintenance run reports as it always has');
+
+  // Back to runner: the session's own verdict is accepted again, and the op is verified by it.
+  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
+  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
+  const back = await call(h, asFirst, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
+    verdicts: [verdict(String(proposed.body.ops[0].opId), 'supported')],
+  });
+  expectStatus(back, 200, 'runner mode reports as it always has');
+  assert.equal((await opRow(h, String(proposed.body.ops[0].opId))).verificationVerdict, 'supported');
 });
 
 // ── 4. no clock, and a space that left Automatic ────────────────────────────────────────────────

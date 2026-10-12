@@ -1,0 +1,154 @@
+[
+ {
+  "trace": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--trace.zip",
+  "moduleRequests": 22,
+  "failedRequests": [
+   {
+    "url": ":4176/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 37.8
+   },
+   {
+    "url": ":4176/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 38.9
+   },
+   {
+    "url": ":4176/src/components/ui/Drawer.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 39.0
+   },
+   {
+    "url": ":4176/src/components/ui/ConfirmDialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 39.0
+   },
+   {
+    "url": ":4176/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 39.0
+   },
+   {
+    "url": ":4176/src/components/ui/__fixtures__/OverlaysFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 39.0
+   },
+   {
+    "url": ":4176/node_modules/.vite/deps/rolldown-runtime-DC62tzP2.js?v=0af5afcc",
+    "status": -1,
+    "failure": null,
+    "ms": 1.9
+   }
+  ],
+  "networkChangedConsoleErrors": 7,
+  "slowestRequests": [
+   {
+    "url": ":4176/node_modules/.vite/deps/antd.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 219.4
+   },
+   {
+    "url": ":4176/node_modules/.vite/deps/react-dom_client.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 128.7
+   },
+   {
+    "url": ":4176/node_modules/.vite/deps/@tanstack_react-query.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 101.3
+   },
+   {
+    "url": ":4176/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 95.6
+   },
+   {
+    "url": ":4176/src/components/ui/Button.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 84.2
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "hook",
+    "title": "Worker Cleanup",
+    "start": 120645.17,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browser\"",
+    "start": 120645.565,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browserName\"",
+    "start": 120673.877,
+    "error": null
+   },
+   {
+    "api": "newPage",
+    "title": null,
+    "start": 105389.989,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 105443.505,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 105610.035,
+    "error": null
+   }
+  ]
+ }
+]

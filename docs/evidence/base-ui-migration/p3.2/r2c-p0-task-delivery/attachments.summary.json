@@ -1,0 +1,215 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p3.2/r2c-p0-task-delivery/<name>",
+ "archives": [
+  {
+   "name": "attachments.tar.gz",
+   "bytes": 230098,
+   "sha256": "b56fb9674cd33fb9776709285681fc21f776f2ea3c45ca75d2d9417486ba33c2",
+   "members": [
+    {
+     "name": "attachments/.last-run.json",
+     "bytes": 45,
+     "sha256": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+     "fields": {
+      "status": "passed",
+      "failedTests": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-chromium-dark-desktop/attachments/computed-styles-and-timings-b4621d6699cfa16f742ca848ea53bd018093deb0.json",
+     "bytes": 315088,
+     "sha256": "813cbc6e92b1018dc00ff140ae91a074ba29aee7e2baa2c9ae188e1ab6286c7a",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "task",
+      "browser": "153.0.8010.12",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-chromium-dark-desktop/evidence.json",
+     "bytes": 315088,
+     "sha256": "813cbc6e92b1018dc00ff140ae91a074ba29aee7e2baa2c9ae188e1ab6286c7a",
+     "fields": {
+      "project": "chromium-dark-desktop",
+      "test": "task",
+      "browser": "153.0.8010.12",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-chromium-dark-phone/attachments/computed-styles-and-timings-0d3c3fb24d18391ac35d63da6906513e1c31aaae.json",
+     "bytes": 299693,
+     "sha256": "5d7247fae72461baa54101dc541dda213c973f822fb03db87b354c735b1d4036",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "task",
+      "browser": "153.0.8010.12",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-chromium-dark-phone/evidence.json",
+     "bytes": 299693,
+     "sha256": "5d7247fae72461baa54101dc541dda213c973f822fb03db87b354c735b1d4036",
+     "fields": {
+      "project": "chromium-dark-phone",
+      "test": "task",
+      "browser": "153.0.8010.12",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-chromium-light-desktop/attachments/computed-styles-and-timings-4f565a992c34eebe9b0f549fa7ef22655bdef3f7.json",
+     "bytes": 312689,
+     "sha256": "43554d7fbcb27a72f0a05c8264b004bbfa1eb6e53ade349c00dd8ae0531fc3dc",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "task",
+      "browser": "153.0.8010.12",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-chromium-light-desktop/evidence.json",
+     "bytes": 312689,
+     "sha256": "43554d7fbcb27a72f0a05c8264b004bbfa1eb6e53ade349c00dd8ae0531fc3dc",
+     "fields": {
+      "project": "chromium-light-desktop",
+      "test": "task",
+      "browser": "153.0.8010.12",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-chromium-light-phone/attachments/computed-styles-and-timings-d405b3bd2398b36b8cf06396afb699ccff1f0ac9.json",
+     "bytes": 297172,
+     "sha256": "c64acc8ba9186d3f3b30a34011775ce018bd0c076c03cd9f78218224a6a9b44f",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "task",
+      "browser": "153.0.8010.12",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-chromium-light-phone/evidence.json",
+     "bytes": 297172,
+     "sha256": "c64acc8ba9186d3f3b30a34011775ce018bd0c076c03cd9f78218224a6a9b44f",
+     "fields": {
+      "project": "chromium-light-phone",
+      "test": "task",
+      "browser": "153.0.8010.12",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-webkit-dark-desktop/attachments/computed-styles-and-timings-2b50cf7aad40a7e6b8e1815716c780c50fe17110.json",
+     "bytes": 307812,
+     "sha256": "f59344155bbd7842ae8291cdd5b28d6c40a0cecb716604e6b7cd399a0709fd82",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "task",
+      "browser": "26.6",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-webkit-dark-desktop/evidence.json",
+     "bytes": 307812,
+     "sha256": "f59344155bbd7842ae8291cdd5b28d6c40a0cecb716604e6b7cd399a0709fd82",
+     "fields": {
+      "project": "webkit-dark-desktop",
+      "test": "task",
+      "browser": "26.6",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-webkit-dark-phone/attachments/computed-styles-and-timings-bfcb5553dbc9476451317c5ff63cea67824a6159.json",
+     "bytes": 292465,
+     "sha256": "55ccea76a45a72ff431cacba12773173c8a35bb960552cc10026ce3df3ffa673",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "task",
+      "browser": "26.6",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-webkit-dark-phone/evidence.json",
+     "bytes": 292465,
+     "sha256": "55ccea76a45a72ff431cacba12773173c8a35bb960552cc10026ce3df3ffa673",
+     "fields": {
+      "project": "webkit-dark-phone",
+      "test": "task",
+      "browser": "26.6",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-webkit-light-desktop/attachments/computed-styles-and-timings-d92ab301d86222168c764d464dd477474c8b0340.json",
+     "bytes": 304104,
+     "sha256": "eb82e50a29c5a39b209d10b6f219d263f9426093ea2c001d8399f5025e44ea8b",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "task",
+      "browser": "26.6",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-webkit-light-desktop/evidence.json",
+     "bytes": 304104,
+     "sha256": "eb82e50a29c5a39b209d10b6f219d263f9426093ea2c001d8399f5025e44ea8b",
+     "fields": {
+      "project": "webkit-light-desktop",
+      "test": "task",
+      "browser": "26.6",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-webkit-light-phone/attachments/computed-styles-and-timings-e9f31ef57f634fc52e9035f6e93f32d3fa19a5dc.json",
+     "bytes": 289075,
+     "sha256": "0e04da914a57371a86aef7ed3a84b8b1a5c7861f53622ca8904e8570bed868d1",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "task",
+      "browser": "26.6",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    },
+    {
+     "name": "attachments/pages.browser.mjs-task-webkit-light-phone/evidence.json",
+     "bytes": 289075,
+     "sha256": "0e04da914a57371a86aef7ed3a84b8b1a5c7861f53622ca8904e8570bed868d1",
+     "fields": {
+      "project": "webkit-light-phone",
+      "test": "task",
+      "browser": "26.6",
+      "unhandled": [],
+      "pageErrors": []
+     }
+    }
+   ]
+  }
+ ]
+}

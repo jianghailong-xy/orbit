@@ -1,0 +1,6 @@
+==> reusing this worktree's lockfile-compatible installation
+==> tsc /root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/node_modules/.bin/tsc (Version 7.0.2)
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/ebc882ba-f4f5-530f-b538-427c2104cf71 is ready to build and test

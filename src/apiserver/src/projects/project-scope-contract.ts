@@ -46,17 +46,23 @@ export type ScopeDecision = (typeof SCOPE_DECISIONS)[number];
 export type ScopeProjectStatus = 'OPEN' | 'DONE' | 'CANCELLED';
 
 /**
- * Codes this contract INTRODUCES. Four, matching the four the unit was asked to freeze.
+ * Codes this contract INTRODUCES. The four the unit was asked to freeze, and one more.
  *
  * Every other refusal on this path reuses a code that already exists, which is not politeness: PAC
  * §12 E2 forbids a new code that is a synonym of an old one, because two names for one event is
  * how two implementations end up both "conforming" while disagreeing.
+ *
+ * `MOVE_TASK_SERVES_SETTLED_CRITERION` is the one more (account owner, 2026-10-06), and it is not a
+ * synonym of `PROJECT_REOPEN_REQUIRED`. Since then a settled project may give up a task by a
+ * confirmed move — one none of its criteria count — so "that project is settled" no longer says why
+ * a move out of one is refused. This does: the task is part of what the project was accepted on.
  */
 export const SCOPE_NEW_REFUSAL_CODES = [
   'PROJECT_SCOPE_MISMATCH',
   'UNMAPPED_PROJECT_WORK',
   'CROSS_PROJECT_APPROVAL_REQUIRED',
   'PROJECT_REOPEN_REQUIRED',
+  'MOVE_TASK_SERVES_SETTLED_CRITERION',
 ] as const;
 
 /**
@@ -105,7 +111,8 @@ export const SCOPE_REQUIRED_ACTIONS = [
   'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF',
   /** Somebody has to say which project owns this work. Nothing an agent can answer for itself. */
   'NAME_OWNING_PROJECT',
-  /** The landing project is settled; it has to be reopened (new acceptance epoch) first. */
+  /** A settled project stands at an end of this write; it has to be reopened (new acceptance
+   *  epoch) first. */
   'REOPEN_PROJECT_FIRST',
   /** Wait for the user's answer on the declared crossing. */
   'AWAIT_HANDOFF_APPROVAL',
@@ -169,6 +176,13 @@ export const SCOPE_REFUSAL_POLICY: Readonly<Record<ScopeRefusalCode, ScopeRefusa
     blockerKind: 'AWAITING_USER_APPROVAL',
   },
   PROJECT_REOPEN_REQUIRED: {
+    decision: 'REFUSE',
+    responsible: 'USER',
+    blockerKind: 'AWAITING_USER_APPROVAL',
+  },
+  // Owned like the reopen it asks for: no agent can change what a settled project was accepted on,
+  // and asking again changes nothing until the account owner reopens it.
+  MOVE_TASK_SERVES_SETTLED_CRITERION: {
     decision: 'REFUSE',
     responsible: 'USER',
     blockerKind: 'AWAITING_USER_APPROVAL',
@@ -444,6 +458,13 @@ export const SCOPE_ACCEPTANCE_MAP: Readonly<Record<string, readonly number[]>> =
  * R8 sits ABOVE the approval rules on purpose: an approval must never be able to buy a way into a
  * settled project, or an accepted project silently gains work and its acceptance record becomes a
  * claim about a world that no longer exists.
+ *
+ * The same holds for the way OUT, with one exception (account owner, 2026-10-06): a declared move of
+ * a task none of the settled project's criteria count, into an open project, goes on to R9–R14 like
+ * any move — the account owner confirms it. Every criterion keeps the work it was settled on, so
+ * the record still describes the project. A task that serves one of them is R8B's, above the
+ * approvals for R8's reason. `settledEndRule` in `project-scope-decision.ts` is that predicate,
+ * spelled once for the decision and for the handoff acceptance rule (HP1) alike.
  */
 export interface ScopeRule {
   id: string;
@@ -461,6 +482,7 @@ export const SCOPE_RULES: readonly ScopeRule[] = [
   { id: 'R6_OUT_OF_SCOPE', code: 'PROJECT_SCOPE_MISMATCH', requiredAction: 'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF' },
   { id: 'R7_UNDECLARED_CROSSING', code: 'PROJECT_SCOPE_MISMATCH', requiredAction: 'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF' },
   { id: 'R8_SETTLED_PROJECT', code: 'PROJECT_REOPEN_REQUIRED', requiredAction: 'REOPEN_PROJECT_FIRST' },
+  { id: 'R8B_SETTLED_CRITERION_SERVED', code: 'MOVE_TASK_SERVES_SETTLED_CRITERION', requiredAction: 'REOPEN_PROJECT_FIRST' },
   { id: 'R9_APPROVAL_TARGET_MISMATCH', code: 'APPROVAL_TARGET_MISMATCH', requiredAction: 'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF' },
   { id: 'R10_NO_APPROVAL', code: 'CROSS_PROJECT_APPROVAL_REQUIRED', requiredAction: 'AWAIT_HANDOFF_APPROVAL' },
   { id: 'R11_APPROVAL_PENDING', code: 'APPROVAL_PENDING', requiredAction: 'AWAIT_HANDOFF_APPROVAL' },

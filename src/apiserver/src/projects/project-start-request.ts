@@ -14,7 +14,11 @@ import {
   type StatedAcceptanceCriterion,
 } from './project-acceptance';
 import { branchName } from './project-criterion-landing';
-import { projectBranchRef, projectRepository } from './project-integration-line';
+import {
+  DEFAULT_UPSTREAM_REF,
+  projectBranchRef,
+  projectRepository,
+} from './project-integration-line';
 
 /**
  * A coordinator asking its owner to start the project (`project_request_start`).
@@ -262,15 +266,20 @@ export function startReadiness(
       { tasks: taskRefs(unrunnable) });
   }
   const mergeCheck = settings.mergeCheckCommand?.trim() || null;
-  if (!plan.repository && (settings.line === 'PROJECT_BRANCH' || mergeCheck)) {
+  const needsRepository = settings.line === 'PROJECT_BRANCH' || mergeCheck || settings.upstreamRef;
+  if (!plan.repository && needsRepository) {
     finding('REFUSE', 'START_REPOSITORY_UNKNOWN',
       settings.line === 'PROJECT_BRANCH'
         ? 'tasks are to land on a project branch, and this project names no repository to hold one: '
           + 'its coordination workspace has no recorded remote'
-        : 'a merge check needs a repository to run on, and this project names none: its '
-          + 'coordination workspace has no recorded remote',
+        : mergeCheck
+          ? 'a merge check needs a repository to run on, and this project names none: its '
+            + 'coordination workspace has no recorded remote'
+          : 'a main branch is a branch of a repository, and this project names none: its '
+            + 'coordination workspace has no recorded remote',
       'Wait for the runner to detect origin, or set Repository URL in the coordination workspace '
-        + 'settings. For a project without a repository, suggest line MAIN with no merge check.');
+        + 'settings. For a project without a repository, suggest line MAIN with no merge check'
+        + `${settings.upstreamRef ? ' and no upstreamRef' : ''}.`);
   }
 
   const byHand = running.filter((task) => !task.autoRunWhenReady);
@@ -291,11 +300,12 @@ export function startReadiness(
   return [...refusals, ...warnings];
 }
 
-/** The line under the item's title: the settings the coordinator suggests, in the card's words. */
+/** The line under the item's title: the settings the coordinator suggests, in the card's words —
+ *  "main" being the main branch it suggests, by its name, or main when it suggests none. */
 export function startRequestDetailLine(projectId: string, request: ProjectStartRequest): string {
   const { settings } = request;
   const line = settings.line === 'MAIN'
-    ? 'Directly into main'
+    ? `Directly into ${branchName(settings.upstreamRef ?? DEFAULT_UPSTREAM_REF)}`
     : branchName(settings.projectBranchName ?? projectBranchRef(projectId));
   return [
     line,

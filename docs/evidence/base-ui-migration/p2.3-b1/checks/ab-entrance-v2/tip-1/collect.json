@@ -1,0 +1,1 @@
+{"destination": "/var/tmp/p23b1/runs/ab-entrance-v2/tip-1/collected", "stats": {"startTime": "2026-10-07T01:03:43.505Z", "duration": 58044.216, "expected": 31, "skipped": 0, "unexpected": 1, "flaky": 0}, "artifacts": 33}

@@ -1,0 +1,578 @@
+{
+ "tests": {
+  "start": {
+   "passed": 41,
+   "skipped": 23,
+   "failed": 80
+  },
+  "base": {
+   "passed": 41,
+   "skipped": 23,
+   "failed": 80
+  }
+ },
+ "reds": 80,
+ "sameOnBoth": true,
+ "rows": [
+  {
+   "test": "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 8\n+ Received  + 8\n\n@@ -30,11 +30,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 76,\n+     \"height\": 86,\n      \"label\": \"text-pasted\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"pasted line one\n@@ -60,11 +60,11 @@\n          null,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 76,\n+     \"height\": 86,\n      \"label\": \"files-staged\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [\n        \"pa"
+  },
+  {
+   "test": "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 8\n+ Received  + 8\n\n@@ -30,11 +30,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 85,\n+     \"height\": 86,\n      \"label\": \"text-pasted\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"pasted line one\n@@ -60,11 +60,11 @@\n          null,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 85,\n+     \"height\": 86,\n      \"label\": \"files-staged\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [\n        \"pa"
+  },
+  {
+   "test": "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 8\n+ Received  + 8\n\n@@ -30,11 +30,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 76,\n+     \"height\": 86,\n      \"label\": \"text-pasted\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"pasted line one\n@@ -60,11 +60,11 @@\n          null,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 76,\n+     \"height\": 86,\n      \"label\": \"files-staged\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [\n        \"pa"
+  },
+  {
+   "test": "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 8\n+ Received  + 8\n\n@@ -30,11 +30,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 85,\n+     \"height\": 86,\n      \"label\": \"text-pasted\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"pasted line one\n@@ -60,11 +60,11 @@\n          null,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 85,\n+     \"height\": 86,\n      \"label\": \"files-staged\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [\n        \"pa"
+  },
+  {
+   "test": "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 8\n+ Received  + 8\n\n@@ -30,11 +30,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 76,\n+     \"height\": 86,\n      \"label\": \"text-pasted\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"pasted line one\n@@ -60,11 +60,11 @@\n          null,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 76,\n+     \"height\": 86,\n      \"label\": \"files-staged\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [\n        \"pa"
+  },
+  {
+   "test": "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 8\n+ Received  + 8\n\n@@ -30,11 +30,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 85,\n+     \"height\": 86,\n      \"label\": \"text-pasted\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"pasted line one\n@@ -60,11 +60,11 @@\n          null,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 85,\n+     \"height\": 86,\n      \"label\": \"files-staged\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [\n        \"pa"
+  },
+  {
+   "test": "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 8\n+ Received  + 8\n\n@@ -30,11 +30,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 76,\n+     \"height\": 86,\n      \"label\": \"text-pasted\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"pasted line one\n@@ -60,11 +60,11 @@\n          null,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 76,\n+     \"height\": 86,\n      \"label\": \"files-staged\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [\n        \"pa"
+  },
+  {
+   "test": "composer-input.browser.mjs › paste text and files, the 50,000-character cap and history recall › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 8\n+ Received  + 8\n\n@@ -30,11 +30,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 85,\n+     \"height\": 86,\n      \"label\": \"text-pasted\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"pasted line one\n@@ -60,11 +60,11 @@\n          null,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 85,\n+     \"height\": 86,\n      \"label\": \"files-staged\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [\n        \"pa"
+  },
+  {
+   "test": "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 12\n+ Received  + 12\n\n@@ -42,11 +42,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"slash-open\",\n      \"menu\": Array [\n        Object {\n          \"active\": true,\n          \"text\": \"/refactorcmdRestructure without changing behavior\",\n@@ -89,11 +89,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"slash-arrow-wraps-to-first\",\n      \"menu\": Array ["
+  },
+  {
+   "test": "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 12\n+ Received  + 12\n\n@@ -42,11 +42,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"slash-open\",\n      \"menu\": Array [\n        Object {\n          \"active\": true,\n          \"text\": \"/refactorcmdRestructure without changing behavior\",\n@@ -89,11 +89,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"slash-arrow-wraps-to-first\",\n      \"menu\": Array ["
+  },
+  {
+   "test": "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 12\n+ Received  + 12\n\n@@ -42,11 +42,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"slash-open\",\n      \"menu\": Array [\n        Object {\n          \"active\": true,\n          \"text\": \"/refactorcmdRestructure without changing behavior\",\n@@ -89,11 +89,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"slash-arrow-wraps-to-first\",\n      \"menu\": Array ["
+  },
+  {
+   "test": "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 12\n+ Received  + 12\n\n@@ -42,11 +42,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"slash-open\",\n      \"menu\": Array [\n        Object {\n          \"active\": true,\n          \"text\": \"/refactorcmdRestructure without changing behavior\",\n@@ -89,11 +89,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"slash-arrow-wraps-to-first\",\n      \"menu\": Array ["
+  },
+  {
+   "test": "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 12\n+ Received  + 12\n\n@@ -42,11 +42,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"slash-open\",\n      \"menu\": Array [\n        Object {\n          \"active\": true,\n          \"text\": \"/refactorcmdRestructure without changing behavior\",\n@@ -89,11 +89,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"slash-arrow-wraps-to-first\",\n      \"menu\": Array ["
+  },
+  {
+   "test": "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 12\n+ Received  + 12\n\n@@ -42,11 +42,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"slash-open\",\n      \"menu\": Array [\n        Object {\n          \"active\": true,\n          \"text\": \"/refactorcmdRestructure without changing behavior\",\n@@ -89,11 +89,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"slash-arrow-wraps-to-first\",\n      \"menu\": Array ["
+  },
+  {
+   "test": "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 12\n+ Received  + 12\n\n@@ -42,11 +42,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"slash-open\",\n      \"menu\": Array [\n        Object {\n          \"active\": true,\n          \"text\": \"/refactorcmdRestructure without changing behavior\",\n@@ -89,11 +89,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"slash-arrow-wraps-to-first\",\n      \"menu\": Array ["
+  },
+  {
+   "test": "composer-input.browser.mjs › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 12\n+ Received  + 12\n\n@@ -42,11 +42,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"slash-open\",\n      \"menu\": Array [\n        Object {\n          \"active\": true,\n          \"text\": \"/refactorcmdRestructure without changing behavior\",\n@@ -89,11 +89,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"slash-arrow-wraps-to-first\",\n      \"menu\": Array ["
+  },
+  {
+   "test": "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 5\n+ Received  + 5\n\n@@ -144,11 +144,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 54,\n+     \"height\": 62,\n      \"label\": \"shift-enter-newline\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"hello\n@@ -167,11 +167,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"enter-sent\",\n      \"menu\": null,\n      \"sent\": \"[\\\"hello\\\\nworld\\\"]\",\n      \"staged\": A"
+  },
+  {
+   "test": "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 5\n+ Received  + 5\n\n@@ -144,11 +144,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 60,\n+     \"height\": 62,\n      \"label\": \"shift-enter-newline\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"hello\n@@ -167,11 +167,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"enter-sent\",\n      \"menu\": null,\n      \"sent\": \"[\\\"hello\\\\nworld\\\"]\",\n      \"staged\": A"
+  },
+  {
+   "test": "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 5\n+ Received  + 5\n\n@@ -144,11 +144,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 54,\n+     \"height\": 62,\n      \"label\": \"shift-enter-newline\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"hello\n@@ -167,11 +167,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"enter-sent\",\n      \"menu\": null,\n      \"sent\": \"[\\\"hello\\\\nworld\\\"]\",\n      \"staged\": A"
+  },
+  {
+   "test": "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 5\n+ Received  + 5\n\n@@ -144,11 +144,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 60,\n+     \"height\": 62,\n      \"label\": \"shift-enter-newline\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"hello\n@@ -167,11 +167,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"enter-sent\",\n      \"menu\": null,\n      \"sent\": \"[\\\"hello\\\\nworld\\\"]\",\n      \"staged\": A"
+  },
+  {
+   "test": "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 5\n+ Received  + 5\n\n@@ -144,11 +144,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 54,\n+     \"height\": 62,\n      \"label\": \"shift-enter-newline\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"hello\n@@ -167,11 +167,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"enter-sent\",\n      \"menu\": null,\n      \"sent\": \"[\\\"hello\\\\nworld\\\"]\",\n      \"staged\": A"
+  },
+  {
+   "test": "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 5\n+ Received  + 5\n\n@@ -144,11 +144,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 60,\n+     \"height\": 62,\n      \"label\": \"shift-enter-newline\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"hello\n@@ -167,11 +167,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"enter-sent\",\n      \"menu\": null,\n      \"sent\": \"[\\\"hello\\\\nworld\\\"]\",\n      \"staged\": A"
+  },
+  {
+   "test": "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 5\n+ Received  + 5\n\n@@ -144,11 +144,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 54,\n+     \"height\": 62,\n      \"label\": \"shift-enter-newline\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"hello\n@@ -167,11 +167,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 32,\n+     \"height\": 38,\n      \"label\": \"enter-sent\",\n      \"menu\": null,\n      \"sent\": \"[\\\"hello\\\\nworld\\\"]\",\n      \"staged\": A"
+  },
+  {
+   "test": "composer-input.browser.mjs › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 5\n+ Received  + 5\n\n@@ -144,11 +144,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 60,\n+     \"height\": 62,\n      \"label\": \"shift-enter-newline\",\n      \"menu\": null,\n      \"sent\": \"[]\",\n      \"staged\": Array [],\n      \"value\": \"hello\n@@ -167,11 +167,11 @@\n          false,\n          false,\n        ],\n      ],\n      \"focused\": true,\n-     \"height\": 35,\n+     \"height\": 38,\n      \"label\": \"enter-sent\",\n      \"menu\": null,\n      \"sent\": \"[\\\"hello\\\\nworld\\\"]\",\n      \"staged\": A"
+  },
+  {
+   "test": "composer.browser.mjs › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 17\n+ Received  + 17\n\n@@ -71,53 +71,53 @@\n      ],\n      \"height\": 54,\n    },\n    \"sessionFocusedShiftEnter\": Object {\n      \"animations\": Array [],\n-     \"height\": 54,\n+     \"height\": 62,\n    },\n    \"sessionMotion\": Object {\n      \"backgroundColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderBottomWidth\": \"0px\",\n-     \"borderLeftColor\": \"rgb(201, 206, 213)\",\n+     \"borderLeftColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderRadius\": \"6px\",\n-     \"borderTopColor\": \"rgb(201, 206, 213)\",\n+     \"borderTopColor\": \"rgba(0, 0, 0, 0)\",\n      \"bord"
+  },
+  {
+   "test": "composer.browser.mjs › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 17\n+ Received  + 17\n\n@@ -71,53 +71,53 @@\n      ],\n      \"height\": 60,\n    },\n    \"sessionFocusedShiftEnter\": Object {\n      \"animations\": Array [],\n-     \"height\": 60,\n+     \"height\": 62,\n    },\n    \"sessionMotion\": Object {\n      \"backgroundColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderBottomWidth\": \"0px\",\n-     \"borderLeftColor\": \"rgb(201, 206, 213)\",\n+     \"borderLeftColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderRadius\": \"6px\",\n-     \"borderTopColor\": \"rgb(201, 206, 213)\",\n+     \"borderTopColor\": \"rgba(0, 0, 0, 0)\",\n      \"bord"
+  },
+  {
+   "test": "composer.browser.mjs › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 17\n+ Received  + 17\n\n@@ -71,53 +71,53 @@\n      ],\n      \"height\": 54,\n    },\n    \"sessionFocusedShiftEnter\": Object {\n      \"animations\": Array [],\n-     \"height\": 54,\n+     \"height\": 62,\n    },\n    \"sessionMotion\": Object {\n      \"backgroundColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderBottomWidth\": \"0px\",\n-     \"borderLeftColor\": \"rgb(31, 35, 41)\",\n+     \"borderLeftColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderRadius\": \"6px\",\n-     \"borderTopColor\": \"rgb(31, 35, 41)\",\n+     \"borderTopColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderTopS"
+  },
+  {
+   "test": "composer.browser.mjs › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 17\n+ Received  + 17\n\n@@ -71,53 +71,53 @@\n      ],\n      \"height\": 60,\n    },\n    \"sessionFocusedShiftEnter\": Object {\n      \"animations\": Array [],\n-     \"height\": 60,\n+     \"height\": 62,\n    },\n    \"sessionMotion\": Object {\n      \"backgroundColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderBottomWidth\": \"0px\",\n-     \"borderLeftColor\": \"rgb(31, 35, 41)\",\n+     \"borderLeftColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderRadius\": \"6px\",\n-     \"borderTopColor\": \"rgb(31, 35, 41)\",\n+     \"borderTopColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderTopS"
+  },
+  {
+   "test": "composer.browser.mjs › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 17\n+ Received  + 17\n\n@@ -71,53 +71,53 @@\n      ],\n      \"height\": 54,\n    },\n    \"sessionFocusedShiftEnter\": Object {\n      \"animations\": Array [],\n-     \"height\": 54,\n+     \"height\": 62,\n    },\n    \"sessionMotion\": Object {\n      \"backgroundColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderBottomWidth\": \"0px\",\n-     \"borderLeftColor\": \"rgb(201, 206, 213)\",\n+     \"borderLeftColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderRadius\": \"6px\",\n-     \"borderTopColor\": \"rgb(201, 206, 213)\",\n+     \"borderTopColor\": \"rgba(0, 0, 0, 0)\",\n      \"bord"
+  },
+  {
+   "test": "composer.browser.mjs › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 17\n+ Received  + 17\n\n@@ -71,53 +71,53 @@\n      ],\n      \"height\": 60,\n    },\n    \"sessionFocusedShiftEnter\": Object {\n      \"animations\": Array [],\n-     \"height\": 60,\n+     \"height\": 62,\n    },\n    \"sessionMotion\": Object {\n      \"backgroundColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderBottomWidth\": \"0px\",\n-     \"borderLeftColor\": \"rgb(201, 206, 213)\",\n+     \"borderLeftColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderRadius\": \"6px\",\n-     \"borderTopColor\": \"rgb(201, 206, 213)\",\n+     \"borderTopColor\": \"rgba(0, 0, 0, 0)\",\n      \"bord"
+  },
+  {
+   "test": "composer.browser.mjs › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 17\n+ Received  + 17\n\n@@ -71,53 +71,53 @@\n      ],\n      \"height\": 54,\n    },\n    \"sessionFocusedShiftEnter\": Object {\n      \"animations\": Array [],\n-     \"height\": 54,\n+     \"height\": 62,\n    },\n    \"sessionMotion\": Object {\n      \"backgroundColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderBottomWidth\": \"0px\",\n-     \"borderLeftColor\": \"rgb(31, 35, 41)\",\n+     \"borderLeftColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderRadius\": \"6px\",\n-     \"borderTopColor\": \"rgb(31, 35, 41)\",\n+     \"borderTopColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderTopS"
+  },
+  {
+   "test": "composer.browser.mjs › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 17\n+ Received  + 17\n\n@@ -71,53 +71,53 @@\n      ],\n      \"height\": 60,\n    },\n    \"sessionFocusedShiftEnter\": Object {\n      \"animations\": Array [],\n-     \"height\": 60,\n+     \"height\": 62,\n    },\n    \"sessionMotion\": Object {\n      \"backgroundColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderBottomWidth\": \"0px\",\n-     \"borderLeftColor\": \"rgb(31, 35, 41)\",\n+     \"borderLeftColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderRadius\": \"6px\",\n-     \"borderTopColor\": \"rgb(31, 35, 41)\",\n+     \"borderTopColor\": \"rgba(0, 0, 0, 0)\",\n      \"borderTopS"
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 599px › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 801,\n+     \"case\": \"idle\",\n+     \"orbit\": 798,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 131.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 143.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 806,\n+     \"case\": \"idle\",\n+     \"orbit\": 810,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 599px › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 801,\n+     \"case\": \"idle\",\n+     \"orbit\": 798,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 131.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 143.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 806,\n+     \"case\": \"idle\",\n+     \"orbit\": 810,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 599px › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 801,\n+     \"case\": \"idle\",\n+     \"orbit\": 798,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 131.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 143.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 806,\n+     \"case\": \"idle\",\n+     \"orbit\": 810,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 599px › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 801,\n+     \"case\": \"idle\",\n+     \"orbit\": 798,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 131.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 143.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 806,\n+     \"case\": \"idle\",\n+     \"orbit\": 810,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 601px › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 797,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 132.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 144.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 802,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 601px › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 797,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 132.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 144.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 802,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 601px › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 797,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 132.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 144.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 802,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 601px › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 797,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 132.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 144.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 802,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 959px › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 797,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 311.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 323.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 802,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 959px › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 797,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 311.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 323.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 802,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 959px › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 797,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 311.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 323.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 802,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 959px › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 797,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 311.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 323.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 802,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 961px › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 312.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 324.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 961px › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 312.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 324.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 961px › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 312.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 324.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › fields match at 961px › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 410\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 312.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 324.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 336,\n+     \"case\": \""
+  },
+  {
+   "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  getByLabel('Manual height')\nExpected: \"402\"\nReceived: \"374\"\nTimeout:  15000ms\n\nCall log:\n  - Expect \"toHaveText\" getByLabel('Manual height') with timeout 15000ms\n  - waiting for getByLabel('Manual height')\n    34 × locator resolved to <output aria-label=\"Manual height\">374</output>\n       - unexpected value \"374\"\n\n\n  222 |     };\n  223 |     await dragTo((y) => y - 100);\n> 224 |     await expect(page.getByLabel('Manual height')).toHaveText('402');\n      |                                                    ^\n  225 |     await record("
+  },
+  {
+   "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  getByLabel('Manual height')\nExpected: \"402\"\nReceived: \"410\"\nTimeout:  15000ms\n\nCall log:\n  - Expect \"toHaveText\" getByLabel('Manual height') with timeout 15000ms\n  - waiting for getByLabel('Manual height')\n    34 × locator resolved to <output aria-label=\"Manual height\">410</output>\n       - unexpected value \"410\"\n\n\n  222 |     };\n  223 |     await dragTo((y) => y - 100);\n> 224 |     await expect(page.getByLabel('Manual height')).toHaveText('402');\n      |                                                    ^\n  225 |     await record("
+  },
+  {
+   "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  getByLabel('Manual height')\nExpected: \"402\"\nReceived: \"374\"\nTimeout:  15000ms\n\nCall log:\n  - Expect \"toHaveText\" getByLabel('Manual height') with timeout 15000ms\n  - waiting for getByLabel('Manual height')\n    34 × locator resolved to <output aria-label=\"Manual height\">374</output>\n       - unexpected value \"374\"\n\n\n  222 |     };\n  223 |     await dragTo((y) => y - 100);\n> 224 |     await expect(page.getByLabel('Manual height')).toHaveText('402');\n      |                                                    ^\n  225 |     await record("
+  },
+  {
+   "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  getByLabel('Manual height')\nExpected: \"402\"\nReceived: \"410\"\nTimeout:  15000ms\n\nCall log:\n  - Expect \"toHaveText\" getByLabel('Manual height') with timeout 15000ms\n  - waiting for getByLabel('Manual height')\n    34 × locator resolved to <output aria-label=\"Manual height\">410</output>\n       - unexpected value \"410\"\n\n\n  222 |     };\n  223 |     await dragTo((y) => y - 100);\n> 224 |     await expect(page.getByLabel('Manual height')).toHaveText('402');\n      |                                                    ^\n  225 |     await record("
+  },
+  {
+   "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  getByLabel('Manual height')\nExpected: \"402\"\nReceived: \"374\"\nTimeout:  15000ms\n\nCall log:\n  - Expect \"toHaveText\" getByLabel('Manual height') with timeout 15000ms\n  - waiting for getByLabel('Manual height')\n    34 × locator resolved to <output aria-label=\"Manual height\">374</output>\n       - unexpected value \"374\"\n\n\n  222 |     };\n  223 |     await dragTo((y) => y - 100);\n> 224 |     await expect(page.getByLabel('Manual height')).toHaveText('402');\n      |                                                    ^\n  225 |     await record("
+  },
+  {
+   "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  getByLabel('Manual height')\nExpected: \"402\"\nReceived: \"410\"\nTimeout:  15000ms\n\nCall log:\n  - Expect \"toHaveText\" getByLabel('Manual height') with timeout 15000ms\n  - waiting for getByLabel('Manual height')\n    34 × locator resolved to <output aria-label=\"Manual height\">410</output>\n       - unexpected value \"410\"\n\n\n  222 |     };\n  223 |     await dragTo((y) => y - 100);\n> 224 |     await expect(page.getByLabel('Manual height')).toHaveText('402');\n      |                                                    ^\n  225 |     await record("
+  },
+  {
+   "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  getByLabel('Manual height')\nExpected: \"402\"\nReceived: \"374\"\nTimeout:  15000ms\n\nCall log:\n  - Expect \"toHaveText\" getByLabel('Manual height') with timeout 15000ms\n  - waiting for getByLabel('Manual height')\n    34 × locator resolved to <output aria-label=\"Manual height\">374</output>\n       - unexpected value \"374\"\n\n\n  222 |     };\n  223 |     await dragTo((y) => y - 100);\n> 224 |     await expect(page.getByLabel('Manual height')).toHaveText('402');\n      |                                                    ^\n  225 |     await record("
+  },
+  {
+   "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  getByLabel('Manual height')\nExpected: \"402\"\nReceived: \"410\"\nTimeout:  15000ms\n\nCall log:\n  - Expect \"toHaveText\" getByLabel('Manual height') with timeout 15000ms\n  - waiting for getByLabel('Manual height')\n    34 × locator resolved to <output aria-label=\"Manual height\">410</output>\n       - unexpected value \"410\"\n\n\n  222 |     };\n  223 |     await dragTo((y) => y - 100);\n> 224 |     await expect(page.getByLabel('Manual height')).toHaveText('402');\n      |                                                    ^\n  225 |     await record("
+  },
+  {
+   "test": "composer.browser.mjs › session composer grows, caps, scrolls and draws exactly like the AntD field › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -    1\n+ Received  + 3332\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 332.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 344.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 615,\n+     \"case\":"
+  },
+  {
+   "test": "composer.browser.mjs › session composer grows, caps, scrolls and draws exactly like the AntD field › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -    1\n+ Received  + 3374\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 745,\n+     \"case\": \"idle\",\n+     \"orbit\": 742,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 26,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 750,\n+     \"case\": \"idle\",\n+     \"orbit\": 754,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 338,\n+     \"case\": \"idle"
+  },
+  {
+   "test": "composer.browser.mjs › session composer grows, caps, scrolls and draws exactly like the AntD field › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -    1\n+ Received  + 3332\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 332.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 344.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 615,\n+     \"case\":"
+  },
+  {
+   "test": "composer.browser.mjs › session composer grows, caps, scrolls and draws exactly like the AntD field › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -    1\n+ Received  + 3374\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 745,\n+     \"case\": \"idle\",\n+     \"orbit\": 742,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 26,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 750,\n+     \"case\": \"idle\",\n+     \"orbit\": 754,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 338,\n+     \"case\": \"idle"
+  },
+  {
+   "test": "composer.browser.mjs › session composer grows, caps, scrolls and draws exactly like the AntD field › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -    1\n+ Received  + 3320\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 332.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 344.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 615,\n+     \"case\":"
+  },
+  {
+   "test": "composer.browser.mjs › session composer grows, caps, scrolls and draws exactly like the AntD field › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -    1\n+ Received  + 3368\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 745,\n+     \"case\": \"idle\",\n+     \"orbit\": 742,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 26,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 750,\n+     \"case\": \"idle\",\n+     \"orbit\": 754,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 338,\n+     \"case\": \"idle"
+  },
+  {
+   "test": "composer.browser.mjs › session composer grows, caps, scrolls and draws exactly like the AntD field › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -    1\n+ Received  + 3320\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 332.5,\n+     \"case\": \"idle\",\n+     \"orbit\": 344.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 615,\n+     \"case\":"
+  },
+  {
+   "test": "composer.browser.mjs › session composer grows, caps, scrolls and draws exactly like the AntD field › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -    1\n+ Received  + 3368\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 745,\n+     \"case\": \"idle\",\n+     \"orbit\": 742,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 26,\n+     \"case\": \"idle\",\n+     \"orbit\": 38,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 750,\n+     \"case\": \"idle\",\n+     \"orbit\": 754,\n+     \"path\": \"content.top\",\n+   },\n+   Object {\n+     \"ant\": 338,\n+     \"case\": \"idle"
+  },
+  {
+   "test": "composer.browser.mjs › session composer with staged attachments and while disabled matches the AntD field › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 446\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 332.5,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 344.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   }"
+  },
+  {
+   "test": "composer.browser.mjs › session composer with staged attachments and while disabled matches the AntD field › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 446\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 745,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 742,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 26,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 750,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 754,\n+     \"path\": \"content.top\",\n+   },\n+   "
+  },
+  {
+   "test": "composer.browser.mjs › session composer with staged attachments and while disabled matches the AntD field › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 446\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 332.5,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 344.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   }"
+  },
+  {
+   "test": "composer.browser.mjs › session composer with staged attachments and while disabled matches the AntD field › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 446\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 745,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 742,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 26,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 750,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 754,\n+     \"path\": \"content.top\",\n+   },\n+   "
+  },
+  {
+   "test": "composer.browser.mjs › session composer with staged attachments and while disabled matches the AntD field › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 446\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 332.5,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 344.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   }"
+  },
+  {
+   "test": "composer.browser.mjs › session composer with staged attachments and while disabled matches the AntD field › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 446\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 745,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 742,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 26,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 750,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 754,\n+     \"path\": \"content.top\",\n+   },\n+   "
+  },
+  {
+   "test": "composer.browser.mjs › session composer with staged attachments and while disabled matches the AntD field › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 446\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 800,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 794,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 32,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 332.5,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 344.5,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 805,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 806,\n+     \"path\": \"content.top\",\n+   }"
+  },
+  {
+   "test": "composer.browser.mjs › session composer with staged attachments and while disabled matches the AntD field › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  -   1\n+ Received  + 446\n\n- Array []\n+ Array [\n+   Object {\n+     \"ant\": 745,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 742,\n+     \"path\": \"field.y\",\n+   },\n+   Object {\n+     \"ant\": 35,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"field.height\",\n+   },\n+   Object {\n+     \"ant\": 26,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 38,\n+     \"path\": \"content.left\",\n+   },\n+   Object {\n+     \"ant\": 750,\n+     \"case\": \"attachments-idle\",\n+     \"orbit\": 754,\n+     \"path\": \"content.top\",\n+   },\n+   "
+  },
+  {
+   "test": "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 9\n+ Received  + 4\n\n@@ -1,15 +1,10 @@\n  Object {\n-   \"box\": Array [\n-     12,\n-     10,\n-     195,\n-     30,\n-   ],\n-   \"different\": 1786,\n-   \"height\": 32,\n-   \"maxChannelDelta\": 213,\n+   \"box\": null,\n+   \"different\": 0,\n+   \"height\": 38,\n+   \"maxChannelDelta\": 0,\n    \"sameSize\": true,\n    \"scroll\": Array [\n      0,\n      0,\n    ],\n\n  310 |   // run of text in both fields alike, which the attachment records.\n  311 |   for (const name of Object.keys(cases)) {\n> 312 |     expect(results.orbit[name]).toEqual(results.ant[nam"
+  },
+  {
+   "test": "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 9\n+ Received  + 4\n\n@@ -1,15 +1,10 @@\n  Object {\n-   \"box\": Array [\n-     12,\n-     11,\n-     194,\n-     31,\n-   ],\n-   \"different\": 1854,\n-   \"height\": 35,\n-   \"maxChannelDelta\": 213,\n+   \"box\": null,\n+   \"different\": 0,\n+   \"height\": 38,\n+   \"maxChannelDelta\": 0,\n    \"sameSize\": true,\n    \"scroll\": Array [\n      0,\n      0,\n    ],\n\n  310 |   // run of text in both fields alike, which the attachment records.\n  311 |   for (const name of Object.keys(cases)) {\n> 312 |     expect(results.orbit[name]).toEqual(results.ant[nam"
+  },
+  {
+   "test": "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 9\n+ Received  + 4\n\n@@ -1,15 +1,10 @@\n  Object {\n-   \"box\": Array [\n-     12,\n-     10,\n-     195,\n-     30,\n-   ],\n-   \"different\": 1767,\n-   \"height\": 32,\n-   \"maxChannelDelta\": 255,\n+   \"box\": null,\n+   \"different\": 0,\n+   \"height\": 38,\n+   \"maxChannelDelta\": 0,\n    \"sameSize\": true,\n    \"scroll\": Array [\n      0,\n      0,\n    ],\n\n  310 |   // run of text in both fields alike, which the attachment records.\n  311 |   for (const name of Object.keys(cases)) {\n> 312 |     expect(results.orbit[name]).toEqual(results.ant[nam"
+  },
+  {
+   "test": "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 9\n+ Received  + 4\n\n@@ -1,15 +1,10 @@\n  Object {\n-   \"box\": Array [\n-     12,\n-     11,\n-     194,\n-     31,\n-   ],\n-   \"different\": 1824,\n-   \"height\": 35,\n-   \"maxChannelDelta\": 255,\n+   \"box\": null,\n+   \"different\": 0,\n+   \"height\": 38,\n+   \"maxChannelDelta\": 0,\n    \"sameSize\": true,\n    \"scroll\": Array [\n      0,\n      0,\n    ],\n\n  310 |   // run of text in both fields alike, which the attachment records.\n  311 |   for (const name of Object.keys(cases)) {\n> 312 |     expect(results.orbit[name]).toEqual(results.ant[nam"
+  },
+  {
+   "test": "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-dark-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 9\n+ Received  + 4\n\n@@ -1,15 +1,10 @@\n  Object {\n-   \"box\": Array [\n-     12,\n-     10,\n-     195,\n-     30,\n-   ],\n-   \"different\": 1814,\n-   \"height\": 32,\n-   \"maxChannelDelta\": 213,\n+   \"box\": null,\n+   \"different\": 0,\n+   \"height\": 38,\n+   \"maxChannelDelta\": 0,\n    \"sameSize\": true,\n    \"scroll\": Array [\n      0,\n      0,\n    ],\n\n  310 |   // run of text in both fields alike, which the attachment records.\n  311 |   for (const name of Object.keys(cases)) {\n> 312 |     expect(results.orbit[name]).toEqual(results.ant[nam"
+  },
+  {
+   "test": "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 9\n+ Received  + 4\n\n@@ -1,15 +1,10 @@\n  Object {\n-   \"box\": Array [\n-     12,\n-     11,\n-     194,\n-     32,\n-   ],\n-   \"different\": 1955,\n-   \"height\": 35,\n-   \"maxChannelDelta\": 213,\n+   \"box\": null,\n+   \"different\": 0,\n+   \"height\": 38,\n+   \"maxChannelDelta\": 0,\n    \"sameSize\": true,\n    \"scroll\": Array [\n      0,\n      0,\n    ],\n\n  310 |   // run of text in both fields alike, which the attachment records.\n  311 |   for (const name of Object.keys(cases)) {\n> 312 |     expect(results.orbit[name]).toEqual(results.ant[nam"
+  },
+  {
+   "test": "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-light-desktop",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 9\n+ Received  + 4\n\n@@ -1,15 +1,10 @@\n  Object {\n-   \"box\": Array [\n-     12,\n-     10,\n-     195,\n-     30,\n-   ],\n-   \"different\": 1782,\n-   \"height\": 32,\n-   \"maxChannelDelta\": 255,\n+   \"box\": null,\n+   \"different\": 0,\n+   \"height\": 38,\n+   \"maxChannelDelta\": 0,\n    \"sameSize\": true,\n    \"scroll\": Array [\n      0,\n      0,\n    ],\n\n  310 |   // run of text in both fields alike, which the attachment records.\n  311 |   for (const name of Object.keys(cases)) {\n> 312 |     expect(results.orbit[name]).toEqual(results.ant[nam"
+  },
+  {
+   "test": "composer.browser.mjs › the mirror paints its glyphs exactly where the field lays out its own text › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 9\n+ Received  + 4\n\n@@ -1,15 +1,10 @@\n  Object {\n-   \"box\": Array [\n-     12,\n-     11,\n-     194,\n-     32,\n-   ],\n-   \"different\": 1915,\n-   \"height\": 35,\n-   \"maxChannelDelta\": 255,\n+   \"box\": null,\n+   \"different\": 0,\n+   \"height\": 38,\n+   \"maxChannelDelta\": 0,\n    \"sameSize\": true,\n    \"scroll\": Array [\n      0,\n      0,\n    ],\n\n  310 |   // run of text in both fields alike, which the attachment records.\n  311 |   for (const name of Object.keys(cases)) {\n> 312 |     expect(results.orbit[name]).toEqual(results.ant[nam"
+  }
+ ]
+}

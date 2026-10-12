@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -104,6 +103,23 @@ const project = (extra: Record<string, unknown> = {}) => ({
   coordinatorActivity: { working: false, lastTurnAt: COORDINATOR.lastTurnAt },
   ...extra,
 });
+/** The unified projection a current server carries on the project document: every listed criterion
+ *  met its work, each with the landing reason given (`null` is "on main"), and the counts that
+ *  partition them. The default is the tally the owner read back — six criteria, five on main, one
+ *  with no code to land. */
+const derivedDone = (landingReasons: (string | null)[] = [null, null, null, null, null, 'CODELESS']) => {
+  const criteria = landingReasons.map((landingReason, index) => ({
+    definitionId: `c${index + 1}`, satisfied: true, landing: 'LANDED' as const, landingReason,
+  }));
+  const byReason = { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 0, CODELESS: 0 };
+  for (const reason of landingReasons) if (reason) byReason[reason as keyof typeof byReason] += 1;
+  const total = landingReasons.length;
+  return {
+    status: 'DONE' as const, done: true, withheld: [], confirmation: 'CONFIRMED' as const,
+    counts: { criteria: total, met: total, landed: total, onMain: total - landingReasons.filter(Boolean).length, byReason },
+    criteria,
+  };
+};
 
 class FakeEventSource {
   static streams: FakeEventSource[] = [];
@@ -129,6 +145,16 @@ let routerNavigate: NavigateFunction;
 let mobile = false;
 let projectReadError = false;
 let withControlPlane = false;
+/** What the project's two promotion doors serve: the candidate on offer, and the merges made. */
+let currentPromotion: Record<string, unknown> | null = null;
+let merges: Array<Record<string, unknown>> = [];
+/** The coordinator's request to start, as the open-items door serves it, and how often it was read. */
+let startRequest: Record<string, unknown> | null = null;
+/** The exceptions the open-items door serves as the coordinator's — a blocked candidate's holder. */
+let withCoordinatorItems: Array<Record<string, unknown>> = [];
+let openItemsCalls = 0;
+/** The project's integration line, with whatever is landing on it. */
+let integrationView: Record<string, unknown> | null = null;
 
 function LocationProbe() {
   const l = useLocation();
@@ -178,11 +204,9 @@ async function mount(ready: () => void = () => expect(projectRows()).toHaveLengt
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            {withControlPlane ? <ControlPlaneProvider>{view}</ControlPlaneProvider> : view}
-            <SessionSearch />
-            <LocationProbe />
-          </AntApp>
+          {withControlPlane ? <ControlPlaneProvider>{view}</ControlPlaneProvider> : view}
+          <SessionSearch />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -195,11 +219,20 @@ async function click(element: Element | null | undefined, what: string): Promise
   await act(async () => element!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await settle();
 }
+/** Whether a menu or item is on an open menu: a closing or closed menu takes no pointer (the session list's
+ *  dropdowns stay in the page as they leave) or is gone. */
+const onOpenMenu = (el: Element): boolean => {
+  for (let node: HTMLElement | null = el as HTMLElement; node; node = node.parentElement) {
+    if (node.hidden || node.style.display === 'none' || node.style.pointerEvents === 'none') return false;
+  }
+  return true;
+};
+/** The open menus' plain items, top to bottom (a row that opens a submenu is not one). Submenus use their own
+ *  portal, outside their parent menu's element. */
+const menuItems = (): HTMLElement[] =>
+  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]:not([aria-haspopup])')].filter(onOpenMenu);
 const menuItem = (label: string): HTMLElement | undefined =>
-  // Submenus use their own portal, outside the dropdown's root element.
-  [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].find(
-    (el) => el.closest<HTMLElement>('.ant-dropdown')?.style.pointerEvents !== 'none' && el.textContent?.trim().startsWith(label),
-  );
+  menuItems().find((el) => el.textContent?.trim().startsWith(label));
 async function chooseView(label: string): Promise<void> {
   await click(mounted().querySelector('.session-scope-menu'), 'the view menu');
   await until(() => expect(menuItem(label)).toBeTruthy());
@@ -222,6 +255,12 @@ beforeEach(() => {
   mobile = false;
   projectReadError = false;
   withControlPlane = false;
+  currentPromotion = null;
+  merges = [];
+  startRequest = null;
+  withCoordinatorItems = [];
+  openItemsCalls = 0;
+  integrationView = null;
   FakeEventSource.streams = [];
   vi.mocked(apiModule.pinSession).mockReset().mockResolvedValue({});
   vi.mocked(apiModule.unpinSession).mockReset().mockResolvedValue({});
@@ -253,6 +292,13 @@ beforeEach(() => {
       projectDetailsCalls.push(path);
       return reply(projectDetails);
     }
+    if (path === `/projects/${PROJECT_ID}/promotions/current`) return reply(currentPromotion);
+    if (path === `/projects/${PROJECT_ID}/promotions/merged`) return reply(merges);
+    if (path === `/projects/${PROJECT_ID}/open-items`) {
+      openItemsCalls += 1;
+      return reply({ needsYou: [], withCoordinator: withCoordinatorItems, startRequest });
+    }
+    if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
     if (path.startsWith('/sessions/search?')) return reply({
       q: '', contentSearched: false, total: rows.length,
       hits: rows.map((r) => ({ ...r, matchField: 'title', snippet: null })),
@@ -326,7 +372,7 @@ const remote = (n: number, title: string, extra: Record<string, unknown> = {}) =
 });
 
 async function openSessions(): Promise<void> {
-  await click(projectRow().querySelector('.session-project-progress'), 'the project progress tag');
+  await click(projectRow(), 'the project entry');
   await until(() => expect(page()).not.toBeNull());
 }
 
@@ -365,12 +411,14 @@ async function swipe(entry: HTMLElement, dx: number, source: Element = entry): P
 }
 
 describe('project entry navigation and actions', { timeout: 60_000 }, () => {
-  it.each([false, true])('opens the coordinator when nobody waits or the coordinator waits (waiting=%s)', async (waiting) => {
+  it.each([false, true])('opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=%s)', async (waiting) => {
     rows = [LOOSE, { ...COORDINATOR, ...(waiting ? { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' } : {}) }, { ...TASK, ...(waiting ? { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' } : {}) }];
     await mount();
     await click(projectRow(), 'the project entry');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+    await until(() => expect(page()).not.toBeNull());
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(PROJECT_ID);
     await back();
+    await until(() => expect(page()).toBeNull());
     await hoverProjectMenu();
     await click(menuItem('Open Session'), 'Open Session for the coordinator');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
@@ -382,14 +430,11 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     rows = [LOOSE, COORDINATOR, newer, older];
     await mount();
     expect(preview()?.textContent).toContain('Build the package');
-    await click(projectRow(), 'the project entry');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
-    expect(projectRow().classList.contains('active')).toBe(true);
-    await back();
     await act(async () => projectRow().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
     await until(() => expect(menuItem('Open Session')).toBeTruthy());
     await click(menuItem('Open Session'), 'Open Session for the waiting member');
     await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    expect(projectRow().classList.contains('active')).toBe(true);
   });
 
   it('opens the project sessions page when there is no coordinator', async () => {
@@ -397,7 +442,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     projects = [project({ coordinatorActivity: null })];
     await mount();
     await hoverProjectMenu();
-    expect(menuItem('Open Session')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
+    expect(menuItem('Open Session')?.getAttribute('aria-disabled')).toBe('true');
     await click(menuItem('Open Session'), 'the disabled Open Session');
     expect(location).toBe(`/sessions/${LOOSE.id}`);
     await click(projectRow(), 'the project entry without a coordinator');
@@ -405,10 +450,11 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await until(() => expect(page()?.textContent).toContain('Build the package'));
   });
 
-  it('makes the progress tag an independent click target with the session-count hint', async () => {
+  it('draws the progress tag as part of the entry, with the session-count hint', async () => {
     await mount();
     const progress = projectRow().querySelector('.session-project-progress');
     expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
+    expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
     await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
@@ -426,11 +472,12 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
       await act(async () => projectRow().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
       await until(() => expect(menuItem('Sessions')).toBeTruthy());
     }
-    const labels = [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim());
+    const labels = menuItems().map((item) => item.textContent?.trim());
     expect(labels).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
-    const items = document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu')?.children;
-    expect(items?.[3].classList.contains('ant-dropdown-menu-item-divider')).toBe(true);
-    expect(document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item-divider')).toHaveLength(1);
+    const menus = [...document.querySelectorAll('[role="menu"]')].filter(onOpenMenu);
+    expect(menus).toHaveLength(1);
+    expect(menus[0].children[3]?.getAttribute('role')).toBe('separator');
+    expect(menus[0].querySelectorAll('[role="separator"]')).toHaveLength(1);
     const entryText = projectRow().textContent ?? '';
     for (const forbidden of ['Complete', 'Share', 'Delete', 'Confirm done', 'Chat about this', 'Approve', 'Reject', 'Start project']) {
       expect(labels).not.toContain(forbidden);
@@ -459,7 +506,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     rows = [LOOSE, { ...COORDINATOR, pinnedAt: '2026-10-01T09:00:00Z' }, TASK];
     await mount();
     await hoverProjectMenu();
-    expect([...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Unpin', 'Move…']);
+    expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Unpin', 'Move…']);
     await click(menuItem('Unpin'), 'Unpin');
     await until(() => expect(apiModule.unpinSession).toHaveBeenCalledWith(COORDINATOR.id));
   });
@@ -523,11 +570,79 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     expect(page()?.querySelector('.session-project-page-progress')?.textContent).toContain('4/5 done · 0 running');
     expect(page()?.querySelector('.session-project-progress-bar .done')?.getAttribute('style')).toContain('80%');
+    // No projection to tally (`derivedDone`): the progress card stays where a current server's read
+    // would have drawn the project's ending.
+    expect(page()?.querySelector('.project-why-not-done')).toBeNull();
     expect(projectDetailsCalls).toEqual([`/projects/${PROJECT_ID}`]);
     expect(listCalls.some((path) => {
       const params = new URLSearchParams(path.split('?')[1]);
       return !params.has('workspaceId') && !params.has('projectId') && !params.has('limit');
     })).toBe(false);
+  });
+
+  it('draws the project’s ending where the progress card was, once the read carries the projection', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'DERIVED',
+      tasksByStatus: { DONE: 4, FAILED: 1, CANCELLED: 2 }, derivedDone: derivedDone(),
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Delivered Alpha'));
+    const ending = page()?.querySelector('.project-why-not-done.is-settled');
+    expect(ending?.querySelector('.project-settlement-heading')?.textContent).toBe('This project is done');
+    expect(ending?.querySelector('.criteria-provenance')?.textContent).toBe('recorded by Orbit');
+    expect(ending?.querySelector('.project-done-tally')?.textContent).toBe('6 criteria · 5 on main · 1 no code to land');
+    // The card it stands in for — one that would say nothing but "4/5 done · 0 running" — is gone.
+    expect(page()?.querySelector('.session-project-page-card')).toBeNull();
+  });
+
+  it('keeps the progress card when the projection carries no unified counts', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'DERIVED',
+      tasksByStatus: { DONE: 4, FAILED: 1, CANCELLED: 2 },
+      // An older server's projection: the criteria with no counts behind them draws none of these
+      // cards (the conversation's own rule).
+      derivedDone: { criteria: derivedDone().criteria },
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Delivered Alpha'));
+    expect(page()?.querySelector('.session-project-page-progress')?.textContent).toContain('4/5 done · 0 running');
+    expect(page()?.querySelector('.project-why-not-done')).toBeNull();
+  });
+
+  it('spells the badge of the ending the way the recorder wrote it', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'OWNER',
+      tasksByStatus: { DONE: 5 }, derivedDone: derivedDone([null, 'CODELESS']),
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.project-why-not-done.is-settled')).not.toBeNull());
+    const ending = page()!.querySelector('.project-why-not-done.is-settled')!;
+    expect(ending.querySelector('.criteria-provenance')?.textContent).toBe('recorded by you');
+    expect(ending.querySelector('.project-done-tally')?.textContent).toBe('2 criteria · 1 on main · 1 no code to land');
   });
 
   it('lists Open and Completed members across workspaces, excludes Trash and counts running members', async () => {
@@ -663,25 +778,198 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(menuItem('Complete')).toBeUndefined();
   });
 
-  it('has the page menu, and its back button returns to the workspace list', async () => {
+  // As iOS's toolbar has it (docs/mocks/project-sessions-page-web): one action, the project's page.
+  it('has one action in its header, and its back button returns to the workspace list', async () => {
     await mount();
     await openSessions();
-    await click(page()?.querySelector('.session-project-page-header .session-kebab'), 'the project page menu');
-    await until(() => expect(menuItem('Open Project')).toBeTruthy());
-    const labels = [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['Open Project', 'Open Coordinator']);
-    await click(menuItem('Open Coordinator'), 'Open Coordinator');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    const header = page()!.querySelector('.session-project-page-header')!;
+    expect(header.querySelectorAll('button.session-kebab')).toHaveLength(1);
+    expect(header.querySelector('.session-project-page-open')?.getAttribute('aria-label')).toBe('Open Project');
     await click(page()?.querySelector('.session-folder-back'), 'the project page back');
     await until(() => expect(page()).toBeNull());
     expect(location).not.toContain('project=');
   });
 
-  it('opens the project from the page progress arrow', async () => {
+  it('opens the project from its header, and its progress card is first in the list with no link of its own', async () => {
     await mount();
     await openSessions();
-    await click(page()?.querySelector('.session-project-page-progress [aria-label="Open Project"]'), 'the progress arrow');
+    const list = page()!.querySelector('.workspace-sessions')!;
+    const card = list.querySelector('.session-project-page-card')!;
+    expect(list.firstElementChild, 'the card scrolls with the list, first in it').toBe(card);
+    expect(card.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
+    expect(card.querySelector('a')).toBeNull();
+    await click(page()?.querySelector('.session-project-page-open'), 'the header’s Open Project');
     await until(() => expect(location).toBe(`/projects/${PROJECT_ID}`));
+  });
+
+  it('says a project nobody has started is not started, and offers the owner’s own start while nobody asked', async () => {
+    projects = [project({ startedAt: null, taskCounts: { done: 0, failed: 0, total: 5 } })];
+    await mount();
+    await openSessions();
+    const start = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-page-card .session-project-start');
+    await until(() => expect(start()).not.toBeNull());
+    expect(page()!.querySelector('.session-project-page-progress')?.textContent).toBe('Not started · 5 tasks');
+    expect(start()!.textContent).toContain('The coordinator hasn’t asked yet');
+    const press = start()!.querySelector<HTMLButtonElement>('.session-project-start-press')!;
+    expect(press.textContent).toBe('Start…');
+    expect(press.classList.contains('is-primary')).toBe(false);
+    await click(press, 'Start…');
+    await until(() => expect(document.querySelector('.start-card-dialog')).not.toBeNull());
+  });
+
+  it('offers the coordinator’s request to start with what it suggests, and opens it to be answered here', async () => {
+    projects = [project({ startedAt: null, attention: { ownerItems: [], coordinatorItems: null, startRequest: { waitingSince: '2026-10-04T08:00:00Z' } } })];
+    startRequest = {
+      itemId: 'start-1', kind: 'START_REQUEST', title: 'Start this project?', detailLine: '', waitingSince: '2026-10-04T08:00:00Z',
+      assignee: 'OWNER', assigneeReason: 'OWNER_ONLY',
+      startRequest: {
+        settings: { line: 'PROJECT_BRANCH', automatic: true, maxConcurrentTasks: 2, mergeCheckCommand: null },
+        why: 'P2 and P3 can run side by side.', criteriaDigest: 'sha256:abc', planDigest: 'plan', repository: null, warnings: [],
+      },
+    };
+    await mount();
+    await openSessions();
+    const start = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-start');
+    await until(() => expect(start()?.textContent).toContain('Ready to start'));
+    expect(start()!.textContent).toContain('asked ');
+    expect(start()!.querySelector('.session-project-start-suggestion')?.textContent).toBe('Project branch · Automatic on · 2 at a time');
+    const press = start()!.querySelector<HTMLButtonElement>('.session-project-start-press')!;
+    expect(press.textContent).toBe('Review and start');
+    expect(press.classList.contains('is-primary')).toBe(true);
+    // Counted nowhere: no badge on the card for a start request.
+    expect(page()!.querySelector('.session-project-page-card .session-project-merge-badge')).toBeNull();
+    await click(press, 'Review and start');
+    await until(() => expect(document.querySelector('.start-card-dialog')).not.toBeNull());
+  });
+
+  it('says the suggestion goes directly into the main branch the start card opens with', async () => {
+    projects = [project({ startedAt: null, attention: { ownerItems: [], coordinatorItems: null, startRequest: { waitingSince: '2026-10-04T08:00:00Z' } } })];
+    const asking = (settings: Record<string, unknown>) => ({
+      itemId: 'start-1', kind: 'START_REQUEST', title: 'Start this project?', detailLine: '', waitingSince: '2026-10-04T08:00:00Z',
+      assignee: 'OWNER', assigneeReason: 'OWNER_ONLY',
+      startRequest: {
+        settings: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null, ...settings },
+        why: 'One task.', criteriaDigest: 'sha256:abc', planDigest: 'plan', repository: null, warnings: [],
+      },
+    });
+    const suggestion = (): string | null | undefined =>
+      page()?.querySelector<HTMLElement>('.session-project-start-suggestion')?.textContent;
+    startRequest = asking({ upstreamRef: 'refs/heads/master' });
+    await mount();
+    await openSessions();
+    await until(() => expect(suggestion()).toBe('Directly into master · Automatic off · 1 at a time'));
+    await unmount();
+    // The owner's last choice for the repository outranks a suggestion that names none, as on the card.
+    startRequest = asking({});
+    integrationView = {
+      line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, upstreamRef: 'main', upstreamChosenAt: null,
+      lastMainBranch: { branch: 'develop', repository: 'acme/payments-api', chosenAt: '2026-10-03T08:00:00Z' },
+      integratingCount: 0, queuedCount: 0, inFlight: null,
+    };
+    await mount();
+    await openSessions();
+    await until(() => expect(suggestion()).toBe('Directly into develop · Automatic off · 1 at a time'));
+  });
+
+  it('reads no open items for a project already started, and draws no start', async () => {
+    projects = [project({ startedAt: '2026-10-02T00:00:00Z' })];
+    await mount();
+    await openSessions();
+    await settle();
+    expect(page()!.querySelector('.session-project-start')).toBeNull();
+    expect(openItemsCalls).toBe(0);
+    expect(page()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
+  });
+
+  it('carries a task landing on the project branch in a card of its own, and lists every job in flight from it', async () => {
+    const now = new Date().toISOString();
+    const listed = (over: Record<string, unknown>) => ({
+      kind: 'LAND_TASK', state: 'RUNNING', phase: 'CHECK', taskId: TASK.id, taskTitle: 'Build the package', generation: 1,
+      startedAt: now, queuedAt: now, heartbeatAt: now, runnerName: RUNNER.name, retriedBy: null, timedOut: false,
+      limitSeconds: 4200, retryable: false, ...over,
+    });
+    integrationView = {
+      line: 'PROJECT_BRANCH', ref: 'project/alpha', integratingCount: 1, queuedCount: 1,
+      inFlight: { kind: 'LAND_TASK', state: 'RUNNING', phase: 'CHECK', startedAt: now, heartbeatAt: now, taskTitle: 'Build the package' },
+      inFlightJobs: [
+        listed({ jobId: 'job-build' }),
+        listed({ jobId: 'job-merge', kind: 'LAND_PROMOTION', state: 'QUEUED', phase: null, taskId: null, taskTitle: null,
+          heartbeatAt: null, runnerName: null, limitSeconds: null }),
+      ],
+    };
+    await mount();
+    await openSessions();
+    const landing = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-landing');
+    await until(() => expect(landing()?.textContent).toContain('2 jobs'));
+    expect(landing()!.textContent).toContain('Landing');
+    expect(landing()!.querySelector('.spl-press')!.getAttribute('aria-haspopup')).toBe('dialog');
+    // Out of the progress card, which carried it as a last row until 2026-10-11
+    // (docs/mocks/project-landing-card), and ahead of the merge card in the same list.
+    const blocks = [...page()!.querySelectorAll('.session-project-page-card, .session-project-landing, .session-project-merge')];
+    expect(blocks.map((block) => block.className.split(' ')[0]))
+      .toEqual(['session-project-page-card', 'session-project-landing']);
+    const before = location;
+    await click(landing()!.querySelector('.spl-press')!, 'the landing card');
+    const list = (): HTMLElement | null => document.querySelector<HTMLElement>('.landing-jobs-dialog');
+    await until(() => expect(list()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight'));
+    expect([...list()!.querySelectorAll('.landing-jobs-row')].map((entry) => entry.getAttribute('data-job')))
+      .toEqual(['job-build', 'job-merge']);
+    expect(list()!.textContent).toContain('Build the package');
+    expect(list()!.textContent).toContain('Merge to main');
+    // The list opens over this page rather than leaving it, and outside the card, which still holds
+    // no link of its own.
+    expect(location).toBe(before);
+    expect(page()!.querySelector('.session-project-page-card a')).toBeNull();
+  });
+
+  it('opens the project from the landing line of a server that does not list its jobs', async () => {
+    const now = new Date().toISOString();
+    integrationView = {
+      line: 'PROJECT_BRANCH', ref: 'project/alpha', integratingCount: 1, queuedCount: 0,
+      inFlight: { kind: 'LAND_TASK', state: 'RUNNING', phase: 'CHECK', startedAt: now, heartbeatAt: now, taskTitle: 'Build the package' },
+    };
+    await mount();
+    await openSessions();
+    const landing = (): HTMLElement | null => page()!.querySelector<HTMLElement>('.session-project-landing');
+    await until(() => expect(landing()?.textContent).toContain('Build the package'));
+    expect(landing()!.textContent).toContain('Landing');
+    // Nothing to open: the card is read, and its press is the project page's.
+    expect(landing()!.querySelector('.spl-press')!.tagName).toBe('BUTTON');
+    expect(landing()!.querySelector('.spl-press')!.getAttribute('aria-haspopup')).toBeNull();
+    await click(landing()!.querySelector('.spl-press')!, 'the landing card');
+    await until(() => expect(location).toBe(`/projects/${PROJECT_ID}`));
+    expect(document.querySelector('.landing-jobs-dialog')).toBeNull();
+  });
+
+  it('offers Move on a phone’s swipe only for the coordinator, as its menu does', async () => {
+    mobile = true;
+    await mount();
+    await openSessions();
+    const trailing = (title: string) => [...memberRow(title)!.querySelectorAll('.session-swipe-actions.trailing button')]
+      .map((button) => button.getAttribute('aria-label'));
+    expect(trailing(COORDINATOR.title)).toEqual(['Share', 'Move', 'Delete']);
+    expect(trailing(TASK.title)).toEqual(['Share', 'Delete']);
+  });
+
+  it('opens a phone row’s menu on a held press, and its release does not open the row', async () => {
+    mobile = true;
+    await mount();
+    await openSessions();
+    const task = memberRow(TASK.title)!;
+    Object.defineProperty(task, 'getBoundingClientRect', { configurable: true, value: () => ({ width: 400, left: 0, top: 100 }) });
+    const down = new Event('touchstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(down, 'touches', { value: [{ clientX: 120, clientY: 130 }] });
+    const before = location;
+    await act(async () => task.dispatchEvent(down));
+    await until(() => expect(menuItem('Pin')).toBeTruthy());
+    const up = new Event('touchend', { bubbles: true, cancelable: true });
+    Object.defineProperty(up, 'touches', { value: [] });
+    await act(async () => task.dispatchEvent(up));
+    expect(up.defaultPrevented, 'the release must not send the click that opens the row').toBe(true);
+    expect(location).toBe(before);
+    expect(menuItem('Move')).toBeUndefined();
+    await click(menuItem('Pin'), 'Pin');
+    await until(() => expect(apiModule.pinSession).toHaveBeenCalledWith(TASK.id));
   });
 
   it('returns to the originating folder with the page back button', async () => {
@@ -699,17 +987,22 @@ describe('project sessions page', { timeout: 60_000 }, () => {
 
   it('renders an empty scoped project without falling back to the workspace list', async () => {
     rows = [LOOSE];
-    await mount(() => expect(page()?.textContent).toContain('No sessions in this project.'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
+    await mount(() => expect(page()?.querySelector('.session-project-empty')?.textContent).toBe('No sessions'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 0 sessions');
     expect(titles()).toEqual([]);
     expect(location).toContain(`?project=${PROJECT_ID}`);
   });
 
-  it('renders project read failures as an error on the same page', async () => {
+  it('renders project read failures on the same page, with the reason and a retry', async () => {
     projectReadError = true;
-    await mount(() => expect(page()?.textContent).toContain('Couldn’t load project sessions.'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
+    const empty = (): HTMLElement | null => page()?.querySelector<HTMLElement>('.session-project-empty') ?? null;
+    await mount(() => expect(empty()?.textContent).toContain('Couldn’t load sessions'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
+    expect(empty()!.textContent).toContain('project list unavailable');
     expect(titles()).toEqual([]);
     expect(location).toContain(`?project=${PROJECT_ID}`);
+    projectReadError = false;
+    await click([...empty()!.querySelectorAll('button')].find((button) => button.textContent === 'Retry'), 'Retry');
+    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
   });
 
   it('keeps a completed member in the project page and changes its row actions immediately', async () => {
@@ -743,7 +1036,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(new Set(projectQueryCalls().map((params) => params.get('view')))).toEqual(new Set(['open', 'completed']));
   });
 
-  it.each(['open', 'completed'] as const)('lists and opens the opposite-view coordinator from the %s page menu', async (view) => {
+  it.each(['open', 'completed'] as const)('lists and opens the opposite-view coordinator from its row on the %s page', async (view) => {
     const completed = view === 'completed';
     rows = [LOOSE, { ...TASK, lifecycleState: completed ? 'COMPLETED' : 'OPEN' }];
     remoteRows = [{ ...COORDINATOR, lifecycleState: completed ? 'OPEN' : 'COMPLETED', workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } }];
@@ -751,9 +1044,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${LOOSE.id}${search}`);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     expect(page()?.querySelector('.session-project-coordinator .session-title')?.textContent).toBe(COORDINATOR.title);
-    await click(page()?.querySelector('.session-project-page-header .session-kebab'), 'the page menu');
-    await until(() => expect(menuItem('Open Coordinator')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
-    await click(menuItem('Open Coordinator'), 'Open Coordinator');
+    await click(page()?.querySelector('.session-project-coordinator .session-row'), 'the coordinator row');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}${search}`));
     expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
@@ -826,5 +1117,154 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
     await settle();
     expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 2 : 1));
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
+  });
+});
+
+/**
+ * The merge into main lives on this page (owner decision 2026-10-06): its card under the progress
+ * strip while a candidate asks, merges or is blocked, and every merge already made as a row on the
+ * page's timeline, at its own instant.
+ */
+describe('the merge into main on the project sessions page', { timeout: 60_000 }, () => {
+  const candidate = (state: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+    promotionId: 'promo-1', state, sourceKind: 'PROJECT_BRANCH', sourceRef: 'refs/heads/project/alpha',
+    sourceSha: '5e5bfca23aa1', upstreamRef: 'refs/heads/main', commitsAhead: 5, filesChanged: 10,
+    tasks: [{ taskId: 't1', title: 'Fix the runner gate' }, { taskId: 't2', title: 'Turn the session log off' }],
+    taskIds: ['t1', 't2'],
+    checks: [{ name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode: 0, timedOut: false, durationMs: 60_000 }],
+    conflicts: [], upstreamShaChecked: 'abc1234', landsTreeSha: 'def5678', landsAs: 'MERGE_COMMIT',
+    askedAt: '2026-10-04T08:30:00Z', upstream: { syncedAt: null, conflicts: false }, recheckedAt: null,
+    recheck: null, merged: null, decidedAt: null, ...extra,
+  });
+  const card = (): HTMLElement | null => page()?.querySelector<HTMLElement>('.session-project-merge') ?? null;
+
+  it('draws the asking candidate under the progress card, and presses its own door from there', async () => {
+    currentPromotion = candidate('READY');
+    projectDetails = { id: PROJECT_ID, title: 'Project Alpha', acceptanceCriteriaItems: [
+      { ordinal: 1, satisfied: true }, { ordinal: 2, satisfied: false }, { ordinal: 3, satisfied: false },
+    ] };
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('asking'));
+    const progress = page()!.querySelector('.session-project-page-progress')!;
+    expect(progress.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the merge card is not under the progress strip').toBeTruthy();
+    const text = card()!.textContent ?? '';
+    for (const part of ['Merge into main?', 'Needs you', 'project/alpha · 5 commits ahead of main', '2 tasks · 10 files',
+      'Fix the runner gate', 'Turn the session log off', '✓ Checks passed · no conflicts', 'Details ›']) {
+      expect(text).toContain(part);
+    }
+    expect(card()!.closest('.workspace-sessions'), 'the card scrolls with the list').not.toBeNull();
+    expect(card()!.querySelector('.session-project-merge-tile svg')).not.toBeNull();
+    expect(card()!.querySelector('.session-project-merge-rule')).not.toBeNull();
+    await until(() => expect(card()!.querySelector('.session-project-merge-criteria')?.textContent)
+      .toBe('1 of 3 met on this branch — merging does not close the project'));
+    // The page's card claims no chord: the keys stay with the card the reader opened.
+    expect(card()!.querySelector('.approval-kbd')).toBeNull();
+
+    const merge = [...card()!.querySelectorAll('button')].find((button) => button.textContent === 'Merge to main');
+    await click(merge, 'Merge to main');
+    await until(() => expect(vi.mocked(apiModule.api)).toHaveBeenCalledWith(
+      `/projects/${encodeURIComponent(PROJECT_ID)}/promotions/promo-1/confirm`,
+      { method: 'POST', body: { sourceSha: '5e5bfca23aa1' } },
+    ));
+  });
+
+  it('says a blocked candidate is the coordinator’s, and offers the way to it', async () => {
+    currentPromotion = candidate('BLOCKED', { conflicts: ['src/a.go', 'src/b.go'], decidedAt: '2026-10-04T08:40:00Z' });
+    // The exception its check opened, which the coordinator holds.
+    withCoordinatorItems = [{
+      itemId: 'item-conflict', kind: 'INTEGRATION_CONFLICT', title: 'Merge conflict', detailLine: '',
+      assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', waitingSince: '2026-10-04T08:40:00Z',
+      escalateAt: null, escalatedAt: null, taskId: null, sessionId: null, promotionId: 'promo-1',
+      fuseEpisodeId: null, actions: [], delivery: { state: 'DELIVERED', sessionId: COORDINATOR.id, at: '2026-10-04T08:40:00Z' },
+    }];
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('blocked'));
+    const text = card()!.textContent ?? '';
+    expect(text).toContain('Can’t merge into main yet');
+    expect(text).toContain('2 files conflict with main: src/a.go, src/b.go');
+    expect(text).toContain('Coordinator is resolving it');
+    // The way to it keeps this page in the column, as the coordinator's row does.
+    await click([...card()!.querySelectorAll('button')].find((button) => button.textContent === 'Open coordinator ›'), 'Open coordinator');
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    expect(page()).not.toBeNull();
+  });
+
+  /** 2026-10-09: the coordinator had closed the exception (the work was already on main), and the
+   *  card still said "Coordinator is resolving it". Read with nothing holding it, it names nobody. */
+  it('names nobody once the project’s items are read and none holds the blocked candidate', async () => {
+    currentPromotion = candidate('BLOCKED', { conflicts: ['src/a.go'], decidedAt: '2026-10-04T08:40:00Z' });
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('blocked'));
+    await until(() => expect(openItemsCalls).toBeGreaterThan(0));
+    await until(() => expect(card()!.textContent ?? '').not.toContain('Coordinator is resolving it'));
+    expect(card()!.querySelector('.promotion-spin')).toBeNull();
+    const text = card()!.textContent ?? '';
+    expect(text).toContain('Can’t merge into main yet');
+    expect(text).toContain('Open coordinator ›');
+  });
+
+  it('lists the jobs in flight from the merge check’s landing row', async () => {
+    const now = new Date().toISOString();
+    integrationView = {
+      line: 'PROJECT_BRANCH', ref: 'project/alpha', integratingCount: 1, queuedCount: 0,
+      inFlight: { kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK', startedAt: now, heartbeatAt: now, taskTitle: null },
+      inFlightJobs: [{
+        jobId: 'job-check', kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK', taskId: null, taskTitle: null,
+        generation: 1, startedAt: now, queuedAt: now, heartbeatAt: now, runnerName: RUNNER.name, retriedBy: null,
+        timedOut: false, limitSeconds: 4200, retryable: false,
+      }],
+    };
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('checking'));
+    // The job is the merge card's, so no landing card of its own is drawn.
+    expect(page()!.querySelector('.session-project-landing')).toBeNull();
+    // The row is the merged line's anatomy (owner decision 2026-10-11): the head, the whole row
+    // the press that opens the jobs, and no chevron — the merged line is pressed the same way.
+    expect(card()!.querySelector('.landing-head.is-running')).not.toBeNull();
+    expect(card()!.textContent ?? '').toContain('checking');
+    expect(card()!.querySelector('.landing-head-right')?.textContent).toMatch(/^\d+m \d+s$/);
+    const press = card()!.querySelector<HTMLButtonElement>('button.landing-head-press');
+    expect(press?.textContent).toContain('Merge check');
+    await click(press, 'the merge check’s landing row');
+    await until(() => expect(document.querySelector('.landing-jobs-dialog .orbit-overlay-title')?.textContent)
+      .toBe('1 job in flight'));
+    expect(document.querySelector('.landing-jobs-row[data-job="job-check"]')?.textContent).toContain('checking');
+  });
+
+  it('draws nothing about main while nothing is on offer', async () => {
+    await mount();
+    await openSessions();
+    await settle();
+    expect(card()).toBeNull();
+    expect(page()!.querySelector('.session-project-merge-row')).toBeNull();
+  });
+
+  it('draws each merge already made on the timeline at its own instant, and opens its receipt', async () => {
+    merges = [candidate('MERGED', {
+      promotionId: 'promo-0',
+      merged: { sha: '8d5a868e90df', byUserId: 'user-1', at: '2026-10-04T09:00:00Z', automatic: false, revert: null },
+    })];
+    await mount();
+    await openSessions();
+    const mergeRow = (): HTMLElement | null => page()?.querySelector<HTMLElement>('.session-project-merge-row') ?? null;
+    await until(() => expect(mergeRow()).not.toBeNull());
+    expect(mergeRow()!.textContent).toContain('Merged into main');
+    expect(mergeRow()!.textContent).toContain('8d5a868 · 2 tasks · by you');
+    // Newer than the task's last turn, so it leads it, in the same section.
+    const task = memberRow('Build the package')!;
+    expect(mergeRow()!.compareDocumentPosition(task) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mergeRow()!.closest('section')).toBe(task.closest('section'));
+    expect(card(), 'a merge already made drew the card').toBeNull();
+
+    await click(mergeRow(), 'the merge row');
+    await until(() => expect(document.querySelector('.review-card-dialog .project-promotion-receipt')).not.toBeNull());
+    const receipt = document.querySelector('.review-card-dialog .project-promotion-receipt')!;
+    expect(receipt.textContent).toContain('8d5a868');
+    expect(receipt.textContent).toContain('Fix the runner gate');
   });
 });

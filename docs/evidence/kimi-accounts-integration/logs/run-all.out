@@ -1,0 +1,49 @@
+stopped runner-hpc-kimi (2864743)
+stopped runner-old-kimi (2862025)
+stopped web (2810184)
+stopped main-web (2810412)
+stopped api (2810055)
+stopped fake-kimi (2809857)
+removed kimi-accounts-stack-pg
+checkout /root/.orbit/worktrees/d7dec327-328c-5e56-b824-35fa98f0e2ed at 6c10d1ed910ef35f6e053702fc5484229c8b2011 (version 0.1.225); dirty files: 1
+apiserver dist built
+0.1.225
+0.1.225
+main web: 721e48275dcfac150c6944e0d5fae399cf6d83e8
+
+All migrations have been successfully applied.
+fake kimi server pid 2874890 on 127.0.0.1:18741
+apiserver pid 2874938 on 127.0.0.1:3741
+web pid 2874978 on http://127.0.0.1:4741
+main-web pid 2875101 on http://127.0.0.1:4742
+→ POST /api/auth/bootstrap {"email":"owner@kimi-int.test","name":"Kimi Int Owner","password":"<redacted>"} ← 201
+→ POST /api/runners/enrollment-tokens {"label":"hpc-kimi"} ← 201
+✓ registered runner "hpc-kimi" (01a11c81-0a82-700a-963d-c61f4337afee).
+{"ok":true,"user":"default@kimi.ai","region":"global"}
+✓ Logged in to Kimi Code on kimi.ai.
+runner hpc-kimi pid 2875296 (orbit, ORBIT_HOME=/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home)
+hpc-kimi engines[kimi]: {"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","accounts":[{"id":"default","home":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code","auth":"yes","kimiRegion":"global"}],"kimiRegion":"global"}
+→ POST /api/workspaces {"name":"hpc-kimi-ws","description":"Sandbox repo on hpc-kimi (fake kimi only)","runnerId":"34cSsjpxU1AVt4w2wGiis","workDir":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/work","enableWorktree":false,"defaultMergeTarget":"main"} ← 201
+→ POST /api/runners/enrollment-tokens {"label":"old-kimi"} ← 201
+✓ registered runner "old-kimi" (01a11c81-8536-7699-b98d-ac262df65cc5).
+{"ok":true,"user":"old-default@kimi.com","region":"mainland-cn"}
+✓ Logged in to Kimi Code on kimi.com.
+runner old-kimi pid 2876889 (orbit-nocap, ORBIT_HOME=/var/tmp/kimi-accounts-stack/runners/old-kimi/home)
+old-kimi engines[kimi]: {"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","accounts":[{"id":"default","home":"/var/tmp/kimi-accounts-stack/runners/old-kimi/userhome/.kimi-code","auth":"yes","kimiRegion":"mainland-cn"}],"kimiRegion":"mainland-cn"}
+→ POST /api/workspaces {"name":"old-kimi-ws","description":"Sandbox repo on old-kimi (fake kimi only)","runnerId":"34cStXE0R8wbtmXA7xgAP","workDir":"/var/tmp/kimi-accounts-stack/runners/old-kimi/work","enableWorktree":false,"defaultMergeTarget":"main"} ← 201
+seeded {"owner":{"id":"34cSsjjceSfJmYxPHcELD","email":"owner@kimi-int.test"},"runners":{"hpc-kimi":{"id":"34cSsjpxU1AVt4w2wGiis","bin":"orbit","defaultRegion":"global","defaultUser":"default@kimi.ai"},"old-kimi":{"id":"34cStXE0R8wbtmXA7xgAP","bin":"orbit-nocap","defaultRegion":"mainland-cn","defaultUser":"old-default@kimi.com"}},"workspaces":{"hpc-kimi":{"id":"34cStX9EAFu0Q44FlkkCi","name":"hpc-kimi-ws"},"old-kimi":{"id":"34cSuKW0Pb0IDlfFqgpqO","name":"old-kimi-ws"}}}
+SCENARIO 1 PASS
+SCENARIO 2 PASS
+SCENARIO 3 PASS
+SCENARIO 4 PASS
+SCENARIO 5 PASS
+SCENARIO 6 PASS
+stack: /var/tmp/kimi-accounts-stack  checkout: /root/.orbit/worktrees/d7dec327-328c-5e56-b824-35fa98f0e2ed (6c10d1ed9)
+postgres: kimi-accounts-stack-pg Up 8 minutes 127.0.0.1:5741->5432/tcp
+api: pid 2874938
+fake-kimi: pid 2874890
+main-web: pid 2875101
+runner-hpc-kimi: pid 2919024
+runner-old-kimi: pid 2915719
+web: pid 2874978
+GET /api/health: {"status":"ok"}

@@ -28,6 +28,11 @@
  *   (9) the backfill: each of the three ways a project could start before 0331 gives it a start
  *       time, the earliest one it has, and a project with none of them stays unstarted.
  *   (10) a project with no repository can be started on main, and not on a branch it cannot have.
+ *   (11) Automatic needs a coordinator (the owner, 2026-10-07): a start with Automatic on opens the
+ *       project's first one where its tasks run, and says so; with Automatic off it opens none; and
+ *       a project with nowhere to open one — its tasks on a disabled workspace, or on none — is
+ *       refused 409 START_COORDINATOR_UNAVAILABLE before the start writes anything. A project that
+ *       has a coordinator is answered with it, nothing opened.
  *
  * Every fact is produced the way the product produces it: criteria through `ProjectsService.update`,
  * the start through the real controller, pipe and interceptor where the door itself is the claim,
@@ -909,5 +914,133 @@ test('the owner starts a project in one write, once', {
     const after = await world(bare.id, bare.sessionId);
     assert.ok(after.project.started_at);
     assert.deepEqual(after.bindings, [], 'nothing to bind, so nothing is');
+    const kept = onMain.json.coordinator as { sessionId: string; created: boolean };
+    assert.equal(kept.sessionId, uuidToBase62(bare.sessionId),
+      'a project that has a coordinator is answered with it');
+    assert.equal(kept.created, false, 'and nothing is opened');
+  });
+
+  // ═══ (11) Automatic needs a coordinator ════════════════════════════════════════════════════════
+
+  /** A project nobody planned from a conversation: no coordinator, one task — on a workspace that
+   *  is on or switched off, or (`assigned: false`) on no workspace at all. */
+  async function uncoordinated(label: string, workspace: { enabled: boolean; assigned: boolean }) {
+    const runnerId = randomUUID();
+    const workspaceId = randomUUID();
+    const id = randomUUID();
+    await prisma.runner.create({
+      data: {
+        id: runnerId,
+        ownerId,
+        name: `${label}-runner`,
+        tokenHash: `hash-${runnerId}`,
+        status: RunnerStatus.ONLINE,
+        capabilities: [],
+        capabilitiesReportedAt: new Date(),
+        lastHeartbeatAt: new Date(),
+      },
+    });
+    await prisma.workspace.create({
+      data: {
+        id: workspaceId,
+        ownerId,
+        runnerId,
+        name: `${label}-workspace`,
+        enabled: workspace.enabled,
+        workDir: `/srv/${label}`,
+        repoUrl: REPO,
+      },
+    });
+    await prisma.project.create({ data: { id, ownerId, title: `${label} 的项目` } });
+    await prisma.projectRuntime.upsert({ where: { projectId: id }, create: { projectId: id }, update: {} });
+    await state(id, [FIRST, SECOND]);
+    await prisma.task.create({
+      data: {
+        id: randomUUID(),
+        ownerId,
+        projectId: id,
+        title: FIRST_TASK,
+        creatorType: CreatorType.USER,
+        creatorId: ownerId,
+        assigneeId: workspace.assigned ? workspaceId : null,
+        status: TaskStatus.OPEN,
+        completionCriterion: 'EXECUTABLE',
+        acceptanceCommand: 'true',
+        acceptanceExpectedExitCode: 0,
+      },
+    });
+    return { id, workspaceId };
+  }
+
+  async function coordinatorOf(projectId: string) {
+    const { rows: [row] } = await sql.query<{
+      coordinator_session_id: string | null;
+      coordinator_workspace_id: string | null;
+      started_at: string | null;
+    }>(
+      `SELECT "coordinator_session_id", "coordinator_workspace_id", "started_at"::text AS "started_at"
+         FROM "project" WHERE "id" = $1::uuid`,
+      [projectId],
+    );
+    return row;
+  }
+
+  const mainStart = (digest: string, automatic: boolean): StartProjectRequestBody => ({
+    criteriaDigest: digest,
+    line: 'MAIN',
+    automatic,
+    maxConcurrentTasks: 2,
+    mergeCheckCommand: null,
+  });
+
+  await t.test('(11) a start with Automatic on opens the project’s first coordinator where its tasks run', async () => {
+    const project = await uncoordinated('opens-a-coordinator', { enabled: true, assigned: true });
+    const started = await press(project.id, mainStart(await seal(project.id), true));
+    assert.equal(started.status, 201, JSON.stringify(started.json));
+    const after = await coordinatorOf(project.id);
+    assert.ok(after.started_at, 'the project started');
+    assert.ok(after.coordinator_session_id, 'and has a coordinator now');
+    assert.equal(after.coordinator_workspace_id, project.workspaceId, 'opened where its tasks run');
+    const opened = started.json.coordinator as { sessionId: string; created: boolean };
+    assert.equal(opened.sessionId, uuidToBase62(after.coordinator_session_id!), 'the answer names it');
+    assert.equal(opened.created, true);
+    const { rows: [session] } = await sql.query<{ workspace_id: string }>(
+      `SELECT "workspace_id" FROM "session" WHERE "id" = $1::uuid`,
+      [after.coordinator_session_id],
+    );
+    assert.equal(session.workspace_id, project.workspaceId);
+  });
+
+  await t.test('(11) with Automatic off, a start opens no coordinator', async () => {
+    const project = await uncoordinated('opens-none', { enabled: true, assigned: true });
+    const started = await press(project.id, mainStart(await seal(project.id), false));
+    assert.equal(started.status, 201, JSON.stringify(started.json));
+    assert.equal(started.json.coordinator, null);
+    const after = await coordinatorOf(project.id);
+    assert.ok(after.started_at);
+    assert.equal(after.coordinator_session_id, null, 'the owner runs it: nobody was opened');
+  });
+
+  await t.test('(11) nowhere to open a coordinator refuses the start before it writes anything', async () => {
+    for (const [label, workspace, says] of [
+      ['disabled-landing', { enabled: false, assigned: true }, /disabled, deleted or not on a runner/],
+      ['no-landing', { enabled: true, assigned: false }, /none of its tasks is assigned to a workspace/],
+    ] as const) {
+      const project = await uncoordinated(label, workspace);
+      const digest = await seal(project.id);
+      const refusal = await press(project.id, mainStart(digest, true));
+      assert.equal(refusal.status, 409, `${label}: ${JSON.stringify(refusal.json)}`);
+      assert.equal(refusal.json.code, 'START_COORDINATOR_UNAVAILABLE');
+      assert.match(String(refusal.json.message), says);
+      const after = await coordinatorOf(project.id);
+      assert.equal(after.started_at, null, `${label}: a refused start started the project`);
+      assert.equal(after.coordinator_session_id, null);
+      assert.deepEqual((await world(project.id, null)).confirmations, [],
+        `${label}: a refused start confirmed the criteria`);
+
+      // Automatic off needs no coordinator, so the same project starts.
+      const off = await press(project.id, mainStart(digest, false));
+      assert.equal(off.status, 201, `${label}: ${JSON.stringify(off.json)}`);
+    }
   });
 });

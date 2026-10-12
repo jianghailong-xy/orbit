@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && python3 docs/evidence/base-ui-migration/p3.2/compare_runs.py /var/tmp/p2kw-c2604b/pilot-before-shots /var/tmp/p2kw-c2604b/pilot-after-shots /var/tmp/p2kw-c2604b/pilot-before/report.json /var/tmp/p2kw-c2604b/pilot-after/report.json docs/evidence/base-ui-migration/p2-keyboard-window/fix-pilot-compare.json",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_844913654cb9",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T04:42:00.625973+00:00",
+ "exitCode": 0,
+ "outputSha256": "725542fd5f9e3be24166c6176e45567613bd71e5b1722d5d96f38230578a6bac",
+ "outputBytes": 101,
+ "note": "P3.2's comparison tool (unchanged) on fix-pilot-before vs fix-pilot-after: 256 screenshots, 222 byte-identical; 64 traces, 53 identical; 0 of 256 captures with computed-style differences. Classified in fix-pilot-summary.json against the two trees' own noise runs."
+}

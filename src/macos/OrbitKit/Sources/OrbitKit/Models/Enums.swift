@@ -160,6 +160,12 @@ public enum SessionWaitingKind: String, Codable, Sendable {
     case ownerConfirmation = "OWNER_CONFIRMATION"
     case ownerItem = "OWNER_ITEM"
     case startRequest = "START_REQUEST"
+    /// An OPEN project whose coordinator asked its owner to record it done: the row says "Ready to
+    /// close", over the "Is this project done?" card.
+    case doneRequest = "DONE_REQUEST"
+    /// A project that looks finished and that its coordinator did not ask about within the
+    /// project's escalation window: the row says "Record as done…".
+    case recordAsDone = "RECORD_AS_DONE"
     /// Forward-compatibility floor: no named kind, which is also what an older control plane sends.
     case unknown = "UNKNOWN"
 
@@ -273,6 +279,11 @@ public enum RunEventType: String, Codable, Sendable {
     /// so the turn in progress when it does is often a different one.
     case userDelivery = "user_delivery"
     case turnEnd = "turn_end"
+    /// The engine's guess at the person's next message, filed after a turn ended against that turn
+    /// (`{ text, source }`; docs/prompt-suggestions-design.md). Durable, never a transcript row: the
+    /// reducer keeps it as `TranscriptState.promptSuggestion` while it is still the newest of
+    /// `user` / `turn_end` / itself, and the composer offers it.
+    case promptSuggestion = "prompt_suggestion"
     case interrupt
     case approvalRequest = "approval_request"
     case approvalResolved = "approval_resolved"

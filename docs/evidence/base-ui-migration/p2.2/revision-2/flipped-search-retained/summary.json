@@ -1,0 +1,97 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T09:01:12.934Z",
+    "duration": 13514.871,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2106
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+          "sha256": "0c885d2cb0ece940228f621748169d9cd49e9b32273aabc7f8741200b484ede6"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2012
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+          "sha256": "a2ccdc1ee7f1addafdc0dde6e29459d4de5e97480dbe7ed25b63c8933bbaf435"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2131
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+          "sha256": "05067d9c14f6bcecb9b31bb74b267bfadfca16eed9c5d0f53c42f34a67b52f32"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2593
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-3--motion.json",
+          "sha256": "c16654b1901f712faa95c6e972fb06ced3d4b42760f09b7739b88477a18f906d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2390
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-search--repeat-4--motion.json",
+          "sha256": "3e8584bdc03534f7e1ab6b03e06327abc96a3605668db32e42290caa624266d0"
+        }
+      ]
+    }
+  ]
+}

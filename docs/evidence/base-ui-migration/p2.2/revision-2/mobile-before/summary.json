@@ -1,0 +1,45 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T08:31:57.819Z",
+    "duration": 5088.82,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "duration": 3925
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--antd-attachment-open.png",
+          "sha256": "52fe84ea5fbbb1a8c4b6f931c7245ca2001cc703721630180d07785b4aa7442e"
+        },
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png",
+          "sha256": "f98a9eccc8899d79f8f349af0810829e1ebc3a76fbecd5067efe24fa766b1694"
+        },
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "9b2dea6ca492380c95f6a3b4f8cc5058ec2d721d9a388b04cf69cd589f2de570"
+        },
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--menu-glyphs.json",
+          "sha256": "508f9ce137711ae010c25e28d770c5c89470db4b04bc4b99a3910b90d98a953d"
+        },
+        {
+          "file": "chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--error-context.md",
+          "sha256": "111c4b2649f9985b9fe940eaf7de08c3122e444ce8974023dbf08a8fb3d2d8fb"
+        }
+      ]
+    }
+  ]
+}

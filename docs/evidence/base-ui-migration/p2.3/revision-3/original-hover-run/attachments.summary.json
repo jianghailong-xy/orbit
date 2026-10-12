@@ -1,0 +1,231 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.3/revision-3/original-hover-run/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "58e371fcc622683f713d6feab43fd8d6e7e5bdb9319872d905543eccf80d9775",
+   "fields": {
+    "elapsedMs": 6505,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "7d5dde5208df2b3e62b998d553a418574d820d4daab895ececfe9e02e75a68b0",
+   "fields": {
+    "elapsedMs": 6308,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "chromium-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "fbee0b8b2413f4ef6e56b8d64327c5ca225bc44933ec523e4b5879cb8ad23a4a",
+   "fields": {
+    "elapsedMs": 6505,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "73cd7d6d06e66bddf0a53f98ad9a3ee99c84f4102e497794eb6e767a22c596f6",
+   "fields": {
+    "elapsedMs": 6315,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "91e405ba204faff00712bc6bd08c8491e3b2c0c941fbe2175be691725f13c0e9",
+   "fields": {
+    "elapsedMs": 6507,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "cb24269019ab17a447d8523c73de1cd0271a4778874ba86fab69d1eaa7f7c75d",
+   "fields": {
+    "elapsedMs": 6326,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "chromium-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "c5a7412da90974519aef1f482ecb1e8eee25dc9238d334bacce598428be80e76",
+   "fields": {
+    "elapsedMs": 6503,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "546f223d78b6c204730a77d2eedb4db87a9f8e1b216165ac6c39f9bf44ff96dd",
+   "fields": {
+    "elapsedMs": 6338,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "e7d941579c1a4c2c0b001c9fcdb632f28c24c2698bc0aff4f7a1491d4f3d86c8",
+   "fields": {
+    "elapsedMs": 6506,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "7aee6ee90a4eb24a0232aa92eaa6573f8747c31da857f519ac543bfe77c10609",
+   "fields": {
+    "elapsedMs": 6322,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-dark-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "9ad9cefcad6e5152fb0cd4702d138d517e87906f4069f551eadaf2c9107fac82",
+   "fields": {
+    "elapsedMs": 6507,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "3cc856ed1e6af72af204f0f5aaad5baf18cf7b1a2e66ad79b4ffe1c79a2ab1c9",
+   "fields": {
+    "elapsedMs": 6321,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "aab873387f11713cd374a27506d9a8b703ec48e7b7d6062e69d1ece1e94ee554",
+   "fields": {
+    "elapsedMs": 6512,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "27d69f40ff94998c6a08e216106d682a0738b3ac94e0ad507c053b7d83ba87cf",
+   "fields": {
+    "elapsedMs": 6319,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "2bcec70b225f953b4a73faa3efe146f24234b8403d395fe53f11f666acd9eedf",
+   "fields": {
+    "elapsedMs": 6506,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "1cb05ad79f4a53b85ee006c34a5ca311512c70f1de551eb873251551870e75a7",
+   "fields": {
+    "elapsedMs": 6318,
+    "remaining": 0
+   }
+  }
+ ]
+}

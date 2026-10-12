@@ -1,0 +1,56 @@
+{
+  "testedCommit": "baec95275814fdeb6a6530fefeb533338a426787",
+  "webTree": "1ad9ad5307c82637afb766d939eb50a2e1296d68",
+  "sourceInputsUnchanged": true,
+  "checks": [
+    "upstream-build-test",
+    "fixture-types",
+    "choices-entry",
+    "notification-combinations",
+    "production-notifications",
+    "list-choices",
+    "list-toasts",
+    "list-p0"
+  ],
+  "runs": {
+    "choices-entry": {
+      "stats": {
+        "startTime": "2026-10-04T13:01:42.533Z",
+        "duration": 70149.36,
+        "expected": 32,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "attachmentsVerified": 88,
+      "singleAttempt": true,
+      "baselineEnvironmentMatches": true
+    },
+    "notification-combinations": {
+      "stats": {
+        "startTime": "2026-10-04T13:03:12.966Z",
+        "duration": 150343.904,
+        "expected": 88,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "attachmentsVerified": 232,
+      "singleAttempt": true,
+      "baselineEnvironmentMatches": true
+    },
+    "production-notifications": {
+      "stats": {
+        "startTime": "2026-10-04T13:06:14.478Z",
+        "duration": 27209.344999999998,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "attachmentsVerified": 24,
+      "singleAttempt": true,
+      "baselineEnvironmentMatches": true
+    }
+  }
+}

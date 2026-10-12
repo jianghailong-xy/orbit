@@ -1,0 +1,214 @@
+{
+ "audit": {
+  "commit": "1886feef3e8c6d288fd54977fc8870b3bce6cec1",
+  "scopeHash": "207adee641ac6b35cdd3e7c29019290ac801f5c611bfee7a4d595fc7b0388168"
+ },
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json",
+  "2026-10-09.json",
+  "2026-10-09b.json",
+  "2026-10-09c.json",
+  "2026-10-10.json",
+  "2026-10-10b.json"
+ ],
+ "routes": [
+  {
+   "route": "/s/:token (task, project, wiki or session link)",
+   "entry": "pages/SharedLinkPage.tsx",
+   "modules": 197,
+   "antd": []
+  },
+  {
+   "route": "/s/:token/t/:taskId",
+   "entry": "pages/SharedLinkPage.tsx",
+   "modules": 197,
+   "antd": []
+  },
+  {
+   "route": "/s/:token/d/:slug",
+   "entry": "pages/SharedWikiPage.tsx",
+   "modules": 120,
+   "antd": []
+  },
+  {
+   "route": "/s/:token/c/:sessionId (a shared conversation)",
+   "entry": "pages/SharedSessionPage.tsx",
+   "modules": 109,
+   "antd": []
+  },
+  {
+   "route": "/login",
+   "entry": "pages/LoginPage.tsx",
+   "modules": 7,
+   "antd": []
+  },
+  {
+   "route": "/setup",
+   "entry": "pages/SetupPage.tsx",
+   "modules": 21,
+   "antd": []
+  },
+  {
+   "route": "/enroll",
+   "entry": "pages/EnrollPage.tsx",
+   "modules": 16,
+   "antd": []
+  },
+  {
+   "route": "/cli-login",
+   "entry": "pages/CliLoginPage.tsx",
+   "modules": 17,
+   "antd": []
+  },
+  {
+   "route": "(the signed-in shell: sidebar and session search)",
+   "entry": "components/AppShell.tsx",
+   "modules": 230,
+   "antd": [
+    {
+     "module": "src/web/src/components/WorkspaceView.tsx",
+     "antd": [
+      "App",
+      "Button",
+      "Dropdown",
+      "Image",
+      "Input",
+      "MenuProps",
+      "Popover",
+      "Select",
+      "Spin",
+      "Tooltip"
+     ],
+     "owner": "P5.3",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/ (the default landing)",
+   "entry": "App.tsx#DefaultLanding",
+   "modules": 12,
+   "antd": []
+  },
+  {
+   "route": "/tasks, /tasks/:id, /lists/:key",
+   "entry": "pages/TaskRoute.tsx",
+   "modules": 156,
+   "antd": []
+  },
+  {
+   "route": "/settings/profile",
+   "entry": "pages/ProfilePage.tsx",
+   "modules": 29,
+   "antd": []
+  },
+  {
+   "route": "/settings",
+   "entry": "pages/SettingsPage.tsx",
+   "modules": 25,
+   "antd": []
+  },
+  {
+   "route": "/settings/shared-links",
+   "entry": "pages/SharedLinksPage.tsx",
+   "modules": 29,
+   "antd": []
+  },
+  {
+   "route": "/settings/access-tokens",
+   "entry": "pages/AccessTokensPage.tsx",
+   "modules": 35,
+   "antd": []
+  },
+  {
+   "route": "/admin",
+   "entry": "pages/AdminUsersPage.tsx",
+   "modules": 31,
+   "antd": []
+  },
+  {
+   "route": "/admin/sign-in",
+   "entry": "pages/AdminSignInPage.tsx",
+   "modules": 18,
+   "antd": []
+  },
+  {
+   "route": "/infrastructure",
+   "entry": "pages/InfrastructurePage.tsx",
+   "modules": 70,
+   "antd": []
+  },
+  {
+   "route": "/providers/new, /providers/new/:slug, /providers/:id",
+   "entry": "pages/ProviderConnectPage.tsx",
+   "modules": 39,
+   "antd": []
+  },
+  {
+   "route": "/providers/pools/:id",
+   "entry": "pages/ProviderPoolPage.tsx",
+   "modules": 55,
+   "antd": []
+  },
+  {
+   "route": "/following",
+   "entry": "pages/FollowingPage.tsx",
+   "modules": 23,
+   "antd": []
+  },
+  {
+   "route": "/projects, /projects/:id, /projects/:id/tasks/:taskId",
+   "entry": "pages/ProjectsPage.tsx",
+   "modules": 178,
+   "antd": []
+  },
+  {
+   "route": "/wiki and its routes",
+   "entry": "pages/WikiPage.tsx",
+   "modules": 260,
+   "antd": [
+    {
+     "module": "src/web/src/components/WorkspaceView.tsx",
+     "antd": [
+      "App",
+      "Button",
+      "Dropdown",
+      "Image",
+      "Input",
+      "MenuProps",
+      "Popover",
+      "Select",
+      "Spin",
+      "Tooltip"
+     ],
+     "owner": "P5.3",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/WorkspaceView.tsx {{ statusLabel }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/runners/register",
+   "entry": "components/RunnerRegisterGuide.tsx",
+   "modules": 7,
+   "antd": []
+  },
+  {
+   "route": "/runners/:id",
+   "entry": "pages/RunnerDetailPage.tsx",
+   "modules": 62,
+   "antd": []
+  }
+ ]
+}

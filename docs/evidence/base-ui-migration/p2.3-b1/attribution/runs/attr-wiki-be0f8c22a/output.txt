@@ -1,0 +1,363 @@
+{"app": "/var/tmp/p23b1/trees/m-be0f8c22a", "commit": "be0f8c22a5891c98806eee135c132dbea138c698", "dirty": "", "runner": "77233e226b4e8a96d38517a4a68329052d5f04d6", "started": "2026-10-07T00:44:40Z", "args": "-g wiki$"}
+[WebServer] (node:2877674) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 8 tests using 1 worker
+
+(node:2877853) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (16.2s)
+(node:2880370) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.8s)
+(node:2882642) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (15.7s)
+(node:2884441) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  4 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.6s)
+(node:2886276) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  5 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (16.1s)
+(node:2888024) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  6 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.9s)
+(node:2890316) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  7 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (16.0s)
+(node:2892757) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  8 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (15.7s)
+
+
+  1) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p23b1/trees/tip/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p23b1/trees/tip/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-light-desktop/attachments/computed-styles-and-timings-8d65e7ab90165c6f72cfc29478ea43a42a453ab9.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p23b1/trees/tip/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p23b1/trees/tip/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-light-phone/attachments/computed-styles-and-timings-cd7c6f6cb0211c41f035c80daea547285dffc794.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p23b1/trees/tip/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p23b1/trees/tip/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-dark-desktop/attachments/computed-styles-and-timings-b16e66b541c9fd961a5cf16337118982dd530a57.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p23b1/trees/tip/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p23b1/trees/tip/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-dark-phone/attachments/computed-styles-and-timings-928de3ecd16734369e7a1f4d65e5da7fa547e5fe.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p23b1/trees/tip/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p23b1/trees/tip/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-light-desktop/attachments/computed-styles-and-timings-182d000398f72d9c255e5b09b7a2655fb7b5345f.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p23b1/trees/tip/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p23b1/trees/tip/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-light-phone/attachments/computed-styles-and-timings-d8a8005704dc5241651705e6a40cfa4dbc9b8580.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p23b1/trees/tip/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p23b1/trees/tip/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-dark-desktop/attachments/computed-styles-and-timings-c46e0e505b125ff2528fd04ad6e66e0efea89e17.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-card').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-card').first() with timeout 15000ms
+      - waiting for locator('.wk-card').first()
+
+
+       at harness.mjs:27
+
+      25 |       for (const selector of Object.values(selectors)) {
+      26 |         const locator = typeof selector === 'string' ? page.locator(selector).first() : selector;
+    > 27 |         await expect(locator).toBeVisible();
+         |                               ^
+      28 |         // Visibility alone accepts opacity:0 during an overlay's prepare phase.
+      29 |         await expect.poll(() => locator.evaluate((el) => {
+      30 |           for (let node = el; node; node = node.parentElement) {
+        at capture (/var/tmp/p23b1/trees/tip/src/web/ui-migration/harness.mjs:27:31)
+        at wikiScenario (/var/tmp/p23b1/trees/tip/src/web/ui-migration/page-scenarios.mjs:75:3)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-dark-phone/attachments/computed-styles-and-timings-cb29ca31d9f0c8b88a9a622e32d3dd6c98a484a3.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../runs/attr-wiki-be0f8c22a/output/pages.browser.mjs-wiki-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8 failed
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ─────────────────────────────
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ───────────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki ──────────────────────────────
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki ────────────────────────────────
+# exit 1

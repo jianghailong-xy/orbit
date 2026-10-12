@@ -1,0 +1,14 @@
+{
+  "command": "npm run test:ui-choices -w @orbit/web",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_94ab8b1fe065",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "38947755e48ac979362db36f82bfcf966b527a75",
+  "webTree": "848736509199b4db94c3a30a20b43d5c202599a4",
+  "started": "2026-10-06T05:33:49Z",
+  "outputLastWritten": "2026-10-06T05:58:47.208246+00:00",
+  "exitCode": 1,
+  "outputSha256": "fb7b00394aa17265d7426a36f68e38c5343e63920e8c6d1ccd3e2776d29a9cf2",
+  "outputBytes": 92485,
+  "note": "515 passed / 5 failed; see revision-8/README.md and choices-full-first/."
+}

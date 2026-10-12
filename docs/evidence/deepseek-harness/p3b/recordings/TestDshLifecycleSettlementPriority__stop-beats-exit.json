@@ -1,0 +1,132 @@
+{
+  "controlPlaneTurns": [
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "INTERRUPTED",
+          "subtype": "interrupted"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "INTERRUPTED",
+      "turnId": "t1"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "interrupt",
+      "status": "DELIVERED",
+      "turnId": "i1"
+    }
+  ],
+  "engineRequests": [
+    {
+      "id": "orbit-dsh-1",
+      "method": "initialize",
+      "pid": 3439933
+    },
+    {
+      "id": "orbit-dsh-2",
+      "method": "session/new",
+      "pid": 3439933
+    },
+    {
+      "fields": {
+        "keySuffix": "0001",
+        "method": "session/new",
+        "permissionMode": "workspace-write",
+        "profileSealed": true
+      },
+      "note": "open",
+      "pid": 3439933
+    },
+    {
+      "id": "orbit-dsh-3",
+      "method": "session/prompt",
+      "pid": 3439933
+    },
+    {
+      "fields": {
+        "tool": "lc-tool-3439933-1"
+      },
+      "note": "effect-hang",
+      "pid": 3439933
+    },
+    {
+      "id": null,
+      "method": "session/cancel",
+      "pid": 3439933
+    }
+  ],
+  "engineSessionLogs": {
+    "lc-engine-session-1": {
+      "cwd": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleSettlementPrioritystop-beats-exit2097847917/001/work",
+      "history": [
+        "m1 [effect-hang]"
+      ]
+    }
+  },
+  "orbitTranscript": [
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "m1 [effect-hang]",
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "status": "in_progress",
+      "toolCallId": "lc-tool-3439933-1",
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "turn": "",
+      "type": "interrupt"
+    },
+    {
+      "isError": true,
+      "status": "failed",
+      "toolCallId": "lc-tool-3439933-1",
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "stopReason": "cancelled",
+      "subtype": "interrupted",
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "subtype": "process_exited",
+      "turn": "",
+      "type": "system"
+    }
+  ],
+  "runnerTurnLedger": {
+    "runtimeSessionId": "lc-engine-session-1",
+    "turns": {
+      "t1": {
+        "state": "settled",
+        "status": "INTERRUPTED",
+        "subtype": "interrupted"
+      }
+    }
+  },
+  "scenario": "TestDshLifecycleSettlementPriority/stop-beats-exit",
+  "sideEffects": [
+    "m1"
+  ]
+}

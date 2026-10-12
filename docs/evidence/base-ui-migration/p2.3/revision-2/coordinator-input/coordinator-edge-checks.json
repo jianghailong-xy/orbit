@@ -1,0 +1,14 @@
+[
+  {
+    "variant": "final",
+    "root": "/tmp/orbit-p23-coordinator-review-t5ns4cfj",
+    "exitCode": 1,
+    "seconds": 18.32
+  },
+  {
+    "variant": "reference",
+    "root": "/tmp/orbit-p23-reference-review-9h13op3k",
+    "exitCode": 0,
+    "seconds": 17.28
+  }
+]

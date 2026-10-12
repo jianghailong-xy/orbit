@@ -5,6 +5,7 @@ import {
   toUuid,
   WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_LEAD_RULES,
   WIKI_DOC_RECORD_KINDS,
   WIKI_DOC_REPO_KINDS,
   WIKI_DOC_RULES,
@@ -52,8 +53,9 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-articles';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
 import { wikiDocsAffected, withdrawDocSentencesByPath } from './wiki-docs-affected';
-import { conditionView, gatherDocMaterial, type StoredSessionCondition } from './wiki-docs-material';
+import { conditionView, gatherDocMaterial, storedSessionCondition } from './wiki-docs-material';
 import { ownerEnvLiterals } from './wiki-dossier';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import { requireConfirmedPlan } from './wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.service';
@@ -891,6 +893,31 @@ function redacted(text: string | null, literals: readonly string[]): string | nu
   return text === null ? null : redactSecrets(text, { literals }).text;
 }
 
+/** A sentence that ends at a full-width stop, closers after it: the next one follows with no space. */
+const FULL_STOP_END = /[。！？][」』"”’）)]*$/u;
+
+/**
+ * A written document's lead (contract `docs.lead`): the first sentences of its first section, withdrawn
+ * ones left out by the caller, joined as they read — a space after a Latin stop, none after a full-width
+ * one — and cut to `maxChars` characters with an ellipsis when longer. Null when there is none.
+ */
+export function docLead(sentences: readonly string[]): string | null {
+  const taken = sentences.slice(0, WIKI_DOC_LEAD_RULES.sentences);
+  if (taken.length === 0) return null;
+  const text = taken.reduce((lead, sentence) => (FULL_STOP_END.test(lead) ? `${lead}${sentence}` : `${lead} ${sentence}`));
+  const chars = Array.from(text);
+  return chars.length <= WIKI_DOC_LEAD_RULES.maxChars ? text : `${chars.slice(0, WIKI_DOC_LEAD_RULES.maxChars).join('').trimEnd()}…`;
+}
+
+/**
+ * The principal the server's `docs_build` job reads and writes a space's documents as (contract `docs.who.write`,
+ * `jobs.kindRuns.docs_build`): the space's maintenance, with no session and no user — the server writes on its own
+ * account, as its `articles` job does (`wikiArticlesJobPrincipal`).
+ */
+export function wikiDocsBuildJobPrincipal(ownerId: string): WikiPrincipal {
+  return { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
+}
+
 @Injectable()
 export class WikiDocs {
   private readonly logger = new Logger(WikiDocs.name);
@@ -914,17 +941,34 @@ export class WikiDocs {
 
   /**
    * The writers (contract `docs.who.write`): a maintenance run of this space, asked the one test
-   * criterion 2 exported, or the import the server's own container runs. The space is found first, so
-   * another owner's is a 404 before it is anything else.
+   * criterion 2 exported, the server's own `docs_build` job, or the import the server's own container runs.
+   * The space is found first, so another owner's is a 404 before it is anything else.
    */
   async assertWriter(principal: WikiPrincipal, spaceId: string): Promise<void> {
     await this.requireSpace(principal.ownerId, spaceId);
     if (principal.origin === 'import' && principal.sessionId === null && principal.userId === null) return;
+    // The server's docs_build job (`wikiDocsBuildJobPrincipal`): maintenance with no session and no user, which no
+    // door builds — the runner door refuses a headless call before it names a principal.
+    if (principal.origin === 'maintenance' && principal.sessionId === null && principal.userId === null) return;
     if (
       principal.origin === 'maintenance'
       && principal.sessionId !== null
       && (await isWikiMaintenanceSession(this.prisma, { ownerId: principal.ownerId, sessionId: principal.sessionId, spaceId }))
     ) {
+      // An account the executor switch gives the server has its documents written by the wiki worker, with the
+      // deployment's System model (contract `docs.build.server`): its maintenance session is handed no material
+      // and writes nothing, so no session's provider is asked. Under the default runner this is never true, and
+      // the session reads and writes exactly as it always has.
+      const executor = currentWikiExecutorSwitch();
+      if (wikiExecutorServes(executor, principal.ownerId)) {
+        throw new WikiRefusalError({
+          code: 'WIKI_SERVER_EXECUTES',
+          message:
+            `the Orbit server writes this account's wiki documents (ORBIT_WIKI_EXECUTOR=${executor.mode}): its wiki worker `
+              + "builds them when the owner confirms a plan, with the deployment's System model, so this session's provider "
+              + 'is not asked. Nothing was read or written.',
+        });
+      }
       return;
     }
     throw new WikiRefusalError({
@@ -1064,7 +1108,7 @@ export class WikiDocs {
       select: { sources: true },
     });
     if (!section) throw new NotFoundException(`no section ${sectionKey} of document ${slug} in the space's confirmed plan`);
-    const condition = ((section.sources as unknown as { sessions?: StoredSessionCondition | null }) ?? {}).sessions ?? null;
+    const condition = storedSessionCondition(((section.sources ?? {}) as { sessions?: unknown }).sessions);
     const literals = await ownerEnvLiterals(this.prisma, ownerId);
     const gathered = await gatherDocMaterial(this.prisma, this.wiki, { ownerId, spaceId, condition, literals });
     return {
@@ -1455,9 +1499,24 @@ export class WikiDocs {
     if (!plan) return { spaceId, plan: null, docs: { total: 0, written: 0 }, categories: [] };
     const docs = await this.prisma.wikiDoc.findMany({
       where: { ownerId, spaceId, slug: { in: plan.docs.map((doc) => doc.slug) } },
-      select: { slug: true, status: true, updatedAt: true, planVersion: true, sections: { select: { key: true, staleAt: true } } },
+      select: { slug: true, status: true, updatedAt: true, planVersion: true, sections: { select: { id: true, key: true, staleAt: true } } },
     });
     const written = new Map(docs.map((doc) => [doc.slug, doc]));
+    // A written document's lead is read from its first section, as the plan orders them (contract `docs.lead`).
+    const firstOf = (doc: PlanDocRow) => written.get(doc.slug)?.sections.find((section) => section.key === doc.sections[0]?.key);
+    const firstIds = plan.docs.flatMap((doc) => firstOf(doc)?.id ?? []);
+    const leads = new Map(
+      (firstIds.length === 0
+        ? []
+        : await this.prisma.wikiDocSection.findMany({
+          where: { ownerId, id: { in: firstIds } },
+          select: {
+            id: true,
+            sentences: { where: { status: { not: 'withdrawn' } }, orderBy: { position: 'asc' }, take: WIKI_DOC_LEAD_RULES.sentences, select: { text: true } },
+          },
+        })
+      ).map((section) => [section.id, docLead(section.sentences.map((sentence) => sentence.text))]),
+    );
     const numbers = numbering(plan);
     const categories = (plan.categories as unknown as PlanCategory[]) ?? [];
     return {
@@ -1475,6 +1534,7 @@ export class WikiDocs {
           .map((doc) => {
             const stored = written.get(doc.slug);
             const sections = new Map((stored?.sections ?? []).map((section) => [section.key, section]));
+            const first = firstOf(doc);
             return {
               slug: doc.slug,
               number: numbers.get(doc.slug)!.number,
@@ -1484,6 +1544,7 @@ export class WikiDocs {
               status: (stored?.status as WikiDocStatus | undefined) ?? null,
               updatedAt: stored?.updatedAt.toISOString() ?? null,
               planVersion: stored?.planVersion ?? null,
+              lead: first ? (leads.get(first.id) ?? null) : null,
               sections: doc.sections.map((section, n) => ({
                 key: section.key,
                 number: n + 1,

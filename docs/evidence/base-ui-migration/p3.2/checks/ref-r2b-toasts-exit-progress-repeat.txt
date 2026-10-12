@@ -1,0 +1,44 @@
+
+Running 10 tests using 1 worker
+
+  ✓   1 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (9.9s)
+  ✓   2 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.3s)
+  ✓   3 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (4.9s)
+  ✓   4 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (4.2s)
+  ✓   5 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.2s)
+  ✓   6 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.3s)
+  ✓   7 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.3s)
+  ✓   8 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.6s)
+  ✓   9 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.4s)
+  ✘  10 [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (16.7s)
+
+
+  1) [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+      61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+    > 62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+         |                                                         ^
+      63 |     for (let i = 1; i < connected.length; i++) {
+      64 |       // CSS serializes the visible opacity; raw effect progress can differ by
+      65 |       // sub-ULP rounding when a delay replaces elapsed animation time.
+        at /var/tmp/p32r2-ref/src/web/ui-migration/toasts-promotion.browser.mjs:62:57
+
+    Error Context: ../../../p32r2-final/ref-r2b-toasts-exit-progress-repeat/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-phone-repeat4/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/ref-r2b-toasts-exit-progress-repeat/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-phone-repeat4/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/ref-r2b-toasts-exit-progress-repeat/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-phone-repeat4/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-light-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+  9 passed (1.0m)

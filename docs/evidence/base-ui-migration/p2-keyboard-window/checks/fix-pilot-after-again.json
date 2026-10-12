@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/after2 && git log --oneline -1 && cd src/web && unshare -n bash -c 'ip link set lo up && P32_SNAPSHOTS=/var/tmp/p2kw-c2604b/pilot-after-again-shots P32_OUTPUT=/var/tmp/p2kw-c2604b/pilot-after-again P32_PORT=4291 NO_COLOR=1 nice -n -10 npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_16805c66f7f7",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T04:46:21.243059+00:00",
+ "exitCode": 0,
+ "outputSha256": "49e57da9d219511d5cc88ac9e2d0e16ceaf7f9cd585514b6d7b289932f165fcc",
+ "outputBytes": 47573,
+ "note": "Second pilot run on the fixed tree (noise reference), at the same time as fix-pilot-before-again: 72 passed."
+}

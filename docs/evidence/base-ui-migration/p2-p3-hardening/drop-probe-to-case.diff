@@ -1,0 +1,15 @@
+--- p33/tools/pilot-p33-drop.browser.mjs (the probe test, indented one level)
++++ src/web/ui-migration/pilot.browser.mjs at 8447b59a5 (the resident case)
+@@ -1,4 +1,4 @@
+-  test('P3.3 probe: files dropped on Add file are each uploaded', async ({ evidence }, testInfo) => {
++  test('files dropped on Add file are each uploaded', async ({ evidence }, testInfo) => {
+     const { page } = evidence;
+     const pilot = await installPilotFixtures(page, { theme: testInfo.project.use.colorScheme });
+     const uploads = [];
+@@ -33,5 +33,5 @@
+       queries: [...new Set(uploads.map((u) => u.query))],
+     };
+     await testInfo.attach('trace', { body: JSON.stringify([{ step: 'two files dropped on Add file', ...observed, requests: [] }], null, 2), contentType: 'application/json' });
+-    expect(observed).toEqual({ url: 'unchanged', uploadRequests: 2, files: ['dropped.png', 'dropped.txt'], queries: observed.queries });
++    expect(observed).toEqual({ url: 'unchanged', uploadRequests: 2, files: ['dropped.png', 'dropped.txt'], queries: [`?taskId=${PILOT_IDS.task}`] });
+   });

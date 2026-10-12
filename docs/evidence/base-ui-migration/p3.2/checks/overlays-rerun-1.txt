@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium-dark-desktop] › ui-migration/overlays.browser.mjs:437:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.9s)
+
+  1 passed (2.7s)

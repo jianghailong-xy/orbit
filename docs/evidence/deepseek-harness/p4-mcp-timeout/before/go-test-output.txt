@@ -1,0 +1,9 @@
+=== RUN   TestDshRealMCPTimeoutCancelsTheCall
+    dsh_mcp_test.go:845: turn t1 settled SUCCEEDED/completed result="P4 timeout answer" error=""
+--- PASS: TestDshRealMCPTimeoutCancelsTheCall (60.61s)
+=== RUN   TestDshRealOrbitMCPTimeoutBefore
+    dsh_mcp_test.go:885: turn t1 settled SUCCEEDED/completed result="P4 held answer" error=""
+    dsh_mcp_test.go:893: turn=SUCCEEDED modelSaw status=failed content="Error: Request timed out"; created after approval=1
+--- PASS: TestDshRealOrbitMCPTimeoutBefore (60.81s)
+PASS
+ok  	orbit	121.439s

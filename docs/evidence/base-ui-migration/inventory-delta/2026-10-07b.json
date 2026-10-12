@@ -1,0 +1,257 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-07",
+ "task": "34bkjldwhL7rVdYPgWBwz",
+ "amends": "2026-10-07.json",
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-07",
+  "evidenceRevision": "38IfqZvjjfRG2lpbvFKqOb",
+  "questions": [
+   "ProjectBlockers",
+   "ProjectCrossingsCard",
+   "ProjectProgressStatus",
+   "TaskDependencyList"
+  ]
+ },
+ "scan": {
+  "commit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+  "scopeHash": "bb238f9ed5588bd9e5c3ae2d4f32a9302b85fe7d219d5c05c6b1f16e024d5a2a",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 690,
+   "productionFiles": 343,
+   "testFiles": 345,
+   "antdProductionFiles": 100,
+   "antdTestFiles": 76,
+   "antSelectorTestFiles": 62,
+   "antClassTestFiles": 69,
+   "iconProductionFiles": 97,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 285,
+   "hitLines": {
+    "ant-class": 457,
+    "ant-design-support": 19,
+    "ant-selector": 428,
+    "antd-reference": 351,
+    "icon-class": 77,
+    "icon-reference": 108,
+    "imperative-confirm": 22,
+    "imperative-feedback": 218,
+    "internal-ref": 5,
+    "provider": 88,
+    "rc-support": 231,
+    "ref-focus": 25,
+    "theme": 2,
+    "use-app": 16,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 241
+  }
+ },
+ "files": {
+  "src/web/src/components/ProjectBlockers.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2,
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "按项目详情页区块归 P4.3a；P4.3b 改 ProjectPromotionCard 时跑它的测试。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": [
+    "P4.3b"
+   ]
+  },
+  "src/web/src/components/ProjectBlockers.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Input",
+    "Modal",
+    "Tag",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "按项目详情页区块归 P4.3a；P4.3b 改 ProjectPromotionCard 时跑它的测试。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": [
+    "P4.3b"
+   ]
+  },
+  "src/web/src/components/ProjectCrossingsCard.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Card",
+    "Skeleton",
+    "Space",
+    "Tag",
+    "Typography"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "决策卡，按功能归 P4.3b；P4.3a 改 ProjectsPage 详情页或 TaskAttributionCard 时跑相关测试。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": [
+    "P4.3a"
+   ]
+  },
+  "src/web/src/components/ProjectProgressStatus.test.tsx": {
+   "status": "reassigned",
+   "category": "test",
+   "types": [
+    "ant-class",
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 4,
+    "ant-selector": 2,
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "按项目详情页区块归 P4.3a；P4.3b、P5.3 改到渲染它的卡片或页面时跑它的测试。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": [
+    "P4.3b",
+    "P5.3"
+   ]
+  },
+  "src/web/src/components/ProjectProgressStatus.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Alert",
+    "Button",
+    "Input",
+    "Modal"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "按项目详情页区块归 P4.3a；P4.3b、P5.3 改到渲染它的卡片或页面时跑它的测试。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": [
+    "P4.3b",
+    "P5.3"
+   ]
+  },
+  "src/web/src/components/TaskDependencyList.tsx": {
+   "status": "reassigned",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Popconfirm"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "p01Owner": "P4.3",
+   "owner": "P4.3a",
+   "reason": "列表，属任务详情，归 P4.3a。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": []
+  }
+ },
+ "css": [
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-blockers-heading.ant-typography {",
+   "count": 1,
+   "lines": [
+    16999
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "按项目详情页区块归 P4.3a；P4.3b 改 ProjectPromotionCard 时跑它的测试。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": [
+    "P4.3b"
+   ]
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-blockers-summary.ant-typography {",
+   "count": 1,
+   "lines": [
+    17009
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "按项目详情页区块归 P4.3a；P4.3b 改 ProjectPromotionCard 时跑它的测试。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": [
+    "P4.3b"
+   ]
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".project-blockers-headline .ant-tag {",
+   "count": 1,
+   "lines": [
+    17038
+   ],
+   "status": "reassigned",
+   "type": "css-override",
+   "p01Group": "项目详情/任务行/验收卡/工具栏（P4.3）",
+   "owner": "P4.3a",
+   "reason": "按项目详情页区块归 P4.3a；P4.3b 改 ProjectPromotionCard 时跑它的测试。",
+   "basis": "协调者 2026-10-07 判定（第 1 版证据 38IfqZvjjfRG2lpbvFKqOb 退回意见），采纳 2026-10-07.json 的建议。",
+   "alsoTestedBy": [
+    "P4.3b"
+   ]
+  }
+ ],
+ "summary": {
+  "files": 6,
+  "cssLines": 3,
+  "owners": {
+   "P4.3a": 8,
+   "P4.3b": 1
+  }
+ }
+}

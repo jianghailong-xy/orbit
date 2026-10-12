@@ -1,0 +1,6 @@
+[orbit-runner 2026-10-08T17:13:33.925Z] runner "old-kimi" online -> http://127.0.0.1:3741 (max 16 concurrent)
+[orbit-runner 2026-10-08T17:18:48.934Z] claude plan-usage unavailable: open /var/tmp/kimi-accounts-stack/runners/old-kimi/userhome/.claude/.credentials.json: no such file or directory
+[orbit-runner 2026-10-08T17:19:41.095Z] runner stopping; draining session supervisors...
+[orbit-runner 2026-10-08T17:19:42.879Z] runner "old-kimi" online -> http://127.0.0.1:3741 (max 16 concurrent)
+[orbit-runner 2026-10-08T17:19:57.882Z] claude plan-usage unavailable: open /var/tmp/kimi-accounts-stack/runners/old-kimi/userhome/.claude/.credentials.json: no such file or directory
+[orbit-runner 2026-10-08T17:20:13.066Z] > interactive run 01a11c87-a0bf-7450-94ac-887f59f10d1b — Scenario 6a: a Kimi session on the old runner.

@@ -53,6 +53,8 @@ function harness(reloadContent: string, session: Record<string, unknown>, provid
         ...session,
       }),
     },
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: { findFirst: async () => provider ?? null },
   };
   const prisma = {

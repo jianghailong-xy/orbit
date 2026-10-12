@@ -22,9 +22,6 @@ import Foundation
 public enum NavOrigin: Hashable, Sendable {
     /// A row in the section's own list.
     case list
-    /// A row in the compact shell's left drawer — a Recents row, or one of the open projects — the
-    /// page that yields the screen edge back to the drawer it came from.
-    case drawer
     /// A URL or a notification tap.
     case deepLink
     /// The needs-you banner.
@@ -46,8 +43,11 @@ public enum NavNode: Hashable, Sendable {
     /// top of its session list opens the sessions filed in that folder. iOS only — macOS and web
     /// show no folders (§1).
     case folder(SessionFolderAddress)
-    /// A project's sessions across workspaces, opened from its progress label (design §5).
-    case sessionProject(SessionProjectAddress)
+    /// A project's sessions across workspaces (design §5). A session list's row pushes it over that
+    /// list, so back returns there; the drawer's project row, the merge banner and a merge
+    /// notification put it up `asDestination` instead — the project's own page, the drawer row's
+    /// destination (``NavState/atDestinationRoot``).
+    case sessionProject(SessionProjectAddress, asDestination: Bool = false)
     case taskDetail(taskID: String)
     case taskListsDirectory
     case runnerDetail(runnerID: String)
@@ -58,20 +58,21 @@ public enum NavNode: Hashable, Sendable {
     /// device's name is, instead of a text field and a Rename button on the record.
     case runnerName(runnerID: String)
     case watchDetail(watchID: String)
-    /// Settings' second layer: the runners list, pushed from Settings' own form. A runner's record is
-    /// the third, and it is the *same* ``runnerDetail(runnerID:)`` frame the Runners section pushes —
+    /// A page Settings' list opens — Infrastructure, Notifications, Shared links, Access tokens, Change
+    /// password, Admin — each a frame of Settings' own stack. A machine's record pushed from
+    /// Infrastructure is the *same* ``runnerDetail(runnerID:)`` frame the Infrastructure section pushes —
     /// what tells the two apart is the stack a frame rides, not the frame.
-    case settingsRunners
-    /// Every other page Settings' list opens — Notifications, Providers, Shared links, Change
-    /// password, Admin — each a frame of Settings' own stack like the runners list above it.
     case settingsPage(SettingsPage)
-    /// A pool's page, pushed from Settings → Providers: an account pool of the user's own Claude
+    /// A pool's page, pushed from Infrastructure's Account pools: an account pool of the user's own Claude
     /// subscriptions, read-only here, or a shared pool of OpenAI API keys, which is run from its page.
     case accountPool(poolID: String)
     case sharedPool(poolID: String)
+    /// One of the account's own API keys, read-only, pushed from Infrastructure's API keys: a DeepSeek
+    /// key's page, its account balance first (`DeepSeekBalance`). Changing a key happens on the web.
+    case providerDetail(providerID: String)
     case userDetail(userID: String)
-    /// One project's page, pushed from the Projects list or from the drawer's project rows — which
-    /// the page's origin tells apart, as a console's does.
+    /// One project's page, pushed from the Projects list — or over a phone's conversation or a
+    /// project's sessions page, so the back swipe returns there.
     case projectDetail(projectID: String, origin: NavOrigin = .list)
     /// Every task one session's agent created: its console's `View all in Tasks ›` on a phone, pushed
     /// over that console — with the card's task and project pages — so the back swipe returns to the
@@ -86,11 +87,18 @@ public enum NavNode: Hashable, Sendable {
     /// Review: the proposals waiting for the owner, one card at a time. Pushed from the Wiki home's
     /// amber banner.
     case wikiReview
+    /// Activity (design §12.3.2): what the home said besides its content — the status line, what waits
+    /// on the owner, the decisions, the changes and the agents' use. Pushed from the bar's Activity
+    /// button; the three-column shells open it in the detail pane.
+    case wikiActivity
     /// The space's Wiki settings — its review mode and maintenance — pushed from the home's gear.
     case wikiSettings
     /// One run: what a maintenance run, an import or a session's proposal applied at once, pushed
     /// from its row in Recently changed.
     case wikiRun(changesetID: String)
+    /// One of the server's runs (mock 35 ⑤, P9): its call log, pushed from its row in Activity's Runs, or
+    /// from the status line's View run for a run the server's job made — which has no session to open.
+    case wikiJob(jobID: String)
     /// One of a topic's articles — its own (part 0) or a subtopic article — pushed from the Contents
     /// sheet, Browse by category or the A–Z index.
     case wikiArticle(topic: String, part: Int)
@@ -177,17 +185,23 @@ public struct NavState: Equatable, Sendable {
     /// that drew as selected and could not be opened.
     public var highlightedSessionID: String? { consoleOnTop }
 
-    /// `AppModel.consoleFromRecents` — you came from the drawer, so the left edge returns you there.
-    /// No shadow variable and no assignment-ordering convention: the frame says where it came from.
-    public var consoleFromRecents: Bool {
-        if case .console(_, .drawer) = path.last { return true }
-        return false
+    /// The drawer row the screen belongs to — the one drawn as selected, and the one whose tap only
+    /// closes the drawer. A project's sessions page anywhere on the Agents stack makes it that
+    /// project's, with what was pushed over it; otherwise the Agents stack is the workspace's
+    /// (`agentID`, the agent its pane shows), and every other section's stack is the section's own.
+    public func drawerDestination(agentID: String?) -> DrawerDestination {
+        guard section == .agents else { return .section(section) }
+        if let project = projectSessionsColumn { return .project(projectID: project.projectID) }
+        return agentID.map { .workspace(agentID: $0) } ?? .section(.agents)
     }
 
-    /// `AppModel.projectFromDrawer` — the same for a project's page opened from the drawer's project
-    /// rows: the left edge returns you to the drawer, not to the Projects list under the page.
-    public var projectFromDrawer: Bool {
-        if case .projectDetail(_, .drawer) = path.last { return true }
+    /// The page on top is its drawer destination's own — a section's list, or a project's sessions
+    /// page put up as the project's own — so a phone's left edge opens the drawer there. Over any
+    /// page pushed above one, a project's sessions page a session list's row pushed included, the
+    /// edge is the system back-swipe's (owner, 2026-10-06).
+    public var atDestinationRoot: Bool {
+        guard let top = path.last else { return true }
+        if case .sessionProject(_, let asDestination) = top { return asDestination }
         return false
     }
 
@@ -212,20 +226,20 @@ public struct NavState: Equatable, Sendable {
 
     /// The project's session page on a phone, when it is the frame on top.
     public var projectSessionsPage: SessionProjectAddress? {
-        if case .sessionProject(let address) = path.last { return address }
+        if case .sessionProject(let address, _) = path.last { return address }
         return nil
     }
 
     /// The page the iPad's session column shows, beneath any selected console and over a folder.
     public var projectSessionsColumn: SessionProjectAddress? {
         for frame in path.reversed() {
-            if case .sessionProject(let address) = frame { return address }
+            if case .sessionProject(let address, _) = frame { return address }
         }
         return nil
     }
 
-    // The three single-layer sections — Following, Runners, Admin — push exactly one kind of page,
-    // so "which record is showing" is the id on top of their own stack. Each one is a total function
+    // The three sections whose list opens one kind of record — Following, Infrastructure (a machine's),
+    // Admin — say "which record is showing" with the id on top of their own stack. Each one is a total function
     // of that stack like every other fact here: the list's highlight and the detail pane are the
     // same read, which is what stops a row drawing as selected while the page under it says
     // something else. Admin is the one that had nowhere to put this at all — see ``NavNode/userDetail(userID:)``.
@@ -238,7 +252,7 @@ public struct NavState: Equatable, Sendable {
         return id
     }
 
-    /// `AppModel.selectedRunnerID` — the runner record the Runners pane shows. A page the record
+    /// `AppModel.selectedRunnerID` — the machine's record the Infrastructure pane shows. A page the record
     /// pushed over itself (an engine's, its name's) is still that runner's, so the list's highlight
     /// stays on it.
     public var selectedRunnerID: String? {
@@ -277,6 +291,12 @@ public struct NavState: Equatable, Sendable {
         return false
     }
 
+    /// Whether Activity is the page on top of the Wiki section's stack.
+    public var wikiActivityOnTop: Bool {
+        if case .wikiActivity = path.last { return true }
+        return false
+    }
+
     /// Whether the Wiki settings are the page on top of the Wiki section's stack.
     public var wikiSettingsOnTop: Bool {
         if case .wikiSettings = path.last { return true }
@@ -286,6 +306,12 @@ public struct NavState: Equatable, Sendable {
     /// The run the Wiki pane shows, when a run's page is on top.
     public var selectedWikiRunID: String? {
         guard case .wikiRun(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// The server's run the Wiki pane shows, when its page is on top.
+    public var selectedWikiJobID: String? {
+        guard case .wikiJob(let id) = path.last else { return nil }
         return id
     }
 
@@ -321,6 +347,26 @@ public struct NavState: Equatable, Sendable {
         case .wikiPlanSection(let slug, let index, let version)?: return WikiPlanAddress(version: version, doc: slug, section: index)
         default: return nil
         }
+    }
+
+    /// The row of the Wiki's directory the page on top answers to — the one the iPad's and the Mac's directory
+    /// column lights (design §12.3, mock 32): the home at the root; Browse, the A–Z index, the plan (one of its
+    /// documents or sections too), a document or an article. An entry or a run opened over one of them keeps it
+    /// lit, as the web's drawer keeps the page it was opened over; Activity, Review and the settings answer to
+    /// no row.
+    public var wikiContentsAt: WikiContentsAt? {
+        for frame in path.reversed() {
+            switch frame {
+            case .wikiEntry, .wikiRun: continue
+            case .wikiBrowse: return .browse
+            case .wikiIndex: return .index
+            case .wikiPlan, .wikiPlanDoc, .wikiPlanSection: return .plan
+            case .wikiDoc(let slug, _): return .doc(slug: slug)
+            case .wikiArticle(let topic, let part): return .article(topic: topic, part: part)
+            default: return nil
+            }
+        }
+        return .home
     }
 
     /// `AppModel.selectedUserID` — the account the Admin pane shows.
@@ -434,14 +480,14 @@ public struct NavState: Equatable, Sendable {
         var frames = path
         frames.removeAll { if case .sessionProject = $0 { return true }; return false }
         let index = frames.first.map { if case .folder = $0 { return 1 }; return 0 } ?? 0
-        frames.insert(.sessionProject(address), at: index)
+        frames.insert(.sessionProject(address, asDestination: false), at: index)
         path = frames
     }
 
     /// Leave the project's list without closing a console in the detail pane or its folder.
     public mutating func leaveProjectSessions(_ projectID: String? = nil) {
         path = path.filter { frame in
-            guard case .sessionProject(let address) = frame else { return true }
+            guard case .sessionProject(let address, _) = frame else { return true }
             return projectID.map { $0 != address.projectID } ?? false
         }
     }
@@ -534,6 +580,33 @@ public struct NavState: Equatable, Sendable {
     }
 }
 
+/// A row of the phone's drawer (the iPad's sidebar), as a place: a section, one workspace's session
+/// list, or one project's sessions page. `NavState.drawerDestination(agentID:)` says which one the
+/// screen belongs to, so a row's highlight and what its tap does are one read. Two spellings of a
+/// project's id are the same project.
+public enum DrawerDestination: Hashable, Sendable {
+    case section(AppSection)
+    case workspace(agentID: String)
+    case project(projectID: String)
+
+    public static func == (lhs: DrawerDestination, rhs: DrawerDestination) -> Bool {
+        switch (lhs, rhs) {
+        case (.section(let a), .section(let b)): return a == b
+        case (.workspace(let a), .workspace(let b)): return a == b
+        case (.project(let a), .project(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
+        default: return false
+        }
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .section(let section): hasher.combine(0); hasher.combine(section)
+        case .workspace(let agentID): hasher.combine(1); hasher.combine(agentID)
+        case .project(let projectID): hasher.combine(2); hasher.combine(PublicID.storageKey(projectID))
+        }
+    }
+}
+
 /// A folder's page, as the frame that shows it spells it (docs/session-folders-move-design.md
 /// §3.3): which folder, the workspace it belongs to (the page says whose it is, and files the
 /// sessions it creates there), and the scope of the list it was opened from — Open's page lists the
@@ -583,6 +656,15 @@ public struct WikiDocAddress: Hashable, Sendable {
         self.slug = slug
         self.section = section
     }
+}
+
+/// A row of the Wiki's directory, as the page it stands for: lit where that page is open (the Contents sheet
+/// opened over it, the wide shells' directory column beside it), a topic whose article is open listing its
+/// subtopic articles under it, a document that is open its sections.
+public enum WikiContentsAt: Hashable, Sendable {
+    case home, browse, index, plan
+    case article(topic: String, part: Int)
+    case doc(slug: String)
 }
 
 /// A page of the plan: the version (nil for the one shown first), a document of it, a section of that.

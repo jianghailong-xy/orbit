@@ -1,0 +1,993 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "--project",
+   "webkit-light-phone",
+   "--project",
+   "webkit-dark-phone",
+   "-g",
+   "multiple labels search, toggle, collapse, remove and clear",
+   "--repeat-each",
+   "10"
+  ],
+  "configFile": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results",
+    "repeatEach": 10,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results",
+    "repeatEach": 10,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices.browser.mjs",
+   "file": "choices.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1025,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:22.536Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-8360a0b0740205f1758e",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 965,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:23.903Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-75abc2923590e664002b",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1021,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:25.201Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-3139c07facc707728768",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 974,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:26.574Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-bffeb6bc03f7fdd33da6",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 999,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:27.879Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c4d6a720af134d628b4c",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 989,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:29.199Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-89da2d7639c35df1e1a7",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1016,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:30.501Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-044c7de04b8303930e5a",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 943,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:31.841Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-88ba8f9c370ab0a62665",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 952,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:33.105Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-e1eaef3b97fe07cacd55",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 994,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:34.388Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-640f5e932de0a256c41f",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 10,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 990,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:35.713Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-85813765a23a61ef5d8d",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 11,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 973,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:37.033Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-82128261decd5d3532fa",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 12,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1017,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:38.338Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-588ce6415cdc006ca170",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 13,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 969,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:39.688Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-5d1ea26c7152b1972f80",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 14,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 953,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:40.989Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d2fd4b6a201e02532483",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 15,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1001,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:42.261Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-0254b65a838813273d6a",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 16,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 943,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:43.577Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-e737402d543a2010a723",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 17,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 974,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:44.847Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-dfe9a7baf716350787f5",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 18,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 978,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:46.145Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-4505551623f3b2f6433a",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 19,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1001,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:56:47.446Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-a00418944d332bde1b93",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T18:56:21.489Z",
+  "duration": 27105.848,
+  "expected": 20,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

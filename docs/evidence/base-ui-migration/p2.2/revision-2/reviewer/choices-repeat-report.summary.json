@@ -1,0 +1,398 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/tmp/orbit-p22-coordinator-review-c41y2abt/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "src/web/ui-migration/coordinator-choices-repeat.config.mjs",
+   "--project=chromium-dark-phone",
+   "--grep",
+   "multiple chip appearance",
+   "--repeat-each=3"
+  ],
+  "configFile": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/coordinator-choices-repeat.config.mjs",
+  "rootDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat",
+    "repeatEach": 3,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/.coordinator-choices-repeat/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14381 --strictPort",
+   "cwd": "/tmp/orbit-p22-coordinator-review-c41y2abt/src/web/",
+   "url": "http://127.0.0.1:14381",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices.browser.mjs",
+   "file": "choices.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "multiple chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5483,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:29:29.100Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-902c1fe1022467984070",
+     "file": "choices.browser.mjs",
+     "line": 488,
+     "column": 42
+    },
+    {
+     "title": "multiple chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4982,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:29:34.964Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-b946101983151050328d",
+     "file": "choices.browser.mjs",
+     "line": 488,
+     "column": 42
+    },
+    {
+     "title": "multiple chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5293,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T08:29:40.256Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c04945eb5df9f92a41bf",
+     "file": "choices.browser.mjs",
+     "line": 488,
+     "column": 42
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T08:29:28.250Z",
+  "duration": 17429.017,
+  "expected": 3,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

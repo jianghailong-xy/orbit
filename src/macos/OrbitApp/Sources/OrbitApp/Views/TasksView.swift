@@ -57,24 +57,6 @@ struct TasksListView: View {
             #endif
             .task { await navigationRefreshLoop(tasks) }
             .task(id: tasks.queryKey) { await listRefreshLoop(tasks) }
-            .confirmationDialog("Delete this task?", isPresented: deletePresented,
-                                titleVisibility: .visible) {
-                if let task = taskToDelete {
-                    Button("Delete \(task.title)", role: .destructive) {
-                        let id = task.id
-                        taskToDelete = nil
-                        Task {
-                            if await tasks.deleteTask(id), model.selectedTaskID == id {
-                                model.selectedTaskID = nil
-                            }
-                        }
-                    }
-                    .disabled(tasks.isMutating(task.id))
-                }
-                Button("Cancel", role: .cancel) { taskToDelete = nil }
-            } message: {
-                Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
-            }
             #if os(iOS)
             .toolbar { compactToolbar(tasks) }
             .environment(\.editMode, .constant(selecting ? .active : .inactive))
@@ -86,9 +68,10 @@ struct TasksListView: View {
                     tasks.applyLabels($0)
                 }
             }
-            .confirmationDialog(batchTitle(batchConfirm), isPresented: batchPresented,
-                                titleVisibility: .visible, presenting: batchConfirm) { action in
+            .orbitConfirmation({ batchTitle($0) },
+                               isPresented: batchPresented, presenting: batchConfirm) { action in
                 batchButtons(action, tasks: tasks)
+                Button("Cancel", role: .cancel) {}
             } message: { action in
                 Text(batchMessage(action))
             }
@@ -560,6 +543,25 @@ struct TasksListView: View {
                 .disabled(tasks.isMutating(task.id))
             }
             .contextMenu { rowMenu(tasks, task) }
+            // On the row that asks — the swipe and the long-press menu both raise it — so the panel
+            // opens against the row rather than at the top of the page.
+            .orbitConfirmation("Delete this task?", isPresented: deletePresented) {
+                if let task = taskToDelete {
+                    Button("Delete \(task.title)", role: .destructive) {
+                        let id = task.id
+                        taskToDelete = nil
+                        Task {
+                            if await tasks.deleteTask(id), model.selectedTaskID == id {
+                                model.selectedTaskID = nil
+                            }
+                        }
+                    }
+                    .disabled(tasks.isMutating(task.id))
+                }
+                Button("Cancel", role: .cancel) { taskToDelete = nil }
+            } message: {
+                Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
+            }
     }
 
     @ViewBuilder
@@ -663,7 +665,7 @@ struct TasksListView: View {
     private func runConflictBanner(_ conflict: TaskRunHandoff.Conflict,
                                    tasks: TasksModel) -> some View {
         let clearPin: (() -> Void)? = conflict.taskID.map { id in
-            { Task { await tasks.setProvider(id, nil) } }
+            { Task { await tasks.clearRunPin(id) } }
         }
         return TaskRunHandoffCard(conflict: conflict,
                                   onOpenRun: { model.route(to: .session($0)) },
@@ -1202,6 +1204,21 @@ private struct TaskDetailContent: View {
                         Image(systemName: "ellipsis.circle")
                     }
                     .accessibilityLabel("Task actions")
+                    // Raised by this menu, so it hangs off the ⋯ that was pressed rather than off the
+                    // page.
+                    .orbitConfirmation("Delete this task?", isPresented: $confirmingDelete) {
+                        Button("Delete task", role: .destructive) {
+                            Task {
+                                if await tasks.deleteTask(taskID), model.selectedTaskID == taskID {
+                                    model.selectedTaskID = nil
+                                }
+                            }
+                        }
+                        .disabled(tasks.isMutating(taskID))
+                        Button("Cancel", role: .cancel) { }
+                    } message: {
+                        Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
+                    }
                 }
             }
         }
@@ -1268,57 +1285,6 @@ private struct TaskDetailContent: View {
         .fileImporter(isPresented: $importingInput, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
             Task { await addInputs(urls) }
-        }
-        .confirmationDialog("Delete this task?", isPresented: $confirmingDelete,
-                            titleVisibility: .visible) {
-            Button("Delete task", role: .destructive) {
-                Task {
-                    if await tasks.deleteTask(taskID), model.selectedTaskID == taskID {
-                        model.selectedTaskID = nil
-                    }
-                }
-            }
-            .disabled(tasks.isMutating(taskID))
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
-        }
-        // The way back from a status already written — offered on the three statuses that mean the
-        // work has stopped, and asked once. Answered with `TaskReopen.modalOK` rather than the
-        // question's words: the press has already been made once.
-        .confirmationDialog(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen,
-                            titleVisibility: .visible) {
-            Button(TaskReopenCopy.modalOK) {
-                Task { _ = await tasks.reopen(taskID) }
-            }
-            .disabled(tasks.isMutating(taskID))
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            // The sentences the browser's question carries, in the same order — the conditional ones
-            // are included by `paragraphs` only when they are true of this row.
-            Text(TaskReopen.paragraphs(tasks.detail).joined(separator: "\n\n"))
-        }
-        .confirmationDialog(TaskDetailCopy.removeInputTitle,
-                            isPresented: Binding(get: { inputToRemove != nil },
-                                                 set: { if !$0 { inputToRemove = nil } }),
-                            titleVisibility: .visible, presenting: inputToRemove) { input in
-            Button(TaskDetailCopy.remove, role: .destructive) {
-                Task { await tasks.removeInput(taskID, inputID: input.id) }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: { _ in
-            Text(TaskDetailCopy.removeInputDetail)
-        }
-        .confirmationDialog(TaskDetailCopy.removePrerequisiteTitle,
-                            isPresented: Binding(get: { prerequisiteToRemove != nil },
-                                                 set: { if !$0 { prerequisiteToRemove = nil } }),
-                            titleVisibility: .visible, presenting: prerequisiteToRemove) { row in
-            Button(TaskDetailCopy.remove, role: .destructive) {
-                Task { await tasks.removeDependency(taskID, dependsOn: row.id) }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: { _ in
-            Text(TaskDetailCopy.removePrerequisiteDetail)
         }
     }
 
@@ -1480,7 +1446,7 @@ private struct TaskDetailContent: View {
             // Offered only when the refusal named the task — clearing a pin edits the TASK, so
             // without one there is nothing for the button to act on.
             let clearPin: (() -> Void)? = conflict.taskID.map { id in
-                { Task { await tasks.setProvider(id, nil) } }
+                { Task { await tasks.clearRunPin(id) } }
             }
             TaskRunHandoffCard(conflict: conflict,
                                onOpenRun: { model.route(to: .session($0)) },
@@ -1586,6 +1552,21 @@ private struct TaskDetailContent: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
             .disabled(tasks.isMutating(task.id))
+            // The way back from a status already written — offered on the three statuses that mean
+            // the work has stopped, and asked once, on the button that asks. Answered with
+            // `TaskReopen.modalOK` rather than the question's words: the press has already been made
+            // once.
+            .orbitConfirmation(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen) {
+                Button(TaskReopenCopy.modalOK) {
+                    Task { _ = await tasks.reopen(taskID) }
+                }
+                .disabled(tasks.isMutating(taskID))
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                // The sentences the browser's question carries, in the same order — the conditional
+                // ones are included by `paragraphs` only when they are true of this row.
+                Text(TaskReopen.paragraphs(tasks.detail).joined(separator: "\n\n"))
+            }
         }
     }
 
@@ -1688,6 +1669,7 @@ private struct TaskDetailContent: View {
         Section {
             assigneePicker(task)
             if smartSelection { suggestedPicker(task) }
+            enginePicker(task)
             providerPicker(task)
             modelPicker(task)
             listPicker(task)
@@ -1820,27 +1802,103 @@ private struct TaskDetailContent: View {
         return model.agents?.items.first { $0.id == id }
     }
 
-    /// The provider whose model space the Model menu lists: this task's pin, else the assignee's.
-    private func effectiveProvider(_ task: TaskItem) -> String {
-        task.provider ?? assigneeAgent(task)?.provider ?? "claude"
+    /// The keys and the account pools — the shared ones first — as the pins read them, a pool resolved
+    /// like a key (web's `configuredProviders` in TaskDetailPanel).
+    private var pinConfigured: [ConfiguredProvider] {
+        (model.agents?.configuredProviders ?? []) + ProviderPools.asProviders(model.agents?.allPools ?? [])
     }
 
-    private func providerPicker(_ task: TaskItem) -> some View {
-        let configured = model.agents?.configuredProviders
-        let inherited = assigneeAgent(task).map {
-            AgentDefaults.providerName($0.provider ?? "claude", configured: configured)
+    /// The machine the task's assignee runs on — where its models, its sign-in and DeepSeek Harness are.
+    private func assigneeRunner(_ task: TaskItem) -> Runner? {
+        assigneeAgent(task)?.runnerId.flatMap { model.runners?.runner($0) }
+    }
+
+    /// What the pins judge the engine's credentials by: the account's keys and pools, and what the
+    /// assignee's runner says about DeepSeek Harness and Antigravity — the two the server admits on the
+    /// runner's own word. No engine health: this panel has none to judge (web parity).
+    private func pinSources(_ task: TaskItem) -> ChoiceSources {
+        let runner = assigneeRunner(task)
+        return ChoiceSources(configured: pinConfigured,
+                             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
+                             runtimeDefaults: runner?.runtimeDefaultModels, pools: model.agents?.allPools ?? [],
+                             antigravity: runner?.antigravity,
+                             antigravityKeyAvailable: SessionProviderChoices.antigravityKeyAvailable(
+                                workspace: assigneeAgent(task), runner: runner),
+                             dshState: runner.map { DshRuntime.state(of: $0) })
+    }
+
+    private func runPin(_ task: TaskItem) -> TaskRunPin {
+        TaskRunPin(task: task, assignee: assigneeAgent(task), configured: pinConfigured)
+    }
+
+    /// The engine this task's runs use (board 6 ①): the assignee's, or one of the six by its CLI's
+    /// name. Moving it clears a pinned credential the new engine does not run, and the model with it.
+    private func enginePicker(_ task: TaskItem) -> some View {
+        let pin = runPin(task)
+        return Picker(TaskDetailCopy.engineLabel, selection: Binding(
+            get: { pin.pinnedEngine },
+            set: { engine in
+                guard let request = pin.engineRequest(engine, configured: pinConfigured) else { return }
+                Task { await tasks.pinRun(task.id, request) }
+            }
+        )) {
+            Text(pin.inheritedEngine).tag(String?.none)
+            ForEach(ProviderEngines.all, id: \.self) { engine in
+                Text(ProviderEngines.cliName(engine)).tag(Optional(engine))
+            }
         }
-        let options = AgentDefaults.providers(configured: configured)
+        .pickerStyle(.menu)
+        .disabled(tasks.isMutating(task.id))
+    }
+
+    /// The credential of that engine its runs spend (board 6 ②): Engine default — the runner's own
+    /// sign-in, OpenCode's own configuration, DeepSeek Harness's first DeepSeek key — then the account
+    /// pools and the keys the engine runs, and nothing it does not. A pin it does not list is kept, so
+    /// the field still says what is pinned.
+    private func providerPicker(_ task: TaskItem) -> some View {
+        let pin = runPin(task)
+        let sources = pinSources(task)
+        let rows = SessionProviderChoices.providers(for: pin.runEngine, sources: sources)
+            .filter { $0.kind == .pool || $0.kind == .key }
+        let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
+        let runner = assigneeRunner(task)
+        let runnerName = runner.map { RunnerPageFormat.displayName($0) }
+        let engineDefault = TaskRunPin.engineDefaultLabel(engine: pin.runEngine, firstDeepSeekKey: firstDeepSeekKey?.label,
+                                                          runnerName: runnerName)
+        let pools = rows.filter { $0.kind == .pool }
+        let keys = rows.filter { $0.kind == .key }
         return Picker(TaskDetailCopy.providerLabel, selection: Binding(
             get: { task.provider },
-            set: { provider in Task { await tasks.setProvider(task.id, provider) } }
-        )) {
-            Text(inherited.map { "Assignee's (\($0))" } ?? "Assignee's").tag(String?.none)
-            ForEach(options) { option in
-                Text(option.name).tag(Optional(option.id))
+            set: { slug in
+                // A credential this machine can't run isn't a pin — it's a request for the install or the
+                // sign-in that would make it one, so go to that engine's page on the runner.
+                if let slug, let row = rows.first(where: { $0.slug == slug }), row.unavailable != nil {
+                    if let rid = runner?.id, let engine = row.fixEngine { model.openRunnerEngine(rid, engine: engine) }
+                    return
+                }
+                guard let request = pin.providerRequest(slug) else { return }
+                Task { await tasks.pinRun(task.id, request) }
             }
-            if let pinned = task.provider, !options.contains(where: { $0.id == pinned }) {
-                Text(AgentDefaults.providerName(pinned, configured: configured)).tag(Optional(pinned))
+        )) {
+            Text("\(TaskDetailCopy.engineDefault) · \(engineDefault)").tag(String?.none)
+            if !pools.isEmpty {
+                Section("Account pools") {
+                    ForEach(pools) { row in Text(row.label).tag(Optional(row.slug)) }
+                }
+            }
+            if !keys.isEmpty {
+                Section(pin.runEngine == "dsh" ? "Your DeepSeek keys" : "Your keys") {
+                    ForEach(keys) { row in
+                        Text(row.unavailable.map { "\(row.label) — \($0) →" } ?? row.label).tag(Optional(row.slug))
+                    }
+                }
+            }
+            if let pinned = task.provider, !rows.contains(where: { $0.slug == pinned }) {
+                Text(ProviderEngines.isLoginProvider(pinned)
+                     ? runnerName.map { "Sign-in on \($0)" } ?? "Runner sign-in"
+                     : SessionProviderChoices.current(engine: pin.runEngine, provider: pinned, in: rows,
+                                                      sources: sources).label)
+                    .tag(Optional(pinned))
             }
         }
         .pickerStyle(.menu)
@@ -1848,11 +1906,13 @@ private struct TaskDetailContent: View {
     }
 
     private func modelPicker(_ task: TaskItem) -> some View {
-        let provider = effectiveProvider(task)
+        let pin = runPin(task)
+        let sources = pinSources(task)
+        let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
         let options = AgentDefaults.models(
-            for: provider,
+            engine: pin.runEngine, provider: pin.runProvider(firstDeepSeekKey: firstDeepSeekKey?.slug),
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
-            configured: model.agents?.configuredProviders)
+            configured: pinConfigured)
         // Unpinned on an assignee with smart selection on, each run's model is picked for it.
         let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true
             ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"
@@ -1982,6 +2042,19 @@ private struct TaskDetailContent: View {
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Remove \(row.node.title) as a prerequisite")
                 .disabled(tasks.isMutating(taskID))
+                // On the row's own button, so the panel opens against it rather than at the top of
+                // the page.
+                .orbitConfirmation({ _ in TaskDetailCopy.removePrerequisiteTitle },
+                                    isPresented: Binding(get: { prerequisiteToRemove != nil },
+                                                         set: { if !$0 { prerequisiteToRemove = nil } }),
+                                    presenting: prerequisiteToRemove) { row in
+                    Button(TaskDetailCopy.remove, role: .destructive) {
+                        Task { await tasks.removeDependency(taskID, dependsOn: row.id) }
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: { _ in
+                    Text(TaskDetailCopy.removePrerequisiteDetail)
+                }
             }
         }
     }
@@ -2062,6 +2135,19 @@ private struct TaskDetailContent: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Remove input")
                     .disabled(tasks.isMutating(task.id))
+                    // On the row's own button, so the panel opens against it rather than at the top
+                    // of the page.
+                    .orbitConfirmation({ _ in TaskDetailCopy.removeInputTitle },
+                                        isPresented: Binding(get: { inputToRemove != nil },
+                                                             set: { if !$0 { inputToRemove = nil } }),
+                                        presenting: inputToRemove) { input in
+                        Button(TaskDetailCopy.remove, role: .destructive) {
+                            Task { await tasks.removeInput(taskID, inputID: input.id) }
+                        }
+                        Button("Cancel", role: .cancel) { }
+                    } message: { _ in
+                        Text(TaskDetailCopy.removeInputDetail)
+                    }
                 }
             }
             Button { importingInput = true } label: {

@@ -1,0 +1,200 @@
+46a418fba Merge orbit/p2-menu-select-antd-288742: keyboard-window probe, baselines and delivered-tree checks from the previous session
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --grep multiple choices in Dialog keep their owner --project chromium-light-phone --repeat-each 100
+
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 100 tests using 1 worker
+
+  ✓    1 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓    2 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.0s)
+  ✓    3 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓    4 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓    5 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.7s)
+  ✓    6 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.7s)
+  ✓    7 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.7s)
+  ✓    8 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓    9 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.1s)
+  ✓   10 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.3s)
+  ✓   11 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.1s)
+  ✘   12 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (18.7s)
+  ✓   13 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓   14 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.2s)
+  ✓   15 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.8s)
+  ✓   16 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓   17 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓   18 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.2s)
+  ✓   19 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.0s)
+  ✓   20 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.8s)
+  ✓   21 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.2s)
+  ✘   22 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (17.1s)
+  ✓   23 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓   24 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.7s)
+  ✓   25 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.8s)
+  ✓   26 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.1s)
+  ✓   27 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.8s)
+  ✓   28 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓   29 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.0s)
+  ✓   30 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓   31 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.8s)
+  ✓   32 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.2s)
+  ✓   33 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.3s)
+  ✓   34 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.9s)
+  ✓   35 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.0s)
+  ✓   36 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓   37 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.8s)
+  ✓   38 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.0s)
+  ✓   39 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.8s)
+  ✓   40 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.8s)
+  ✓   41 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.0s)
+  ✓   42 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.2s)
+  ✓   43 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.3s)
+  ✓   44 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓   45 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.3s)
+  ✓   46 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.8s)
+  ✓   47 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓   48 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.8s)
+  ✓   49 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.1s)
+  ✓   50 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.4s)
+  ✓   51 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.4s)
+  ✓   52 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.9s)
+  ✓   53 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓   54 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.8s)
+  ✓   55 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.6s)
+  ✓   56 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.3s)
+  ✓   57 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.0s)
+  ✓   58 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.0s)
+  ✓   59 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.7s)
+  ✓   60 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓   61 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (4.4s)
+  ✓   62 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (4.1s)
+  ✓   63 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (9.5s)
+  ✓   64 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.8s)
+  ✓   65 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.8s)
+  ✓   66 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.4s)
+  ✓   67 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.4s)
+  ✓   68 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.4s)
+  ✓   69 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.2s)
+  ✓   70 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.3s)
+  ✓   71 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.7s)
+  ✓   72 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.2s)
+  ✓   73 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.9s)
+  ✓   74 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓   75 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.6s)
+  ✓   76 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.8s)
+  ✓   77 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (4.9s)
+  ✓   78 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.8s)
+  ✓   79 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.9s)
+  ✓   80 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.9s)
+  ✓   81 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.9s)
+  ✓   82 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (5.1s)
+  ✓   83 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (6.9s)
+  ✓   84 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.2s)
+  ✓   85 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (4.1s)
+  ✓   86 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓   87 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.5s)
+  ✓   88 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.1s)
+  ✓   89 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.1s)
+  ✓   90 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.6s)
+  ✓   91 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (3.7s)
+  ✓   92 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.7s)
+  ✓   93 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.6s)
+  ✓   94 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.5s)
+  ✓   95 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.2s)
+  ✓   96 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.6s)
+  ✓   97 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.0s)
+  ✓   98 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.0s)
+  ✓   99 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.2s)
+  ✓  100 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.2s)
+
+
+  1) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /var/tmp/p2kw-c2604b/before/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: .choices-results/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat11/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat11/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat11/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('status', { name: 'Row actions', exact: true })
+    Expected: "2"
+    Received: "1"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Row actions', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Row actions', exact: true })
+        34 × locator resolved to <output aria-label="Row actions">1</output>
+           - unexpected value "1"
+
+
+      622 |   await page.keyboard.press('ArrowDown');
+      623 |   await page.keyboard.press('Enter');
+    > 624 |   await expect(page.getByRole('status', { name: 'Row actions', exact: true })).toHaveText('2');
+          |                                                                                ^
+      625 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('0');
+      626 |   await page.getByRole('button', { name: 'Open row', exact: true }).click();
+      627 |   await expect(page.getByRole('status', { name: 'Row clicks', exact: true })).toHaveText('1');
+        at /var/tmp/p2kw-c2604b/before/src/web/ui-migration/choices.browser.mjs:624:80
+
+    Error Context: .choices-results/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat21/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat21/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-10b64-ot-activate-a-clickable-row-chromium-light-phone-repeat21/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row 
+  98 passed (5.9m)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /var/tmp/p2kw-c2604b/before/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /var/tmp/p2kw-c2604b/before/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --grep 'multiple choices in Dialog keep their owner' --project chromium-light-phone --repeat-each 100

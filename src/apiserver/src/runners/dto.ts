@@ -11,7 +11,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import type { InstallEngine, LoginEngine } from '@orbit/shared';
+import { KIMI_REGIONS, type InstallEngine, type KimiRegion, type LoginEngine } from '@orbit/shared';
+import { IsPublicId } from '../common/public-id';
 
 export class CreateEnrollmentTokenDto {
   @IsOptional() @IsString() label?: string;
@@ -31,10 +32,11 @@ export class UpdateRunnerDto {
   @IsOptional() @IsInt() @Min(1) minFreeDiskMb?: number | null;
 }
 
-// The requested runner order. The service filters this list against the caller's
-// current runners and appends omitted runners, so stale clients cannot drop rows.
+// The requested runner order, in the public ids GET /runners hands out — decoded to the UUIDs the
+// service compares, so uniqueness holds across both spellings. The service filters this list against
+// the caller's current runners and appends omitted runners, so stale clients cannot drop rows.
 export class ReorderRunnersDto {
-  @IsArray() @IsString({ each: true }) @ArrayUnique() ids!: string[];
+  @IsArray() @IsPublicId({ each: true }) @ArrayUnique() ids!: string[];
 }
 
 /** The authorization code the user pasted back from the hosted OAuth callback page. */
@@ -57,6 +59,9 @@ export class StartLoginDto {
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) account?: string;
   /** Codex only: sign in a NEW account, which the runner adds under this name. */
   @IsOptional() @IsString() @MaxLength(60) accountName?: string;
+  /** Kimi only: the site to sign in on — kimi.com (`mainland-cn`) or kimi.ai (`global`). Absent: a
+   *  bare `kimi login`, which goes wherever the CLI decides. */
+  @IsOptional() @IsIn(KIMI_REGIONS) region?: KimiRegion;
 }
 
 /** A new name for an account a runner reports, Default included. The limit is the one an account
@@ -67,5 +72,5 @@ export class RenameAccountDto {
 
 /** Which CLI to install on the runner. Required — there is no historical default here. */
 export class StartInstallDto {
-  @IsIn(['claude', 'codex', 'kimi', 'antigravity']) engine!: InstallEngine;
+  @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh']) engine!: InstallEngine;
 }

@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' orbit-popconfirm pop-[a-z-]+ (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "069601b675c735a69263f4a75f8d4349c0877c77",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T15:18:43.447186+00:00",
+ "endedAt": "2026-10-07T15:30:15.424370+00:00",
+ "loadAverage": {
+  "start": [
+   19.185546875,
+   23.060546875,
+   22.0361328125
+  ],
+  "end": [
+   83.18359375,
+   59.4765625,
+   39.38671875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "9c83b5859084c2115b80f3b2f94256dc363112acb12a5e178afcb75c3ec9ed8c",
+ "outputBytes": 53197,
+ "raw": "/var/tmp/kw2-246921c8/runs/after-pop",
+ "stats": {
+  "expected": 280,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 691324.7320000001,
+  "samples": 280
+ }
+}

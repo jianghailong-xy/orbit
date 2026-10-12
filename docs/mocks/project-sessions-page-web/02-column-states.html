@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web 项目会话页：会话栏的几种状态</title>
+<link rel="stylesheet" href="web.css">
+<style>
+  .col { width: 321px; }
+  .col .shot { width: 321px; }
+  figcaption { margin-top: 0; }
+</style></head>
+<body>
+<h1>② 会话栏的几种状态（桌面，原大）</h1>
+<p class="lede" style="width:2080px">都是图 ① 那一页的会话栏，按原大截下来（默认宽度 320px）。规则和 iOS 用同一套：启动行的判断和项目页 Open items 里那一行一致（Web 的 <code>lib/projectStart.ts</code>、iOS 的 <code>StartProject.pageRow</code>）；落地行、合入卡的形态也和 iOS 共用同一套判断（<code>projectMerge.ts</code> 和 <code>ProjectMergeCard</code>）。</p>
+
+<div class="row" style="gap:30px">
+  <div class="col">
+    <div class="cap"><span class="tag now">现在</span>没启动</div>
+    <div class="shot"><img src="shots/d-now-col.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">⋯ 菜单：Open Project、Open Coordinator。</li>
+      <li class="n" data-n="2">钉在上方的横带，写 “0/5 done · 0 running” 加 ↗。看不出在等启动，也没有入口。</li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="cap"><span class="tag new">方案</span>没启动 · 协调者还没请求</div>
+    <div class="shot"><img src="shots/d-own-col.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">⊞ 打开项目页。</li>
+      <li class="n" data-n="2">直接写 <b>Not started · 5 tasks</b>。</li>
+      <li class="n" data-n="3">灰点：没人在等你，不算进 Needs you。</li>
+      <li class="n" data-n="4">浅蓝的 <b>Start…</b>：打开起始卡，设置按默认规则填。</li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="cap"><span class="tag new">方案</span>没启动 · 协调者已请求</div>
+    <div class="shot"><img src="shots/d-asked-col.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">橙点 <b>Ready to start · asked 2m ago</b>，下面一行是协调者建议的跑法；栏窄时折成两行，不截断。</li>
+      <li class="n" data-n="2">实心的 <b>Review and start</b>：打开起始卡，内容是协调者请求的那一版，Start 回答这份请求。</li>
+      <li>协调者那一行照旧写橙色的 “Ready to start”，不改。不加 Needs you 徽标，卡片也不变色。</li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="cap"><span class="tag new">方案</span>进行中 · 有任务在落地</div>
+    <div class="shot"><img src="shots/d-running-col.png" alt=""></div>
+    <ul class="notes">
+      <li>启动后，启动行收起，卡片回到 <b>1/5 done · 2 running</b>。</li>
+      <li class="n" data-n="1"><b>落地行</b>（Web 现在没有）：有任务正在落到项目分支时，卡里多一行“Landing · checking · 2m 40s”和任务名，每秒走一次，点了打开项目页。合入 main 的那一步写在合入卡里，不在这里。</li>
+      <li>下面的会话行、Today 分组、转圈都是现有的。</li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="cap"><span class="tag new">方案</span>合入卡</div>
+    <div class="shot"><img src="shots/d-merge-col.png" alt=""></div>
+    <ul class="notes">
+      <li>合入卡挪进列表，放在进度卡下面，<b>跟着列表滚动</b>（现在钉在列表上方）。</li>
+      <li class="n" data-n="1">补上 iOS 有的图标块和分隔线。</li>
+      <li class="n" data-n="2">补上判据那一行（“1 of 5 met on this branch — merging does not close the project”）。</li>
+      <li>受阻时的 <b>Open coordinator ›</b> 改成保留项目页（现在会丢掉 <code>?project=</code>，会话栏被换掉）。Details 保留。</li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="cap"><span class="tag new">方案</span>读不到会话</div>
+    <div class="shot"><img src="shots/d-error-col.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">和 iOS 一样，在中间写清楚：<b>Couldn’t load sessions</b> 加原因，再给一个 <b>Retry</b>（Web 没有下拉刷新）。现在只在列表底部写一行小字，也没有重试。</li>
+      <li>真的一个会话都没有时，同一个位置写 <b>No sessions</b>，不带按钮。</li>
+    </ul>
+  </div>
+</div>
+</body></html>

@@ -46,6 +46,8 @@ function serviceOn(current: {
   /** The identity the session declares. A configured (BYOK) slug takes providerBuiltin: false. */
   provider?: string;
   providerBuiltin?: boolean;
+  /** The engine it runs on, when the case records one. */
+  engine?: string;
   /** The one configured row `provider` names, or may be switched onto — or none. */
   modelProvider?: Record<string, unknown>;
 }) {
@@ -83,7 +85,12 @@ function serviceOn(current: {
       },
       count: async () => 0,
     },
-    modelProvider: { findFirst: async () => modelProvider ?? null },
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
+    modelProvider: {
+      findFirst: async () => modelProvider ?? null,
+      findMany: async () => (modelProvider ? [modelProvider] : []),
+    },
   };
   const prisma = { $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) } as never;
   const service = new SessionsService(prisma, {} as never, {
@@ -196,6 +203,7 @@ test('a provider switch that re-resolves the model is a re-spawn, effort and all
   process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
   const { service, turns } = serviceOn({
     modelProvider: {
+      slug: 'byok',
       runtime: 'claude',
       baseUrl: 'https://byok.example/anthropic',
       apiKeyEnc: encryptSecret('sk-byok'),
@@ -231,6 +239,7 @@ test('a provider switch that re-resolves the model says nothing to the engine it
   // since resolveProviderSwitch refuses to move a session across runtimes.
   const { service, turns } = serviceOn({
     modelProvider: {
+      slug: 'byok',
       runtime: 'claude',
       baseUrl: 'https://byok.example/anthropic',
       apiKeyEnc: encryptSecret('sk-byok'),
@@ -264,6 +273,7 @@ test('a provider switch that keeps the model still speaks to the running engine'
   // without a switch.
   const { service, turns } = serviceOn({
     modelProvider: {
+      slug: 'byok',
       runtime: 'claude',
       baseUrl: 'https://byok.example/anthropic',
       apiKeyEnc: encryptSecret('sk-byok'),
@@ -331,6 +341,51 @@ test('an opencode session is re-spawned too — its process does not outlive the
   assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'anthropic/claude-haiku-4-5');
 });
 
+// A configured key run on OpenCode lives in the process environment (shared `openCodeKeys`), so a
+// move onto, off or between keys names the provider on the reload, which is what has the inbox
+// rebuild that environment (reloadProviderEnv).
+const deepseekKey = () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  return {
+    slug: 'deepseek',
+    runtime: 'claude',
+    baseUrl: 'https://api.deepseek.com/anthropic',
+    apiKeyEnc: encryptSecret('sk-ds'),
+    defaultModel: 'deepseek-v4-pro',
+    enabled: true,
+  };
+};
+
+test('an opencode session moved onto a configured key is stored as that key on OpenCode, its environment rebuilt', async () => {
+  const { service, turns } = serviceOn({ provider: 'opencode', model: 'anthropic/claude-opus-5', modelProvider: deepseekKey() });
+
+  // The old spelling — the key named in the model — is written in the new form (docs/provider-engine-contract.md
+  // §3.3): the key is the provider, the model its bare id, and the engine stays OpenCode.
+  await service.updateConfig(OWNER, ID, { model: 'orbit-deepseek/deepseek-v4-pro' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  const content = JSON.parse(turns[0].content ?? '{}');
+  assert.equal(content.model, 'deepseek-v4-pro');
+  assert.equal(content.provider, 'deepseek');
+});
+
+test("an opencode session on a key moving between that key's models keeps its environment", async () => {
+  const { service, turns } = serviceOn({
+    provider: 'deepseek', providerBuiltin: false, engine: 'opencode', model: 'deepseek-v4-pro', modelProvider: deepseekKey(),
+  });
+
+  await service.updateConfig(OWNER, ID, { model: 'deepseek-flash' });
+
+  assert.equal(JSON.parse(turns[0].content ?? '{}').provider, undefined);
+});
+
+test('an opencode session cannot be moved onto a key OpenCode may not spend', async () => {
+  const { service, turns } = serviceOn({ provider: 'opencode', model: 'anthropic/claude-opus-5', modelProvider: { ...deepseekKey(), enabled: false } });
+
+  await assert.rejects(service.updateConfig(OWNER, ID, { model: 'orbit-deepseek/deepseek-v4-pro' }), /provider not available on OpenCode/);
+  assert.deepEqual(turns, []);
+});
+
 test('an antigravity session is re-spawned although it speaks stream-json like claude', async () => {
   // Same transport, different input: agy takes nothing but user messages on stdin and exits on a
   // control_request (docs/antigravity-runtime-contract.md §1.1), so a setconfig would end the
@@ -395,6 +450,7 @@ test('a configured provider borrowing the claude runtime is told, not re-spawned
     providerBuiltin: false,
     model: 'byok-large',
     modelProvider: {
+      slug: 'byok',
       runtime: 'claude',
       baseUrl: 'https://byok.example/anthropic',
       apiKeyEnc: encryptSecret('sk-byok'),

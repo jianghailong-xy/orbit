@@ -1,0 +1,136 @@
+{
+  "approvalCards": [],
+  "controlPlane": null,
+  "facts": {
+    "cancelReason": "SdkError: Request timed out",
+    "cancelledRequestId": 2,
+    "elapsedSeconds": 60,
+    "modelSaw": "Error: Request timed out",
+    "serverFrames": "{\"direction\":\"in\",\"message\":{\"jsonrpc\":\"2.0\",\"id\":\"server-discover-probe-1\",\"method\":\"server/discover\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientInfo\":{\"name\":\"dsh-mcp-client\",\"version\":\"0.0.1\"},\"io.modelcontextprotocol/clientCapabilities\":{}}}}}\n{\"direction\":\"in\",\"message\":{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"dsh-mcp-client\",\"version\":\"0.0.1\"}},\"jsonrpc\":\"2.0\",\"id\":0}}\n{\"direction\":\"in\",\"message\":{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}}\n{\"direction\":\"in\",\"message\":{\"method\":\"tools/list\",\"jsonrpc\":\"2.0\",\"id\":1}}\n{\"direction\":\"in\",\"message\":{\"method\":\"tools/call\",\"params\":{\"name\":\"record\",\"arguments\":{\"value\":\"hold\"}},\"jsonrpc\":\"2.0\",\"id\":2}}\n{\"effect\":\"hold\"}\n{\"direction\":\"in\",\"message\":{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":2,\"reason\":\"SdkError: Request timed out\"}}}\n",
+    "toolStatus": "failed"
+  },
+  "modelRequests": 2,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealMCPTimeoutCancelsTheCall3956198050/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealMCPTimeoutCancelsTheCall3956198050/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "78f5bb423473e0e5675296b15b43ec5a98ab7c48734e57b7554d47a5e8da1f6d",
+        "dshHome": "/tmp/orbit-dsh-mcp-timeout-cDupKT/TestDshRealMCPTimeoutCancelsTheCall3956198050/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-mcp-timeout-cDupKT/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "sessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "text": "Call the held MCP tool."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 45981,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "value": "hold"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "held",
+        "mcpTool": "record",
+        "name": "mcp__held__record",
+        "runtimeSessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: Request timed out",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "status": "failed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "e9f17b6b-0bfa-4a62-87dc-36dd0a244bba",
+        "runtimeSessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "text": "P4 timeout answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 46008,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 46008,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "61e64138-4b95-4fd6-9cec-42974cb8c2c2",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "auto",
+  "scenario": "TestDshRealMCPTimeoutCancelsTheCall"
+}

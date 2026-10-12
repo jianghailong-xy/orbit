@@ -299,7 +299,7 @@ func orbitOnPathIs(path, exe string) bool {
 // wikiMaintenanceEnv is a clean start's whole environment, built from nothing (see wikiMaintenanceEnvPass).
 // The session context is what the orbit MCP server and the `orbit` CLI need to act for this session, and
 // ORBIT_HOME is said outright: under the clean HOME they would otherwise look for the runner's
-// configuration in the wrong place.
+// configuration in the wrong place. So is the runner's mark, which envWithAgent would have put on.
 func wikiMaintenanceEnv(job *ClaimedSession) []string {
 	run := job.WikiMaintenance
 	env := []string{
@@ -310,6 +310,7 @@ func wikiMaintenanceEnv(job *ClaimedSession) []string {
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 		"DISABLE_AUTOUPDATER=1",
 		"ORBIT_HOME=" + machineHome(),
+		envRunnerChild + "=1",
 	}
 	env = append(env, wikiMaintainBashEnv()...)
 	if run.path != "" {
@@ -325,6 +326,8 @@ func wikiMaintenanceEnv(job *ClaimedSession) []string {
 			env = append(env, key+"="+value)
 		}
 	}
+	// A managed runner's instance, which `orbit mcp` sends with the runner credential.
+	env = append(env, managedInstanceEnv()...)
 	return append(env,
 		"ORBIT_SESSION_ID="+publicID(job.SessionID),
 		"ORBIT_AGENT_ID="+publicID(job.AgentID),

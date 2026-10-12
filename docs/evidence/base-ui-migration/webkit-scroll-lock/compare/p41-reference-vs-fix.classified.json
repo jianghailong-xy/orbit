@@ -1,0 +1,378 @@
+[
+ {
+  "file": "chromium-dark-desktop/p41-cli-denied.png",
+  "differentPixels": 4,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p41-profile-photo.png",
+  "differentPixels": 66,
+  "maxChannelDelta": 40,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 66
+  },
+  "otherBox": [
+   500,
+   151,
+   1059,
+   897
+  ]
+ },
+ {
+  "file": "chromium-dark-desktop/p41-profile-reset.png",
+  "differentPixels": 33,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p41-setup-invalid.png",
+  "differentPixels": 37,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-desktop/p41-setup-required.png",
+  "differentPixels": 44,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/p41-cli-denied.png",
+  "differentPixels": 4,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/p41-setup-invalid.png",
+  "differentPixels": 6,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/p41-setup-required.png",
+  "differentPixels": 28,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-dark-phone/p41-setup-valid.png",
+  "differentPixels": 16,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p41-cli-denied.png",
+  "differentPixels": 4,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p41-profile-photo.png",
+  "differentPixels": 37,
+  "maxChannelDelta": 39,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 0,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 37
+  },
+  "otherBox": [
+   500,
+   151,
+   737,
+   897
+  ]
+ },
+ {
+  "file": "chromium-light-desktop/p41-profile-reset.png",
+  "differentPixels": 45,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p41-setup-invalid.png",
+  "differentPixels": 15,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p41-setup-required.png",
+  "differentPixels": 31,
+  "maxChannelDelta": 2,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-desktop/p41-setup-valid.png",
+  "differentPixels": 7,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/p41-cli-denied.png",
+  "differentPixels": 4,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/p41-profile-photo.png",
+  "differentPixels": 26,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "chromium-light-phone/p41-setup-invalid.png",
+  "differentPixels": 6,
+  "maxChannelDelta": 1,
+  "p0Comparator": "match",
+  "class": "chromium noise"
+ },
+ {
+  "file": "webkit-dark-desktop/p41-cli-denied.png",
+  "differentPixels": 34840,
+  "maxChannelDelta": 255,
+  "p0Comparator": "12110 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 16013,
+   "shift8": 11626,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-dark-desktop/p41-profile-reset.png",
+  "differentPixels": 49961,
+  "maxChannelDelta": 255,
+  "p0Comparator": "14519 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 33857,
+   "shift8": 8777,
+   "other": 126
+  },
+  "otherBox": [
+   584,
+   37,
+   1262,
+   172
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/p41-settings-saving.png",
+  "differentPixels": 61854,
+  "maxChannelDelta": 255,
+  "p0Comparator": "19784 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 52479,
+   "shift8": 2172,
+   "other": 2
+  },
+  "otherBox": [
+   831,
+   195,
+   833,
+   198
+  ]
+ },
+ {
+  "file": "webkit-dark-desktop/p41-settings-theme.png",
+  "differentPixels": 52028,
+  "maxChannelDelta": 255,
+  "p0Comparator": "16879 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 42655,
+   "shift8": 2172,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-dark-phone/p41-cli-denied.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6576 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-dark-phone/p41-profile-reset.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6728 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-dark-phone/p41-settings-saving.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6728 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-dark-phone/p41-settings-theme.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "6728 pixels (ratio 0.03 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-desktop/p41-cli-denied.png",
+  "differentPixels": 33848,
+  "maxChannelDelta": 255,
+  "p0Comparator": "5105 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 13710,
+   "shift8": 12937,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-desktop/p41-profile-reset.png",
+  "differentPixels": 46230,
+  "maxChannelDelta": 255,
+  "p0Comparator": "8016 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 29135,
+   "shift8": 9805,
+   "other": 89
+  },
+  "otherBox": [
+   584,
+   37,
+   1262,
+   172
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/p41-settings-saving.png",
+  "differentPixels": 57668,
+  "maxChannelDelta": 255,
+  "p0Comparator": "14140 pixels (ratio 0.02 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 48291,
+   "shift8": 2172,
+   "other": 4
+  },
+  "otherBox": [
+   831,
+   195,
+   833,
+   198
+  ]
+ },
+ {
+  "file": "webkit-light-desktop/p41-settings-theme.png",
+  "differentPixels": 47909,
+  "maxChannelDelta": 255,
+  "p0Comparator": "10572 pixels (ratio 0.01 of all image pixels) are different.",
+  "class": {
+   "scrollbar": 7201,
+   "shift4": 38536,
+   "shift8": 2172,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-phone/p41-cli-denied.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-phone/p41-profile-reset.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-phone/p41-settings-saving.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ },
+ {
+  "file": "webkit-light-phone/p41-settings-theme.png",
+  "differentPixels": 6753,
+  "maxChannelDelta": 255,
+  "p0Comparator": "match",
+  "class": {
+   "scrollbar": 6753,
+   "shift4": 0,
+   "shift8": 0,
+   "other": 0
+  },
+  "otherBox": null
+ }
+]

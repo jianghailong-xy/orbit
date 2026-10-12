@@ -1,0 +1,130 @@
+{"app": "/var/tmp/p23b1/trees/e361ee373", "commit": "e361ee3734bee190daf62cfb2f54bc3739df18df", "dirty": "", "runner": "77233e226b4e8a96d38517a4a68329052d5f04d6", "started": "2026-10-06T23:01:52Z", "args": "-g (settings|profile|session)$"}
+[WebServer] (node:1651872) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 24 tests using 1 worker
+
+(node:1652030) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/settings-saved.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/b1-state.diag.mjs:114:3 › settings (1.6s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/profile-validation.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/b1-state.diag.mjs:114:3 › profile (1.7s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-desktop/notification-error.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/b1-state.diag.mjs:114:3 › session (5.0s)
+(node:1652882) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/settings-saved.png, writing actual.
+  ✓   4 [chromium-light-phone] › ui-migration/b1-state.diag.mjs:114:3 › settings (1.3s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/profile-validation.png, writing actual.
+  ✓   5 [chromium-light-phone] › ui-migration/b1-state.diag.mjs:114:3 › profile (1.7s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-light-phone/notification-error.png, writing actual.
+  ✓   6 [chromium-light-phone] › ui-migration/b1-state.diag.mjs:114:3 › session (5.0s)
+(node:1653742) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/settings-saved.png, writing actual.
+  ✓   7 [chromium-dark-desktop] › ui-migration/b1-state.diag.mjs:114:3 › settings (1.3s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/profile-validation.png, writing actual.
+  ✓   8 [chromium-dark-desktop] › ui-migration/b1-state.diag.mjs:114:3 › profile (1.6s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-desktop/notification-error.png, writing actual.
+  ✓   9 [chromium-dark-desktop] › ui-migration/b1-state.diag.mjs:114:3 › session (5.0s)
+(node:1654484) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/settings-saved.png, writing actual.
+  ✓  10 [chromium-dark-phone] › ui-migration/b1-state.diag.mjs:114:3 › settings (1.2s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/profile-validation.png, writing actual.
+  ✓  11 [chromium-dark-phone] › ui-migration/b1-state.diag.mjs:114:3 › profile (1.7s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/chromium-dark-phone/notification-error.png, writing actual.
+  ✓  12 [chromium-dark-phone] › ui-migration/b1-state.diag.mjs:114:3 › session (4.4s)
+(node:1655855) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/settings-saved.png, writing actual.
+  ✓  13 [webkit-light-desktop] › ui-migration/b1-state.diag.mjs:114:3 › settings (1.8s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/profile-validation.png, writing actual.
+  ✓  14 [webkit-light-desktop] › ui-migration/b1-state.diag.mjs:114:3 › profile (2.2s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-desktop/notification-error.png, writing actual.
+  ✓  15 [webkit-light-desktop] › ui-migration/b1-state.diag.mjs:114:3 › session (6.2s)
+(node:1657172) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/settings-saved.png, writing actual.
+  ✓  16 [webkit-light-phone] › ui-migration/b1-state.diag.mjs:114:3 › settings (1.5s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/profile-validation.png, writing actual.
+  ✓  17 [webkit-light-phone] › ui-migration/b1-state.diag.mjs:114:3 › profile (1.7s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-light-phone/notification-error.png, writing actual.
+  ✓  18 [webkit-light-phone] › ui-migration/b1-state.diag.mjs:114:3 › session (5.3s)
+(node:1658642) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/settings-saved.png, writing actual.
+  ✓  19 [webkit-dark-desktop] › ui-migration/b1-state.diag.mjs:114:3 › settings (1.7s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/profile-validation.png, writing actual.
+  ✓  20 [webkit-dark-desktop] › ui-migration/b1-state.diag.mjs:114:3 › profile (2.0s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-desktop/notification-error.png, writing actual.
+  ✓  21 [webkit-dark-desktop] › ui-migration/b1-state.diag.mjs:114:3 › session (6.0s)
+(node:1659711) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/settings-saved.png, writing actual.
+  ✓  22 [webkit-dark-phone] › ui-migration/b1-state.diag.mjs:114:3 › settings (1.5s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  23 [webkit-dark-phone] › ui-migration/b1-state.diag.mjs:114:3 › profile (1.9s)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/diag-e361ee373/snapshots/webkit-dark-phone/notification-error.png, writing actual.
+  ✓  24 [webkit-dark-phone] › ui-migration/b1-state.diag.mjs:114:3 › session (5.6s)
+
+  24 passed (1.2m)
+# exit 0

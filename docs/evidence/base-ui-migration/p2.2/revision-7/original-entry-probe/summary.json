@@ -1,0 +1,117 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T13:38:58.437Z",
+    "duration": 10549.66,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2013
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--native-entry.json",
+          "sha256": "bee8319ba79046bdfb2dc10c3e013612445acc8449899e1c497f56d4ac888a50"
+        },
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--trace.zip",
+          "sha256": "b8ad15cb92a3806f5763dfef72bf455ae079eacd39568e94c63be47b1df4bf4f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1530
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-1--native-entry.json",
+          "sha256": "1df2251a186634a39574b3f52eb52b46a6fe02e5ef1d132424117fee8fe3d3eb"
+        },
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-1--trace.zip",
+          "sha256": "35c47bd8b4cf8f0852f4447c12e4bcd5096a356b447381628e2242fa78a69b0f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1501
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-2--native-entry.json",
+          "sha256": "86e503b15b89d7489b8c602ae639ef541a74bb4bef0c07654bdfd6b2b02e4f9e"
+        },
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-2--trace.zip",
+          "sha256": "9d087b85f79f04d88b6f7937a6586fbd12f3e5f1cc716eacc6d7016937715749"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1487
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-3--native-entry.json",
+          "sha256": "9b269592a71b9c11968b82e2909af990fa8ebd8b2693e464dd65023b246ae4d3"
+        },
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-3--trace.zip",
+          "sha256": "62dbf058d827281a2075828d79fbfe622357311d6a8eeade12da506a4f9ef975"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1528
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-4--native-entry.json",
+          "sha256": "5f40964148d9044b006a3c6901fedc079a7cfe0beb6a43879a2ab1bd7a0a766e"
+        },
+        {
+          "file": "webkit-dark-desktop--observe-original-legacy-confirmation-entry-without-synchronization--repeat-4--trace.zip",
+          "sha256": "1c66aa3692986ad1ba6a3eafdb691ab8382db1ae8000a77376d6f2b8cfe62770"
+        }
+      ]
+    }
+  ]
+}

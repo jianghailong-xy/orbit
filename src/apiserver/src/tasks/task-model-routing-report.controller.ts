@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { TaskModelRoutingReportService } from './task-model-routing-report.service';
@@ -9,6 +10,7 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
 export class TaskModelRoutingReportController {
   constructor(private readonly report: TaskModelRoutingReportService) {}
 
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get('report')
   read(
     @CurrentUser() user: AuthUser,

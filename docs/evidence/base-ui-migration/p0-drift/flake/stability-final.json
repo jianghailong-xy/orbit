@@ -1,0 +1,525 @@
+{
+ "fixed": {
+  "run": "/var/tmp/p0drift-s2/runs/stability-fixed",
+  "stats": {
+   "startTime": "2026-10-06T22:16:41.825Z",
+   "duration": 856696.475,
+   "expected": 400,
+   "skipped": 0,
+   "unexpected": 0,
+   "flaky": 0
+  },
+  "executions": 400,
+  "failed": 0,
+  "byKind": {},
+  "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+  "failures": []
+ },
+ "original": {
+  "run": "/var/tmp/p0drift-s2/runs/stability-original",
+  "stats": {
+   "startTime": "2026-10-06T22:16:41.924Z",
+   "duration": 859781.6,
+   "expected": 339,
+   "skipped": 0,
+   "unexpected": 61,
+   "flaky": 0
+  },
+  "executions": 400,
+  "failed": 61,
+  "byKind": {
+   "strict-mode duplicate (toast + live region)": 61
+  },
+  "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+  "failures": [
+   {
+    "project": "chromium-light-desktop",
+    "test": "profile",
+    "occurrence": 12,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "settings",
+    "occurrence": 14,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "settings",
+    "occurrence": 15,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-light-desktop",
+    "test": "profile",
+    "occurrence": 15,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-light-phone",
+    "test": "settings",
+    "occurrence": 17,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-light-phone",
+    "test": "profile",
+    "occurrence": 18,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-light-phone",
+    "test": "settings",
+    "occurrence": 19,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "profile",
+    "occurrence": 8,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "profile",
+    "occurrence": 10,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "settings",
+    "occurrence": 11,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "profile",
+    "occurrence": 16,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "settings",
+    "occurrence": 19,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-dark-desktop",
+    "test": "settings",
+    "occurrence": 22,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-dark-phone",
+    "test": "settings",
+    "occurrence": 5,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "chromium-dark-phone",
+    "test": "settings",
+    "occurrence": 9,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 1,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 4,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 5,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 6,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "profile",
+    "occurrence": 6,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 7,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "profile",
+    "occurrence": 7,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 8,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 9,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 10,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 11,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 12,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "profile",
+    "occurrence": 12,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 13,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "profile",
+    "occurrence": 13,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 14,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "profile",
+    "occurrence": 14,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 15,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "profile",
+    "occurrence": 15,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 17,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 18,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-desktop",
+    "test": "settings",
+    "occurrence": 25,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-light-phone",
+    "test": "settings",
+    "occurrence": 3,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 2,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 3,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "profile",
+    "occurrence": 3,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 4,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 5,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "profile",
+    "occurrence": 7,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 8,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 9,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 12,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 16,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "profile",
+    "occurrence": 18,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "profile",
+    "occurrence": 20,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 21,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 22,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "profile",
+    "occurrence": 22,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 24,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "settings",
+    "occurrence": 25,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-desktop",
+    "test": "profile",
+    "occurrence": 25,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-phone",
+    "test": "settings",
+    "occurrence": 1,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-phone",
+    "test": "settings",
+    "occurrence": 2,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-phone",
+    "test": "profile",
+    "occurrence": 10,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-phone",
+    "test": "settings",
+    "occurrence": 11,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   },
+   {
+    "project": "webkit-dark-phone",
+    "test": "settings",
+    "occurrence": 12,
+    "retry": 0,
+    "kind": "strict-mode duplicate (toast + live region)",
+    "message": "Error: strict mode violation: getByText('Setting saved', { exact: true }) resolved to 2 elements:"
+   }
+  ]
+ }
+}

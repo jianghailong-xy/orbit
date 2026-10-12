@@ -1,0 +1,9 @@
+same   [] exit=0 stdout=1193 bytes stderr=0 bytes
+same   [--json] exit=0 stdout=697172 bytes stderr=0 bytes
+same   [--check-retired] exit=1 stdout=1193 bytes stderr=71 bytes
+same   [--json --check-retired] exit=1 stdout=697172 bytes stderr=71 bytes
+same   [--bogus] exit=2 stdout=0 bytes stderr=28 bytes
+--help, before -> after:
+2a3,4
+>        node src/web/scripts/audit-antd.mjs --check-owners
+> Read-only: exits 1 when a use point has no owner in the P0.1 inventory or docs/evidence/base-ui-migration/inventory-delta/*.json; lists the ones awaiting the coordinator.

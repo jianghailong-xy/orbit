@@ -1,0 +1,670 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs
+
+[WebServer] (node:3282072) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 496 tests using 1 worker
+
+(node:3282147) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.8s)
+  ✓    2 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+  ✓    3 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (977ms)
+  ✓    4 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (942ms)
+  ✓    5 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (1.0s)
+  ✓    6 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (892ms)
+  ✓    7 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (790ms)
+  ✓    8 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (826ms)
+  ✓    9 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.5s)
+  ✓   10 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (1.6s)
+  ✓   11 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (1.5s)
+  ✓   12 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.6s)
+  ✓   13 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (2.3s)
+  ✓   14 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (2.5s)
+  ✓   15 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (2.4s)
+  ✓   16 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (2.2s)
+  ✓   17 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.4s)
+  ✓   18 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.5s)
+  ✓   19 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (2.2s)
+  ✓   20 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (2.4s)
+  ✓   21 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.4s)
+  ✓   22 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (2.3s)
+  ✓   23 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.5s)
+  ✓   24 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.6s)
+  ✓   25 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (2.5s)
+  ✓   26 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (2.7s)
+  ✓   27 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.4s)
+  ✓   28 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (2.6s)
+  ✓   29 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.6s)
+  ✓   30 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (2.5s)
+  ✓   31 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.7s)
+  ✓   32 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.5s)
+  ✓   33 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.5s)
+  ✓   34 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.7s)
+  ✓   35 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (3.6s)
+  ✓   36 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (3.4s)
+  ✓   37 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (3.3s)
+  ✓   38 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (3.2s)
+  ✓   39 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (3.6s)
+  ✓   40 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (3.5s)
+  ✓   41 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (3.5s)
+  ✓   42 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (3.1s)
+  ✓   43 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (3.0s)
+  ✓   44 [chromium-light-desktop] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (14.8s)
+  ✓   45 [chromium-light-desktop] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.2s)
+  ✓   46 [chromium-light-desktop] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.6s)
+  ✓   47 [chromium-light-desktop] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.3s)
+  ✓   48 [chromium-light-desktop] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.6s)
+  ✓   49 [chromium-light-desktop] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (894ms)
+  ✓   50 [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.0s)
+  ✓   51 [chromium-light-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓   52 [chromium-light-desktop] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (3.5s)
+  ✓   53 [chromium-light-desktop] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.6s)
+  ✓   54 [chromium-light-desktop] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (1.1s)
+  ✓   55 [chromium-light-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.8s)
+  ✓   56 [chromium-light-desktop] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (5.5s)
+  ✓   57 [chromium-light-desktop] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (5.0s)
+  ✓   58 [chromium-light-desktop] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓   59 [chromium-light-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.2s)
+  ✓   60 [chromium-light-desktop] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓   61 [chromium-light-desktop] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (1.2s)
+  ✓   62 [chromium-light-desktop] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.4s)
+(node:3294999) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   63 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓   64 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+  ✓   65 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (879ms)
+  ✓   66 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (799ms)
+  ✓   67 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (1.1s)
+  ✓   68 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (1.1s)
+  ✓   69 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (972ms)
+  ✓   70 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (893ms)
+  ✓   71 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.6s)
+  ✓   72 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (1.7s)
+  ✓   73 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (1.8s)
+  ✓   74 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.6s)
+  ✓   75 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (2.3s)
+  ✓   76 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (2.5s)
+  ✓   77 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (2.8s)
+  ✓   78 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (2.3s)
+  ✓   79 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.5s)
+  ✓   80 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.5s)
+  ✓   81 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (2.2s)
+  ✓   82 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (2.5s)
+  ✓   83 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.5s)
+  ✓   84 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (2.2s)
+  ✓   85 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.5s)
+  ✓   86 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.4s)
+  ✓   87 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (2.2s)
+  ✓   88 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (2.4s)
+  ✓   89 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.5s)
+  ✓   90 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (2.5s)
+  ✓   91 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.4s)
+  ✓   92 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (2.5s)
+  ✓   93 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.3s)
+  ✓   94 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.4s)
+  ✓   95 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.3s)
+  ✓   96 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.3s)
+  ✓   97 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (3.2s)
+  ✓   98 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (3.2s)
+  ✓   99 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (2.7s)
+  ✓  100 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (2.9s)
+  ✓  101 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (3.1s)
+  ✘  102 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (15.3s)
+(node:3303654) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  103 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (17.5s)
+(node:3305323) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  104 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (2.8s)
+  ✓  105 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (2.6s)
+  ✓  106 [chromium-light-phone] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (12.4s)
+  ✓  107 [chromium-light-phone] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (989ms)
+  ✓  108 [chromium-light-phone] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.3s)
+  ✓  109 [chromium-light-phone] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.1s)
+  ✓  110 [chromium-light-phone] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.3s)
+  ✓  111 [chromium-light-phone] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (814ms)
+  ✓  112 [chromium-light-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (1.9s)
+  ✓  113 [chromium-light-phone] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.2s)
+  ✓  114 [chromium-light-phone] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (3.0s)
+  ✓  115 [chromium-light-phone] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.4s)
+  ✓  116 [chromium-light-phone] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (865ms)
+  ✓  117 [chromium-light-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.4s)
+  ✓  118 [chromium-light-phone] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (4.3s)
+  ✓  119 [chromium-light-phone] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (3.6s)
+  ✓  120 [chromium-light-phone] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.4s)
+  ✓  121 [chromium-light-phone] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (2.1s)
+  ✓  122 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.7s)
+  ✓  123 [chromium-light-phone] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (972ms)
+  ✓  124 [chromium-light-phone] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.3s)
+(node:3316026) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  125 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓  126 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.5s)
+  ✓  127 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (832ms)
+  ✓  128 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (951ms)
+  ✓  129 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (945ms)
+  ✓  130 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (883ms)
+  ✓  131 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (1.3s)
+  ✓  132 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (892ms)
+  ✓  133 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.7s)
+  ✓  134 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (2.0s)
+  ✓  135 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (2.1s)
+  ✓  136 [chromium-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (3.2s)
+  ✓  137 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (6.1s)
+  ✓  138 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (3.4s)
+  ✓  139 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (2.9s)
+  ✓  140 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (2.5s)
+  ✓  141 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.4s)
+  ✓  142 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.7s)
+  ✓  143 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (2.5s)
+  ✓  144 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (2.7s)
+  ✓  145 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.6s)
+  ✓  146 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (2.6s)
+  ✓  147 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.7s)
+  ✓  148 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.6s)
+  ✓  149 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (2.3s)
+  ✓  150 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (3.0s)
+  ✓  151 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.5s)
+  ✓  152 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (2.6s)
+  ✓  153 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.6s)
+  ✓  154 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (2.7s)
+  ✓  155 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.8s)
+  ✓  156 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.7s)
+  ✓  157 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.7s)
+  ✓  158 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.6s)
+  ✓  159 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (3.5s)
+  ✓  160 [chromium-dark-desktop] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (3.7s)
+  ✓  161 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (3.5s)
+  ✓  162 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (3.3s)
+  ✓  163 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (3.7s)
+  ✓  164 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (3.9s)
+  ✓  165 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (4.1s)
+  ✓  166 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (3.3s)
+  ✓  167 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (3.4s)
+  ✓  168 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (15.1s)
+  ✓  169 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.2s)
+  ✓  170 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.6s)
+  ✓  171 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.4s)
+  ✓  172 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.6s)
+  ✓  173 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (1.0s)
+  ✓  174 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (1.9s)
+  ✓  175 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓  176 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (3.2s)
+  ✓  177 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.6s)
+  ✓  178 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (1.1s)
+  ✓  179 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.5s)
+  ✓  180 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (5.5s)
+  ✓  181 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (4.4s)
+  ✓  182 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.6s)
+  ✓  183 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.4s)
+  ✓  184 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  185 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (1.0s)
+  ✓  186 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.4s)
+(node:3353394) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  187 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓  188 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+  ✓  189 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (894ms)
+  ✓  190 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (941ms)
+  ✓  191 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (1.1s)
+  ✓  192 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (1.1s)
+  ✓  193 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (900ms)
+  ✓  194 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (860ms)
+  ✓  195 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.8s)
+  ✓  196 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (1.9s)
+  ✓  197 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (2.2s)
+  ✓  198 [chromium-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.8s)
+  ✓  199 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (2.6s)
+  ✓  200 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (3.8s)
+  ✓  201 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (5.0s)
+  ✓  202 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (4.0s)
+  ✓  203 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.6s)
+  ✓  204 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.6s)
+  ✓  205 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (2.3s)
+  ✓  206 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (2.6s)
+  ✓  207 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.7s)
+  ✓  208 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (2.6s)
+  ✓  209 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.9s)
+  ✓  210 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.8s)
+  ✓  211 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (2.5s)
+  ✓  212 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (2.7s)
+  ✓  213 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.5s)
+  ✓  214 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (2.8s)
+  ✓  215 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.6s)
+  ✓  216 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (2.6s)
+  ✓  217 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.6s)
+  ✓  218 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.6s)
+  ✓  219 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.7s)
+  ✓  220 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.8s)
+  ✓  221 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (3.7s)
+  ✓  222 [chromium-dark-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (4.0s)
+  ✓  223 [chromium-dark-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (3.6s)
+  ✓  224 [chromium-dark-phone] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (3.3s)
+  ✓  225 [chromium-dark-phone] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (3.7s)
+  ✓  226 [chromium-dark-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (3.6s)
+  ✓  227 [chromium-dark-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (3.6s)
+  ✓  228 [chromium-dark-phone] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (3.3s)
+  ✓  229 [chromium-dark-phone] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (3.1s)
+  ✓  230 [chromium-dark-phone] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (15.4s)
+  ✓  231 [chromium-dark-phone] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.2s)
+  ✓  232 [chromium-dark-phone] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.5s)
+  ✓  233 [chromium-dark-phone] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.2s)
+  ✓  234 [chromium-dark-phone] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.6s)
+  ✓  235 [chromium-dark-phone] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (979ms)
+  ✓  236 [chromium-dark-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓  237 [chromium-dark-phone] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.5s)
+  ✓  238 [chromium-dark-phone] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (4.0s)
+  ✓  239 [chromium-dark-phone] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (2.0s)
+  ✓  240 [chromium-dark-phone] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (1.2s)
+  ✓  241 [chromium-dark-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.7s)
+  ✓  242 [chromium-dark-phone] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (5.6s)
+  ✓  243 [chromium-dark-phone] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (4.7s)
+  ✓  244 [chromium-dark-phone] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.6s)
+  ✓  245 [chromium-dark-phone] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (2.1s)
+  ✓  246 [chromium-dark-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.9s)
+  ✓  247 [chromium-dark-phone] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (1.1s)
+  ✓  248 [chromium-dark-phone] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.4s)
+(node:3374032) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  249 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.9s)
+  ✓  250 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.6s)
+  ✓  251 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (853ms)
+  ✓  252 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (785ms)
+  ✓  253 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (812ms)
+  ✓  254 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (851ms)
+  ✓  255 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (828ms)
+  ✓  256 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (807ms)
+  ✓  257 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.6s)
+  ✓  258 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (1.5s)
+  ✓  259 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (1.5s)
+  ✓  260 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.6s)
+  ✓  261 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (1.9s)
+  ✓  262 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (2.3s)
+  ✓  263 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (2.5s)
+  ✓  264 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (2.0s)
+  ✓  265 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.4s)
+  ✓  266 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.4s)
+  ✘  267 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (1.5m)
+(node:3408285) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  268 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (3.4s)
+  ✓  269 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.6s)
+  ✓  270 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (1.8s)
+  ✓  271 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.3s)
+  ✓  272 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.5s)
+  ✓  273 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (1.7s)
+  ✓  274 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (2.2s)
+  ✓  275 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.8s)
+  ✓  276 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (2.2s)
+  ✓  277 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.4s)
+  ✓  278 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (2.7s)
+  ✓  279 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.7s)
+  ✓  280 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.4s)
+  ✓  281 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.5s)
+  ✓  282 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.5s)
+  ✓  283 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (3.2s)
+  ✓  284 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (3.2s)
+  ✓  285 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (2.7s)
+  ✓  286 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (2.4s)
+  ✓  287 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (2.5s)
+  ✓  288 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (2.8s)
+  ✓  289 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (2.5s)
+  ✓  290 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (2.3s)
+  ✓  291 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (2.2s)
+  ✓  292 [webkit-light-desktop] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (9.8s)
+  ✓  293 [webkit-light-desktop] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.1s)
+  ✓  294 [webkit-light-desktop] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.5s)
+  ✓  295 [webkit-light-desktop] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.3s)
+  ✓  296 [webkit-light-desktop] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.6s)
+  ✓  297 [webkit-light-desktop] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (917ms)
+  ✓  298 [webkit-light-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.0s)
+  ✓  299 [webkit-light-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.3s)
+  ✓  300 [webkit-light-desktop] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (2.7s)
+  ✓  301 [webkit-light-desktop] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.8s)
+  ✓  302 [webkit-light-desktop] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (1.1s)
+  ✓  303 [webkit-light-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.6s)
+  ✓  304 [webkit-light-desktop] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (4.1s)
+  ✓  305 [webkit-light-desktop] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (3.6s)
+  ✓  306 [webkit-light-desktop] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.8s)
+  ✓  307 [webkit-light-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.6s)
+  ✓  308 [webkit-light-desktop] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.0s)
+  ✓  309 [webkit-light-desktop] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (1.3s)
+  ✓  310 [webkit-light-desktop] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (2.3s)
+(node:3433009) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  311 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.2s)
+  ✓  312 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.8s)
+  ✓  313 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (900ms)
+  ✓  314 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (899ms)
+  ✓  315 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (1.1s)
+  ✓  316 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (1.1s)
+  ✓  317 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (961ms)
+  ✓  318 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (808ms)
+  ✓  319 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.6s)
+  ✓  320 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (1.9s)
+  ✓  321 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (2.0s)
+  ✓  322 [webkit-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.6s)
+  ✓  323 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (1.8s)
+  ✓  324 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (2.3s)
+  ✓  325 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (2.2s)
+  ✓  326 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (1.8s)
+  ✓  327 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.4s)
+  ✓  328 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.7s)
+  ✓  329 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (1.9s)
+  ✓  330 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (2.2s)
+  ✓  331 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.3s)
+  ✓  332 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (1.9s)
+  ✓  333 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.4s)
+  ✓  334 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.2s)
+  ✓  335 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (2.1s)
+  ✓  336 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (2.3s)
+  ✓  337 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.5s)
+  ✓  338 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (2.4s)
+  ✓  339 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.5s)
+  ✓  340 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (2.5s)
+  ✓  341 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.8s)
+  ✓  342 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.5s)
+  ✓  343 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.3s)
+  ✓  344 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.3s)
+  ✓  345 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (3.2s)
+  ✓  346 [webkit-light-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (3.1s)
+  ✓  347 [webkit-light-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (3.1s)
+  ✓  348 [webkit-light-phone] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (2.9s)
+  ✓  349 [webkit-light-phone] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (3.2s)
+  ✓  350 [webkit-light-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (2.9s)
+  ✓  351 [webkit-light-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (2.8s)
+  ✓  352 [webkit-light-phone] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (2.5s)
+  ✓  353 [webkit-light-phone] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (2.4s)
+  ✓  354 [webkit-light-phone] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (11.3s)
+  ✓  355 [webkit-light-phone] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.3s)
+  ✓  356 [webkit-light-phone] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.8s)
+  ✓  357 [webkit-light-phone] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.5s)
+  ✓  358 [webkit-light-phone] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.6s)
+  ✓  359 [webkit-light-phone] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (857ms)
+  ✓  360 [webkit-light-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.0s)
+  ✓  361 [webkit-light-phone] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.5s)
+  ✓  362 [webkit-light-phone] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (3.2s)
+  ✓  363 [webkit-light-phone] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (2.1s)
+  ✓  364 [webkit-light-phone] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (1.2s)
+  ✓  365 [webkit-light-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.8s)
+  ✓  366 [webkit-light-phone] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (4.1s)
+  ✓  367 [webkit-light-phone] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (3.7s)
+  ✓  368 [webkit-light-phone] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.5s)
+  ✓  369 [webkit-light-phone] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.4s)
+  ✓  370 [webkit-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.0s)
+  ✓  371 [webkit-light-phone] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (2.5s)
+  ✓  372 [webkit-light-phone] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (4.3s)
+(node:3459375) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  373 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (5.8s)
+  ✓  374 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (2.1s)
+  ✓  375 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (942ms)
+  ✓  376 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (973ms)
+  ✓  377 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (930ms)
+  ✓  378 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (965ms)
+  ✓  379 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (987ms)
+  ✓  380 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (970ms)
+  ✓  381 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.6s)
+  ✓  382 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (1.7s)
+  ✓  383 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (1.7s)
+  ✓  384 [webkit-dark-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.8s)
+  ✓  385 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (2.0s)
+  ✓  386 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (2.3s)
+  ✓  387 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (2.3s)
+  ✓  388 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (2.5s)
+  ✓  389 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.6s)
+  ✓  390 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.6s)
+  ✓  391 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (2.3s)
+  ✓  392 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (2.6s)
+  ✓  393 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.5s)
+  ✓  394 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (2.0s)
+  ✓  395 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.5s)
+  ✓  396 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.8s)
+  ✓  397 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (2.8s)
+  ✓  398 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (2.9s)
+  ✓  399 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.6s)
+  ✓  400 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (2.4s)
+  ✓  401 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.2s)
+  ✓  402 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (2.3s)
+  ✓  403 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.3s)
+  ✓  404 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.4s)
+  ✓  405 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.4s)
+  ✓  406 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.3s)
+  ✓  407 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (3.3s)
+  ✓  408 [webkit-dark-desktop] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (3.3s)
+  ✓  409 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (2.6s)
+  ✓  410 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (2.4s)
+  ✓  411 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (2.4s)
+  ✓  412 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (2.5s)
+  ✓  413 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (2.6s)
+  ✓  414 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (2.2s)
+  ✓  415 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (2.4s)
+  ✓  416 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (11.1s)
+  ✓  417 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.0s)
+  ✓  418 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.4s)
+  ✓  419 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.1s)
+  ✓  420 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.3s)
+  ✓  421 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (845ms)
+  ✓  422 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.1s)
+  ✓  423 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.5s)
+  ✓  424 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (3.3s)
+  ✓  425 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.9s)
+  ✓  426 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (1.1s)
+  ✓  427 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.6s)
+  ✓  428 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (4.1s)
+  ✓  429 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (2.9s)
+  ✓  430 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✓  431 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.2s)
+  ✓  432 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.5s)
+  ✓  433 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (856ms)
+  ✓  434 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.4s)
+(node:3482667) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  435 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓  436 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:50:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+  ✓  437 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion attachment has no transition and dismisses cleanly (735ms)
+  ✓  438 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion expiry has no transition and dismisses cleanly (669ms)
+  ✓  439 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion search has no transition and dismisses cleanly (856ms)
+  ✓  440 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion multiple has no transition and dismisses cleanly (864ms)
+  ✓  441 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion popover has no transition and dismisses cleanly (783ms)
+  ✓  442 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:98:90 › reduced motion tooltip has no transition and dismisses cleanly (744ms)
+  ✓  443 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal attachment can reopen during exit without stale unmount (1.5s)
+  ✓  444 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal expiry can reopen during exit without stale unmount (1.4s)
+  ✓  445 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal search can reopen during exit without stale unmount (1.7s)
+  ✓  446 [webkit-dark-phone] › ui-migration/choices-lifecycle.browser.mjs:115:67 › normal popover can reopen during exit without stale unmount (1.5s)
+  ✓  447 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches attachment (1.8s)
+  ✓  448 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches attachment (2.1s)
+  ✓  449 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches attachment (2.1s)
+  ✓  450 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches expiry (1.9s)
+  ✓  451 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches expiry (2.3s)
+  ✓  452 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches expiry (2.3s)
+  ✓  453 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search (1.9s)
+  ✓  454 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches search (2.3s)
+  ✓  455 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches search (2.4s)
+  ✓  456 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches multiple (2.1s)
+  ✓  457 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches multiple (2.3s)
+  ✓  458 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches multiple (2.5s)
+  ✓  459 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches popover (2.0s)
+  ✓  460 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches popover (2.1s)
+  ✓  461 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches popover (2.2s)
+  ✘  462 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip (1.5m)
+(node:3501874) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  463 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal top entrance and exit motion matches tooltip (2.0s)
+  ✓  464 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal flipped entrance and exit motion matches tooltip (1.9s)
+  ✓  465 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover center zoom origin matches (2.0s)
+  ✓  466 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › popover end zoom origin matches (2.0s)
+  ✓  467 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip center zoom origin matches (2.0s)
+  ✓  468 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:136:83 › tooltip end zoom origin matches (2.0s)
+  ✓  469 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu left edge zoom matches and stays in view (2.7s)
+  ✓  470 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:155:41 › submenu right edge zoom matches and stays in view (2.7s)
+  ✓  471 [webkit-dark-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (2.1s)
+  ✓  472 [webkit-dark-phone] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (1.9s)
+  ✓  473 [webkit-dark-phone] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (2.3s)
+  ✓  474 [webkit-dark-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (2.4s)
+  ✓  475 [webkit-dark-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (2.3s)
+  ✓  476 [webkit-dark-phone] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (2.1s)
+  ✓  477 [webkit-dark-phone] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (3.1s)
+  ✓  478 [webkit-dark-phone] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (10.9s)
+  ✓  479 [webkit-dark-phone] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (966ms)
+  ✓  480 [webkit-dark-phone] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.2s)
+  ✓  481 [webkit-dark-phone] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.1s)
+  ✓  482 [webkit-dark-phone] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.3s)
+  ✓  483 [webkit-dark-phone] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (783ms)
+  ✓  484 [webkit-dark-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.0s)
+  ✓  485 [webkit-dark-phone] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.3s)
+  ✓  486 [webkit-dark-phone] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (2.7s)
+  ✓  487 [webkit-dark-phone] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.7s)
+  ✓  488 [webkit-dark-phone] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (941ms)
+  ✓  489 [webkit-dark-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.4s)
+  ✓  490 [webkit-dark-phone] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (3.9s)
+  ✓  491 [webkit-dark-phone] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (2.6s)
+  ✓  492 [webkit-dark-phone] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✓  493 [webkit-dark-phone] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.0s)
+  ✓  494 [webkit-dark-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+  ✓  495 [webkit-dark-phone] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (761ms)
+  ✓  496 [webkit-dark-phone] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.2s)
+
+
+  1) [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByTestId('theme')
+    Expected: "light"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByTestId('theme') with timeout 15000ms
+      - waiting for getByTestId('theme')
+
+
+       7 |   page.on('pageerror', (error) => errors.get(page).push(error.message));
+       8 |   await page.goto(fixture);
+    >  9 |   await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+         |                                           ^
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+      12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:9:43
+
+    Error Context: .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-chromium-light-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByTestId('theme')
+    Expected: "light"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByTestId('theme') with timeout 15000ms
+      - waiting for getByTestId('theme')
+
+
+      86 |     for (const system of ['antd', 'orbit']) {
+      87 |       await page.goto(`${fixture}?sample=${kind}&system=${system}`);
+    > 88 |       await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+         |                                               ^
+      89 |       const region = page.getByRole('region', { name: 'Appearance sample' });
+      90 |       const choice = region.getByRole('combobox');
+      91 |       if (['expiry', 'account', 'search'].includes(kind)) {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:88:47
+
+    Error Context: .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-chromium-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search 
+
+    Test timeout of 90000ms exceeded.
+
+    Error: page.evaluate: Test timeout of 90000ms exceeded.
+
+      69 | async function capture(page) {
+      70 |   await page.waitForFunction(() => window.choiceMotion.records.length > 0);
+    > 71 |   return page.evaluate(async () => {
+         |               ^
+      72 |     const state = window.choiceMotion;
+      73 |     await Promise.all([...state.animations].map((animation) => animation.finished.catch(() => {})));
+      74 |     state.active = false;
+        at capture (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:71:15)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:116:30
+
+    Error Context: .choices-results/choices-motion.browser.mjs-8f5e3--exit-motion-matches-search-webkit-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-motion.browser.mjs-8f5e3--exit-motion-matches-search-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-motion.browser.mjs-8f5e3--exit-motion-matches-search-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip 
+
+    Test timeout of 90000ms exceeded.
+
+    Error: page.evaluate: Test timeout of 90000ms exceeded.
+
+      69 | async function capture(page) {
+      70 |   await page.waitForFunction(() => window.choiceMotion.records.length > 0);
+    > 71 |   return page.evaluate(async () => {
+         |               ^
+      72 |     const state = window.choiceMotion;
+      73 |     await Promise.all([...state.animations].map((animation) => animation.finished.catch(() => {})));
+      74 |     state.active = false;
+        at capture (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:71:15)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-motion.browser.mjs:116:30
+
+    Error Context: .choices-results/choices-motion.browser.mjs-d4495-exit-motion-matches-tooltip-webkit-dark-phone/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-motion.browser.mjs-d4495-exit-motion-matches-tooltip-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-motion.browser.mjs-d4495-exit-motion-matches-tooltip-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states 
+    [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states 
+    [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches search 
+    [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:100:3 › normal bottom entrance and exit motion matches tooltip 
+  492 passed (23.0m)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs

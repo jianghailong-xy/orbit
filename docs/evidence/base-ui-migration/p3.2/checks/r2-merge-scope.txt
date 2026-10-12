@@ -1,0 +1,11 @@
+ok    src/macos/OrbitKit/Tests/OrbitKitTests/TaskDetailCopyParityTests.swift: MERGED is MAIN plus exactly the batch's changed lines
+ok    src/macos/OrbitKit/Tests/OrbitKitTests/TaskDetailCopyParityTests.swift: MERGED is BATCH plus exactly main's changed lines
+ok    src/web/src/components/AccountSelect.tsx: MERGED is MAIN plus exactly the batch's changed lines
+ok    src/web/src/components/AccountSelect.tsx: MERGED is BATCH plus exactly main's changed lines
+ok    src/web/src/index.css: MERGED is MAIN plus exactly the batch's changed lines
+ok    src/web/src/index.css: MERGED is BATCH plus exactly main's changed lines
+ok    the batch's other 41 files (its evidence aside) are its own blobs, but for ['src/web/ui-migration/pilot-fixtures.mjs', 'src/web/ui-migration/pilot.browser.mjs']
+ok    main's other 418 files are main's own blobs, but for ['src/web/src/pages/RunnerDetailPage.antigravityAccount.test.tsx']
+ok    main changed nothing under src/web/src/components/ui or src/web/ui-migration
+ok    index.css: no selector changed by both sides
+ok    no ui-migration fixture and no pilot source uses the first class of a selector main's index.css changed

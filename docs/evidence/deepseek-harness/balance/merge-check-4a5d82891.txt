@@ -1,0 +1,24 @@
+Merge check on 4a5d8289177fb6aefc46e782fe076e1110677c99 (this branch + origin/main 162774e52), HPC, 2026-10-06.
+Orbit job bgj_c996beaf69bf; each step run on its own so every exit code is known.
+
+=== STEP 1: npm run build
+=== STEP 1 EXIT 0 (7s): npm run build
+✓ built in 1.93s
+=== STEP 2: npm test -w @orbit/shared
+=== STEP 2 EXIT 0 (1s): npm test -w @orbit/shared
+ Test Files  24 passed (24)
+      Tests  393 passed (393)
+=== STEP 3: npm test -w @orbit/apiserver
+=== STEP 3 EXIT 0 (49s): npm test -w @orbit/apiserver
+ℹ tests 4518
+ℹ pass 4518
+ℹ fail 0
+ℹ skipped 0
+=== STEP 4: npm test -w @orbit/web
+=== STEP 4 EXIT 0 (278s): npm test -w @orbit/web
+ Test Files  325 passed (325)
+      Tests  4097 passed (4097)
+=== STEP 5: cd src/runner-go && go test ./...
+=== STEP 5 EXIT 0 (265s): cd src/runner-go && go test ./...
+ok  	orbit	246.551s
+=== MERGE CHECK rc=0 on 4a5d8289177fb6aefc46e782fe076e1110677c99

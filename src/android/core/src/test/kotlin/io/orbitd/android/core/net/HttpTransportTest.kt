@@ -5,6 +5,7 @@ import io.orbitd.android.core.auth.MemoryCredentials
 import io.orbitd.android.core.auth.MemoryData
 import io.orbitd.android.core.auth.MemoryInstances
 import io.orbitd.android.core.auth.tokens
+import io.orbitd.android.core.protocol.SignInMethods
 import io.orbitd.android.core.protocol.Wire
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
@@ -20,6 +21,36 @@ import org.junit.Test
 class HttpTransportTest {
     private fun MockWebServer.address() = ServerAddress.parse(url("/prefix").toString(), true)
 
+    @Test fun uploadProgressReportsChunkWritesWithoutChangingBytesOrRetrying503() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(503))
+            val bytes = ByteArray(240_123) { (it % 251).toByte() }
+            val progress = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Long>>()
+            val response = OkHttpTransport().execute(HttpRequest(server.address(), ApiRequest(listOf("attachments"),
+                HttpMethod.POST, body = bytes, contentType = "application/octet-stream", onUploadProgress = { sent, total -> progress += sent to total }), "test"))
+            assertEquals(503, response.status); assertEquals(1, server.requestCount)
+            assertArrayEquals(bytes, server.takeRequest().body.readByteArray())
+            assertEquals(0L, progress.first().first); assertEquals(bytes.size.toLong(), progress.last().first)
+            assertTrue(progress.size > 3); assertTrue(progress.all { it.second == bytes.size.toLong() })
+            assertTrue(progress.zipWithNext().all { (a, b) -> a.first < b.first })
+        }
+    }
+
+    @Test fun readingLimitsBoundBothDeclaredAndChunkedBinaryResponses() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("x".repeat(100)))
+            server.enqueue(MockResponse().setChunkedBody("x".repeat(100), 5))
+            server.enqueue(MockResponse().setBody("12345678"))
+            val transport = OkHttpTransport()
+            val request = HttpRequest(server.address(), ApiRequest(listOf("attachments", "id"), maxResponseBytes = 8), "test")
+            repeat(2) {
+                try { transport.execute(request); fail("Oversized resource must not be buffered") }
+                catch (_: NetworkException) { }
+            }
+            assertEquals("12345678", transport.execute(request).body.decodeToString())
+        }
+    }
+
     @Test fun loginRefreshRetryAndLogoutUseTheWireContractAndIdenticalMutationBody() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody(Wire.json.encodeToString(tokens())))
@@ -32,7 +63,7 @@ class HttpTransportTest {
             val body = """{"clientTurnId":"same-turn","message":"Hello"}""".encodeToByteArray()
             client.request(handle, ApiRequest(listOf("sessions", "s1", "turn"), HttpMethod.POST, body = body))
             client.logout()
-            val calls = List(5) { server.takeRequest(5, TimeUnit.SECONDS)!! }
+            val calls = List(5) { server.takeRequest(60, TimeUnit.SECONDS)!! }
             assertTrue(calls.all { it.getHeader("X-Orbit-Client") == "android/0.1.0-a03" })
             assertEquals(listOf("/prefix/api/auth/login", "/prefix/api/sessions/s1/turn", "/prefix/api/auth/refresh", "/prefix/api/sessions/s1/turn", "/prefix/api/auth/logout"), calls.map { it.path })
             assertNull(calls[0].getHeader("Authorization"))
@@ -43,6 +74,35 @@ class HttpTransportTest {
             assertArrayEquals(body, calls[1].body.readByteArray())
             assertArrayEquals(body, calls[3].body.readByteArray())
             assertTrue(calls[4].body.readUtf8().contains(tokens(version = 1).refreshToken))
+        }
+    }
+
+    @Test fun signInMethodsAndGoogleExchangeUseTheWireContract() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"password":true,"google":true,"googleSignup":true}"""))
+            server.enqueue(MockResponse().setBody(Wire.json.encodeToString(tokens())))
+            val client = AuthSession(OkHttpTransport(), MemoryCredentials(), MemoryInstances(), MemoryData(), "0.1.0-d1", true)
+            assertEquals(SignInMethods(google = true, googleSignup = true), client.signInMethods(server.address()))
+            client.loginWithGoogleTicket(server.address(), "fixture-ticket", "fixture-verifier")
+            val (methods, exchange) = List(2) { server.takeRequest(60, TimeUnit.SECONDS)!! }
+            assertEquals("GET /prefix/api/auth/methods", "${methods.method} ${methods.path}")
+            assertEquals("POST /prefix/api/auth/google/exchange", "${exchange.method} ${exchange.path}")
+            assertTrue(listOf(methods, exchange).all { it.getHeader("X-Orbit-Client") == "android/0.1.0-d1" && it.getHeader("Authorization") == null })
+            assertEquals("application/json; charset=utf-8", exchange.getHeader("Content-Type"))
+            assertEquals("""{"ticket":"fixture-ticket","codeVerifier":"fixture-verifier"}""", exchange.body.readUtf8())
+        }
+    }
+
+    @Test fun signInMethodsSurvivesAPooledConnectionTheServerClosed() = runBlocking {
+        MockWebServer().use { server ->
+            // The first answer ends its connection afterwards, as a server's idle keep-alive timeout does.
+            server.enqueue(MockResponse().setBody("""{"password":true,"google":false,"googleSignup":false}""")
+                .setSocketPolicy(SocketPolicy.DISCONNECT_AT_END))
+            server.enqueue(MockResponse().setBody("""{"password":true,"google":true,"googleSignup":false}"""))
+            val client = AuthSession(OkHttpTransport(), MemoryCredentials(), MemoryInstances(), MemoryData(), "test", true)
+            assertEquals(SignInMethods(), client.signInMethods(server.address()))
+            Thread.sleep(200)
+            assertEquals(SignInMethods(google = true), client.signInMethods(server.address()))
         }
     }
 
@@ -66,7 +126,7 @@ class HttpTransportTest {
             val call = async(kotlinx.coroutines.Dispatchers.IO) {
                 OkHttpTransport().execute(HttpRequest(server.address(), ApiRequest(listOf("users", "me")), "test"))
             }
-            assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+            assertNotNull(server.takeRequest(60, TimeUnit.SECONDS))
             call.cancel()
             withTimeout(2_000) { call.join() }
             assertTrue(call.isCancelled)

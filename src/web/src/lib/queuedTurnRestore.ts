@@ -29,3 +29,13 @@ export function returnsToComposer(turn: QueuedTurnOrigin): boolean {
     && !parseWatchWake(turn.content)
     && !parseBackgroundWake(turn.content);
 }
+
+/**
+ * Whether a queued turn is a wake a watch queued, which is withdrawn rather than cancelled: the watch
+ * dead-letters it and never sends it again (WorkspaceView's `QueuedTurnMeta`, `withdrawWake`). Never
+ * another Orbit session's message, whatever its words look like — they are that session's to choose,
+ * and the transcript draws it as their message first.
+ */
+export function isQueuedWatchWake(turn: QueuedTurnOrigin): boolean {
+  return !turn.sessionMessage && parseWatchWake(turn.content) !== null;
+}

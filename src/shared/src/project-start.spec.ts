@@ -32,6 +32,13 @@ describe('differingStartSettings', () => {
     expect(differingStartSettings(named, named)).toEqual([]);
   });
 
+  it('counts a main branch it named and did not get as the line, and not one it left to the project', () => {
+    const named = { ...ASKED, upstreamRef: 'refs/heads/master' };
+    expect(differingStartSettings(named, { ...named, upstreamRef: 'refs/heads/main' })).toEqual(['line']);
+    expect(differingStartSettings(named, named)).toEqual([]);
+    expect(differingStartSettings(ASKED, { ...ASKED, upstreamRef: 'refs/heads/develop' })).toEqual([]);
+  });
+
   it('compares a merge check as it is stored: trimmed, and blank is none', () => {
     expect(differingStartSettings({ ...ASKED, mergeCheckCommand: '  npm test ' }, ASKED)).toEqual([]);
     expect(differingStartSettings({ ...ASKED, mergeCheckCommand: '   ' }, { ...ASKED, mergeCheckCommand: null }))

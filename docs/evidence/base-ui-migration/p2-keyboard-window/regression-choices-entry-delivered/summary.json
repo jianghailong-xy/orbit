@@ -1,0 +1,780 @@
+{
+  "stats": {
+    "startTime": "2026-10-06T22:09:54.105Z",
+    "duration": 74083.276,
+    "expected": 32,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3642
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "4aebe7bb4ebd05d97050c34181a645a3331556cf4535b9dc635a4ebd5a62b118"
+        },
+        {
+          "file": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "b1477bbb6cb1f62b3378bf999c25751ecb94cf317d3090be0ee02158843fc9d3"
+        },
+        {
+          "file": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "7c1ed100f7417ff3a7fdf0c5aa79025f3df25989aa051a17ad0278b98222e363"
+        },
+        {
+          "file": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "53dca5070a95e46ffe94bfa315e83f3345b56641515856ee8bb9551cbb4a8e13"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1809
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "d3e4fa8effd9868b751b060700d1b73ca1b7f719508db8d1e2f8d8ee765cab4b"
+        },
+        {
+          "file": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "e5c99147839b0434148ef7868dd255e45698c4c76bba91a23b9c36b047294176"
+        },
+        {
+          "file": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "35b6f5de0d0a3b1dbbdd720b4cc0cffe2dcce516d6ab9e5ddb8edd99066c7f5a"
+        },
+        {
+          "file": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "5977904c95b626e89ba16df02b89f8107489bc773a55c10f7faa6390c71de070"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3077
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "5e3283ec7cb00a37c0e348f5b41e12da809294217b463da004f894d58e26908b"
+        },
+        {
+          "file": "chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "d9ebd8b4049b3e2bbfc0887293ae4171cbbb4c5596fa002de62486cea2f106a7"
+        },
+        {
+          "file": "chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "21730f9884d7a19b8697e631fd7a20c3746b8f32995635eaaa251dc1685b69a6"
+        },
+        {
+          "file": "chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "50038decf974f0f234ba66e7e129e7864a2e4e07c9c6a341def503eee025af39"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1488
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "2da94d52b41274c688ead4c345f931d98ad720986d16a61f869a136c4666ebe5"
+        },
+        {
+          "file": "chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "21783cdea26999c763b6a44750cf38f7aee06784cf3171ef8459d102a96f7445"
+        },
+        {
+          "file": "chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "45a5cdba652d246a83ca1ea319ee89f0c8647501bfe3240dc3f5625852b11ab4"
+        },
+        {
+          "file": "chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "99f09f6adda26f7cc159e6679c08cdea4c81825a1c541540a2d1f37092bbfb7d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2925
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "48a8f7200193d699f7298adb0753aa6ed90d3ae3c59a310224b84bd2bf49954b"
+        },
+        {
+          "file": "chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "e89445680d20b3c063c13cfdbda073f782d884eff54c5964891726086901be83"
+        },
+        {
+          "file": "chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "8d81582be2d1648eda4d938de5332d1e9577aa1eea336212b8471f42ee616582"
+        },
+        {
+          "file": "chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "18e99fc8a637c1f01e8180581857eb8bb4d9ede9ea8c1acde27fa578fba943c3"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1511
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "cba159a34e4713d68874cc416000aa121472c9bfcfb66b9233f8fc0b073f9cec"
+        },
+        {
+          "file": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "fb274f87587da8fb346f304bfb3cba8c0712a91a77942c78eaeb38a9c80e543f"
+        },
+        {
+          "file": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "37c2e585b743417df73e83a38de49b709f663d5333178312ea7a54e01c730892"
+        },
+        {
+          "file": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "8fe00629fbc196abd50edc27e3d3b307ba0f21345904d22471ec22d2b8943dcc"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2811
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "784db55e058fb0e0b2f762d5247683dec44a9b1c099cd72e838fe0dbe7d87f98"
+        },
+        {
+          "file": "chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "94d4472210a12063c07fa9e96bf98f69ef36e0890e025e159a536a0f7b2a001b"
+        },
+        {
+          "file": "chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "7c0c7fb3cc42896964c2ca5cbcf131d332012d6afe6a7ffd03ef2dafb402893c"
+        },
+        {
+          "file": "chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "06cf598db89aabaade5e6fc1d28c7a6490154510b3eeb3218d1dfe3cea0dc1a6"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1507
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "87c65a26a90050af3080551181a77261438408ae069c56d7626378e7612addfd"
+        },
+        {
+          "file": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "1f9c05ddd61681007c6e3cd481e9b9e43ef6df0bda43a16c66025fc685b36c9f"
+        },
+        {
+          "file": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "c9ea02c4370e54121b8975e67c004a68fc7f448ae0bf093604c0b4ce7a36195c"
+        },
+        {
+          "file": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2821
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "fc9795b8ed1b631f746e546f1e5b9f5fee00b48c6f6b5b9ddb4ad1b460809684"
+        },
+        {
+          "file": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "0f9fe071782e99fc039567a67a0a642ab9d9778a1c334d03054acc9dad500aca"
+        },
+        {
+          "file": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "e8decbd947424cd0609a4ce6b31acbb337dede7b1ed597a5d04018af0429f32a"
+        },
+        {
+          "file": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "a1950e81504c6e59533c699416eaa0299c3c687a4e956a1799247b65d8e9ed5c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1517
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "7d718559620ed70ccb44b6cf7a233241fb517914a8d5a2aab7bea544d9b809bc"
+        },
+        {
+          "file": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "03181fcda0022b0b4bfb479cdb2a3d2b9207f513fa6ae3d91b2fc7de7138daf4"
+        },
+        {
+          "file": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "716e71da0c6588b19ed323c626aeec4c55100e40ac0072e7ae41a3969e947286"
+        },
+        {
+          "file": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2805
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "6b3ddb26bfcffda7b4244b206b908cf45406a025bda205319b053393bf8d5592"
+        },
+        {
+          "file": "webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "b3f72fc97e8ff2249d9a3b93094c41fcd03610d21253bddee1cc301079cc4e34"
+        },
+        {
+          "file": "webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "03dae25441a16b4334857a3f039418e649234f4f0b3db8a96af3829a80bd23a2"
+        },
+        {
+          "file": "webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "f60789f83367182141436843766e9ff31e3fae1a8ce3497a4701958e4d564a72"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1596
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "6b3ddb26bfcffda7b4244b206b908cf45406a025bda205319b053393bf8d5592"
+        },
+        {
+          "file": "webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "7f571e77860b9812dc388d971e274ab021ebe8bdcd7c07782a75219d5f154e70"
+        },
+        {
+          "file": "webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "6169b402d87ab5319aefbc8954d529108df9aaa513e7f16f413951a0444af9c2"
+        },
+        {
+          "file": "webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "d9cd8ca7cf4e89c64ffa074027a9114ec6febab086f4c767fa2b08d58d8d47e5"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3058
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "33adb8e8fc29acc94e2c7bcc5b92364d5a81615b84c88c2f3d0cd1467b595341"
+        },
+        {
+          "file": "webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "f1a829d07d3bad44bb95db958d150767d3cc0fdfa97d22727dbbb600cd564bcd"
+        },
+        {
+          "file": "webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "e32ef88fb0c87e77d6afdfc1ab711f0cd1fc4fd50d967eb34b1799b18362b58d"
+        },
+        {
+          "file": "webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "c33f3cff5ff0d72a69b8f5bb223263bf42c5eb903d2e597bfe143db672f08446"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1813
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "33adb8e8fc29acc94e2c7bcc5b92364d5a81615b84c88c2f3d0cd1467b595341"
+        },
+        {
+          "file": "webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "c978aad433dc5010655ec3538081c2c192f440c913f8ed6f5af2503c674a81f0"
+        },
+        {
+          "file": "webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "a91790b3581681b11f074c4c94dd4157688f1537e97e2a124f5c15a90896026b"
+        },
+        {
+          "file": "webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "8f19b683ca974774d57f42b1880190360631463b007eae5eb9c9974fae69f0cb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3216
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "df55d7a65d15f1035dfdfa5c86e7dd802cf7ce1cdfbbdf7e87cfaa132d077be2"
+        },
+        {
+          "file": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "456e90b583487d37354fd2e733561f6574f7f80eb674187f2339b88d56fb5b9f"
+        },
+        {
+          "file": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "1ffbafe9e6895aeccdfd88350fd3692fc0fb467a5398514678a9ac6fb336e5f7"
+        },
+        {
+          "file": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "1a9210d5699b6f3d776d044726c8e92e254377caceb13b69a8c898062726099c"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2170
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-open.png",
+          "sha256": "df55d7a65d15f1035dfdfa5c86e7dd802cf7ce1cdfbbdf7e87cfaa132d077be2"
+        },
+        {
+          "file": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+          "sha256": "36b7d29cc2c561af481c83fadd20990f242a5522e62fca66346630a6014e74a1"
+        },
+        {
+          "file": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+          "sha256": "47defc79bc1456d9e76c8898a0e4760a939b71fef63e3c969ad75ab5bd8720aa"
+        },
+        {
+          "file": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+          "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2235
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+          "sha256": "9031b51c19a70de6cc851bdbb01d3f8685e13bbbbf51037067413d8fe723c26e"
+        },
+        {
+          "file": "chromium-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+          "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1622
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+          "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2087
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+          "sha256": "28230a141f554b8c8d1af832c2d70485e6dfef686d6dbbf109c01bc26094d8c1"
+        },
+        {
+          "file": "chromium-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+          "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1628
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+          "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1887
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+          "sha256": "8971813b7c9b1403b8f583637059c045a778401fd8d7c42aef2d80db0e18a0f1"
+        },
+        {
+          "file": "chromium-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+          "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1438
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+          "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2051
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+          "sha256": "1a13cf2d9fe4d1fe37a37a7fd1dfec512e7e29da311235c5c8db1dcac3711953"
+        },
+        {
+          "file": "chromium-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+          "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1578
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+          "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2011
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+          "sha256": "a6631d68bc94f6ec3c2e4b8499761ee5f1fbdb4571d17173b8c64dff577c04f1"
+        },
+        {
+          "file": "webkit-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+          "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1476
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+          "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3106
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+          "sha256": "aa08666fa974c9d4e32f3f6a18c4b6f537900a21ca8a1de06bc8e26a205be183"
+        },
+        {
+          "file": "webkit-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+          "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1947
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+          "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2215
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+          "sha256": "810c8771445ce24e9df0908d5118920161565f8c15cf94e5aedfe067d4a54608"
+        },
+        {
+          "file": "webkit-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+          "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1631
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+          "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3154
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png",
+          "sha256": "2ed8214b56d6c0751940572cd0365888cac582aac2b70ee367b14cb1a4a6b21c"
+        },
+        {
+          "file": "webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+          "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1653
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+          "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d"
+        }
+      ]
+    }
+  ]
+}

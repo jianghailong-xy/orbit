@@ -17,10 +17,61 @@ export const WIKI_MAINTENANCE_JOB = {
   /** The budget the task declares for its check, in seconds: the check reads two rows. */
   checkTimeoutSeconds: 300,
   /**
-   * The most ops ended sessions left waiting that one run of an automatic space adopts and verifies
-   * (contract `reviewModes.verification.adoption`): the rest wait for the next run, oldest first.
+   * The most ops ended sessions — and, for a server run, the space's ended runs — left waiting that one
+   * run of an automatic space adopts and verifies (contract `reviewModes.verification.adoption`): the rest
+   * wait for the next run, oldest first.
    */
   adoptOpsMax: 50,
+} as const;
+
+/**
+ * A maintenance run the server's wiki worker executes (contract `maintenance.job.server`, P8): the job kind
+ * `maintain`, the numbers the pipeline holds itself to, and the steps its model calls are filed under. The
+ * numbers are the runner's, moved verbatim (`maintenance.job.rules` and `maintenance.job.run.steps`); what
+ * changes is who asks — the queue, with the deployment's System model, instead of a clean Claude Code in a
+ * session.
+ */
+export const WIKI_MAINTAIN_JOB = {
+  kind: 'maintain',
+  /**
+   * Background work: a fact made the run, and the owner's own asks sort above it (contract `jobs.priority`). It goes
+   * before an articles job of its space made before it that has never been claimed, once (the owner's decision of
+   * 2026-10-10).
+   */
+  priority: 0,
+  /** The queue's steps: extraction, and the one plan change a run may propose; `plan_*` is the plan's wait limit. */
+  steps: { extract: 'extract', planProposal: 'plan_proposal' },
+  /** One extraction's max_tokens: an 8k-token dossier's at most six entries, the import's own budget. */
+  extractMaxTokens: 8192,
+  /** One plan proposal's max_tokens: a document's new sections in the plan's line format (the runner's 32,000). */
+  planMaxTokens: 32_000,
+  /** Dossiers one page of the run's read carries (`maintenance.job.rules.pageSessions`). */
+  pageSessions: 5,
+  /** The most ops one changeset may hold, and — in a Manual space — the most one run may leave waiting. */
+  opsPerChangeset: 30,
+  opsPerTurn: 5,
+  /** A source's quote, at most (`limits.quoteMaxChars`), and how much of the README tells the model what the repository is. */
+  quoteMaxChars: 300,
+  aboutMaxChars: 300,
+  /** One plan proposal's rounds at most, and the items one may be made of (`maintenance.job.docs.rules`). */
+  proposalRoundsMax: 3,
+  proposalItemsMax: 12,
+  /** How long the job waits for one repository operation of the run: the snapshot, a read, a diff, the anchors. */
+  repoWaitSeconds: 300,
+  /** Reads and diffs in flight at once: each is a fetch in the same checkout on the space's runner. */
+  repoOpsInFlight: 2,
+  /**
+   * The most diffs the anchors step makes (`anchorRules.verify.skip`), one a commit the space's anchors were last
+   * checked at, the commits most anchors were checked at first; the anchors checked at the rest are checked again.
+   * A diff is one more operation (~1.6 s), worth it only when it spares more than ~26 anchors' checks (~0.06 s
+   * each). Replayed over the canary's 19 rounds of 2026-10-08/10, four averaged ~44 s a round against ~47 s for
+   * eight and ~53 s for no cap: the commits past the fourth held few anchors, mostly ones that moved again anyway.
+   * A skipped entry keeps its check where it was and a checked one moves to the run's commit, so a run leaves at
+   * most five such commits behind, whatever came before it.
+   */
+  anchorDiffsMax: 4,
+  /** The directories under docs/ that hold no design document (`maintenance.job.docs.excluded`). */
+  docsExcluded: ['docs/mocks/', 'docs/evidence/'],
 } as const;
 
 /**
@@ -200,7 +251,13 @@ export interface WikiMaintenanceReport {
     /** What the run adopted of what ended sessions left waiting, counted apart from its own ops. */
     adopted?: { ops: number; verified: number; failed: number };
   };
-  anchors?: { entries: number; changed: number; missing: number };
+  /**
+   * The anchors step's counts (contract `maintenance.job.server.anchors`): the entries whose checks the run
+   * wrote, and of them the ones left changed or missing; `skipped` the entries whose anchors were all already
+   * checked at the run's commit and were left alone. A run before 2026-10-10 re-checked every entry and
+   * reported no `skipped`.
+   */
+  anchors?: { entries: number; changed: number; missing: number; skipped?: number };
   /** The topic articles a run before criterion 3's revision 3 rewrote; a run now writes the plan's sections (docs). */
   articles?: { written: number; unchanged: number; failed: number };
   docs?: WikiMaintenanceDocsReport;
@@ -255,7 +312,8 @@ export interface WikiMaintenanceCheck {
   position: string | null;
   reached: boolean;
   run: {
-    taskId: string;
+    /** The task that ran it; null for a run a wiki job ran (the server path, migration 0401). */
+    taskId: string | null;
     sessionId: string | null;
     outcome: WikiCursorOutcome | null;
     opsRefused: number | null;

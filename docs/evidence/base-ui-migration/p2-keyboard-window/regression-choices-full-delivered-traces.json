@@ -1,0 +1,365 @@
+[
+ {
+  "trace": "chromium-light-phone--normal-top-entrance-and-exit-motion-matches-search--trace.zip",
+  "moduleRequests": 28,
+  "failedRequests": [
+   {
+    "url": ":4177/src/theme.ts",
+    "status": -1,
+    "failure": null,
+    "ms": 36.5
+   },
+   {
+    "url": ":4177/src/components/ui/Button.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.7
+   },
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.7
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.7
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.7
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.8
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.8
+   },
+   {
+    "url": ":4177/src/components/ui/Tooltip.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.8
+   },
+   {
+    "url": ":4177/src/components/ui/Select.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.8
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.8
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 36.8
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 36.8
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/rolldown-runtime-DC62tzP2.js?v=0af5afcc",
+    "status": -1,
+    "failure": null,
+    "ms": 34.1
+   }
+  ],
+  "networkChangedConsoleErrors": 13,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 162.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 134.2
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 104.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 101.1
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 94.4
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   "",
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "emulateMedia",
+    "title": null,
+    "start": 258842.046,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 258845.115,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 258956.41,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 259077.425,
+    "error": null
+   },
+   {
+    "api": "click",
+    "title": null,
+    "start": 259601.107,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 348829.347,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "webkit-dark-phone--normal-flipped-entrance-and-exit-motion-matches-attachment--trace.zip",
+  "moduleRequests": 270,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 106.8
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 93.5
+   },
+   {
+    "url": ":4177/src/lib/theme.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 83.3
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 81.7
+   },
+   {
+    "url": ":4177/src/theme.ts",
+    "status": 200,
+    "failure": null,
+    "ms": 77.9
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   "",
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1615118.382,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1615137.099,
+    "error": null
+   },
+   {
+    "api": "click",
+    "title": null,
+    "start": 1615154.306,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toBeVisible\"",
+    "start": 1616031.721,
+    "error": null
+   },
+   {
+    "api": "waitForFunction",
+    "title": null,
+    "start": 1616074.587,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1702658.325,
+    "error": null
+   }
+  ]
+ },
+ {
+  "trace": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--trace.zip",
+  "moduleRequests": 270,
+  "failedRequests": [],
+  "networkChangedConsoleErrors": 0,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 563.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 481.7
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@tanstack_react-query.js?v=0af5afcc",
+    "status": 200,
+    "failure": null,
+    "ms": 433.5
+   },
+   {
+    "url": ":4177/src/components/ui/Button.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 432.0
+   },
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 276.9
+   }
+  ],
+  "console": [],
+  "pageErrors": [
+   "",
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1062566.02,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1062575.081,
+    "error": null
+   },
+   {
+    "api": "click",
+    "title": null,
+    "start": 1062585.623,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toBeVisible\"",
+    "start": 1062884.129,
+    "error": null
+   },
+   {
+    "api": "waitForFunction",
+    "title": null,
+    "start": 1062891.834,
+    "error": null
+   },
+   {
+    "api": "evaluateExpression",
+    "title": null,
+    "start": 1147979.16,
+    "error": null
+   }
+  ]
+ }
+]

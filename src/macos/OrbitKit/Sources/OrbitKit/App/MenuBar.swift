@@ -29,18 +29,33 @@ public struct MenuBarSummary: Equatable, Sendable {
 
 public enum MenuBar {
     public static func summary(from sessions: [Session], limit: Int = 8) -> MenuBarSummary {
-        let g = SessionGrouping.group(sessions)
-        let items = (g.needsYou + g.running).prefix(limit).map { s in
-            QuickItem(id: s.id,
-                      title: s.title ?? "Session",
-                      subtitle: subtitle(for: s),
-                      route: .session(s.id))
-        }
+        summary(SessionGrouping.group(sessions), limit: limit)
+    }
+
+    static func summary(_ g: SessionGroups, limit: Int = 8) -> MenuBarSummary {
+        let items = (g.needsYou + g.running).prefix(limit).map(item)
         return MenuBarSummary(needsYou: g.needsYou.count,
                               running: g.running.count,
                               queued: g.queued.count,
                               badge: badge(g.needsYou.count),
                               items: Array(items))
+    }
+
+    /// The same summary after one row changed in place without moving between `SessionGrouping`'s
+    /// buckets: the counts and the order of the items stand, so only that row's item can differ.
+    static func replacing(_ s: Session, in summary: MenuBarSummary) -> MenuBarSummary {
+        guard let i = summary.items.firstIndex(where: { $0.id == s.id }) else { return summary }
+        var items = summary.items
+        items[i] = item(s)
+        return MenuBarSummary(needsYou: summary.needsYou, running: summary.running,
+                              queued: summary.queued, badge: summary.badge, items: items)
+    }
+
+    private static func item(_ s: Session) -> QuickItem {
+        QuickItem(id: s.id,
+                  title: s.title ?? "Session",
+                  subtitle: subtitle(for: s),
+                  route: .session(s.id))
     }
 
     public static func badge(_ count: Int) -> String? {

@@ -261,6 +261,8 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
     const { linkedAt, ...accountView } = answer.account!;
     assert.deepEqual(accountView, {
       state: 'ACTIVE',
+      // Nobody paused it (migration 0374): a pause would say until when.
+      pausedUntil: null,
       email: 'owner@codex-login.invalid',
       plan: 'pro',
       fingerprint: `…${login.accountId.slice(-4)}`,

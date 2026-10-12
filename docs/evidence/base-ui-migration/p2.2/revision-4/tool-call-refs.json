@@ -1,0 +1,52 @@
+[
+  {
+    "ref": "exec-d9ef8931-9152-4802-a570-68c0595847fb",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-scroll-diagnosis node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe.config.mjs",
+    "exitCode": 1
+  },
+  {
+    "ref": "exec-a7518762-d1cf-45af-9dba-5a2978925d7f",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-scroll-diagnosis-native-input node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.config.mjs",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-59e6457e-708f-4028-975f-47036d3fd164",
+    "command": "git commit -m \"test(web): bound nested choice scroll unlock and verify real scrolling\"",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-3c47ca7f-fe7d-4efb-9c9b-ddcd8afd89cf",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-final-choices-entry npm run test:ui-choices -w @orbit/web -- --grep 'Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits'",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-eee0450e-82ec-4453-bd9a-c47de0e8bbc5",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-final-reduced-repeat npm run test:ui-choices -w @orbit/web -- --grep 'reduce Dialog Popover Select exits restore one layer at a time' --repeat-each 5",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-33ad3952-91ba-4dbc-9410-751c95d2c4d5",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-list-choices npm run test:ui-choices -w @orbit/web -- --list",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-43f75ae8-16bc-4f1e-94c4-ef39b00cc1cf",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-negative-controls node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.config.mjs",
+    "exitCode": 1
+  },
+  {
+    "ref": "exec-f12ccad4-66e1-4d75-95eb-fec7d859841f",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-negative-controls-standard node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.config.mjs",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-2bd371f3-e215-40ac-98ee-29d4b7f53523",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-source-observation-audit python3 docs/evidence/base-ui-migration/p2.2/revision-4/audit-r4.py",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-9d54304f-52a1-47d7-a473-28668289503e",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r4-source-observation-final python3 docs/evidence/base-ui-migration/p2.2/revision-4/audit-r4.py",
+    "exitCode": 0
+  }
+]

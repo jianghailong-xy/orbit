@@ -179,7 +179,7 @@ export async function receiveCodexResetResult(
     seen.before = current;
     seen.application = application;
     return application.kind === 'APPLIED' ? application.operation : null;
-  });
+  }, runnerId);
   const { before, application } = seen;
   if (!operation || !before || !application) return refused('OPERATION_NOT_FOUND', runnerId, result);
   if (application.kind === 'REJECTED') return refused(application.rejection, runnerId, result, before);

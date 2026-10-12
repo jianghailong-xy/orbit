@@ -1,0 +1,878 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop
+
+[WebServer] (node:1939383) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 15 tests using 1 worker
+
+(node:1939468) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › attachment matches the current surface, density and option states (2.9s)
+(node:1939591) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › access matches the current surface, density and option states (2.2s)
+(node:1939699) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › expiry matches the current surface, density and option states (2.9s)
+(node:1939925) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › account matches the current surface, density and option states (2.6s)
+(node:1940222) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   5 [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › search matches the current surface, density and option states (2.9s)
+(node:1940541) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   6 [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › popover matches the current surface, density and option states (2.3s)
+(node:1940778) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   7 [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › tooltip matches the current surface, density and option states (2.3s)
+(node:1940891) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   8 [chromium-light-desktop] › ui-migration/choices.browser.mjs:70:1 › menu arrows, disabled items, submenu, checkbox and focus return work (15.7s)
+(node:1941472) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices.browser.mjs:101:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.4s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices.browser.mjs:132:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.1s)
+  ✘  11 [chromium-light-desktop] › ui-migration/choices.browser.mjs:161:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (16.6s)
+(node:1946061) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [chromium-light-desktop] › ui-migration/choices.browser.mjs:191:1 › remote search accepts server labels and resets an action picker without local filtering (1.2s)
+  ✓  13 [chromium-light-desktop] › ui-migration/choices.browser.mjs:211:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.7s)
+  ✘  14 [chromium-light-desktop] › ui-migration/choices.browser.mjs:211:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (1.5m)
+(node:1951431) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  15 [chromium-light-desktop] › ui-migration/choices.browser.mjs:245:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (15.9s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › attachment matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 17
+    + Received  + 17
+
+    @@ -10,17 +10,17 @@
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 31.577713012695312,
+    +         "height": 32,
+              "label": "File",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 122.0625,
+    +         "width": 122,
+              "x": 4,
+    -         "y": 3.9472198486328125,
+    +         "y": 4,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(31, 35, 41)",
+              "borderRadius": "4px",
+    @@ -29,17 +29,17 @@
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 31.577728271484375,
+    +         "height": 32,
+              "label": "Image",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 122.0625,
+    +         "width": 122,
+              "x": 4,
+    -         "y": 35.524932861328125,
+    +         "y": 36,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(31, 35, 41)",
+              "borderRadius": "4px",
+    @@ -48,17 +48,17 @@
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 31.577728271484375,
+    +         "height": 32,
+              "label": "Shell",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 122.0625,
+    +         "width": 122,
+              "x": 4,
+    -         "y": 75.98388671875,
+    +         "y": 77,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgba(0, 0, 0, 0.25)",
+              "borderRadius": "4px",
+    @@ -67,17 +67,17 @@
+              "boxShadow": "none",
+              "color": "rgba(0, 0, 0, 0.25)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 31.577728271484375,
+    +         "height": 32,
+              "label": "Skill",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 122.0625,
+    +         "width": 122,
+              "x": 4,
+    -         "y": 107.56161499023438,
+    +         "y": 109,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(31, 35, 41)",
+              "borderRadius": "4px",
+    @@ -86,17 +86,17 @@
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 31.577728271484375,
+    +         "height": 32,
+              "label": "/Command",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 122.0625,
+    +         "width": 122,
+              "x": 4,
+    -         "y": 139.13934326171875,
+    +         "y": 141,
+            },
+          ],
+          "surface": Object {
+            "backgroundColor": "rgb(255, 255, 255)",
+            "borderColor": "rgb(31, 35, 41)",
+    @@ -106,14 +106,14 @@
+            "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+            "color": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 174.664306640625,
+    +       "height": 177,
+            "lineHeight": "22px",
+            "padding": "4px",
+    -       "width": 130.0625,
+    +       "width": 130,
+            "x": 0,
+            "y": 0,
+          },
+        },
+      }
+
+      64 |     }
+      65 |     await attach(info, 'appearance', measurements);
+    > 66 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      67 |   });
+      68 | }
+      69 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:66:32
+
+    Error Context: .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-attach-b3ab6-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › access matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 7
+    + Received  + 7
+
+    @@ -10,17 +10,17 @@
+              "boxShadow": "none",
+              "color": "rgb(51, 112, 255)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 49.49928283691406,
+    +         "height": 56.75,
+              "label": "Only youTurns the link off.",
+              "lineHeight": "22px",
+    -         "padding": "5px 12px",
+    +         "padding": "8px 12px",
+              "width": 192.625,
+              "x": 4,
+    -         "y": 3.90142822265625,
+    +         "y": 4,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(31, 35, 41)",
+              "borderRadius": "4px",
+    @@ -29,17 +29,17 @@
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 49.49928283691406,
+    +         "height": 56.75,
+              "label": "Anyone with the linkNo sign-in needed to view.",
+              "lineHeight": "22px",
+    -         "padding": "5px 12px",
+    +         "padding": "8px 12px",
+              "width": 192.625,
+              "x": 4,
+    -         "y": 53.40071105957031,
+    +         "y": 60.75,
+            },
+          ],
+          "surface": Object {
+            "backgroundColor": "rgb(255, 255, 255)",
+            "borderColor": "rgb(31, 35, 41)",
+    @@ -49,11 +49,11 @@
+            "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+            "color": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 106.80142211914062,
+    +       "height": 121.5,
+            "lineHeight": "22px",
+            "padding": "4px",
+            "width": 200.625,
+            "x": 0,
+            "y": 0,
+
+      64 |     }
+      65 |     await attach(info, 'appearance', measurements);
+    > 66 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      67 |   });
+      68 | }
+      69 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:66:32
+
+    Error Context: .choices-results/choices.browser.mjs-access-b1b27-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-access-b1b27-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-access-b1b27-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › expiry matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -12,20 +12,20 @@
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "height": 24,
+            "lineHeight": "22px",
+    -       "padding": "0px 7px",
+    +       "padding": "0px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+          },
+        },
+        "popup": Object {
+          "rows": Array [
+            Object {
+    -         "backgroundColor": "rgb(214, 232, 255)",
+    +         "backgroundColor": "rgb(240, 247, 255)",
+              "borderColor": "rgb(31, 35, 41)",
+              "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+    @@ -35,11 +35,11 @@
+              "fontWeight": "600",
+              "height": 32,
+              "label": "Never",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 242,
+    +         "width": 240,
+              "x": 4,
+              "y": 4,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+    @@ -54,11 +54,11 @@
+              "fontWeight": "400",
+              "height": 32,
+              "label": "7 days",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 242,
+    +         "width": 240,
+              "x": 4,
+              "y": 36,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+    @@ -73,11 +73,11 @@
+              "fontWeight": "400",
+              "height": 32,
+              "label": "30 days",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 242,
+    +         "width": 240,
+              "x": 4,
+              "y": 68,
+            },
+          ],
+          "surface": Object {
+    @@ -92,11 +92,11 @@
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "height": 104,
+            "lineHeight": "22px",
+            "padding": "4px",
+    -       "width": 250,
+    +       "width": 248,
+            "x": 0,
+            "y": 0,
+          },
+        },
+      }
+
+      64 |     }
+      65 |     await attach(info, 'appearance', measurements);
+    > 66 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      67 |   });
+      68 | }
+      69 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:66:32
+
+    Error Context: .choices-results/choices.browser.mjs-expiry-6462a-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-expiry-6462a-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-expiry-6462a-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › account matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 12
+    + Received  + 12
+
+    @@ -12,34 +12,34 @@
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "height": 32,
+            "lineHeight": "22px",
+    -       "padding": "4px 11px",
+    +       "padding": "0px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+          },
+        },
+        "popup": Object {
+          "rows": Array [
+            Object {
+    -         "backgroundColor": "rgb(214, 232, 255)",
+    +         "backgroundColor": "rgb(240, 247, 255)",
+              "borderColor": "rgb(31, 35, 41)",
+              "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "600",
+    -         "height": 51.0625,
+    +         "height": 77,
+              "label": "Automaticeach new session starts on the account whose quota resets soonest",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 242,
+    +         "width": 240,
+              "x": 4,
+              "y": 4,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+    @@ -50,17 +50,17 @@
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 51.0625,
+    +         "height": 55,
+              "label": "Default5-hour 12% · signed in",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 242,
+    +         "width": 240,
+              "x": 4,
+    -         "y": 55.0625,
+    +         "y": 81,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgba(0, 0, 0, 0.25)",
+              "borderRadius": "4px",
+    @@ -69,17 +69,17 @@
+              "boxShadow": "none",
+              "color": "rgba(0, 0, 0, 0.25)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+              "fontSize": "14px",
+              "fontWeight": "400",
+    -         "height": 51.0625,
+    +         "height": 55,
+              "label": "Work accountsigned out",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+    -         "width": 242,
+    +         "width": 240,
+              "x": 4,
+    -         "y": 106.125,
+    +         "y": 136,
+            },
+          ],
+          "surface": Object {
+            "backgroundColor": "rgb(255, 255, 255)",
+            "borderColor": "rgb(31, 35, 41)",
+    @@ -89,14 +89,14 @@
+            "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+            "color": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 161.1875,
+    +       "height": 195,
+            "lineHeight": "22px",
+            "padding": "4px",
+    -       "width": 250,
+    +       "width": 248,
+            "x": 0,
+            "y": 0,
+          },
+        },
+      }
+
+      64 |     }
+      65 |     await attach(info, 'appearance', measurements);
+    > 66 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      67 |   });
+      68 | }
+      69 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:66:32
+
+    Error Context: .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-accoun-2f812-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › search matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -12,20 +12,20 @@
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "height": 32,
+            "lineHeight": "22px",
+    -       "padding": "4px 11px",
+    +       "padding": "0px 11px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+          },
+        },
+        "popup": Object {
+          "rows": Array [
+            Object {
+    -         "backgroundColor": "rgb(214, 232, 255)",
+    +         "backgroundColor": "rgb(240, 247, 255)",
+              "borderColor": "rgb(31, 35, 41)",
+              "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+    @@ -37,11 +37,11 @@
+              "label": "Never",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+              "width": 242,
+              "x": 4,
+    -         "y": 4,
+    +         "y": 36,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgb(31, 35, 41)",
+              "borderRadius": "4px",
+    @@ -56,11 +56,11 @@
+              "label": "7 days",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+              "width": 242,
+              "x": 4,
+    -         "y": 36,
+    +         "y": 68,
+            },
+            Object {
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "borderColor": "rgba(0, 0, 0, 0.25)",
+              "borderRadius": "4px",
+    @@ -75,11 +75,11 @@
+              "label": "30 days",
+              "lineHeight": "22px",
+              "padding": "5px 12px",
+              "width": 242,
+              "x": 4,
+    -         "y": 68,
+    +         "y": 100,
+            },
+          ],
+          "surface": Object {
+            "backgroundColor": "rgb(255, 255, 255)",
+            "borderColor": "rgb(31, 35, 41)",
+    @@ -89,11 +89,11 @@
+            "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+            "color": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 104,
+    +       "height": 136,
+            "lineHeight": "22px",
+            "padding": "4px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+
+      64 |     }
+      65 |     await attach(info, 'appearance', measurements);
+    > 66 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      67 |   });
+      68 | }
+      69 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:66:32
+
+    Error Context: .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-search-84e44-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › popover matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 3
+    + Received  + 3
+
+    @@ -5,19 +5,19 @@
+            "backgroundColor": "rgb(255, 255, 255)",
+            "borderColor": "rgb(31, 35, 41)",
+            "borderRadius": "8px",
+            "borderStyle": "none",
+            "borderWidth": "0px",
+    -       "boxShadow": "none",
+    +       "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+            "color": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 72.02923583984375,
+    +       "height": 76,
+            "lineHeight": "22px",
+            "padding": "12px",
+    -       "width": 190.4984130859375,
+    +       "width": 182.03125,
+            "x": 0,
+            "y": 0,
+          },
+        },
+      }
+
+      64 |     }
+      65 |     await attach(info, 'appearance', measurements);
+    > 66 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      67 |   });
+      68 | }
+      69 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:66:32
+
+    Error Context: .choices-results/choices.browser.mjs-popove-eb435-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-popove-eb435-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-popove-eb435-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › tooltip matches the current surface, density and option states 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 3
+    + Received  + 3
+
+    @@ -5,19 +5,19 @@
+            "backgroundColor": "rgba(0, 0, 0, 0.85)",
+            "borderColor": "rgb(255, 255, 255)",
+            "borderRadius": "6px",
+            "borderStyle": "none",
+            "borderWidth": "0px",
+    -       "boxShadow": "none",
+    +       "boxShadow": "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px",
+            "color": "rgb(255, 255, 255)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 33.98014831542969,
+    +       "height": 34,
+            "lineHeight": "22px",
+            "padding": "6px 8px",
+    -       "width": 166.8712921142578,
+    +       "width": 166.96875,
+            "x": 0,
+            "y": 0,
+          },
+        },
+      }
+
+      64 |     }
+      65 |     await attach(info, 'appearance', measurements);
+    > 66 |     expect(measurements.orbit).toEqual(measurements.antd);
+         |                                ^
+      67 |   });
+      68 | }
+      69 |
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:66:32
+
+    Error Context: .choices-results/choices.browser.mjs-toolti-6ca31-e-density-and-option-states-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-toolti-6ca31-e-density-and-option-states-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-toolti-6ca31-e-density-and-option-states-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-light-desktop] › ui-migration/choices.browser.mjs:70:1 › menu arrows, disabled items, submenu, checkbox and focus return work 
+
+    Error: expect(locator).toBeFocused() failed
+
+    Locator:  getByRole('menuitem', { name: 'Provider', exact: true })
+    Expected: focused
+    Received: inactive
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toBeFocused" getByRole('menuitem', { name: 'Provider', exact: true }) with timeout 15000ms
+      - waiting for getByRole('menuitem', { name: 'Provider', exact: true })
+        34 × locator resolved to <div tabindex="-1" role="menuitem" id="base-ui-_r_1i_" aria-haspopup="menu" aria-expanded="false" class="orbit-menu-item">…</div>
+           - unexpected value "inactive"
+
+
+      76 |   await page.keyboard.press('ArrowDown');
+      77 |   const provider = page.getByRole('menuitem', { name: 'Provider', exact: true });
+    > 78 |   await expect(provider).toBeFocused();
+         |                          ^
+      79 |   await page.keyboard.press('ArrowRight');
+      80 |   await expect(page.getByRole('menuitem', { name: 'Codex', exact: true })).toBeFocused();
+      81 |   await page.keyboard.press('Escape');
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:78:26
+
+    Error Context: .choices-results/choices.browser.mjs-menu-a-3f7b4-ckbox-and-focus-return-work-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-menu-a-3f7b4-ckbox-and-focus-return-work-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-menu-a-3f7b4-ckbox-and-focus-return-work-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium-light-desktop] › ui-migration/choices.browser.mjs:161:1 › search preserves selection, filters groups, handles no results, composition and explicit clear 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByRole('status', { name: 'Workspace value', exact: true })
+    Expected: "docs"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByRole('status', { name: 'Workspace value', exact: true }) with timeout 15000ms
+      - waiting for getByRole('status', { name: 'Workspace value', exact: true })
+
+
+      177 |   await input.dispatchEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 229, isComposing: true, bubbles: true });
+      178 |   await expect(input).toHaveAttribute('aria-expanded', 'true');
+    > 179 |   await expect(page.getByRole('status', { name: 'Workspace value', exact: true })).toHaveText('docs');
+          |                                                                                    ^
+      180 |   await input.dispatchEvent('compositionend', { data: '文档' });
+      181 |   await input.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      182 |   await input.fill('文档');
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:179:84
+
+    Error Context: .choices-results/choices.browser.mjs-search-d03e6-position-and-explicit-clear-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-search-d03e6-position-and-explicit-clear-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-search-d03e6-position-and-explicit-clear-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [chromium-light-desktop] › ui-migration/choices.browser.mjs:211:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+
+    Test timeout of 90000ms exceeded.
+
+    Error: locator.click: Test timeout of 90000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: 'Legacy share', exact: true }).getByRole('button', { name: 'Session actions', exact: true })
+        - locator resolved to <button tabindex="0" type="button" id="base-ui-_r_25_" aria-haspopup="menu" aria-expanded="false" class="orbit-button orbit-button-default orbit-button-middle">…</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      - retrying click action
+        - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+      - element was detached from the DOM, retrying
+
+
+      22 | async function tap(page, info, locator) {
+      23 |   if (info.project.use.hasTouch) await locator.tap();
+    > 24 |   else await locator.click();
+         |                      ^
+      25 | }
+      26 | async function outside(page, info) {
+      27 |   if (info.project.use.hasTouch) await page.touchscreen.tap(3, 60);
+        at tap (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:24:22)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:229:9
+
+    Error Context: .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-legacy-21267--layer-Escape-Tab-and-theme-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [chromium-light-desktop] › ui-migration/choices.browser.mjs:245:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByRole('tooltip')
+    Expected: "Usage from this account"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByRole('tooltip') with timeout 15000ms
+      - waiting for getByRole('tooltip')
+
+
+      259 |   await usage.focus();
+      260 |   const tooltip = page.getByRole('tooltip');
+    > 261 |   await expect(tooltip).toHaveText('Usage from this account');
+          |                         ^
+      262 |   await expect(usage).toHaveAttribute('aria-describedby', /.+/);
+      263 |   await page.keyboard.press('Escape');
+      264 |   await expect(tooltip).not.toBeVisible();
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:261:25
+
+    Error Context: .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-popove-166ec-responds-to-focus-and-hover-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11 failed
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › attachment matches the current surface, density and option states 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › access matches the current surface, density and option states 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › expiry matches the current surface, density and option states 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › account matches the current surface, density and option states 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › search matches the current surface, density and option states 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › popover matches the current surface, density and option states 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:43:3 › tooltip matches the current surface, density and option states 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:70:1 › menu arrows, disabled items, submenu, checkbox and focus return work 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:161:1 › search preserves selection, filters groups, handles no results, composition and explicit clear 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:211:37 › legacy Modal owns choices, top-layer Escape, Tab and theme 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:245:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover 
+  4 passed (2.8m)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop

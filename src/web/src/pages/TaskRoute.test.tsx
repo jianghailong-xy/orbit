@@ -113,7 +113,7 @@ describe('TaskRoute', () => {
   it('draws nothing but a spinner on arrival until the task’s read says where it opens', async () => {
     await mount(`/tasks/${TASK}`);
     expect(list()).toBeNull();
-    expect(container.querySelector('.ant-spin')).toBeTruthy();
+    expect(container.querySelector('[role="status"][aria-label="Loading"]')).toBeTruthy();
   });
 
   it('keeps the list one instance while tasks open and close over it', async () => {

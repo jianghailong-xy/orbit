@@ -1,0 +1,16 @@
+{
+ "commit": "3aa26fb97644f24551dc9c70149021f7f7f9453f",
+ "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+ "started": "2026-10-07T16:20:20Z",
+ "finished": "2026-10-07T16:26:25Z",
+ "exit": 0,
+ "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+ "environmentEqualsP02": true,
+ "screenshots": 252,
+ "stats": {
+  "expected": 76,
+  "unexpected": 0,
+  "flaky": 0,
+  "skipped": 4
+ }
+}

@@ -1,0 +1,12 @@
+{
+ "command": "npm run test:ui-choices -w @orbit/web -- --grep 'select supports arrows, Enter, clear' --repeat-each 10",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_07334a6883e9",
+ "cwd": "/root/.orbit/worktrees/f9ffd160-2464-5af0-9d66-5af91c8bd5ab",
+ "commit": "632b7950ea2c303b7fab6856365ac233f6359f45",
+ "webTree": "35301ab31d4cd93761cad55eb7bc2bf1f7a3fa98",
+ "outputLastWritten": "2026-10-06T08:08:58.266195+00:00",
+ "exitCode": 0,
+ "outputSha256": "c1012d0d05ea972ace2032a0d7928745b92fcf7e4cd7b620816b719781dc1faf",
+ "outputBytes": 14137
+}

@@ -1,0 +1,183 @@
+<!doctype html>
+<!-- Design board 4 (web): a new session picks the engine first (NewSessionProviderHero), then a provider that
+     engine can use (the composer's model menu → Provider). "现在" is drawn from today's
+     NewSessionProviderHero.tsx, sessionProviderChoices.ts and WorkspaceView.tsx's modelMenuItems; "改后" is the
+     proposal. Hand-drawn on the shipped tokens; not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>4 · New session: engine, then provider (web) — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .pane { height: 600px; }
+  .pane .mid { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 70px; }
+  .pane .pop { position: absolute; top: 178px; left: 50%; transform: translateX(-50%); }
+  .pane .bot { padding: 0 22px 18px; }
+  .closed { height: 250px; }
+  .closed .mid { padding-top: 34px; }
+  .cases { display: grid; grid-template-columns: 590px 590px minmax(0, 1fr); gap: 18px 34px; align-items: start; }
+  .cases .hd { font-size: 12.5px; font-weight: 600; color: var(--text-2); display: flex; gap: 8px; align-items: center; }
+  .cases .case { grid-column: 1 / -1; margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--border-subtle); font-size: 14px; font-weight: 650; }
+  .cases .case:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  .menus2 { display: inline-flex; align-items: flex-start; gap: 6px; }
+  .menus2 .w-menu:first-child { width: 250px; }
+  .menus2 .w-menu + .w-menu, .menus2 .m-mark .w-menu { width: 318px; }
+  .menus2 > .w-menu + .w-menu, .menus2 > .m-mark { margin-top: 42px; }
+  .cases .m-cap { margin-top: 0; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">4 · 新会话（Web）：先选 engine，再在 Provider 菜单里选这个 engine 能用的凭据</h1>
+  <p class="m-sub zh">今天的新会话已经是「中间选 engine、composer 的模型菜单里选 Provider」两步，但 Provider 菜单只列「跑在同一个 CLI 上」的 key：DeepSeek key 只出现在 Claude 下面，DeepSeek Harness 只有自己那把 Harness key，OpenCode 下的 key 是用模型名 <code>orbit-&lt;slug&gt;/&lt;model&gt;</code> 编码出来的。改后 Provider 菜单按兼容表列：凭据来源分三组（这台 runner 上的登录、账号池、你的 key），同一把 DeepSeek key 出现在 Claude Code、DeepSeek Harness、OpenCode 三处，DeepSeek Harness 下可以在两把 DeepSeek key 之间选。示例：工作区 orbit 在 hpc 上；hpc 上 Claude Code 登了两个账号（Default、Work），有账号池 Claude accounts；key 和板 1 一样。engine 名按待定项 A（板 1 ③-2）。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 第一步：中间的 engine 选择（点名字展开）</div>
+    <div class="cols2">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>一行一个 engine，名字是 Claude / Kimi</div>
+        <div class="w-app"><div class="w-pane pane" id="nowHero"></div></div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>同样一行一个 engine，名字用 engine 名</div>
+        <div class="w-app"><div class="w-pane pane" id="afterHero"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 第二步：composer 的模型菜单 → Provider（新会话和进行中的会话是同一个菜单）</div>
+    <div class="cases" id="cases"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+
+<script>
+const paneHead = '<div class="w-pane-h"><div class="t">New session</div><div class="s">orbit · New session</div></div>';
+const heroName = (name, open) => `<div class="w-hero"><span style="display:inline-flex;border-radius:15px;box-shadow:0 8px 22px rgba(58,87,232,.32)">${tile('deepseek', 56)}</span>
+  <div class="nm${open ? ' open' : ''}">${name}<span class="chev">▾</span></div></div>`;
+/* Today: ENGINE_LABELS in the order engineChoices meets them. After: ENGINE_CLI_NAMES in ALL_ENGINES order. */
+const engineRows = (claude, kimi, dshRow) => {
+  const row = {
+    claude: { tile: 'anthropic', label: claude, r: 'Opus 5.5' },
+    codex: { tile: 'openai', label: 'Codex', r: 'gpt-5.6-sol' },
+    antigravity: { tile: 'antigravity', label: claude === 'Claude' ? 'Antigravity' : 'Antigravity CLI', r: 'Gemini 3.8 Flash' },
+    kimi: { tile: 'kimi', label: kimi, r: 'Not installed', rCls: 'fix', dim: true },
+    dsh: dshRow || { tile: 'deepseek', label: 'DeepSeek Harness', r: 'DeepSeek V4 Pro', on: true },
+    opencode: { tile: 'opencode', label: 'OpenCode', r: 'Managed by OpenCode' },
+  };
+  const order = claude === 'Claude' ? ['claude', 'codex', 'antigravity', 'kimi', 'dsh', 'opencode'] : ['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh'];
+  return [...order.map((k) => row[k]), { sep: true }, { tile: 'add', label: 'Connect a provider…', link: true }];
+};
+const comp = composer({ chip: '<b>DeepSeek V4 Pro</b> <span class="w-muted">Default</span>' });
+document.getElementById('nowHero').innerHTML = paneHead + `<div class="mid">${heroName('DeepSeek Harness', true)}
+  <div class="pop">${mk('A', menu(engineRows('Claude', 'Kimi'), 'eng'))}</div></div><div class="bot">${comp}</div>`;
+document.getElementById('afterHero').innerHTML = paneHead + `<div class="mid">${heroName('DeepSeek Harness', true)}
+  <div class="pop">${mk(1, menu(engineRows('Claude Code', 'Kimi Code'), 'eng'))}</div></div><div class="bot">${comp}</div>`;
+
+/* the composer's model menu, as modelMenuItems draws it: engine title, Provider, models, Effort */
+const main = (engine, provider, models, extra = []) => menu([
+  { title: ENGINES[engine].name, brand: ENGINES[engine].brand },
+  ...(provider ? [{ label: 'Provider', sub: provider, hl: true }, { sep: true }] : []),
+  ...models,
+  { sep: true },
+  { label: 'Effort', sub: 'Default' },
+  ...extra,
+]);
+const dsModels = [{ label: 'DeepSeek V4 Pro', ck: true }, { label: 'DeepSeek V4 Flash' }];
+const pair = (a, b) => `<div class="menus2">${a}${b || ''}</div>`;
+const T = (k) => ({ tile: k, tileSize: 16 });
+
+const cases = [
+  ['DeepSeek Harness：两把 DeepSeek key 里选一把',
+    pair(main('dsh', null, dsModels)),
+    pair(main('dsh', 'DeepSeek', dsModels), mk(3, menu([
+      { group: 'API keys' },
+      { ...T('deepseek'), label: 'DeepSeek', ck: true },
+      { ...T('deepseek'), label: 'DeepSeek 2' },
+    ]))),
+    '<b>B</b> 今天只有一把 Harness key，所以连 Provider 这一行都不出现；另一把 DeepSeek key 算「Claude Code 的」，这里用不了。<br><b>3</b> 改后列出全部启用的 DeepSeek key（preset 是 deepseek，或自定义 endpoint 在 <code>api.deepseek.com</code>）。'],
+  ['Claude Code：runner 上的登录、账号池、DeepSeek key、GLM key',
+    pair(main('claude', 'Default', [{ label: 'Opus 5.5', ck: true }, { label: 'Sonnet 5.5' }, { label: 'Haiku 4.5' }]), menu([
+      { label: 'Claude' },
+      { label: 'Automatic', q: 'Switches to soonest reset', ind: true },
+      { label: 'Default', q: '5h 23%', ck: true, ind: true },
+      { label: 'Work', q: '5h 57%', ind: true },
+      { label: 'Claude accounts' },
+      { label: 'DeepSeek', det: 'Claude Code' },
+      { label: 'Z.AI (GLM)' },
+      { label: 'Claude Max' },
+    ])),
+    pair(main('claude', 'Default', [{ label: 'Opus 5.5', ck: true }, { label: 'Sonnet 5.5' }, { label: 'Haiku 4.5' }]), mk(4, menu([
+      { group: 'Signed in on hpc' },
+      { label: 'Automatic', q: 'Switches to soonest reset' },
+      { label: 'Default', q: '5h 23%', ck: true },
+      { label: 'Work', q: '5h 57%' },
+      { group: 'Account pools' },
+      { ...T('anthropic'), label: 'Claude accounts' },
+      { group: 'API keys' },
+      { ...T('deepseek'), label: 'DeepSeek' },
+      { ...T('deepseek'), label: 'DeepSeek 2' },
+      { ...T('glm'), label: 'Z.AI (GLM)' },
+      { ...T('anthropic'), label: 'Claude Max' },
+    ]))),
+    '<b>C</b> 今天：引擎自己的登录叫「Claude」，下面缩进列账号；DeepSeek 后面注「Claude Code」，是为了和 Harness 那把区分；第二把 DeepSeek key 配成了 Harness，这里没有。<br><b>4</b> 改后分三组：<b>Signed in on hpc</b>（这台机器上的登录，账号和额度照旧）、<b>Account pools</b>、<b>API keys</b>。两把 DeepSeek key 都在，不再注「Claude Code」。key 行带厂商小图标，因为一组里有好几家厂商的 key。'],
+  ['OpenCode：自身的登录和各把 key',
+    pair(main('opencode', 'OpenCode', [{ label: 'Managed by OpenCode', ck: true }]), menu([
+      { label: 'OpenCode', ck: true },
+      { label: 'DeepSeek Harness' },
+      { label: 'DeepSeek' },
+      { label: 'Antigravity' },
+      { label: 'Kimi (Moonshot)' },
+      { label: 'Z.AI (GLM)' },
+    ])),
+    pair(main('opencode', 'Own sign-in', [{ label: 'Managed by OpenCode', ck: true }]), mk(5, menu([
+      { group: 'On hpc' },
+      { label: "OpenCode's own sign-in", q: 'opencode auth', ck: true },
+      { group: 'API keys' },
+      { ...T('deepseek'), label: 'DeepSeek' },
+      { ...T('deepseek'), label: 'DeepSeek 2' },
+      { ...T('gemini'), label: 'Gemini' },
+      { ...T('kimi'), label: 'Kimi (Moonshot)' },
+      { ...T('glm'), label: 'Z.AI (GLM)' },
+      { foot: 'Claude Max isn\'t here: a subscription token runs on Claude Code only.' },
+    ]))),
+    '<b>D</b> 今天 OpenCode 下的 key 实际是模型（<code>opencode/&lt;slug&gt;</code>，会话里存成 <code>orbit-&lt;slug&gt;/&lt;model&gt;</code>），换 key 等于换模型；Gemini key 显示成「Antigravity」。<br><b>5</b> 改后 key 就是 provider：选了 DeepSeek，模型列表换成 DeepSeek 的模型；选「OpenCode\'s own sign-in」用机器上 <code>opencode auth login</code> 配的。订阅 token 不列，底部说一句为什么。'],
+  ['还没有 DeepSeek key：DeepSeek Harness 那一行给连接入口',
+    pair(menu(engineRows('Claude', 'Kimi', { tile: 'deepseek', label: 'DeepSeek Harness', r: 'Add API key', rCls: 'fix', dim: true }).map((r, i) => i === 0 ? { ...r, on: true } : r))),
+    pair(mk(6, menu(engineRows('Claude Code', 'Kimi Code', { tile: 'deepseek', label: 'DeepSeek Harness', r: 'Connect a DeepSeek key', rCls: 'fix', dim: true }).map((r, i) => i === 0 ? { ...r, on: true } : r), 'eng'))),
+    '<b>E</b> 今天写「Add API key」，链到 <code>/providers/new/deepseek-harness</code>——连的是一把只能跑 Harness 的 key。<br><b>6</b> 改后写「Connect a DeepSeek key」，链到 <code>/providers/new/deepseek</code>（板 2 那张表），连好的 key 三个 engine 都能用。已经有 DeepSeek key、只是全停用了，也显示这一行（停用的 key 不算）。runner 太旧时照旧写「Update runner」。只点 DeepSeek Harness 而没有 key 时，服务端的回答是 <code>DEEPSEEK_KEY_REQUIRED</code>：「DeepSeek Harness runs on a DeepSeek API key; connect one, then try again」（契约 §3.7）。'],
+];
+document.getElementById('cases').innerHTML = cases.map(([title, now, after, cap]) => `
+  <div class="case zh">${title}</div>
+  <div><div class="hd zh"><span class="m-k">现在</span></div><div style="margin-top:8px">${now}</div></div>
+  <div><div class="hd zh"><span class="m-k new">改后</span></div><div style="margin-top:8px">${after}</div></div>
+  <p class="m-cap zh">${cap}</p>`).join('');
+// the "now" columns carry their letters
+const lettered = document.querySelectorAll('.cases .case');
+['B', 'C', 'D', 'E'].forEach((letter, i) => {
+  const nowCol = lettered[i].nextElementSibling.querySelector('.menus2');
+  nowCol.outerHTML = mk(letter, nowCol.outerHTML);
+});
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>engine 名不统一：</b>这里叫 Claude、Kimi，模型菜单标题和 Infrastructure 叫 Claude Code、Kimi Code。'],
+  [1, '<b>engine 列表本身不变</b>：一行一个 engine，右侧是落到的那把凭据的默认模型；不可用的行变灰，给出原因和去处（main 上已改去 Infrastructure）。只有两处变化：名字用 <code>ENGINE_CLI_NAMES</code>（待定项 A），顺序按 <code>ALL_ENGINES</code>（Claude Code、Codex、Kimi Code、Antigravity CLI、OpenCode、DeepSeek Harness）。只要有 DeepSeek key、runner 能跑，DeepSeek Harness 这一行就能选。'],
+  [3, '<b>DeepSeek Harness 下列全部启用的 DeepSeek key。</b>'],
+  [4, '<b>Provider 菜单分三组</b>：Signed in on &lt;机器&gt; / Account pools / API keys，只列这个 engine 能用的（读兼容表），不再按 key 的 runtime 过滤。key 行不再注「Claude Code」「Harness」。'],
+  [5, '<b>OpenCode 的 key 成为正经的 provider：</b>不再用模型名编码 key。旧编码的会话和偏好由 T4 迁移时改写，读取时也兼容。'],
+  [6, '<b>没有 DeepSeek key 时</b>，DeepSeek Harness 行写「Connect a DeepSeek key」，去连 DeepSeek key。'],
+  ['·', '<b>不变的：</b>hero 和收起时的模型行、「Connect a provider…」、Provider 行只在有得选时出现、账号的 Automatic 和额度、模型和 Effort。落到哪把凭据的规则不变：草稿 → 工作区上次 → 这个 engine 自己的登录 → 第一把能用的；DeepSeek Harness 落到第一把启用的 DeepSeek key。'],
+]);
+finish();
+</script>
+</body>
+</html>

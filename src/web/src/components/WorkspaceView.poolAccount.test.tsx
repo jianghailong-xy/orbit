@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -153,11 +152,9 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[entry]}>
-            <AntApp>
-              <Routes>
-                <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
-              </Routes>
-            </AntApp>
+            <Routes>
+              <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -288,13 +285,13 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
     expect(usage()).toBeNull();
   });
 
-  it('on a new session, names the account the claim will pick, and offers the pool as one tile', async () => {
+  it('on a new session, names the account the claim will pick, and the pool its engine runs on', async () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.composer-account');
     expect(account()?.textContent).toBe('Work');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 12%');
     const card = mounted().querySelector<HTMLElement>('.np-card')!;
-    expect(card.getAttribute('aria-label')).toBe('Provider: Claude accounts');
-    expect(card.querySelector('.np-pool-badge')?.textContent).toBe('2');
+    // The hero names the engine; the pool is the provider it spends, picked in the composer.
+    expect(card.getAttribute('aria-label')).toBe('Engine: Claude Code');
   });
 
   it("on a shared pool, names the key the session's claim chose and what the others spent of its cap", async () => {
@@ -305,13 +302,12 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
     expect(account()?.textContent).not.toContain('Team Codex');
   });
 
-  it('on a new session on a shared pool, names the key it will start on, and counts the pool in keys', async () => {
+  it('on a new session on a shared pool, names the key it will start on, and runs it on Codex', async () => {
     workspaceProvider = SHARED_SLUG;
     await mount(`/workspaces/${WORKSPACE}/new`, '.composer-account');
     expect(account()?.textContent).toBe('orbit-org-1');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 25%');
     const card = mounted().querySelector<HTMLElement>('.np-card')!;
-    expect(card.getAttribute('aria-label')).toBe('Provider: Team Codex');
-    expect(card.querySelector('.np-pool-badge')?.getAttribute('aria-label')).toBe('2 keys');
+    expect(card.getAttribute('aria-label')).toBe('Engine: Codex');
   });
 });

@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && unshare -n bash -c 'ip link set lo up && nice -n -10 npm run test:ui-overlays -w @orbit/web'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_cfc6e5a61820",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T05:12:24.633599+00:00",
+ "exitCode": 0,
+ "outputSha256": "451026fc0dde5fb5a543519cd1697c91dc0ed46b558ff2f41554c899db533647",
+ "outputBytes": 16357,
+ "note": "Fixed tree: the overlays matrix (Dialog/Drawer surfaces, Tab trap, Esc/outside close and focus return, nested layers, legacy Modal/Popconfirm/Select coexistence both ways, async confirmation, theme inheritance, composing Escape, motion and scroll restore) in all eight environments, own network namespace: 96 passed. The overlays fixture renders no Orbit Menu; run as the special entry the task names, for continuity with the earlier rounds."
+}

@@ -1,0 +1,1584 @@
+{
+ "files": {
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/README.md": {
+   "sha256": "f90601af897186f2cfe3049d3222da4b2e6f512996aeed1f44946fc458bd2773",
+   "bytes": 70741
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-dlg/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-dlg/report.summary.json": {
+   "sha256": "f6de7e46e42013b8bb791014f321a3fcc4693acd5e7ddf8adc61e8513d5b016e",
+   "bytes": 314433
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-dlg/samples.csv": {
+   "sha256": "242686e5ea4beb3227f9882e845e3371cc36489563f8c79b205eb061593337b5",
+   "bytes": 195484
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-menu/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-menu/report.summary.json": {
+   "sha256": "8d0e63ea5937ef997588536120c3a04ba518681bcd0ff8e3a1a1942243ce457b",
+   "bytes": 767569
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-menu/samples.csv": {
+   "sha256": "4e7f50d38aed83198b2751927299748e8bd77d233a7b4491eea75ae5f921d7ab",
+   "bytes": 518885
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-pop/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-pop/report.summary.json": {
+   "sha256": "99a98c5e24d5dd761d259eae9e8a7a128ee51ed4f31572bb3e1443a04849a32c",
+   "bytes": 158298
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-pop/samples.csv": {
+   "sha256": "74872c68e9621e64a2820f6bdecdd3bd0b68dd4fc5d954319c82cca6f7ce3530",
+   "bytes": 101637
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-a/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-a/report.summary.json": {
+   "sha256": "52e56b5a4c116dfc37951181983e332b3255e8ded8cdbe0996f41383c67beda6",
+   "bytes": 293619
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-a/samples.csv": {
+   "sha256": "c6dd57d32fb7182354ae59fb3d766a4c3742c50b36202b258323b0b4cf59c1fd",
+   "bytes": 192422
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-b/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-b/report.summary.json": {
+   "sha256": "06f9e04c20d5fff8edea86dc80a74c67e352e8e7ae97a1cf584d1d24cd7acfd2",
+   "bytes": 270749
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-b/samples.csv": {
+   "sha256": "4bae3063c89002cc4911b4b9001d8691d256caecb60690515f1e603f4b08ea73",
+   "bytes": 193594
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-c/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-c/report.summary.json": {
+   "sha256": "e39de6176b8098a880f3cf5410e43bc6421dab756db9cd525fda6711e2e45d10",
+   "bytes": 180346
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-select-c/samples.csv": {
+   "sha256": "df77bbf4fa299e4b12b84db37dd8c3470be7b5d4992cd5997179e64380b0c79d",
+   "bytes": 120539
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-sub-a/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-sub-a/report.summary.json": {
+   "sha256": "499ff001b09138301e46c2f00027cf9319dd06311527b518bd23685af032c3ae",
+   "bytes": 338611
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after-sub-a/samples.csv": {
+   "sha256": "2a51e5f03ca121c28f63fdae2f9bf7945c8d6c7dab8cecd13b14adc33959818d",
+   "bytes": 233703
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-field/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-field/report.summary.json": {
+   "sha256": "b179f933d38ee4d4edb7253775a13422b78e006fe2f05c8e749f402528ff6fb9",
+   "bytes": 112524
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-field/samples.csv": {
+   "sha256": "ff8cf1e157db31042e416baf4c393d418315111fbe2f582f96232d41bdf92866",
+   "bytes": 76834
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-sample/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-sample/report.summary.json": {
+   "sha256": "da971380c635987be21c07732ea837e0b3ee3957ab4b3a0bffbec6aaa3dc46a3",
+   "bytes": 113924
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-sample/samples.csv": {
+   "sha256": "1290c2aa53e9315203316dcf8e2a341f8ce7f498ebfdf390db0c640d83e28283",
+   "bytes": 79144
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-session/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-session/report.summary.json": {
+   "sha256": "7df3ffe4c0db56d86975fdfad80b2d9af1d799171183eab10b290bbe31d92d65",
+   "bytes": 112533
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-a-session/samples.csv": {
+   "sha256": "edc821c273a090d2b6c978867080b9e5469119149e8a453dec255d534158586b",
+   "bytes": 76822
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-field/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-field/report.summary.json": {
+   "sha256": "32cba173cc477f36c18c491dbcf7eafe1174b41fd56294e6e6268b18950dfb96",
+   "bytes": 112965
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-field/samples.csv": {
+   "sha256": "87158a4e906605d3f98494859c01feefe8f262759df1c5b6b389b65858e5e08a",
+   "bytes": 82887
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-sample/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-sample/report.summary.json": {
+   "sha256": "a9df10ab3ac370585d463753922a9bf39d91ef2618ec7ee4fe75e8ade2957ad8",
+   "bytes": 114365
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-sample/samples.csv": {
+   "sha256": "da8f9fed4f60da870e60f268eec12ea6d6a357cf8927743a451d4da7962876fd",
+   "bytes": 85103
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-session/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-session/report.summary.json": {
+   "sha256": "16eedb4bcaf9de087042eca8abfa571ca50792200cc27573792739a8b1a4a00d",
+   "bytes": 112972
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-b-session/samples.csv": {
+   "sha256": "b381abcef811f2628f8454bea66ae79922b0079fb916a44dfc48f67c69689735",
+   "bytes": 82952
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-field/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-field/report.summary.json": {
+   "sha256": "f27a427cebc23404154e8ca79194f11299ab70a7a235fa25ef09e599e0b5a12a",
+   "bytes": 112533
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-field/samples.csv": {
+   "sha256": "27bfa0dfae391064d174f1ec8319686eaf85375281a60eba531d13392c59c4d3",
+   "bytes": 69063
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-sample/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-sample/report.summary.json": {
+   "sha256": "b7b51a547fd93c2bf624e5cfb9e30ec45782064926220099a32cf84c5d6d0ac8",
+   "bytes": 113933
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-sample/samples.csv": {
+   "sha256": "336791bc363cf0da484f2a53942de61ce9e0d5df5d073e4e7ff0fb9f0e680f22",
+   "bytes": 71482
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-session/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-session/report.summary.json": {
+   "sha256": "965417a53dfb70322bd754be72eda3b7dfeb5f4c3ce79deb6db19c45e1c23ca2",
+   "bytes": 112525
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/after2-sub-c-session/samples.csv": {
+   "sha256": "69c4eb1dbb0beed14143794f450bfef642a0ce726cd61ee02447ae86f65b9f54",
+   "bytes": 68988
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/antd-audit-compare.py": {
+   "sha256": "f0276a3e312d2b6d9a195bbe7b3b7e374dcedb3e1860639948b3e02cab3954d0",
+   "bytes": 3351
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/antd-audit.json": {
+   "sha256": "1492d7c5d528c7b8ecd2cda6547f94228ef9fe513b1a90e26653c83b855db27d",
+   "bytes": 7228
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/antd-audit.sh": {
+   "sha256": "6d8f79f9043f530e225fd937dd95077cca2aca8322df6f181cb9200707aac864",
+   "bytes": 2243
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-dlg/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-dlg/report.summary.json": {
+   "sha256": "b191a7b5191cb07a95ae619f102428773132e9c57b9cbb43383681665f2d3a62",
+   "bytes": 628107
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-dlg/samples.csv": {
+   "sha256": "8df28d53d86ef7b7bbb66aa6e18677970600358e9dfae27c7d7146761fcde5ef",
+   "bytes": 375005
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-a/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-a/report.summary.json": {
+   "sha256": "ffc6f96f35eefc40a7814b5c9eaae0796ac123c1b4cb44d34ae4d635a1898ed7",
+   "bytes": 472206
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-a/samples.csv": {
+   "sha256": "b634ce21ccfc26840a33f5b2b8f88491e230e541cf98b7af7e958479349e6ef4",
+   "bytes": 298229
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-b/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-b/report.summary.json": {
+   "sha256": "6245d364904c33a5859d93376cd1a33300e72277d2603a44e379d69e44a2300b",
+   "bytes": 406508
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-b/samples.csv": {
+   "sha256": "b68796586c7c3d178124aaf697ff31be159ad2c22ba0a40c34ae5de608b6d70a",
+   "bytes": 263619
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-c/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-c/report.summary.json": {
+   "sha256": "5b9e13071a42c88e07becc54c73c45c6f34bd24853eec7741b9aca26d64bd6df",
+   "bytes": 269825
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-menu-c/samples.csv": {
+   "sha256": "84c09484c705a28de3abc487816caa7c5ba6502fe5b792da657bf7b5cefa5861",
+   "bytes": 188253
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-pop/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-pop/report.summary.json": {
+   "sha256": "5e20dd71c1c7d773df5ec83f78e8915604bc7bc24511a028b2c394dad46d93a8",
+   "bytes": 316107
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-pop/samples.csv": {
+   "sha256": "e847f76ef74474cf9dd91710bbdafe84b79957580643256b7461f2da84239b29",
+   "bytes": 200150
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-a/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-a/report.summary.json": {
+   "sha256": "677862b486638a40c6eb731988d43669c78b8d3051031ecf229e01b04f9ceabc",
+   "bytes": 428773
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-a/samples.csv": {
+   "sha256": "923ffab1e87d2dcdd718a136ee51927dc2463b41c43e4825a54ac74ca9d5b31f",
+   "bytes": 282776
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-b/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-b/report.summary.json": {
+   "sha256": "6bc1b406bd579b73eab9d398cef494a408b950fb67b1acd128c6ea955abf9e43",
+   "bytes": 405913
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-b/samples.csv": {
+   "sha256": "779c9e89dd18d7bb0b089cef21d25e7b6a475f9e0fc8d2a263bc549d0d587164",
+   "bytes": 291508
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-c/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-c/report.summary.json": {
+   "sha256": "83b8c440b62242fa198fd7d0224a7c67ba8baa13f58e6a9f60cfd87ba61fe33a",
+   "bytes": 270344
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-select-c/samples.csv": {
+   "sha256": "e7b06a5b144dbd9eb728be2b187fc507f84cc83a4e8142ea5325f5fad44bdd57",
+   "bytes": 179462
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-a/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-a/report.summary.json": {
+   "sha256": "b4c1d796335555c9a2ba99c823fb5eca3a65eb911cc445e8281692dcde926596",
+   "bytes": 562887
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-a/samples.csv": {
+   "sha256": "cec23b2b05444b708fe910dbdf01064e1ee587578b471b95e992e7bd699ace4c",
+   "bytes": 347347
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-b/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-b/report.summary.json": {
+   "sha256": "5adf296f28e27a8bb15452a66ff12e58f37e07e3af9c3dbb4c08457051e94c1f",
+   "bytes": 565087
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-b/samples.csv": {
+   "sha256": "bd69718b45f66a039fc4e9373d73171483efe1087f6b2cad23a91cd46d6de48c",
+   "bytes": 376922
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-c/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-c/report.summary.json": {
+   "sha256": "1cfbe7520553f1b07d0291c883f2dfd4e1534b15b30047a52e6385ce85d44efc",
+   "bytes": 449586
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-c/samples.csv": {
+   "sha256": "fcb127538d99a9ebf299157bac0a977e80bbcdae2b011fbc672f8b7a9ead1d22",
+   "bytes": 254847
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-d/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-d/report.summary.json": {
+   "sha256": "6a71991bf7c851d21586f207db465180211e8e96649d6ff4b00cd34d462b3fe1",
+   "bytes": 113493
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/baseline-sub-d/samples.csv": {
+   "sha256": "36f373f0662644e360816419236540557222cf6efb70f8f6a51e19c883c7ca37",
+   "bytes": 68294
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/build-inventory-record.py": {
+   "sha256": "d52a6baa4259d0448417319db3ab1bdcf76831762e077ebecb19efed7393a02f",
+   "bytes": 4503
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-dlg.json": {
+   "sha256": "13836b2d85132f2edbcd00b812d3e5577e3b5f1ee60271276bc30434e0e95ab1",
+   "bytes": 1176
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-dlg.txt": {
+   "sha256": "57862afd143e14d4b0b9eb2889618c3b004829bb689cb07eac4e2c48b5cde8ed",
+   "bytes": 103771
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-menu.json": {
+   "sha256": "8e71a2e9d93813b2bce1a68ed4a799200a46246c5f9b27d71963b08fa63c0f19",
+   "bytes": 1322
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-menu.txt": {
+   "sha256": "0ef03702013b9253ecdb31dcb98d7b43ec1aa9410713b865e7167d3d9d19fb8e",
+   "bytes": 256676
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-pop.json": {
+   "sha256": "a7e2cd3f381580a136619008d529bcaf521ac06bf656b4edb414d75ee65b2f0d",
+   "bytes": 1156
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-pop.txt": {
+   "sha256": "9c83b5859084c2115b80f3b2f94256dc363112acb12a5e178afcb75c3ec9ed8c",
+   "bytes": 53197
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-select-a.json": {
+   "sha256": "e01e67fc8e49dc8e1034ea5f72afca5e5b0ce741f9a8263061e12220ded4c1c6",
+   "bytes": 1459
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-select-a.txt": {
+   "sha256": "002f3a8c30a72926a3ccc04ee877887ef2a1abd94c3f20b78fabb3049ca311b1",
+   "bytes": 98044
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-select-b.json": {
+   "sha256": "ab13869d9fa2f42daa15354d373f1bbe1eeae519fbb9331f950dcef0e8a61523",
+   "bytes": 1428
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-select-b.txt": {
+   "sha256": "3864c597588229a19f2cb4936eaf86bf94df567ef375af9ee356ca309066017c",
+   "bytes": 90250
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-select-c.json": {
+   "sha256": "4b094bc7e00a217aae3a10ae4118ac8360b157018a5d3812dd619d8584512e91",
+   "bytes": 1349
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-select-c.txt": {
+   "sha256": "b78dc828e7d90d1773ffc30c79080b254d772b48663252acb95e52c4b7287e3a",
+   "bytes": 60172
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-sub-a.json": {
+   "sha256": "bfde1539ade63099b25e812f611a64ab047d17c2127f664d36045b38427ef237",
+   "bytes": 1263
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after-sub-a.txt": {
+   "sha256": "43709ef5164c41289d522cd3b48110a0eb7675c225304ec8ecb0de856b47f468",
+   "bytes": 112876
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-a-field.json": {
+   "sha256": "8edcff738e942fe80d619ef0000923215e74499be261005e79af47a7a294f26d",
+   "bytes": 1235
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-a-field.txt": {
+   "sha256": "9d6ba0c2ddf92acf5931d58bcb8d89cc38aacc584caad74c8e0f69c504941e90",
+   "bytes": 37589
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-a-sample.json": {
+   "sha256": "74f0b5e401baf7eb2929352899351f5128dded093b13307510395b6ddfacbab8",
+   "bytes": 1231
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-a-sample.txt": {
+   "sha256": "221314d0cb3b56c7386eb65126b1b08c812ce3edf69896febfad2e15a8e6c8cd",
+   "bytes": 38989
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-a-session.json": {
+   "sha256": "227c109d1aa5e51686ac27d942316e55318cefcf3e658d8cbf729ee16079cae7",
+   "bytes": 1234
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-a-session.txt": {
+   "sha256": "77044afef0c42074a82e4387a86e42defaba3248601f21e1a753a208e12f3cec",
+   "bytes": 37589
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-b-field.json": {
+   "sha256": "0223c2842e553c9e0e1b819a84781423896a16dc5712758d3f36ec91bdff260b",
+   "bytes": 1241
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-b-field.txt": {
+   "sha256": "3686f82d6d7765bb99033f8afd209ce135728f6f28c80a34f7c839a82090856b",
+   "bytes": 38029
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-b-sample.json": {
+   "sha256": "91ad06db34edaa96721f6706ff381351871acc403b001d1f1120b6dc3e8cdf77",
+   "bytes": 1251
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-b-sample.txt": {
+   "sha256": "e3475461900da115f59e272e4b52a9b3c32065334f8cf21b621972ebfb6d5df1",
+   "bytes": 39429
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-b-session.json": {
+   "sha256": "902a3a42f9e61238fec349466f9a1ce50392d66877ae63b6c5b794f610700a27",
+   "bytes": 1252
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-b-session.txt": {
+   "sha256": "e76527e25b1ccefb6ce3a5a35db684fc0233ecf384f2d88cf319b001a47fe478",
+   "bytes": 38029
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-c-field.json": {
+   "sha256": "82a61a4617a67fa348057cb1048f87d05b4d8cc4f012fe9d2c8a824ed185d102",
+   "bytes": 1238
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-c-field.txt": {
+   "sha256": "ef3dc21b6322f2f165ef0bdfc247e2437a868f71a8a3efff0dcf1309c7f879f1",
+   "bytes": 37589
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-c-sample.json": {
+   "sha256": "d7642f4a44289adab1a53b0f149a457e37625197081c91b903e47af8fa0b427f",
+   "bytes": 1242
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-c-sample.txt": {
+   "sha256": "29b0e7842c4a384eb487b46cd3140d74e9c07eafb6e2f23c653a1bd11f658893",
+   "bytes": 38989
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-c-session.json": {
+   "sha256": "5b055bb7baf3d5ae62bbf4227a0b069c4859634502a19eecae09154b7271b3e7",
+   "bytes": 1222
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/after2-sub-c-session.txt": {
+   "sha256": "1ad78237f812d911bbfeac7cf4aceaa763b1f2fa3738ea8cd126f7b7d2af75a9",
+   "bytes": 37589
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/antd-audit.json": {
+   "sha256": "691ec1787e60a2fd127dec8003b07963b0ab701c812505572f5829266abb5037",
+   "bytes": 1276
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/antd-audit.txt": {
+   "sha256": "8d163cfa4fea8fda198b472b55f785e5237c83424d647bc1608b902c8c83a9e5",
+   "bytes": 614
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-dlg.json": {
+   "sha256": "fcce5be8907cacce52fd58ed881b147c6212dfce8060ca38fd4f24158339d7be",
+   "bytes": 1186
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-dlg.txt": {
+   "sha256": "181f5d485fd94ea5642d6e60f39d5bd69c292b4fc9aaea80bf2ba745f4c1ccf8",
+   "bytes": 207453
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-menu-a.json": {
+   "sha256": "fa35927ba3b2d4ed57beda16f306e3da4f932ba939fd3c58816d74430bf767fd",
+   "bytes": 1302
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-menu-a.txt": {
+   "sha256": "7b812ce180f8523f1c387ee69823923aa78075a3e9ba87ccccf74fc621ba82bf",
+   "bytes": 155991
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-menu-b.json": {
+   "sha256": "ae7a2f0283f1662489906a738afe4ad54e5ef2a7e402c8772455de4c403e4ed0",
+   "bytes": 1300
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-menu-b.txt": {
+   "sha256": "b78c68d3059990d56a020b9beb171fdafa0755be087ad1cacdc1472857ccfcd3",
+   "bytes": 135533
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-menu-c.json": {
+   "sha256": "e692a382c3330635e6a2e438082e41a4686f7176e0e91db06b6dbeb340a047ef",
+   "bytes": 1242
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-menu-c.txt": {
+   "sha256": "a54caaba16b4c1c2f06eeb7ecd55c8773c71f04e616beadae954f93813dc7730",
+   "bytes": 89331
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-pop.json": {
+   "sha256": "26f80a7c35800057eb9e7525309c5f4daf99d4949a1fbf27262c46f7b0ef45d9",
+   "bytes": 1181
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-pop.txt": {
+   "sha256": "a55e0cc60972005ebecf98714d2b053d333ffbc0209b0d7b1bf09c4ab84dcf31",
+   "bytes": 105452
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-select-a.json": {
+   "sha256": "06d8f540617167f127c2fb9fd4d1911ea36f75ee0147bdebcb647a3051675c97",
+   "bytes": 1333
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-select-a.txt": {
+   "sha256": "60baddccb4173f0afa245fa1598aabd0697838027cc2ea6b4dcca07d90f52727",
+   "bytes": 142711
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-select-b.json": {
+   "sha256": "ef0be404fa437b47221f426fa78627c2aa386b36fde123bed60d8be56789b879",
+   "bytes": 1307
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-select-b.txt": {
+   "sha256": "8944ef338483af6da4d99510a15045bfeadaa53826055e3b3b90c09a13d625a5",
+   "bytes": 134931
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-select-c.json": {
+   "sha256": "528802bffdc34daa68671a8554fcd0ef22577c5027231c3a0bf961006c0e19ca",
+   "bytes": 1250
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-select-c.txt": {
+   "sha256": "aeab3c645509b048412eca9e8d9b45163d2f48ea6813f2000c832a3c89c5f8ce",
+   "bytes": 89851
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-sub-a.json": {
+   "sha256": "525454df1315dccb650ada0a653704f230e8c90b41ac32b8eb3e8c8d09478f20",
+   "bytes": 1259
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-sub-a.txt": {
+   "sha256": "763172f83a02187b050c4cae3080aee39252ef79d21b7dfaa05e78230793128d",
+   "bytes": 187353
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-sub-b.json": {
+   "sha256": "60a020ddc5a6f703d9c18f5ce9f87612694f05bf1bed6ac6ada1ad0e7b4219eb",
+   "bytes": 1269
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-sub-b.txt": {
+   "sha256": "e549cd7a0d636a617bbddbf4200102822b844a58577ffb0b4ecfce2924919381",
+   "bytes": 189553
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-sub-c.json": {
+   "sha256": "b716767de96e2bab063c7abd932b9ab49c8c7c51c62dc55fe335082bad24f618",
+   "bytes": 1238
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-sub-c.txt": {
+   "sha256": "5cc70c2ed35833dfdbdfa1376b305b8d52d2cca0fff11a3d9a7682f39482b46f",
+   "bytes": 148451
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-sub-d.json": {
+   "sha256": "b86504cb61ee2b7dfff07d519834c4cae31a0dd0aed7dbe6d68da6b30d0593ac",
+   "bytes": 1199
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/baseline-sub-d.txt": {
+   "sha256": "e1a6a3f443f9aa06d0ff475f6852de2c155961e50169895aa1331e6318f3272f",
+   "bytes": 38552
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/dev-check.json": {
+   "sha256": "88d6a11ea8bec8872816149cd7315c9b921c24b98cdb43623b13d5bb2d83d1ca",
+   "bytes": 1134
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/dev-check.txt": {
+   "sha256": "94e0ccd31f8ccb218e4ec938b23e06e0c24186f4392e416b18774a972b4efae5",
+   "bytes": 63353
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/fix-held-frames-after.json": {
+   "sha256": "be0aed4deb6215b3f43203f62b7fc32e64f9e9c540dfb8d304ecb1f67ed5aab6",
+   "bytes": 1311
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/fix-held-frames-after.txt": {
+   "sha256": "04da780805be5d41f29fe080e23c65c2cd56658b5acdbea7b7bb6950d31db883",
+   "bytes": 240511
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/fix-held-frames-after2.json": {
+   "sha256": "3a90273fdbea08b994617df202eaf87ea7f1e8eb75f93b84af317420545cf7a1",
+   "bytes": 1307
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/fix-held-frames-after2.txt": {
+   "sha256": "a284ff96d39155ff35e79e57c14a8e4029d2def842da0713a387a7a162af7f09",
+   "bytes": 69546
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/fix-held-frames-before-home-end.json": {
+   "sha256": "276833129111bf8c308566240b32f0b6fa80629ba441f152df116e4f7cced7a2",
+   "bytes": 1430
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/fix-held-frames-before-home-end.txt": {
+   "sha256": "7fc8ddfd7d7e3799cf68c34f01a4af5d4709d0a0694f131dc130a0ad5a87739c",
+   "bytes": 57805
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/fix-held-frames-before.json": {
+   "sha256": "b045555c3caf938134cf019d3931619eca4f31b262dbf18af184d3e813352f2c",
+   "bytes": 1341
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/fix-held-frames-before.txt": {
+   "sha256": "e05ba58a266b918328bb7e881f9d1dd7b2495e5fdb5cfc37f2dd3a2a597eb282",
+   "bytes": 717100
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-chromium-dark-desktop.json": {
+   "sha256": "a38e2f10f17ced476ad54d0335a941c82fe42917b543b57740741c36a1db599f",
+   "bytes": 1119
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-chromium-dark-desktop.txt": {
+   "sha256": "a8de1c9eda6893670a9bcd97abf59a2ad712ffddff97459548bfa25e651086ab",
+   "bytes": 8932
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-chromium-dark-phone.json": {
+   "sha256": "ab78a7075dbb93ec62d484a7ac1041c3d2a432b5c07d21ada8221f098ad0564c",
+   "bytes": 1112
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-chromium-dark-phone.txt": {
+   "sha256": "6f6f810215e31a6cf72183e9dc5dd8ca346a84758a3386b10b28be5628e9b268",
+   "bytes": 8834
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-chromium-light-desktop.json": {
+   "sha256": "13e6cca65ffeb29f188b68170447ed573109038ab168bd05e290ccefe0b973df",
+   "bytes": 1115
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-chromium-light-desktop.txt": {
+   "sha256": "6355fbc9051000f4108c4adefce5cadb540f3335633410cdeffbe87ab8c74829",
+   "bytes": 8982
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-chromium-light-phone.json": {
+   "sha256": "92964b4ebe906119b84bb8f2ddce703ce235c257da89dfea1af14965f27ef2c9",
+   "bytes": 1106
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-chromium-light-phone.txt": {
+   "sha256": "8f152ba0285aad7a0c7487e8b05c6401156b2845569ce95d4b24b7e16717a1bf",
+   "bytes": 8884
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-webkit-dark-desktop.json": {
+   "sha256": "024744755b2827de4e70007b05ea335fdd4b8a8c76c80f9692341e8baeeadf49",
+   "bytes": 1109
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-webkit-dark-desktop.txt": {
+   "sha256": "38e3656eb3303953dbae842f997d20c48a1103e6b3e1c1cb8eb7203ef319d764",
+   "bytes": 8834
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-webkit-dark-phone.json": {
+   "sha256": "404f401cc5d590e3df7f97d9eb45b0a2ef4398cbab5a6bf03913bd95fe08bffe",
+   "bytes": 1104
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-webkit-dark-phone.txt": {
+   "sha256": "e4b7ed88fe4bbbdc05ac8eb84fc204e534604cfd439321389ef44667e68f77bc",
+   "bytes": 8736
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-webkit-light-desktop.json": {
+   "sha256": "96d3a0a4d94d77f6f068980ef3b2317b981bb79010c99added298c7be5202075",
+   "bytes": 1113
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-webkit-light-desktop.txt": {
+   "sha256": "327ff189afff29907a5d5c318a5c9f940a10bc2d7c328cc90c9ce5d8b0cdd492",
+   "bytes": 8883
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-webkit-light-phone.json": {
+   "sha256": "f7b1a4f5d7549caecf2024202e91d7679974e47557390c5494ca95bff6eed0cd",
+   "bytes": 1107
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/held-frames-rebased-webkit-light-phone.txt": {
+   "sha256": "68d36a75f733675f706371e943c92943e28bca4950c484de8807f35e311ce5d9",
+   "bytes": 8785
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/inventory-check-rebased.json": {
+   "sha256": "2364bf606b28613ff46aba9c734c21da4b9e6058d9b2253ec2d349bb0a38fc33",
+   "bytes": 1609
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/inventory-check-rebased.txt": {
+   "sha256": "390e2bb7c849100ec0909775bb48c4e85b12831f2da384fd99ab2166b6a72c54",
+   "bytes": 6098
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-menu-held-frames-after.json": {
+   "sha256": "a9e8b11a73e88912ec0256e4fca939b2abaa0d849aa0f7366504216047835491",
+   "bytes": 1327
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-menu-held-frames-after.txt": {
+   "sha256": "4cf27d068676a75c16240639de21b1ea905c61de06f6d9dc595c3ee9e4b843a0",
+   "bytes": 17525
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-menu-held-frames-after2.json": {
+   "sha256": "754a9efa90d578b2556af0964c1dcbe8487b8a6d808191ce9d9c8627514bb04f",
+   "bytes": 1323
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-menu-held-frames-after2.txt": {
+   "sha256": "fdd28be5bdc2544d1062fdc94aead726a46851be1bdde463a42e7853c9203015",
+   "bytes": 17507
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-menu-held-frames-before.json": {
+   "sha256": "8d966f3be280c3e493d30cd99f64af91390a95f546b32ead32b92e912bc55c3f",
+   "bytes": 1359
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-menu-held-frames-before.txt": {
+   "sha256": "71628787757da5ced99cc1cfe9b3be5935457167e1002fcd969fb07a84d9d8ec",
+   "bytes": 17536
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-select-keys-after.json": {
+   "sha256": "534c24a6e0655e3fa4091953ca9654b3fe09b5cac004d77567d50cd471f50bee",
+   "bytes": 1108
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-select-keys-after.txt": {
+   "sha256": "2d2024ca0fa89f01d982c166916fd88bcacf7ddc2e2adafee050e39a0cfa997f",
+   "bytes": 49086
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-select-keys-before.json": {
+   "sha256": "db865a025eb0f00afbf2124101368d37dfb1b3d5a2a36640ef00f36b95858aaa",
+   "bytes": 1138
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prior-select-keys-before.txt": {
+   "sha256": "ffc1afa57b73e3a1a92818cb676e999f702cb874a07772f30a8747df6524c045",
+   "bytes": 49086
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-after-choices-entry.json": {
+   "sha256": "0710eaa4302fa207631ba402f5d5388156238283d62097c242b8edbb7e3683dc",
+   "bytes": 534
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-after-choices-entry.txt": {
+   "sha256": "627deac6008311af00b4ad46d34bff2635488bc1c4839f2d9f8192a0f765a326",
+   "bytes": 12206
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-after-choices-list.json": {
+   "sha256": "79eef4e0b61edd198d8f061e4808bdd4dd563d46b43a129dfbe8762506eebeff",
+   "bytes": 437
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-after-choices-list.txt": {
+   "sha256": "869171286b2f29c36f05924d19a78eed3eac771f8f0b36b78741b607c653d3bf",
+   "bytes": 66231
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-after-overlays.json": {
+   "sha256": "677f672c01b03d643b629497d053f46a148e6f075309c876ad3a8a140b77f3f6",
+   "bytes": 448
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-after-overlays.txt": {
+   "sha256": "312d0fbcb9ccd62f60be40f0862fcaf5bc3aad8a6616d85ed5615446ad422ea8",
+   "bytes": 17800
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-build.json": {
+   "sha256": "cc03fd1493de9de773b499d4b54abfb92c180f4cfd4dca550d30a62d9d3a1862",
+   "bytes": 465
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-build.txt": {
+   "sha256": "1ddd2c7e2136058a79bba5db0ef01ca42e8a8eb14c3db0f12603ce731d8a97e0",
+   "bytes": 1670
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-choices-entry.json": {
+   "sha256": "6222efc1971b1e30df7f3b5cd38c76be3a59f9a95d3eb178b9a9fffc7b4aff13",
+   "bytes": 571
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-choices-entry.txt": {
+   "sha256": "75c2e509ba97ede166bc8a8d173601faa330ea47a85f8b603cc5230903d9bb04",
+   "bytes": 7172
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-choices-list.json": {
+   "sha256": "82f720779252eee0245ee683bb570ab164fa25ecc0a94ad737e17f238104103a",
+   "bytes": 474
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-choices-list.txt": {
+   "sha256": "869171286b2f29c36f05924d19a78eed3eac771f8f0b36b78741b607c653d3bf",
+   "bytes": 66231
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-overlays.json": {
+   "sha256": "90968adf0bd36b942e9b852c81cf960a6676bfd8905d6091ba1ff3cace4c29a1",
+   "bytes": 485
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-overlays.txt": {
+   "sha256": "feb1d352c7f61a7f760377330b23ccb7dad88c22d32ceb7616b233e18ab1b310",
+   "bytes": 17799
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-p0.json": {
+   "sha256": "1227a3615f8e49ae30a8c95f55203dd4ff7b957c2a5e85592f273ec029d1d0b5",
+   "bytes": 486
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-p0.txt": {
+   "sha256": "7cef33752a8bf65d3f506b201e7afe11e7f61365b74805b3a1e2da179274f60c",
+   "bytes": 38648
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-pilot-1.json": {
+   "sha256": "48738718ddbd47ca5e81138ba010b1bca468292d7b5707664bef64d940099525",
+   "bytes": 677
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-pilot-1.txt": {
+   "sha256": "8d86ccd740f6dbb5c75b9f2fba94bbd9231e0aa1ed593ee44636d9e897348401",
+   "bytes": 46966
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-pilot-2.json": {
+   "sha256": "ee85bd231b7fd1d7895b49e3eb3ce98cfcc2425f4a41cd29dd33f5bcf53c48a3",
+   "bytes": 677
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-before-pilot-2.txt": {
+   "sha256": "5747c560a63d20824dc83a3c53c0a4e3c07bf1d04572de410192d8e95ab7389e",
+   "bytes": 46970
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-build.json": {
+   "sha256": "8ad83eecd2e3fbf7f7e9004eb89d3a8ed3a3eb2c943e8d1b882b4447ff3a67cd",
+   "bytes": 422
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-build.txt": {
+   "sha256": "50d946d7f3b60335fba17c0104b3eeec39c2265acab989245cddc89fccc87531",
+   "bytes": 1670
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-entry.json": {
+   "sha256": "933f41451f178f5873f63d48e30232143900c2362eec3d008422e36c267eb0ab",
+   "bytes": 529
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-entry.txt": {
+   "sha256": "48c5e404b8d7e61fc34ddf2785a0cfc6624610d2535d349ffabbbdb768ca1e37",
+   "bytes": 7172
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-full-chromium-dark-desktop.json": {
+   "sha256": "cfe3c9fc80a09db8631eacc69c9c2d48f9b2cb52206d86df3b7f75abaf427932",
+   "bytes": 482
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-full-chromium-dark-desktop.txt": {
+   "sha256": "5105ae5151a34e1dd990e8acfa22b85fb136d18adb0f0298e4f4c5fa28241c3d",
+   "bytes": 10969
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-full-chromium-light-desktop.json": {
+   "sha256": "321115d5c312494a4718a4ee2f31b6747a6d3c099a4235f4263a0d257b264add",
+   "bytes": 482
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-full-chromium-light-desktop.txt": {
+   "sha256": "b3e490f3648cd8a4c6495656683146a6695af97a4e2bb705ce167518c4d0fd38",
+   "bytes": 11034
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-full-chromium-light-phone.json": {
+   "sha256": "7846e40f50ae76056741a514e45518c9702f7c57548ce9c9dfd2536a8db0d67a",
+   "bytes": 480
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-full-chromium-light-phone.txt": {
+   "sha256": "d6fa05d5a86443698dbf92ced0fc27da5656f31bd03f9d64987054690891fa23",
+   "bytes": 10899
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-list.json": {
+   "sha256": "9b8c8b58ac4ae2513343b2075513e97ad721d2997527075aaa35f9e91e004723",
+   "bytes": 431
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-choices-list.txt": {
+   "sha256": "869171286b2f29c36f05924d19a78eed3eac771f8f0b36b78741b607c653d3bf",
+   "bytes": 66231
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-entry-repeat.json": {
+   "sha256": "bbe3d3f492108cb43e5c101feadb98a4d209fc02cfdeb9f9c0642919804db7f2",
+   "bytes": 561
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-entry-repeat.txt": {
+   "sha256": "18b9da0df049d01b0cae8b8080a3599fd358826dfc07f99f8c542c47f6bdca59",
+   "bytes": 10525
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-overlays.json": {
+   "sha256": "de0b84bbdf166a969f5afa4bda53d34b924684807d5d057b337896e4634526db",
+   "bytes": 442
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-overlays.txt": {
+   "sha256": "6192334e2b57a7d9efd2351b72d1b016794908c66137d1bee3b26f0dea215e72",
+   "bytes": 17803
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-pilot-1.json": {
+   "sha256": "f7decada037b0c0c43e23400e6725b1a31ba39957780da4c7978beacbbef01de",
+   "bytes": 632
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-pilot-1.txt": {
+   "sha256": "dc92e1e70d2ee17641e538fc1808fa347528efe8054f89216d4a3746e8835aa7",
+   "bytes": 46713
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-pilot-2.json": {
+   "sha256": "687f43aa16392c8d74776f0ce8d7185388460a30f79a6475a274dc61a92a3a21",
+   "bytes": 636
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-final-pilot-2.txt": {
+   "sha256": "91bb5565947b6b842b27e19059bd6f61691dd7f07a69ba71d83982a7b7d04e7e",
+   "bytes": 46712
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-prefix-entry-repeat.json": {
+   "sha256": "dbdff5a4a97c88a49cd45863b621ac05e6baaf769c21beaee449178e79a91aa8",
+   "bytes": 681
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-prefix-entry-repeat.txt": {
+   "sha256": "0bd3d4811ad2c54238f5b7334be658fa902c9134a3a6ee5c3f6a9ebc64e9f02e",
+   "bytes": 10525
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-entry.json": {
+   "sha256": "2d60eec173c398eebf5772bd6e82e55eff2172bfcbd65da2cf238a4a9536dcc8",
+   "bytes": 534
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-entry.txt": {
+   "sha256": "5afd3969163794014167417157f4257ecbbc111bde718c238b2f54a8a31465fc",
+   "bytes": 7172
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-chromium-dark-desktop.json": {
+   "sha256": "dca03033930c84de73fbcedfe9ac9117898b23376d06d4162194c3dad1fa715d",
+   "bytes": 482
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-chromium-dark-desktop.txt": {
+   "sha256": "e6281a3ea357de47e6399c6a468337965ec8cb327886736476d61a18540b5b39",
+   "bytes": 10959
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-chromium-dark-phone.json": {
+   "sha256": "1a00f4d894fac9e52d9964ca7f29a9c44a4bd9243d80a2573152642154f7a63e",
+   "bytes": 480
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-chromium-dark-phone.txt": {
+   "sha256": "2b8a063362396c783164678250a66033428eac494a588f96d7b1fe19e4c8dfae",
+   "bytes": 10827
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-chromium-light-desktop.json": {
+   "sha256": "ce8a9d4edcc744b09853f7eba44380d0aca2ca5dc653788a1fd70eb4586d5ed9",
+   "bytes": 483
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-chromium-light-desktop.txt": {
+   "sha256": "356a8f03f53f28f0055166ab90d3168097e32d4ccc4becf4396da855ce4884e9",
+   "bytes": 11026
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-chromium-light-phone.json": {
+   "sha256": "5978d5c7820bc58640da5f2edd8779a2317ae4fefefe832fd59d8ee39f8b9dac",
+   "bytes": 481
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-chromium-light-phone.txt": {
+   "sha256": "30add3606e2999bf917ef5350fe3509e43fe8c21008384779b5b3e202332cb43",
+   "bytes": 10897
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-webkit-dark-desktop.json": {
+   "sha256": "9caa5dc5a7bba4f3f150bc73bd8501024497c6ca566596afb27d948d2dd2f481",
+   "bytes": 480
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-webkit-dark-desktop.txt": {
+   "sha256": "00f90522aeb9361a8e0fca1c8479b206713bd39dc6c3185154b72b6067103b93",
+   "bytes": 10834
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-webkit-dark-phone.json": {
+   "sha256": "b73333ca77f91c1bc8f8084870b70f5943782a804212da44c23b68372846638d",
+   "bytes": 478
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-webkit-dark-phone.txt": {
+   "sha256": "15c2f2d8ce83a9f9674cb7ad573ae789b55387a113b93a44b083d8963d96213e",
+   "bytes": 10698
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-webkit-light-desktop.json": {
+   "sha256": "087f22913a88c2e69913e617b7b7bae8dc5c93a15d13d804221aa0e21f7c736a",
+   "bytes": 481
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-webkit-light-desktop.txt": {
+   "sha256": "fe611e334260fd61bdb39d354f216a94f646923e24b4c396acb22d1d4a027b83",
+   "bytes": 10895
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-webkit-light-phone.json": {
+   "sha256": "6bad047c0966e2fc7720d414583738acca22afdbbfcb3d52d9e3bf33cf04e3af",
+   "bytes": 479
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-choices-full-webkit-light-phone.txt": {
+   "sha256": "4bdd2231dac30e6053efd64374d09a4fab6394cd5227c4230e4af51aaf25cd1c",
+   "bytes": 10771
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-merge-check.json": {
+   "sha256": "c3a3f5fe8ca35afbc85effd2d76a8088e234c7cf8753fca99b94ed95f4467703",
+   "bytes": 402
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-merge-check.txt": {
+   "sha256": "8d0a1d4a4b7455bbaac3d3de10880b1a6d311b29cd94930ecd5ab2672efa94cd",
+   "bytes": 1141728
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-p0.json": {
+   "sha256": "cb103d5c5ba5320285bb74b998023dd4055580648232a363bfc6d577c23dd674",
+   "bytes": 449
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-p0.txt": {
+   "sha256": "56f903dd5542eccda3f127e4f655f3eab3d78128fccdf067302de8c68724200b",
+   "bytes": 16250
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-shared-build.json": {
+   "sha256": "48ff10f2d6db10557927fcbdcc86740d66b577d4e77e3e1c076933248543490a",
+   "bytes": 386
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/prod-rebased-shared-build.txt": {
+   "sha256": "02298cf72615ab6cb9c310eeba49986572da4ec1450f6d5e737a8389b6df0917",
+   "bytes": 53
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/rebased-queue.json": {
+   "sha256": "6646a1577a1e5abe750a61b2321c9e35782ad9fbf4a5186c31404476c4f377d4",
+   "bytes": 1339
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/rebased-queue.txt": {
+   "sha256": "69d4d386e572cac2fd106677043d61450482993578d36ba79b01873d6e342f9f",
+   "bytes": 7174
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-related-after.json": {
+   "sha256": "51f385d43e6df93113efef6609cfa6e689e64b89ed6135ee7bf19564f633cf1f",
+   "bytes": 1790
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-related-after.txt": {
+   "sha256": "86f9f53ad384f8317ed145213cdd6bb5c5e6375e475d3b0b3d2429e6cad93ea0",
+   "bytes": 131271
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-tip-select-final.json": {
+   "sha256": "d05b5aafdfd0a3b53ea58ea2905b5e0f6701988198ed87c89955ba405457cfe1",
+   "bytes": 1456
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-tip-select-final.txt": {
+   "sha256": "a581608f52af1c750adb8f3facb0a53682f23a6c15658033f622e4916fad2d5d",
+   "bytes": 607
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-window-after.json": {
+   "sha256": "5573b4dadbb101fef6211fa40ce78ec5b37679cd1e6f4fb60b8d4ab9738ffa85",
+   "bytes": 975
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-window-after.txt": {
+   "sha256": "4368f3d1a157a29ade56d1afe2687543095c3be2f40fb4b649a41e4ef639a93f",
+   "bytes": 513
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-window-before-2.json": {
+   "sha256": "519098cc9e2d734bd0d375e0d5b1c15cba70718e7301f0e5bc1ad8c1e9a4ea6f",
+   "bytes": 1029
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-window-before-2.txt": {
+   "sha256": "f370fefe0c5c79f2dadd257b743b307fce5794c25d6bb9da4973b1dfb30aeb25",
+   "bytes": 22251
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-window-before.json": {
+   "sha256": "0cc02b62f14879a54b0e7a9dc61328dd20a5e49c7ed603d6b3ce5705c1eca970",
+   "bytes": 1099
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-window-before.txt": {
+   "sha256": "8aa27672f92f2c30aa9d4329f17496d52ae53513a8ea91ebd6a2aaea0385290c",
+   "bytes": 19721
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-window-final.json": {
+   "sha256": "51dd94bd737a909152e8762ac207b9dd2d2ad4258cfdafc4ff883692540426f7",
+   "bytes": 851
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/checks/unit-window-final.txt": {
+   "sha256": "c1f1c8b92e5d80554edd6e3387d9fff0b3af5687a6fb6fc1a9a7bd33c1035c02",
+   "bytes": 477
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-entry-after/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-entry-after/report.summary.json": {
+   "sha256": "b68ee2ac0444d685dc0999a34209d8a9c4f1fc79363ac92d70537bcb36434d3d",
+   "bytes": 32252
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-entry-before/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-entry-before/report.summary.json": {
+   "sha256": "983902205e141aa227132388749f839802ec0bcc3faea9905606c6b3bdcb5b22",
+   "bytes": 29471
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-entry-final/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-entry-final/report.summary.json": {
+   "sha256": "f7af538f691385b7b7a94371755416dd3d9390d407720e907dc1a12d1e6848de",
+   "bytes": 29472
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-entry-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-entry-rebased/report.summary.json": {
+   "sha256": "f0c168870edff83129ec485c43fa7c84bca226a0800e36fc8d7847d8f40aeb0d",
+   "bytes": 29463
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-dark-desktop-final/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-dark-desktop-final/report.summary.json": {
+   "sha256": "3959c979befe38877b07bb6a4ff196edd0f2e14fb54a0b83d415534c6105c4e2",
+   "bytes": 54209
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-dark-desktop-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-dark-desktop-rebased/report.summary.json": {
+   "sha256": "51ca17cede493d274c8328530f68462b3ab890d57bb7affb55c6b48cd4e6ed91",
+   "bytes": 54215
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-dark-phone-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-dark-phone-rebased/report.summary.json": {
+   "sha256": "ba934ff7122b6e7d0da5218f7875a58e037e802041cb2e539125e87d447af6c4",
+   "bytes": 54087
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-light-desktop-final/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-light-desktop-final/report.summary.json": {
+   "sha256": "c0913f29f56d3501d0d5a8a3471763ea79bcfd699d82ed155271966d9d140e81",
+   "bytes": 54275
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-light-desktop-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-light-desktop-rebased/report.summary.json": {
+   "sha256": "2e73bce93d882d175236995c5f5cc55437c3dc2e7f491c59a9590b91e2335e19",
+   "bytes": 54287
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-light-phone-final/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-light-phone-final/report.summary.json": {
+   "sha256": "e995ea72ecb0a0dc655da4cda9dfdeecc5345a6a3a474a794ab0c05651d34be0",
+   "bytes": 54156
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-light-phone-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-chromium-light-phone-rebased/report.summary.json": {
+   "sha256": "2cf513ef3ce08ae58394b5f72f074664282045becfb45026f355b0e569383d71",
+   "bytes": 54146
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-webkit-dark-desktop-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-webkit-dark-desktop-rebased/report.summary.json": {
+   "sha256": "5c20ef6007ab9cb7900de63c0bd0132f6a96b9e4d9f838c263664c8bd747c57e",
+   "bytes": 54080
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-webkit-dark-phone-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-webkit-dark-phone-rebased/report.summary.json": {
+   "sha256": "0f0f90cab0b9ccdc36bb25058a85692ce785c62b51281c6a879ac91f4a35790d",
+   "bytes": 53962
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-webkit-light-desktop-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-webkit-light-desktop-rebased/report.summary.json": {
+   "sha256": "35a567ca8c30fd479f2252254dfb933aa5cdbf1a8fad035ce8e871b7aed5425b",
+   "bytes": 54158
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-webkit-light-phone-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/choices-full-webkit-light-phone-rebased/report.summary.json": {
+   "sha256": "0592383650036d7860b4feeca1ee0a66648c0139611bda8492b49e2f89155b1a",
+   "bytes": 54012
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/combinations.md": {
+   "sha256": "11ed435df8a3254b2343b68aa48ef4145dd92db6081c592265432e58d8ff1250",
+   "bytes": 48715
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/dev-check/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/dev-check/report.summary.json": {
+   "sha256": "b15b12f76752167dc5080042f8cf7e5b734bd85b67deaf79785560f8abd8d258",
+   "bytes": 190320
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/dev-check/samples.csv": {
+   "sha256": "287bc9489087922ee967ba38ec1506d8a4790f82dd6786dbfaa7415982c4cde7",
+   "bytes": 121370
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/entry-repeat-final/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/entry-repeat-final/report.summary.json": {
+   "sha256": "3b8f4de7f741c12dda6bae747a82aafd9bbfcbdbae89e6c8322647d444028d7f",
+   "bytes": 46423
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/entry-repeat-prefix/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/entry-repeat-prefix/report.summary.json": {
+   "sha256": "8931b0682a57eab68e04a60115637fc264371919b7704cc040becbff3289645a",
+   "bytes": 46423
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/final-queue.sh": {
+   "sha256": "612d1962542328d8c89b418e4128804f5ce86da8a2efff306b9c941aed186b36",
+   "bytes": 3718
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-after/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-after/report.summary.json": {
+   "sha256": "e0492f206eb0c065b9d911d559859b45b81b3bd8dbc9c2a2dc7c83c3f947e6e2",
+   "bytes": 326222
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-after/samples.csv": {
+   "sha256": "ace96e7d4257076ab39890d95aafa2329f28d323b15fde0d65b3e92ee9635557",
+   "bytes": 141522
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-after2/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-after2/report.summary.json": {
+   "sha256": "3842d6356680c898cf5fea4c107f32cc3e313b2113faef80a9230447e4223add",
+   "bytes": 214381
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-after2/samples.csv": {
+   "sha256": "5f955764671ca591d984221f3c4a8b51e57debc9cd9d19131fffde105adaac06",
+   "bytes": 140738
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-before-home-end/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-before-home-end/report.summary.json": {
+   "sha256": "c4b55a5be9d8873ffb0e0594449c1c397c97b91576bd2b3906e7032375168504",
+   "bytes": 49356
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-before-home-end/samples.csv": {
+   "sha256": "b99c50a42cb20008b05bd09e0b31c77f5f8da917de29260968c4eaf5b7b63585",
+   "bytes": 10426
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-before/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-before/report.summary.json": {
+   "sha256": "6aec1e61e0aaec2ef9c3c4be95fe70c4968f8f2cf0f8b3b927c33f08a3eb8a71",
+   "bytes": 641601
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/fix-held-frames-before/samples.csv": {
+   "sha256": "fd83dc936e114c81e6f9dc8201eec15227ed3a02bbb32827e2515630961303e8",
+   "bytes": 118934
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.browser.mjs": {
+   "sha256": "ba98df69d2125510ba58ae325516a995e702f9fedbc636553b823cfc22fbeb73",
+   "bytes": 12519
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs": {
+   "sha256": "84d6e1f26864c67302f86c79b809c4893467f4b50329c61e0793f467202532c1",
+   "bytes": 740
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-dark-desktop/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-dark-desktop/report.summary.json": {
+   "sha256": "f6721a58b9d672a4ae2f30dda8d5f2f8b0cabdd672bfb7f83af091c793912aee",
+   "bytes": 27040
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-dark-desktop/samples.csv": {
+   "sha256": "7c5869ef0f0b72528ce6262e3fb65fbff57f66a0c68d343a17bf6c4d3206e5a2",
+   "bytes": 17734
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-dark-phone/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-dark-phone/report.summary.json": {
+   "sha256": "3857f8492f4b1199b02bf3d81e0f3a50b590507ecb7eba0cae0930077ad06d83",
+   "bytes": 26934
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-dark-phone/samples.csv": {
+   "sha256": "134489ee9937f5cf8e4423758d12ea2489afea9a434460fe75a25344e8ae850a",
+   "bytes": 17636
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-light-desktop/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-light-desktop/report.summary.json": {
+   "sha256": "682fc3391f76819b945422cb16c445889030945bc69be09f5eae0d2f4197e000",
+   "bytes": 27082
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-light-desktop/samples.csv": {
+   "sha256": "84036daca4c44325d8a2d3796517ff2c667731e09de36ed49e51319153eff17a",
+   "bytes": 17783
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-light-phone/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-light-phone/report.summary.json": {
+   "sha256": "05a06ddeba5fb8387bd09045793ed8729e1f3f5c34e00ec51cdc3e59cf58c181",
+   "bytes": 26984
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-chromium-light-phone/samples.csv": {
+   "sha256": "132a2eadfaee23a25be7c8886024123a95be16287dc828293c0c3e53b5a8f757",
+   "bytes": 17685
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-dark-desktop/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-dark-desktop/report.summary.json": {
+   "sha256": "9f76d079403160691a6f3f36761392d4a0074093f2fa9d23614fd319712ed28e",
+   "bytes": 26933
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-dark-desktop/samples.csv": {
+   "sha256": "2306834c4b84965ca8c5cef4928e09759367908a4ca211c227f020c232b69051",
+   "bytes": 17636
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-dark-phone/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-dark-phone/report.summary.json": {
+   "sha256": "75d3ff072cc48b9cf4faa0b6f75b57aa136b2d3863d8a40f43e9ac6871d1e584",
+   "bytes": 26836
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-dark-phone/samples.csv": {
+   "sha256": "64178309cb6de7795b76ac5ef550aeba611c40dd582d027bfe7b8217fe5d569c",
+   "bytes": 17538
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-light-desktop/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-light-desktop/report.summary.json": {
+   "sha256": "811c41d50ae87c5b2dc05a0549f445d34101cea07efa71600af1ee8661145c87",
+   "bytes": 26983
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-light-desktop/samples.csv": {
+   "sha256": "edf2a36757695b3dc969d19a383b7203df87342e6dd2db3a2bec49047ec66124",
+   "bytes": 17685
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-light-phone/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-light-phone/report.summary.json": {
+   "sha256": "90a9daf551dec9110ade1a0b735edceca93b5ac5b1d9657a891b9f38c12c06cc",
+   "bytes": 26885
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-rebased-webkit-light-phone/samples.csv": {
+   "sha256": "8ecdbccfca3e48bc3e418bcfa4bbec102aa04e843ee5d01f4a0bc82cf64741f2",
+   "bytes": 17587
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/index-artifacts.py": {
+   "sha256": "2d312cb58e413be1840acb0de3bd713dfcaf47b59fe59e0bb866aadc431c492c",
+   "bytes": 1309
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/inventory-check.sh": {
+   "sha256": "54fc596ec113ecf850f5f3e29ff9afe3e80ca4e337d8524883d95d50c3c8d995",
+   "bytes": 4548
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs": {
+   "sha256": "2434c049650137f36a9eb42955b4a081da86cdc58f5d4505ff1dd68d0cf12740",
+   "bytes": 20963
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs": {
+   "sha256": "bc1390d366ecb3e053ce4ee11be69837098654034ec6177521ce30b8da41da58",
+   "bytes": 746
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-summary.json": {
+   "sha256": "cfe1adc359e09065c7707e5b15529bce715c9ed4d4626e5673b4fc56c0ddbdc9",
+   "bytes": 364771
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/overlays-after/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/overlays-after/report.summary.json": {
+   "sha256": "844878e4ff44da43460b2877108774339210bdff7e118cfca7cb42d9c8e2cffd",
+   "bytes": 87289
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/overlays-before/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/overlays-before/report.summary.json": {
+   "sha256": "a1d320b2695c648fcc33ae94f49391d89bc9545e9df77b1003f2eb6ec656f58f",
+   "bytes": 87288
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/overlays-final/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/overlays-final/report.summary.json": {
+   "sha256": "40b2c6156720f1c9915c18070f99e9ba114abfc4a5aaf18d3b192a0f95f2e041",
+   "bytes": 87292
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/p0-before/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/p0-before/report.summary.json": {
+   "sha256": "e411920daa9583e4be962c601f425b802b9ea298d5dc41e24e2d9c6f1ac56466",
+   "bytes": 102849
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/p0-rebased/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/p0-rebased/report.summary.json": {
+   "sha256": "a73d828eee7d3a60976f8e7280996ba5dbfeec756dea85772e8bdb4acd66d078",
+   "bytes": 89988
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-before-1/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-before-1/report.summary.json": {
+   "sha256": "8260e4345a1fa1f6ef73b2aa2da4d0375e832f81e759f72008880b8c413bf4e6",
+   "bytes": 234028
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-before-2/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-before-2/report.summary.json": {
+   "sha256": "de9fc043308d3332d98f372a64f6d15746c391a41393fab7594ddf0c26089434",
+   "bytes": 234044
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-compare-again.json": {
+   "sha256": "0efa2a20038a1757563f4c9d84ee9dbc4ec316a7f720fe19f28d5f5d0dfe861b",
+   "bytes": 100888
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-compare.json": {
+   "sha256": "4e6fbb8a11d968a1c30962018b019946be3fc2bc8cb373ef2c009884bc00897f",
+   "bytes": 94105
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-final-1/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-final-1/report.summary.json": {
+   "sha256": "761aa7bfcb116423ae7925fad2f5d1bbad1136dbb01b6d95ef5a2b838a1a890c",
+   "bytes": 233441
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-final-2/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-final-2/report.summary.json": {
+   "sha256": "7638970f0e27841d516245f77154877d828b8b4a30ef98863a04816d81045671",
+   "bytes": 233442
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-noise-after.json": {
+   "sha256": "a75f47192f19db9130959b9ba6b1a489a31bf470cebc7b70d72b4fa6326aa948",
+   "bytes": 93164
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-noise-before.json": {
+   "sha256": "32def515925f62d82060567d0d8d368eebd9f95c8213c97fbc5dd4cd5e81dc58",
+   "bytes": 103920
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-repeat.csv": {
+   "sha256": "e51da35fc888003bee160e3f81cb98fe9253b7a679f7093261deef9697a29c67",
+   "bytes": 3305
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-repeat.sh": {
+   "sha256": "b1f09db9be2361fa7bbaec30312fcd32f12590c6ad308de416b32410d99ad1b6",
+   "bytes": 3654
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/pilot-summary.json": {
+   "sha256": "778dd9b51c48359e4bd58584e79176d00edadd393e776fa020759b8f526e8d11",
+   "bytes": 7650
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames-after/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames-after/report.summary.json": {
+   "sha256": "e765777a186341d6f9f96c4ad19f2d619023cd535f6ba71b80c74f6202142057",
+   "bytes": 46334
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames-after2/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames-after2/report.summary.json": {
+   "sha256": "3923e27e5ac515a277a918dfeb169c3dab88a5e4bc21c5f4e0accd15f15cc055",
+   "bytes": 46335
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames-before/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames-before/report.summary.json": {
+   "sha256": "ce4bbfb57fde5169c4092fc3e57d6c5c317b86ddd151c2963a5f5aca9ef4c9a5",
+   "bytes": 46315
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames.config.mjs": {
+   "sha256": "f6493ce71e983ce8bcd72daba1e87dd2c53cb92c8d57832104a601667ec14d11",
+   "bytes": 531
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys-after/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys-after/report.summary.json": {
+   "sha256": "ad4ce75b868adf1db84675027ccb1a71391e8970151f5177435d138d7ac12160",
+   "bytes": 152687
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys-after/samples.csv": {
+   "sha256": "73c6d4f8004d1e9b4a54ff13ce972c55ebb855defffe1a4f15745b7a17ac32ab",
+   "bytes": 105125
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys-before/environment.json": {
+   "sha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "bytes": 10774
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys-before/report.summary.json": {
+   "sha256": "286b369414e7d13e478e5958c5f7de5456b8797883a29c8aae7bf2f980412b92",
+   "bytes": 152680
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys-before/samples.csv": {
+   "sha256": "0580dc6bb0a4ae4739003137b3bb318def266ff05ceb9f8bffeee1dd8249ae7c",
+   "bytes": 105110
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-select-keys.config.mjs": {
+   "sha256": "e7a483e98b9302ed18ea264c069cbc6d79b7ed7eb6ed3d880c99a1f8fe9f2396",
+   "bytes": 516
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/prod-runs.sh": {
+   "sha256": "c0aed95d2f85f71940aa982d339a477c1b6c079ad3b5015c6ab10cb36a06b16c",
+   "bytes": 7770
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/rebase-map.txt": {
+   "sha256": "3fa0b2eb78ddfc78809c9ac4dbf19783a6f58a2391576a51c7d4cbedb36da438",
+   "bytes": 3705
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/rebased-queue.sh": {
+   "sha256": "27164f9910a7260317c4f25a0362511c2b4c0bd42defa630eea3c49c72909d1f",
+   "bytes": 2380
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/record-check.py": {
+   "sha256": "62b78a5ec4af83d0acaedccf7c18c2161d9f85d22b2a618f6b91e23ecd723070",
+   "bytes": 1604
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/render-tables.py": {
+   "sha256": "5439a3fa34ba4132c4d5828694ec9fa41faec1fcc0546ef5904eda21b62971d9",
+   "bytes": 4276
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/run-chunks.py": {
+   "sha256": "9c9c699117c68fac71eac0ade983a966e58cfc7c6b5af80f2737de1953cc5b38",
+   "bytes": 4181
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/slim.py": {
+   "sha256": "216e3264ffdaf3c28d63a41028b5b5f59498716f7cb518cc120b3a15f0aed5d9",
+   "bytes": 6514
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/summarize-pilot.py": {
+   "sha256": "0da9d4d8f5fcfa723fcf69844cd12c1187e03ccf7619834ec318f35e4d84447e",
+   "bytes": 3863
+  },
+  "docs/evidence/base-ui-migration/p2-keyboard-window-2/summarize.py": {
+   "sha256": "ab0644ccf9f7d986b6059a36e75c2e3b218798912a79118bef518e934c1a572e",
+   "bytes": 9329
+  }
+ }
+}

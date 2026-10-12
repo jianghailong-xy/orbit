@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.config.mjs'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_b7fd6ec6e302",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T05:06:21.760078+00:00",
+ "exitCode": 0,
+ "outputSha256": "f658c2f5450ae0963967e26b0f46efd1c689efec7c4703b1fc0e58bbb0edf77f",
+ "outputBytes": 17579,
+ "note": "Fixed tree, menu-held-frames.browser.mjs (committed in 5a6ee008a) in all eight projects, own network namespace, at the same time as fix-held-frames-before: 80 passed. Every sequence ran the item its paced reference runs, and the row-actions menu ran its action without a row click."
+}

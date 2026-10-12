@@ -1,0 +1,201 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "input": {
+          "content": "P4 stopped write",
+          "file_path": "/tmp/orbit-dsh-p4-77gLzH/TestDshRealApprovalStop2963130941/001/work/stopped.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "toolName": "write",
+        "toolUseId": "call_p4_1"
+      },
+      "Status": "ALLOWED",
+      "Polls": 1,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "content": "P4 stopped write",
+          "file_path": "/tmp/orbit-dsh-p4-77gLzH/TestDshRealApprovalStop2963130941/001/work/stopped.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "toolName": "write",
+        "toolUseId": "call_p4_1"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "file": "absent",
+    "lateDecision": "ALLOWED"
+  },
+  "modelRequests": 2,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-77gLzH/TestDshRealApprovalStop2963130941/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-77gLzH/TestDshRealApprovalStop2963130941/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "02ab35fbfa7fa7eba004f3347f6dae68310a10215ac08240ad9003630101b7f7",
+        "dshHome": "/tmp/orbit-dsh-p4-77gLzH/TestDshRealApprovalStop2963130941/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-77gLzH/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "sessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "text": "Write the file."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 45964,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "content": "P4 stopped write",
+          "file_path": "/tmp/orbit-dsh-p4-77gLzH/TestDshRealApprovalStop2963130941/001/work/stopped.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "write",
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {},
+      "turn": "t1",
+      "type": "interrupt"
+    },
+    {
+      "payload": {
+        "content": "Error: approval for escalating to \"workspace-write\" was cancelled",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "status": "failed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 45964,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "stopReason": "cancelled",
+        "subtype": "interrupted"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "payload": {
+        "localTurnId": "t2",
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "text": "Continue."
+      },
+      "turn": "t2",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "localTurnId": "t2",
+        "messageId": "ee0e07bb-268d-4aab-8792-5e6cf71a5fb9",
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "text": "P4 after stop"
+      },
+      "turn": "t2",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 46012,
+        "contextWindow": 1000000,
+        "localTurnId": "t2",
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "subtype": "context"
+      },
+      "turn": "t2",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 46012,
+        "contextWindow": 1000000,
+        "localTurnId": "t2",
+        "numTurns": 1,
+        "runtimeSessionId": "0bf7f801-961a-45c9-a30f-4ec5ce59b39b",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t2",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "default",
+  "scenario": "TestDshRealApprovalStop"
+}

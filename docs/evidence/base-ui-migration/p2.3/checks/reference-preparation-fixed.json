@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "python3",
+    "docs/evidence/base-ui-migration/p2.3/prepare-reference.py",
+    "/tmp/orbit-p23-repro-check-2"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "startedFrom": "5814921cee182e467b0cee42542f8f763580b6ef",
+  "finishedAt": "2026-10-04T06:44:13.284446+00:00",
+  "seconds": 0.2984018209972419,
+  "exitCode": 0
+}

@@ -1,0 +1,7 @@
+{
+ "base (before originals)": "99ec589280aaf3ab1727e520107ebb26a87a1bdb",
+ "C1 committed (after originals; unregistered run)": "4103f361f73721ca5ab9c9b8f2856379d07d63d2",
+ "C1 + scratch registration (registered run)": "82f912a27ead075d74d2c7c2e9d5a23d69a9df9f",
+ "C1 + registration + C2 + C3 (beyond and unregistered run)": "ac57c4a693a7a269d494302569e6132655ae16a2",
+ "note": "Scratch worktrees under /var/tmp/p0drift-s2/trees; none of these commits is delivered. The registration cites a stand-in decision (DECISION-STAND-IN.md); it is not an Orbit decision."
+}

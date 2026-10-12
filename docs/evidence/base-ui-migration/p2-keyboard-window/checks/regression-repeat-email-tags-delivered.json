@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm run test:ui-choices -w @orbit/web -- --grep 'email tags support' --project chromium-dark-desktop --repeat-each 10",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_29204a5f775e",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "fe9d464ee9de6f4798a51527add2a5724ac8ce24",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T23:46:47.631081+00:00",
+ "exitCode": 0,
+ "outputSha256": "6cc3f6d5cc3a911ecddc0f37de727887a5a4422d2ca87e5f00d4a1757858fe90",
+ "outputBytes": 2112,
+ "note": "10 passed on the delivered tree: the case whose page never mounted in the second delivered full run, alone in its environment, ten times; unchanged test, timeout and retries."
+}

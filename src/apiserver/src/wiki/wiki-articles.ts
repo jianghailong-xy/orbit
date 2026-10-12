@@ -31,6 +31,7 @@ import {
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import { ENTRY_SELECT, entryView, WikiRefusalError, type WikiPrincipal } from './wiki.service';
 
@@ -53,10 +54,11 @@ import { ENTRY_SELECT, entryView, WikiRefusalError, type WikiPrincipal } from '.
  * and only when its entry set changed — no clock rewrites one (hard constraint 5).
  *
  * WHO WRITES. A Wiki maintenance run of the space (`isWikiMaintenanceSession`, the one test criterion
- * 2 exported) through the runner door, and an import the API server's container runs itself for a
- * preview space (origin `import`, no session, no user). No door builds the second: it exists only
- * for code running in the server's own process. The owner reads, on the user door, and writes nothing
- * here — an article is the model's summary of what the owner can edit, the entries.
+ * 2 exported) through the runner door, the wiki worker's `articles` job (origin `maintenance`, no
+ * session, no user: `wikiArticlesJobPrincipal`), and an import the API server's container runs itself
+ * for a preview space (origin `import`, no session, no user). No door builds the last two: they exist
+ * only for code running in the server's own processes. The owner reads, on the user door, and writes
+ * nothing here — an article is the model's summary of what the owner can edit, the entries.
  *
  * NOT A SESSIONS OR PROJECTS DEPENDENCY: this reads the wiki's rows and one session row, through
  * Prisma, like the maintenance routes beside it.
@@ -734,6 +736,15 @@ function asCategory(value: string | null): WikiArticleCategory | null {
 /** The spaces whose membership is kept at once: a maintenance run works one space at a time. */
 const WIKI_MEMBERSHIPS_KEPT = 8;
 
+/**
+ * The principal the server's `articles` job reads and writes a space's articles as (contract
+ * `articles.who.write`, `jobs.kindRuns.articles`): the space's maintenance, with no session and no user —
+ * the server writes on its own account — and its revisions, were it to make any, authored `system`.
+ */
+export function wikiArticlesJobPrincipal(ownerId: string): WikiPrincipal {
+  return { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
+}
+
 @Injectable()
 export class WikiArticles {
   private readonly logger = new Logger(WikiArticles.name);
@@ -758,17 +769,34 @@ export class WikiArticles {
 
   /**
    * The writers (contract `articles.who.write`): a maintenance run of this space, asked the one test
-   * criterion 2 exported, or the import the server's own container runs. The space is found first,
-   * so another owner's is a 404 before it is anything else.
+   * criterion 2 exported, the server's own `articles` job, or the import the server's own container
+   * runs. The space is found first, so another owner's is a 404 before it is anything else.
    */
   async assertWriter(principal: WikiPrincipal, spaceId: string): Promise<void> {
     await this.requireSpace(principal.ownerId, spaceId);
     if (principal.origin === 'import' && principal.sessionId === null && principal.userId === null) return;
+    // The server's articles job (`wikiArticlesJobPrincipal`): maintenance with no session and no user,
+    // which no door builds — the runner door refuses a headless call before it names a principal.
+    if (principal.origin === 'maintenance' && principal.sessionId === null && principal.userId === null) return;
     if (
       principal.origin === 'maintenance'
       && principal.sessionId !== null
       && (await isWikiMaintenanceSession(this.prisma, { ownerId: principal.ownerId, sessionId: principal.sessionId, spaceId }))
     ) {
+      // An account the executor switch gives the server has its articles written by the wiki worker, with
+      // the deployment's System model (contract `articles.serverExecution`): its maintenance session is
+      // handed nothing to write from and writes nothing, so no session's provider is asked. Under the
+      // default runner this is never true, and the session writes exactly as it always has.
+      const executor = currentWikiExecutorSwitch();
+      if (wikiExecutorServes(executor, principal.ownerId)) {
+        throw new WikiRefusalError({
+          code: 'WIKI_SERVER_EXECUTES',
+          message:
+            `the Orbit server writes this account's wiki articles (ORBIT_WIKI_EXECUTOR=${executor.mode}): its wiki worker `
+              + "writes them after a maintenance run, with the deployment's System model, so this session's provider is not "
+              + 'asked. Nothing was read or written.',
+        });
+      }
       return;
     }
     throw new WikiRefusalError({

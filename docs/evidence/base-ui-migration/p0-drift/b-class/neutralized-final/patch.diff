@@ -1,0 +1,26 @@
+diff --git a/src/web/src/components/ToastViewport.tsx b/src/web/src/components/ToastViewport.tsx
+index b637abd90..dd290ddf7 100644
+--- a/src/web/src/components/ToastViewport.tsx
++++ b/src/web/src/components/ToastViewport.tsx
+@@ -143,7 +143,7 @@ export function ToastViewport() {
+         const animation = toast.getAnimations().find((a) => a instanceof CSSAnimation && a.animationName === event.animationName);
+         if (animation) toast.dataset.toastAnimationStart = String(Number(document.timeline.currentTime) - Number(animation.currentTime));
+       }}
+-      style={viewportWidth ? narrow
++      style={portal && viewportWidth ? narrow
+         ? { width: `calc(${viewportWidth}px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))` }
+         : { left: `calc(${viewportWidth}px - max(16px, env(safe-area-inset-right, 0px)) - 360px)`, right: 'auto' }
+         : undefined}>
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index b492f4d82..1acd49129 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -293,8 +293,6 @@ body {
+   font-size: 14px;
+   line-height: 20px;
+   text-align: start;
+-  /* Keep the original card's rasterization when its host enters the top layer. */
+-  will-change: transform;
+ }
+ :root[data-theme='dark'] .toast {
+   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);

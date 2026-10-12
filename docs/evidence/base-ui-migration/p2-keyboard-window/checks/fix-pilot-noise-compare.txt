@@ -1,0 +1,15 @@
+screenshots 256 equal 227 differ 29 missing 0
+traces 64 equal 56
+captures with style deltas 0 of 256
+screenshots 256 equal 223 differ 33 missing 0
+traces 64 equal 57
+captures with style deltas 0 of 256
+screenshots 256 equal 235 differ 21 missing 0
+traces 64 equal 57
+captures with style deltas 0 of 256
+compare shots 222/22/12 of 256 traces identical 53/64, requests differ 0, snapshot-only 13, style deltas 0
+noise-before shots 227/27/2 of 256 traces identical 56/64, requests differ 0, snapshot-only 8, style deltas 0
+noise-after shots 223/21/12 of 256 traces identical 57/64, requests differ 0, snapshot-only 8, style deltas 0
+compare-again shots 235/19/2 of 256 traces identical 57/64, requests differ 0, snapshot-only 7, style deltas 0
+beyondInCompareAlsoNoisyWithinATree ['chromium-dark-desktop/pilot-delete-confirm.png', 'chromium-light-desktop/pilot-delete-confirm.png', 'webkit-dark-phone/pilot-assignee-open.png', 'webkit-dark-phone/pilot-delete-confirm.png', 'webkit-dark-phone/pilot-detail.png', 'webkit-dark-phone/pilot-field-hover.png', 'webkit-dark-phone/pilot-list-open.png', 'webkit-dark-phone/pilot-list-search.png', 'webkit-dark-phone/pilot-model-open.png', 'webkit-dark-phone/pilot-provider-open.png', 'webkit-dark-phone/pilot-run-hint.png', 'webkit-dark-phone/pilot-suggested-open.png']
+beyondInCompareOnly []

@@ -113,36 +113,3 @@ function RowReject({ entryId }: { entryId: string }) {
     </WikiRejectMenu>
   );
 }
-
-/**
- * The same entry in the home page's cards: one line of title, one line of summary, the trust badge
- * on the end. No anchor or use column, because these cards are a way in rather than a work list.
- */
-export function WikiEntryLine({
-  entry,
-  spaceSlug,
-  newSince,
-  title,
-}: {
-  entry: WikiEntry;
-  spaceSlug: string;
-  /** Drawn as a blue dot: this entry was written since the reader's last visit. */
-  newSince?: boolean;
-  /** Overrides the row's title, for a log that says something other than the entry's own words. */
-  title?: React.ReactNode;
-}) {
-  return (
-    <div className="wk-row">
-      <WikiKindMark kind={entry.kind} />
-      <div className="wk-row-main">
-        <div className="wk-row-t">
-          <span className="tt">{title ?? <Link to={wikiEntryPath(spaceSlug, entry.id)}>{entry.title}</Link>}</span>
-          {newSince && <span className="wk-new" />}
-        </div>
-        <div className="wk-row-d">{wikiRowSummary(entry)}</div>
-      </div>
-      <WikiTrustBadge trust={entry.trust} />
-    </div>
-  );
-}
-

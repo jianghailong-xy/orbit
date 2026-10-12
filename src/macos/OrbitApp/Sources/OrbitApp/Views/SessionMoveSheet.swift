@@ -203,9 +203,11 @@ struct SessionMoveSheet: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// A runtime's name as the workspace switcher spells it — a configured provider by its label.
+    /// What a workspace's next session would start on, as its row names it (web `SessionMoveModal`): an
+    /// engine's own sign-in by the engine's CLI, anything else by its label.
     private func providerName(_ slug: String) -> String {
-        AgentDefaults.providerName(slug, configured: app.agents?.configuredProviders)
+        ProviderEngines.isEngine(slug) ? ProviderEngines.cliName(slug)
+            : AgentDefaults.providerName(slug, configured: app.agents?.configuredProviders)
     }
 
     /// Ask the server for the second group — when the panel opens, when it comes back to it from a

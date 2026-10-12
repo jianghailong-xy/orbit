@@ -1,0 +1,57 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/regression-repeat-motion-flipped-search/<name>",
+ "files": [
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--motion.json",
+   "bytes": 22967,
+   "sha256": "2b65c2fb00d96e490f8b779f13458022986abafb2948e30f3cadc4a390f163ff"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-1--motion.json",
+   "bytes": 22869,
+   "sha256": "9aa29b8d22bc3acac43aa2052300fab555720de4fbc18b37c4a0ebe11edf89ba"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-2--motion.json",
+   "bytes": 23307,
+   "sha256": "d8dd2997e5ce6ab08781181b729ed88e41d462a8ad9f91cda3b446dccd3f62dd"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-3--motion.json",
+   "bytes": 22576,
+   "sha256": "66d6b62027bfca659c82fdc80c3dd6caef1444eaba48b161d77f9ba9c17fddd4"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-4--motion.json",
+   "bytes": 21237,
+   "sha256": "7bb3f05859cabd27a67a03c5b8230fc1897ce29a9071bdc7b7e91fe72a218002"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-5--motion.json",
+   "bytes": 22662,
+   "sha256": "2c8dd68788e2d17c0830b8a43cb1ca45f83b800387faff2998dcd4a019749100"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-6--motion.json",
+   "bytes": 21607,
+   "sha256": "ee4ca084bf71972a120cd8665a869f97d68f0fe16abb639752051e9c03b1f798"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-7--motion.json",
+   "bytes": 22543,
+   "sha256": "684fbe24eacc019157012ce18de95cd9757ff5cf408485ea1deeff1ba9c6db19"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-8--motion.json",
+   "bytes": 22581,
+   "sha256": "338f5c8534895a5a3b8a125d982444cb9c9c2d8dc3387b461d04b5164a143b35"
+  },
+  {
+   "name": "webkit-light-desktop--normal-flipped-entrance-and-exit-motion-matches-search--repeat-9--motion.json",
+   "bytes": 22917,
+   "sha256": "b0622c53d1133a0532bc799ffc2f2093363f0d2111991725b9d6ff67008bfa19"
+  }
+ ]
+}

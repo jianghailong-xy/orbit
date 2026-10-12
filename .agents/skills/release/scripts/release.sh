@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Cut one Orbit client release tag. Pushing vX.Y.Z runs both jobs in
-# .github/workflows/release.yml: the signed macOS DMG and iOS TestFlight upload.
+# Cut one Orbit client release tag. Pushing vX.Y.Z runs every job in
+# .github/workflows/release.yml: the signed macOS DMG, the iOS TestFlight upload
+# and the signed Android APK attached to the same GitHub Release.
 set -euo pipefail
 
 ver="${1:-}"
@@ -55,7 +56,7 @@ branch="$(git branch --show-current)"
 echo "▶ tagging $tag at $(git rev-parse --short HEAD) (branch: ${branch:-detached})"
 git tag -a "$tag" -m "Release $tag"
 git push origin "$tag"
-echo "✓ pushed $tag — release.yml is building the macOS DMG and iOS TestFlight build"
+echo "✓ pushed $tag — release.yml is building the macOS DMG, iOS TestFlight build and Android APK"
 
 if command -v gh >/dev/null 2>&1; then
   url="$(gh repo view --json url -q .url 2>/dev/null || true)"

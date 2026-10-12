@@ -1,0 +1,154 @@
+{
+ "chromium-dark-desktop": {
+  "status": "passed",
+  "retry": 0,
+  "trace": [
+   {
+    "step": "two files dropped on Add file",
+    "url": "unchanged",
+    "uploadRequests": 2,
+    "files": [
+     "dropped.png",
+     "dropped.txt"
+    ],
+    "queries": [
+     "?taskId=2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "requests": []
+   }
+  ]
+ },
+ "chromium-dark-phone": {
+  "status": "passed",
+  "retry": 0,
+  "trace": [
+   {
+    "step": "two files dropped on Add file",
+    "url": "unchanged",
+    "uploadRequests": 2,
+    "files": [
+     "dropped.png",
+     "dropped.txt"
+    ],
+    "queries": [
+     "?taskId=2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "requests": []
+   }
+  ]
+ },
+ "chromium-light-desktop": {
+  "status": "passed",
+  "retry": 0,
+  "trace": [
+   {
+    "step": "two files dropped on Add file",
+    "url": "unchanged",
+    "uploadRequests": 2,
+    "files": [
+     "dropped.png",
+     "dropped.txt"
+    ],
+    "queries": [
+     "?taskId=2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "requests": []
+   }
+  ]
+ },
+ "chromium-light-phone": {
+  "status": "passed",
+  "retry": 0,
+  "trace": [
+   {
+    "step": "two files dropped on Add file",
+    "url": "unchanged",
+    "uploadRequests": 2,
+    "files": [
+     "dropped.png",
+     "dropped.txt"
+    ],
+    "queries": [
+     "?taskId=2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "requests": []
+   }
+  ]
+ },
+ "webkit-dark-desktop": {
+  "status": "passed",
+  "retry": 0,
+  "trace": [
+   {
+    "step": "two files dropped on Add file",
+    "url": "unchanged",
+    "uploadRequests": 2,
+    "files": [
+     "dropped.png",
+     "dropped.txt"
+    ],
+    "queries": [
+     "?taskId=2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "requests": []
+   }
+  ]
+ },
+ "webkit-dark-phone": {
+  "status": "passed",
+  "retry": 0,
+  "trace": [
+   {
+    "step": "two files dropped on Add file",
+    "url": "unchanged",
+    "uploadRequests": 2,
+    "files": [
+     "dropped.png",
+     "dropped.txt"
+    ],
+    "queries": [
+     "?taskId=2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "requests": []
+   }
+  ]
+ },
+ "webkit-light-desktop": {
+  "status": "passed",
+  "retry": 0,
+  "trace": [
+   {
+    "step": "two files dropped on Add file",
+    "url": "unchanged",
+    "uploadRequests": 2,
+    "files": [
+     "dropped.png",
+     "dropped.txt"
+    ],
+    "queries": [
+     "?taskId=2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "requests": []
+   }
+  ]
+ },
+ "webkit-light-phone": {
+  "status": "passed",
+  "retry": 0,
+  "trace": [
+   {
+    "step": "two files dropped on Add file",
+    "url": "unchanged",
+    "uploadRequests": 2,
+    "files": [
+     "dropped.png",
+     "dropped.txt"
+    ],
+    "queries": [
+     "?taskId=2zwQZ2hd93IvLb59t6p5W"
+    ],
+    "requests": []
+   }
+  ]
+ }
+}

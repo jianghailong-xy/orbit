@@ -327,3 +327,33 @@ psql exit=2
 23:54:32Z → 00:01:42Z（7.2 分钟），抓到 **28 个不同后端的 90 次** idle-in-transaction：最长的一次 idle 间隙
 **0.14s**，最长的事务整体存活 **0.22s**，与 300s 差三个数量级。采样的已知局限：抓不到短于 250ms 的间隙，
 窗口只有 7.2 分钟、抓不到低频的批量路径——但两者都不影响结论方向，本参数只关心**长**间隙。
+
+## 9. `/dev/shm` 64MB 让手动 VACUUM 报 ENOSPC；`run_event` 的统计 17 天没刷新
+
+**2026-10-09 事故**：生产库一次手动 VACUUM 失败：
+
+```
+ERROR:  could not resize shared memory segment "/PostgreSQL.3509582570" to 67145440 bytes: No space left on device
+```
+
+**原因链条**（每一步都在本机容器里实测复现过）：
+
+1. Docker 容器默认 `/dev/shm` = 64MB；
+2. PG16 对 ≥ `min_parallel_table_scan_size`（8MB）的表，**连不写 `PARALLEL` 的普通 VACUUM 也会自动并行**
+   （`max_parallel_maintenance_workers=2`）——所以这不是「显式并行才踩」，是「手动 VACUUM 就踩」；
+3. 并行 VACUUM 的动态共享内存段 ≈ `maintenance_work_mem`（默认 64MB）→ 请求 67,145,440 字节 > 64MB → ENOSPC。
+
+**逃生门**（已实测）：`VACUUM (PARALLEL 0, ANALYZE)` 串行执行不受影响——死元组数组只在并行时才走动态共享内存。
+
+**处置**：
+
+| 项 | 处置 | 状态 |
+|---|---|---|
+| postgres 服务加 `shm_size: "256m"` | 官方 postgres 镜像文档的推荐值；重建容器生效，数据与 WAL 归档不动 | 账号所有者已批准，待部署 |
+| `ALTER TABLE "run_event" SET (autovacuum_analyze_scale_factor = 0.01, autovacuum_analyze_threshold = 1000)` | migration 0417，随 apiserver 启动应用 | 同上 |
+
+**另一半：`run_event` 17 天没有 autoanalyze**。这张表几乎只追加：死元组只有 6,857（约 570 万行的 0.1%），
+autovacuum 的清理触发线（50 + 0.2×行数 ≈ 113 万）永远够不到——这是预期行为，不是故障。真正缺的是统计：
+autoanalyze 的触发线是 50 + 0.1×行数 ≈ 56.5 万次变更，所以 2026-09-22 → 2026-10-09 一次都没跑，
+规划器拿 17 天前的 n_distinct/MCV 做高水位（`max(seq)`）读与事件扇出的计划。0.01 把触发线降到约 5.7 万行，
+统计重新跟上实际分布；vacuum 侧维持默认——死元组不积累的表不需要更激进的清理。

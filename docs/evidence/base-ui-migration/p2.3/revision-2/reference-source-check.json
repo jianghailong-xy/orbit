@@ -1,0 +1,8 @@
+{
+  "baseline": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "allOriginalSourceFilesMatch": 589,
+  "samePrivateFixture": "src/web/src/components/ui/__fixtures__/ToastsFixture.tsx",
+  "fixtureSha256": "b9e336d0b39dda8b6c36991b275c712d7f658c10fb0a26b93125e491a8a3760f",
+  "currentTestSha256": "1e46528debc4c86f68f92abba1806b3759c37119a7f8ada51a0a54783118cf26",
+  "onlyReferenceTestChange": "Use the owned .toast-viewport DOM locator because the task-start modal hides the notification from the accessibility tree."
+}

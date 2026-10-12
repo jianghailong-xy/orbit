@@ -1,0 +1,647 @@
+{
+ "a": "diag-verify-before",
+ "b": "diag-verify-after",
+ "rows": [
+  {
+   "screenshot": "chromium-dark-desktop/notification-error.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    870,
+    0,
+    428,
+    196
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-dark-desktop/profile-validation.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 603,
+   "maxChannelDelta": 88,
+   "clusters": [
+    {
+     "x": 1165,
+     "y": 28,
+     "width": 82,
+     "height": 11,
+     "pixels": 490
+    },
+    {
+     "x": 525,
+     "y": 711,
+     "width": 6,
+     "height": 6,
+     "pixels": 11
+    },
+    {
+     "x": 1029,
+     "y": 711,
+     "width": 6,
+     "height": 6,
+     "pixels": 11
+    },
+    {
+     "x": 1029,
+     "y": 242,
+     "width": 6,
+     "height": 6,
+     "pixels": 9
+    },
+    {
+     "x": 525,
+     "y": 515,
+     "width": 3,
+     "height": 4,
+     "pixels": 8
+    },
+    {
+     "x": 525,
+     "y": 601,
+     "width": 3,
+     "height": 4,
+     "pixels": 8
+    },
+    {
+     "x": 525,
+     "y": 687,
+     "width": 3,
+     "height": 4,
+     "pixels": 8
+    },
+    {
+     "x": 500,
+     "y": 790,
+     "width": 8,
+     "height": 8,
+     "pixels": 8
+    }
+   ],
+   "toastBox": [
+    870,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 490,
+   "insideToastBoxMax": 88,
+   "outsideToastBox": 113
+  },
+  {
+   "screenshot": "chromium-dark-desktop/settings-saved.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 97,
+   "maxChannelDelta": 49,
+   "clusters": [
+    {
+     "x": 1195,
+     "y": 31,
+     "width": 8,
+     "height": 11,
+     "pixels": 59
+    },
+    {
+     "x": 1222,
+     "y": 31,
+     "width": 9,
+     "height": 8,
+     "pixels": 38
+    }
+   ],
+   "toastBox": [
+    870,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 97,
+   "insideToastBoxMax": 49,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-dark-phone/notification-error.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    230
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-dark-phone/profile-validation.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 320,
+   "maxChannelDelta": 48,
+   "clusters": [
+    {
+     "x": 164,
+     "y": 69,
+     "width": 66,
+     "height": 10,
+     "pixels": 303
+    },
+    {
+     "x": 43,
+     "y": 282,
+     "width": 4,
+     "height": 3,
+     "pixels": 6
+    },
+    {
+     "x": 16,
+     "y": 100,
+     "width": 2,
+     "height": 3,
+     "pixels": 4
+    },
+    {
+     "x": 21,
+     "y": 446,
+     "width": 3,
+     "height": 2,
+     "pixels": 4
+    },
+    {
+     "x": 347,
+     "y": 308,
+     "width": 2,
+     "height": 3,
+     "pixels": 3
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 307,
+   "insideToastBoxMax": 48,
+   "outsideToastBox": 13
+  },
+  {
+   "screenshot": "chromium-dark-phone/settings-saved.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 1320,
+   "maxChannelDelta": 90,
+   "clusters": [
+    {
+     "x": 159,
+     "y": 39,
+     "width": 132,
+     "height": 86,
+     "pixels": 1300
+    },
+    {
+     "x": 345,
+     "y": 519,
+     "width": 4,
+     "height": 18,
+     "pixels": 10
+    },
+    {
+     "x": 345,
+     "y": 757,
+     "width": 4,
+     "height": 18,
+     "pixels": 10
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 1300,
+   "insideToastBoxMax": 90,
+   "outsideToastBox": 20
+  },
+  {
+   "screenshot": "chromium-light-desktop/notification-error.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    870,
+    0,
+    428,
+    196
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-light-desktop/profile-validation.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 495,
+   "maxChannelDelta": 113,
+   "clusters": [
+    {
+     "x": 1165,
+     "y": 28,
+     "width": 82,
+     "height": 11,
+     "pixels": 495
+    }
+   ],
+   "toastBox": [
+    870,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 495,
+   "insideToastBoxMax": 113,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-light-desktop/settings-saved.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 97,
+   "maxChannelDelta": 59,
+   "clusters": [
+    {
+     "x": 1195,
+     "y": 31,
+     "width": 8,
+     "height": 11,
+     "pixels": 59
+    },
+    {
+     "x": 1222,
+     "y": 31,
+     "width": 9,
+     "height": 8,
+     "pixels": 38
+    }
+   ],
+   "toastBox": [
+    870,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 97,
+   "insideToastBoxMax": 59,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-light-phone/notification-error.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    230
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-light-phone/profile-validation.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 306,
+   "maxChannelDelta": 60,
+   "clusters": [
+    {
+     "x": 164,
+     "y": 69,
+     "width": 66,
+     "height": 10,
+     "pixels": 306
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 306,
+   "insideToastBoxMax": 60,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-light-phone/settings-saved.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 1418,
+   "maxChannelDelta": 113,
+   "clusters": [
+    {
+     "x": 159,
+     "y": 44,
+     "width": 126,
+     "height": 76,
+     "pixels": 1418
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 1418,
+   "insideToastBoxMax": 113,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-desktop/notification-error.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    196
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-desktop/profile-validation.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-desktop/settings-saved.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-phone/notification-error.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    230
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-phone/profile-validation.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 3994,
+   "maxChannelDelta": 167,
+   "clusters": [
+    {
+     "x": 106,
+     "y": 44,
+     "width": 174,
+     "height": 81,
+     "pixels": 3994
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 3994,
+   "insideToastBoxMax": 167,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-phone/settings-saved.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-desktop/notification-error.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    196
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-desktop/profile-validation.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-desktop/settings-saved.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-phone/notification-error.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    230
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-phone/profile-validation.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 4863,
+   "maxChannelDelta": 224,
+   "clusters": [
+    {
+     "x": 104,
+     "y": 42,
+     "width": 178,
+     "height": 80,
+     "pixels": 4863
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 4863,
+   "insideToastBoxMax": 224,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-phone/settings-saved.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  }
+ ]
+}

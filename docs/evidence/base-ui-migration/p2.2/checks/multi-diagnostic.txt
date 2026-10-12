@@ -1,0 +1,576 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone --grep chip appearance|multiple labels|email tags|multiple choices in Dialog
+
+[WebServer] (node:2272981) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 10 tests using 1 worker
+
+(node:2273067) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields (5.4s)
+(node:2273418) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 3:30:29 PM [vite] (client) [console.error] Warning: Please avoid setting option to disabled in tags mode since user can always type text as tag.
+[WebServer] 3:30:31 PM [vite] (client) [console.error] Warning: Please avoid setting option to disabled in tags mode since user can always type text as tag.
+  ✘   2 [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › tags chip appearance matches current labels and email fields (4.7s)
+(node:2273669) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   3 [chromium-light-desktop] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (16.2s)
+(node:2282888) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices.browser.mjs:548:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.3s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices.browser.mjs:588:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.4s)
+(node:2283138) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   6 [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields (4.1s)
+(node:2283737) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 3:30:58 PM [vite] (client) [console.error] Warning: Please avoid setting option to disabled in tags mode since user can always type text as tag.
+[WebServer] 3:30:59 PM [vite] (client) [console.error] Warning: Please avoid setting option to disabled in tags mode since user can always type text as tag.
+  ✘   7 [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › tags chip appearance matches current labels and email fields (2.8s)
+(node:2283973) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   8 [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (15.9s)
+(node:2294925) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-dark-phone] › ui-migration/choices.browser.mjs:548:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.2s)
+  ✓  10 [webkit-dark-phone] › ui-migration/choices.browser.mjs:588:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.6s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 11
+    + Received  + 31
+
+    @@ -1,28 +1,28 @@
+      Object {
+        "control": Object {
+          "icons": Array [
+            Object {
+    -         "color": "rgb(143, 149, 158)",
+    +         "color": "rgba(0, 0, 0, 0.45)",
+              "height": 10,
+              "width": 10,
+              "x": 41.921875,
+              "y": 7,
+            },
+            Object {
+    -         "color": "rgb(143, 149, 158)",
+    +         "color": "rgba(0, 0, 0, 0.45)",
+              "height": 10,
+              "width": 10,
+              "x": 105.828125,
+              "y": 7,
+            },
+            Object {
+              "color": "rgba(0, 0, 0, 0.25)",
+              "height": 12,
+              "width": 12,
+              "x": 230,
+    -         "y": 6,
+    +         "y": 16,
+            },
+          ],
+          "origin": Object {
+            "x": 24,
+            "y": 148,
+    @@ -37,11 +37,11 @@
+            "boxShadow": "none",
+            "color": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 24,
+    +       "height": 44,
+            "lineHeight": "22px",
+            "padding": "1px 7px 1px 3px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+    @@ -70,23 +70,43 @@
+            Object {
+              "color": "rgb(31, 35, 41)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "height": 16,
+    -         "text": "+ 1 ...",
+    -         "width": 35.421875,
+    +         "text": "+ ",
+    +         "width": 12.078125,
+              "x": 133.828125,
+    +         "y": 4,
+    +       },
+    +       Object {
+    +         "color": "rgb(31, 35, 41)",
+    +         "fontSize": "14px",
+    +         "fontWeight": "400",
+    +         "height": 16,
+    +         "text": "1",
+    +         "width": 7.796875,
+    +         "x": 145.90625,
+              "y": 4,
+            },
+    +       Object {
+    +         "color": "rgb(31, 35, 41)",
+    +         "fontSize": "14px",
+    +         "fontWeight": "400",
+    +         "height": 16,
+    +         "text": " ...",
+    +         "width": 15.5625,
+    +         "x": 153.703125,
+    +         "y": 4,
+    +       },
+          ],
+        },
+        "popup": Object {
+          "rows": Array [
+            Object {
+              "backgroundColor": "rgb(214, 232, 255)",
+              "borderColor": "rgb(31, 35, 41)",
+    -         "borderRadius": "4px 4px 0px 0px",
+    +         "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+    @@ -99,13 +119,13 @@
+              "width": 242,
+              "x": 4,
+              "y": 4,
+            },
+            Object {
+    -         "backgroundColor": "rgb(240, 247, 255)",
+    +         "backgroundColor": "rgb(214, 232, 255)",
+              "borderColor": "rgb(31, 35, 41)",
+    -         "borderRadius": "0px",
+    +         "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+    @@ -118,13 +138,13 @@
+              "width": 242,
+              "x": 4,
+              "y": 36,
+            },
+            Object {
+    -         "backgroundColor": "rgb(240, 247, 255)",
+    +         "backgroundColor": "rgb(214, 232, 255)",
+              "borderColor": "rgb(31, 35, 41)",
+    -         "borderRadius": "0px 0px 4px 4px",
+    +         "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(31, 35, 41)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+
+      506 |   }
+      507 |   await attach(info, 'multi-appearance', all);
+    > 508 |   for (const values of Object.values(all)) expect(values.orbit).toEqual(values.antd);
+          |                                                                 ^
+      509 | });
+      510 |
+      511 | test('multiple labels search, toggle, collapse, remove and clear without losing the remaining values', async ({ page }, info) => {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:508:65
+
+    Error Context: .choices-results/choices.browser.mjs-multip-ed3e8-ent-labels-and-email-fields-chromium-light-desktop/error-context.md
+
+    attachment #9: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-ed3e8-ent-labels-and-email-fields-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-ed3e8-ent-labels-and-email-fields-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › tags chip appearance matches current labels and email fields 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 4
+    + Received  + 4
+
+    @@ -1,28 +1,28 @@
+      Object {
+        "control": Object {
+          "icons": Array [
+            Object {
+    -         "color": "rgb(143, 149, 158)",
+    +         "color": "rgba(0, 0, 0, 0.45)",
+              "height": 10,
+              "width": 10,
+              "x": 73.25,
+              "y": 11,
+            },
+            Object {
+    -         "color": "rgb(143, 149, 158)",
+    +         "color": "rgba(0, 0, 0, 0.45)",
+              "height": 10,
+              "width": 10,
+              "x": 160.703125,
+              "y": 11,
+            },
+            Object {
+              "color": "rgba(0, 0, 0, 0.25)",
+              "height": 12,
+              "width": 12,
+              "x": 226,
+    -         "y": 10,
+    +         "y": 24,
+            },
+          ],
+          "origin": Object {
+            "x": 24,
+            "y": 148,
+    @@ -37,11 +37,11 @@
+            "boxShadow": "none",
+            "color": "rgb(31, 35, 41)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 32,
+    +       "height": 60,
+            "lineHeight": "22px",
+            "padding": "1px 11px 1px 3px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+
+      506 |   }
+      507 |   await attach(info, 'multi-appearance', all);
+    > 508 |   for (const values of Object.values(all)) expect(values.orbit).toEqual(values.antd);
+          |                                                                 ^
+      509 | });
+      510 |
+      511 | test('multiple labels search, toggle, collapse, remove and clear without losing the remaining values', async ({ page }, info) => {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:508:65
+
+    Error Context: .choices-results/choices.browser.mjs-tags-c-807e6-ent-labels-and-email-fields-chromium-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-tags-c-807e6-ent-labels-and-email-fields-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-tags-c-807e6-ent-labels-and-email-fields-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('listbox')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('listbox') with timeout 15000ms
+      - waiting for getByRole('listbox')
+
+
+      517 |   await page.keyboard.press('Enter');
+      518 |   await expect(value).toHaveText('["bug","docs"]');
+    > 519 |   await expect(page.getByRole('listbox')).toBeVisible();
+          |                                           ^
+      520 |   await expect(page.getByRole('option', { name: 'Docs', exact: true })).toHaveAttribute('aria-selected', 'true');
+      521 |   await tap(page, info, page.getByRole('option', { name: 'Ops', exact: true }));
+      522 |   await expect(value).toHaveText('["bug","docs","ops"]');
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:519:43
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 11
+    + Received  + 31
+
+    @@ -1,28 +1,28 @@
+      Object {
+        "control": Object {
+          "icons": Array [
+            Object {
+    -         "color": "rgb(139, 144, 153)",
+    +         "color": "rgba(255, 255, 255, 0.45)",
+              "height": 10,
+              "width": 10,
+              "x": 41.921875,
+              "y": 7,
+            },
+            Object {
+    -         "color": "rgb(139, 144, 153)",
+    +         "color": "rgba(255, 255, 255, 0.45)",
+              "height": 10,
+              "width": 10,
+              "x": 105.828125,
+              "y": 7,
+            },
+            Object {
+              "color": "rgba(255, 255, 255, 0.25)",
+              "height": 12,
+              "width": 12,
+              "x": 230,
+    -         "y": 6,
+    +         "y": 16,
+            },
+          ],
+          "origin": Object {
+            "x": 24,
+            "y": 161,
+    @@ -37,11 +37,11 @@
+            "boxShadow": "none",
+            "color": "rgb(201, 206, 213)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 24,
+    +       "height": 44,
+            "lineHeight": "22px",
+            "padding": "1px 7px 1px 3px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+    @@ -70,23 +70,43 @@
+            Object {
+              "color": "rgb(201, 206, 213)",
+              "fontSize": "14px",
+              "fontWeight": "400",
+              "height": 16,
+    -         "text": "+ 1 ...",
+    -         "width": 35.41015625,
+    +         "text": "+ ",
+    +         "width": 12.0654296875,
+              "x": 133.828125,
+    +         "y": 4,
+    +       },
+    +       Object {
+    +         "color": "rgb(201, 206, 213)",
+    +         "fontSize": "14px",
+    +         "fontWeight": "400",
+    +         "height": 16,
+    +         "text": "1",
+    +         "width": 7.7861328125,
+    +         "x": 145.8935546875,
+              "y": 4,
+            },
+    +       Object {
+    +         "color": "rgb(201, 206, 213)",
+    +         "fontSize": "14px",
+    +         "fontWeight": "400",
+    +         "height": 16,
+    +         "text": " ...",
+    +         "width": 15.55859375,
+    +         "x": 153.6796875,
+    +         "y": 4,
+    +       },
+          ],
+        },
+        "popup": Object {
+          "rows": Array [
+            Object {
+              "backgroundColor": "rgb(34, 61, 126)",
+              "borderColor": "rgb(201, 206, 213)",
+    -         "borderRadius": "4px 4px 0px 0px",
+    +         "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(201, 206, 213)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    @@ -99,13 +119,13 @@
+              "width": 242,
+              "x": 4,
+              "y": 4,
+            },
+            Object {
+    -         "backgroundColor": "rgb(29, 48, 91)",
+    +         "backgroundColor": "rgb(34, 61, 126)",
+              "borderColor": "rgb(201, 206, 213)",
+    -         "borderRadius": "0px",
+    +         "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(201, 206, 213)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    @@ -118,13 +138,13 @@
+              "width": 242,
+              "x": 4,
+              "y": 36,
+            },
+            Object {
+    -         "backgroundColor": "rgb(29, 48, 91)",
+    +         "backgroundColor": "rgb(34, 61, 126)",
+              "borderColor": "rgb(201, 206, 213)",
+    -         "borderRadius": "0px 0px 4px 4px",
+    +         "borderRadius": "4px",
+              "borderStyle": "none",
+              "borderWidth": "0px",
+              "boxShadow": "none",
+              "color": "rgb(201, 206, 213)",
+              "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+
+      506 |   }
+      507 |   await attach(info, 'multi-appearance', all);
+    > 508 |   for (const values of Object.values(all)) expect(values.orbit).toEqual(values.antd);
+          |                                                                 ^
+      509 | });
+      510 |
+      511 | test('multiple labels search, toggle, collapse, remove and clear without losing the remaining values', async ({ page }, info) => {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:508:65
+
+    Error Context: .choices-results/choices.browser.mjs-multip-ed3e8-ent-labels-and-email-fields-webkit-dark-phone/error-context.md
+
+    attachment #9: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-ed3e8-ent-labels-and-email-fields-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-ed3e8-ent-labels-and-email-fields-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › tags chip appearance matches current labels and email fields 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 4
+    + Received  + 4
+
+    @@ -1,28 +1,28 @@
+      Object {
+        "control": Object {
+          "icons": Array [
+            Object {
+    -         "color": "rgb(139, 144, 153)",
+    +         "color": "rgba(255, 255, 255, 0.45)",
+              "height": 10,
+              "width": 10,
+              "x": 73.25,
+              "y": 11,
+            },
+            Object {
+    -         "color": "rgb(139, 144, 153)",
+    +         "color": "rgba(255, 255, 255, 0.45)",
+              "height": 10,
+              "width": 10,
+              "x": 160.703125,
+              "y": 11,
+            },
+            Object {
+              "color": "rgba(255, 255, 255, 0.25)",
+              "height": 12,
+              "width": 12,
+              "x": 226,
+    -         "y": 10,
+    +         "y": 24,
+            },
+          ],
+          "origin": Object {
+            "x": 24,
+            "y": 161,
+    @@ -37,11 +37,11 @@
+            "boxShadow": "none",
+            "color": "rgb(201, 206, 213)",
+            "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+    -       "height": 32,
+    +       "height": 60,
+            "lineHeight": "22px",
+            "padding": "1px 11px 1px 3px",
+            "width": 250,
+            "x": 0,
+            "y": 0,
+
+      506 |   }
+      507 |   await attach(info, 'multi-appearance', all);
+    > 508 |   for (const values of Object.values(all)) expect(values.orbit).toEqual(values.antd);
+          |                                                                 ^
+      509 | });
+      510 |
+      511 | test('multiple labels search, toggle, collapse, remove and clear without losing the remaining values', async ({ page }, info) => {
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:508:65
+
+    Error Context: .choices-results/choices.browser.mjs-tags-c-807e6-ent-labels-and-email-fields-webkit-dark-phone/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-tags-c-807e6-ent-labels-and-email-fields-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-tags-c-807e6-ent-labels-and-email-fields-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('listbox')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('listbox') with timeout 15000ms
+      - waiting for getByRole('listbox')
+
+
+      517 |   await page.keyboard.press('Enter');
+      518 |   await expect(value).toHaveText('["bug","docs"]');
+    > 519 |   await expect(page.getByRole('listbox')).toBeVisible();
+          |                                           ^
+      520 |   await expect(page.getByRole('option', { name: 'Docs', exact: true })).toHaveAttribute('aria-selected', 'true');
+      521 |   await tap(page, info, page.getByRole('option', { name: 'Ops', exact: true }));
+      522 |   await expect(value).toHaveText('["bug","docs","ops"]');
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices.browser.mjs:519:43
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6 failed
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:482:42 › tags chip appearance matches current labels and email fields 
+    [chromium-light-desktop] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › multiple chip appearance matches current labels and email fields 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:482:42 › tags chip appearance matches current labels and email fields 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:511:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+  4 passed (58.6s)
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --project webkit-dark-phone --grep 'chip appearance|multiple labels|email tags|multiple choices in Dialog'

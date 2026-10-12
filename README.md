@@ -121,7 +121,7 @@ before building the web image and follow the [self-hosting hardening guide](docs
 
 ### 2. Add a runner
 
-In the web UI, open **Runners → Add a runner**, choose Linux or macOS, and copy the command shown for your
+In the web UI, open **Infrastructure → Add → Register a machine**, choose Linux or macOS, and copy the command shown for your
 deployment. The current installer is one command because it downloads the static runner and then runs
 `orbit register`:
 
@@ -131,8 +131,9 @@ curl -fsSL http://localhost:2086/install.sh | bash
 
 The command must run on the machine that has the repository, internal tools, VPN, and agent credentials. It opens
 a browser approval URL (or prints one to copy); approve the machine in Orbit. The UI polls the runner list and
-shows **Runner online** after the first heartbeat. If you are provisioning non-interactively, use a one-time
-enrollment token from **Runners** and pass it to `orbit register --token`; never put a long-lived runner token in
+shows **Runner online** after the first heartbeat. If you are provisioning non-interactively, create a one-time
+enrollment token with `POST /api/runners/enrollment-tokens` while signed in (the web UI has no button for it, and a
+personal access token is refused) and pass it to `orbit register --token`; never put a long-lived runner token in
 source control.
 
 Useful checks on the runner are:

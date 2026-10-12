@@ -70,7 +70,7 @@ test('the runners response hands clients the Google sign-in and its quota, and n
   assert.equal(JSON.stringify(runner).includes('example.com'), false);
 });
 
-test('Antigravity sign-in is started only on a runner that relays it, as its one login', async () => {
+test('Antigravity sign-in is started only on a runner that relays it, for Default or an account', async () => {
   const writes: Record<string, unknown>[] = [];
   const runner: Record<string, unknown> = { id: 'runner-1', status: 'ONLINE', capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1], engines: null };
   const prisma = {
@@ -100,13 +100,15 @@ test('Antigravity sign-in is started only on a runner that relays it, as its one
       (error: unknown) => error instanceof BadRequestException && error.message === ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY,
     );
   }
-  // One Google account per runner, like Kimi's one login: there is no other account to name.
-  runner.capabilities = [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:linux'];
-  await assert.rejects(service.startLogin('owner-1', 'runner-1', { engine: 'antigravity', account: 'default' }), /keeps a login per directory/);
-  await assert.rejects(service.startLogin('owner-1', 'runner-1', { engine: 'antigravity', accountName: 'Work' }), /keeps a login per directory/);
   assert.equal(writes.length, 1, 'a refused start writes nothing');
-  // A Linux runner that says so starts it.
+  // A Linux runner that says so starts it — for its own sign-in, one of its accounts, or a new one,
+  // each in a Gemini directory of its own as Claude's and Codex's accounts are.
+  runner.capabilities = [ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:linux'];
   assert.equal((await service.startLogin('owner-1', 'runner-1', { engine: 'antigravity' })).status, 'pending');
+  await service.startLogin('owner-1', 'runner-1', { engine: 'antigravity', account: '5c2e91a0' });
+  assert.deepEqual([writes.at(-1)!.loginAccount, writes.at(-1)!.loginAccountName], ['5c2e91a0', null]);
+  await service.startLogin('owner-1', 'runner-1', { engine: 'antigravity', accountName: ' Work ' });
+  assert.deepEqual([writes.at(-1)!.loginAccount, writes.at(-1)!.loginAccountName], [null, 'Work']);
 });
 
 test('Antigravity install uses the existing relay and refuses runners that do not declare support', async () => {

@@ -1,0 +1,3 @@
+tree=/root/.orbit/worktrees/dbe90aaf-e3f6-5636-b913-6b2833d4da2a head=12fdef2f731f6e9c9440807f1c23bdcbac583823 dirty=0
+what=npm run build -w @orbit/shared; npm run build -w @orbit/web && npm run test -w @orbit/web start=2026-10-09T01:16:12Z load=19.99 20.39 26.13 root-free=24269M
+exit=0 end=2026-10-09T01:21:33Z load=20.22 20.09 24.30

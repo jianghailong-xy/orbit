@@ -1,0 +1,482 @@
+{
+ "chromium-dark-desktop | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-desktop | exit keeps its own native progress through modal transfers with no-preference motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-desktop | exit keeps its own native progress through modal transfers with reduce motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-desktop | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-desktop | notification card stays fixed through Dialog entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-desktop | notification card stays fixed through Drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-phone | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-phone | exit keeps its own native progress through modal transfers with no-preference motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-phone | exit keeps its own native progress through modal transfers with reduce motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-phone | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-phone | notification card stays fixed through Dialog entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-dark-phone | notification card stays fixed through Drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-desktop | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-desktop | exit keeps its own native progress through modal transfers with no-preference motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-desktop | exit keeps its own native progress through modal transfers with reduce motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-desktop | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-desktop | notification card stays fixed through Dialog entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-desktop | notification card stays fixed through Drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-phone | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-phone | exit keeps its own native progress through modal transfers with no-preference motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-phone | exit keeps its own native progress through modal transfers with reduce motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-phone | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-phone | notification card stays fixed through Dialog entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "chromium-light-phone | notification card stays fixed through Drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-desktop | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   1,
+   1
+  ]
+ },
+ "webkit-dark-desktop | exit keeps its own native progress through modal transfers with no-preference motion": {
+  "tip": [
+   1,
+   1
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-desktop | exit keeps its own native progress through modal transfers with reduce motion": {
+  "tip": [
+   1,
+   1
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-desktop | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-desktop | notification card stays fixed through Dialog entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-desktop | notification card stays fixed through Drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-phone | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-phone | exit keeps its own native progress through modal transfers with no-preference motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-phone | exit keeps its own native progress through modal transfers with reduce motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-phone | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-phone | notification card stays fixed through Dialog entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-dark-phone | notification card stays fixed through Drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-desktop | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-desktop | exit keeps its own native progress through modal transfers with no-preference motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-desktop | exit keeps its own native progress through modal transfers with reduce motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-desktop | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-desktop | notification card stays fixed through Dialog entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-desktop | notification card stays fixed through Drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-phone | entrance progress survives a modal transfer before its first 180ms completes": {
+  "tip": [
+   1,
+   1
+  ],
+  "fixab": [
+   1,
+   1
+  ]
+ },
+ "webkit-light-phone | exit keeps its own native progress through modal transfers with no-preference motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-phone | exit keeps its own native progress through modal transfers with reduce motion": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-phone | notification card stays fixed through Bottom drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-phone | notification card stays fixed through Dialog entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ },
+ "webkit-light-phone | notification card stays fixed through Drawer entry, nested layers and exit": {
+  "tip": [
+   2,
+   0
+  ],
+  "fixab": [
+   2,
+   0
+  ]
+ }
+}

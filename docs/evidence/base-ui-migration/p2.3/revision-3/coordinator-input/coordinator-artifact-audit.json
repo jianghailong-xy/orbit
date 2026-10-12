@@ -1,0 +1,56 @@
+{
+  "commit": "192ee6cf0fa45727096b0bf23d5a4f2ce3e5c96e",
+  "runs": {
+    "toasts-run": {
+      "passed": 208,
+      "artifacts": 544
+    },
+    "overlays-regression": {
+      "passed": 96,
+      "artifacts": 256
+    },
+    "production-run": {
+      "passed": 8,
+      "artifacts": 24
+    },
+    "reference-motion-run": {
+      "passed": 32,
+      "artifacts": 224
+    },
+    "coordinator-after": {
+      "passed": 10,
+      "artifacts": 10
+    },
+    "continuous-motion-after": {
+      "passed": 9,
+      "artifacts": 9
+    },
+    "original-nested-motion": {
+      "passed": 3,
+      "artifacts": 3
+    },
+    "original-confirmation-close": {
+      "passed": 2,
+      "artifacts": 2
+    },
+    "original-confirmation-open-close": {
+      "passed": 2,
+      "artifacts": 4
+    },
+    "static-raster-after": {
+      "passed": 56,
+      "artifacts": 344
+    }
+  },
+  "sourceHashesMatch": true,
+  "originalBaselinesUnchanged": 252,
+  "pixelExactStaticPairs": 24,
+  "pixelExactMotionPairs": 160,
+  "productionPairs": 8,
+  "continuousMotionGroups": 24,
+  "continuousFramesUnchanged": 2381,
+  "nativeTimerRangeMs": [
+    6299,
+    6315
+  ]
+}

@@ -59,12 +59,12 @@ function FailedOutput({ text }: { text: string }) {
   const clean = stripAnsi(text);
   return (
     <details className="bgwake-output">
-      <summary aria-label="输出末尾">
-        <span className="bgwake-output-label">输出末尾</span>
+      <summary aria-label="Output tail">
+        <span className="bgwake-output-label">Output tail</span>
         <span className="chat-pre bgwake-output-preview">{clean}</span>
         <span className="bgwake-output-action">
-          <span className="bgwake-output-expand">展开输出</span>
-          <span className="bgwake-output-collapse">收起输出</span>
+          <span className="bgwake-output-expand">Show full output</span>
+          <span className="bgwake-output-collapse">Show less</span>
           <DownOutlined />
         </span>
       </summary>
@@ -92,8 +92,8 @@ function FailedOutput({ text }: { text: string }) {
  * the queue's status line under it, so it keeps its shape when a runner takes it.
  *
  * A job that ended while a turn was running is written into that turn (a steer), so its line sits in
- * the running turn's own stream, and how far it got is the line's to say — using a steer's delivery
- * state (lib/steerDelivery), with a compact receipt once confirmed.
+ * the running turn's own stream, and how far it got is the line's to say — the same words a steer's
+ * bubble uses (lib/steerDelivery), from "Sending…" to "Sent into this turn".
  */
 export function BackgroundWakeCard({
   wake,
@@ -144,7 +144,7 @@ export function BackgroundWakeCard({
           {closing && <span className="bgwake-status">{closing}</span>}
           {ts && <span className="bgwake-time">{relTime(ts)}</span>}
           <span className="bgwake-details-label">
-            {wake.jobs.length > 0 ? '任务详情' : '详情'}
+            {wake.jobs.length > 0 ? 'Job details' : 'Details'}
             <RightOutlined className="bgwake-caret" />
           </span>
         </summary>
@@ -212,7 +212,7 @@ export function BackgroundWakeCard({
         </div>
       ))}
       {undelivered && <div className="bgwake-undelivered">The session has not confirmed it received this.</div>}
-      {steer && <div className="bgwake-steer">{steer === 'Sent into this turn' ? '已送达当前轮次' : steer}</div>}
+      {steer && <div className="bgwake-steer">{steer}</div>}
       {queued && <div className="bgwake-queued">{queued}</div>}
     </div>
   );

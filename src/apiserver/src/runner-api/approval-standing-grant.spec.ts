@@ -43,6 +43,8 @@ function harness(session: SessionRow, rules: { toolName: string; ruleContent: st
       },
     },
     workspacePermissionRule: { findMany: async () => rules },
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: { findFirst: async () => ({ runtime: AgentProvider.CODEX }) },
     // Which turn raised the call, so an abandoned one is provable later
     // (`sessions/abandoned-approvals.ts`). These fixtures have no conversation turns, so every row

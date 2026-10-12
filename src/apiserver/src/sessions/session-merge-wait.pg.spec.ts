@@ -220,7 +220,8 @@ suite('session_merge, asked to wait for the outcome, on real PostgreSQL', async 
   const client = new Client({ connectionString: URL });
   await client.connect();
   const db = prismaClientFor(URL);
-  const service = new SessionsService(db as unknown as PrismaService, {} as never, {} as never);
+  const realtime = { notifyRunnerWake: () => undefined } as never;
+  const service = new SessionsService(db as unknown as PrismaService, {} as never, realtime);
   const repositories: string[] = [];
   t.after(async () => {
     for (const dir of repositories) rmSync(dir, { recursive: true, force: true });

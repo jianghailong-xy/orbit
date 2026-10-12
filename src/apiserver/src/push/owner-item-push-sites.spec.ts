@@ -48,6 +48,9 @@ const OWNER_ITEM_WRITERS: Record<string, string> = {
   'projects/owner-decision-signal.ts': 'a READ: it counts the owner’s items, it opens none',
   'projects/project-done-request.ts':
     'a READ: the done check reads the owner’s open items to refuse over them, it opens none',
+  'auth/tenant-isolation-fixtures.ts':
+    'no door: the tenant isolation census’s PostgreSQL fixtures insert each account’s items straight '
+    + 'into the table for another account to ask after, on accounts with no device to ring',
 };
 
 /** Every file that must carry the announcement, and the fact each one announces. */

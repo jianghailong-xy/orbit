@@ -1,0 +1,670 @@
+{
+ "summary": {
+  "expectedDir": "/var/tmp/p23b1/trees/tip/src/web/.ui-migration-results/expected-screenshots",
+  "actualDir": "runs/diag-verify-before/snapshots",
+  "only": "",
+  "total": 80,
+  "bytesEqual": 68,
+  "pixelEqual": 68,
+  "p0ComparatorFails": 8,
+  "missingExpected": 0
+ },
+ "rows": [
+  {
+   "file": "chromium-dark-desktop/notification-error.png",
+   "expectedSha256": "1e799f036ced55b19820a0fb4d6e9bc0d25b8bf694997938fdbeb6074253698a",
+   "actualSha256": "1e799f036ced55b19820a0fb4d6e9bc0d25b8bf694997938fdbeb6074253698a",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/profile-validation.png",
+   "expectedSha256": "e52eb8f22549612a8da10d1649bf410fbed39e485d3b2f7036bb78a3aa5e2a37",
+   "actualSha256": "573a57cd5677bdc445ea3af6cb084173b0cc73be94bededc0919a04db276a602",
+   "bytesEqual": false,
+   "differentPixels": 597,
+   "maxChannelDelta": 88,
+   "box": {
+    "x": 500,
+    "y": 28,
+    "width": 747,
+    "height": 770
+   },
+   "p0Comparator": "18 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "chromium-dark-desktop/profile.png",
+   "expectedSha256": "b95f566baa63e499c5d51cf18da26c1ef82fabbb419ae64c76e6842a3fb34914",
+   "actualSha256": "b95f566baa63e499c5d51cf18da26c1ef82fabbb419ae64c76e6842a3fb34914",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/session-attachment-menu.png",
+   "expectedSha256": "c433af44707c969b3277e0b1f6b22d0cdeff45dadb2782ceb58e3f72d4197515",
+   "actualSha256": "c433af44707c969b3277e0b1f6b22d0cdeff45dadb2782ceb58e3f72d4197515",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/session-attachment-staged.png",
+   "expectedSha256": "5fc50d996fc402c0d029e7b24a259de3d735fe64ff1350b0ce475c882695c961",
+   "actualSha256": "5fc50d996fc402c0d029e7b24a259de3d735fe64ff1350b0ce475c882695c961",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/session-composer-focus.png",
+   "expectedSha256": "22b23cca9cdbd0fa43d646172467832545cbe6ce9a416fb4a2128ffbb4105120",
+   "actualSha256": "22b23cca9cdbd0fa43d646172467832545cbe6ce9a416fb4a2128ffbb4105120",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/session-idle.png",
+   "expectedSha256": "961f80d871b078691bbcab100bdd08beb390b2bc7d9f05f8e2b40361c5bce9a2",
+   "actualSha256": "961f80d871b078691bbcab100bdd08beb390b2bc7d9f05f8e2b40361c5bce9a2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/session-streaming.png",
+   "expectedSha256": "ac1ffc45691d6d47b5219085e34ed5d3228604dbe34af84b6414929e2e08d86e",
+   "actualSha256": "ac1ffc45691d6d47b5219085e34ed5d3228604dbe34af84b6414929e2e08d86e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/settings-saved.png",
+   "expectedSha256": "af80da8cd05ef561eb27e0cb2b7ece6fdb0e9fbbb0df3a8d048431bf7d4f5a9a",
+   "actualSha256": "8aac73a34011b72ffec5729bc83ab64ec069fe7e30ed4ed84d0ef5b40378f059",
+   "bytesEqual": false,
+   "differentPixels": 97,
+   "maxChannelDelta": 49,
+   "box": {
+    "x": 1195,
+    "y": 31,
+    "width": 36,
+    "height": 11
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/settings.png",
+   "expectedSha256": "38b4b07331aed5bbc1075572c7b185d3b9acdcbe0924b48c79447fdda58fd45b",
+   "actualSha256": "38b4b07331aed5bbc1075572c7b185d3b9acdcbe0924b48c79447fdda58fd45b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/notification-error.png",
+   "expectedSha256": "a12160704f9814d42b26a9e9abf1ea9c170f15d4e3118f6e8bf36976035a644e",
+   "actualSha256": "a12160704f9814d42b26a9e9abf1ea9c170f15d4e3118f6e8bf36976035a644e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/profile-validation.png",
+   "expectedSha256": "55270904362b5152509c2053fbff3542273214f349d326d3e3809e43a196fa26",
+   "actualSha256": "06f881a1ed1e2ebf45c00b7d4a4da4b7d3815e6fa8ab9ff2bf476b51aa608966",
+   "bytesEqual": false,
+   "differentPixels": 316,
+   "maxChannelDelta": 48,
+   "box": {
+    "x": 21,
+    "y": 69,
+    "width": 328,
+    "height": 379
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/profile.png",
+   "expectedSha256": "7fca6448b3d3ed994ee8ad010f7e293dcd0e0d39ca8382bd24ae3b618a6dd906",
+   "actualSha256": "e346ae8c59b18e6f59b9e7e759c132fd1275fba8a0f866616256441a05ebd3d9",
+   "bytesEqual": false,
+   "differentPixels": 13,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 16,
+    "y": 100,
+    "width": 2,
+    "height": 354
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/session-attachment-menu.png",
+   "expectedSha256": "ac212e01664a76bd4317372e5985e6feceee6689c490bfcf1447b5c24782e06d",
+   "actualSha256": "ac212e01664a76bd4317372e5985e6feceee6689c490bfcf1447b5c24782e06d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/session-attachment-staged.png",
+   "expectedSha256": "33a3ffa6183617aa5f100d407dd8fc78cc1c8a03ccc5e9404c47fd6e13243e05",
+   "actualSha256": "33a3ffa6183617aa5f100d407dd8fc78cc1c8a03ccc5e9404c47fd6e13243e05",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/session-composer-focus.png",
+   "expectedSha256": "3183e94a16af8aa138c783efb796456ef4423a9d412e4b9e1f3df016d1e8ef2b",
+   "actualSha256": "3183e94a16af8aa138c783efb796456ef4423a9d412e4b9e1f3df016d1e8ef2b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/session-idle.png",
+   "expectedSha256": "30db161a582062433a28bdfda12c95f347264d8967278674d561ee63505f3eac",
+   "actualSha256": "30db161a582062433a28bdfda12c95f347264d8967278674d561ee63505f3eac",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/session-streaming.png",
+   "expectedSha256": "112c86141e46bb1f40ad2b63c3b359817826c66f93e1af94d55c8a49ca7ebd8e",
+   "actualSha256": "112c86141e46bb1f40ad2b63c3b359817826c66f93e1af94d55c8a49ca7ebd8e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/settings-saved.png",
+   "expectedSha256": "8912ae5fc6e4bbd0806f8d7d4b695468d3170bc64c50de0ba2adb102f8d43fe3",
+   "actualSha256": "5ba6aeb9760b4aaf781bb153e4eca7b484a8e7a1e2e55e601e00977d94d16720",
+   "bytesEqual": false,
+   "differentPixels": 1328,
+   "maxChannelDelta": 90,
+   "box": {
+    "x": 159,
+    "y": 39,
+    "width": 215,
+    "height": 736
+   },
+   "p0Comparator": "95 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "chromium-dark-phone/settings.png",
+   "expectedSha256": "81fca3e41a537acc762bb7a042778c0d0dc22eb12f10983e856e9edacca1f0d9",
+   "actualSha256": "81fca3e41a537acc762bb7a042778c0d0dc22eb12f10983e856e9edacca1f0d9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/notification-error.png",
+   "expectedSha256": "e58caff51600e2bd02b240fa548bc830f77a764b8b6f7c950a5787a6f2faf2b6",
+   "actualSha256": "e58caff51600e2bd02b240fa548bc830f77a764b8b6f7c950a5787a6f2faf2b6",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/profile-validation.png",
+   "expectedSha256": "c19e7b89a66ce177089708e954d3de8d6d380e049479933d9faf0f240bb3fbf7",
+   "actualSha256": "6e9da820cac93be9d4942c6f7c60f5c3593e9e1e6c405be1c0edc3d2b53444bb",
+   "bytesEqual": false,
+   "differentPixels": 495,
+   "maxChannelDelta": 113,
+   "box": {
+    "x": 1165,
+    "y": 28,
+    "width": 82,
+    "height": 11
+   },
+   "p0Comparator": "83 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "chromium-light-desktop/profile.png",
+   "expectedSha256": "bee5cfd83eb10740b16f7ecacf90e4f6c41d0deef7706bb22959d69df0af115a",
+   "actualSha256": "bee5cfd83eb10740b16f7ecacf90e4f6c41d0deef7706bb22959d69df0af115a",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/session-attachment-menu.png",
+   "expectedSha256": "7c3fd86d0b7e26950ac2400c5e0ba1784b9462d1640cb1e0a886260fb1d0426c",
+   "actualSha256": "7c3fd86d0b7e26950ac2400c5e0ba1784b9462d1640cb1e0a886260fb1d0426c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/session-attachment-staged.png",
+   "expectedSha256": "bcba61ccfff49fa156ca889d3f379f5267850c0b0431dcce1f66884029807701",
+   "actualSha256": "bcba61ccfff49fa156ca889d3f379f5267850c0b0431dcce1f66884029807701",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/session-composer-focus.png",
+   "expectedSha256": "9b3963ee539d6cde28fe171a42d08591ed0856063e1f3010316a3cdb06c29c5a",
+   "actualSha256": "9b3963ee539d6cde28fe171a42d08591ed0856063e1f3010316a3cdb06c29c5a",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/session-idle.png",
+   "expectedSha256": "647087e35a9d233ddd08f114506bd014e1e8d270da9f63966433915d309355e3",
+   "actualSha256": "647087e35a9d233ddd08f114506bd014e1e8d270da9f63966433915d309355e3",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/session-streaming.png",
+   "expectedSha256": "429a6a404cb96b33910802d8abe2bb08caa27e62b52a20afe4518f08e004395d",
+   "actualSha256": "429a6a404cb96b33910802d8abe2bb08caa27e62b52a20afe4518f08e004395d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/settings-saved.png",
+   "expectedSha256": "63edcae52916226f9ecbd335aaed1493d9e3e58c195c271f8535c9889c02cf3a",
+   "actualSha256": "08b261df8175fa881dad04185fb2c052d9872a4ad342e4993275e9405ff7143b",
+   "bytesEqual": false,
+   "differentPixels": 97,
+   "maxChannelDelta": 59,
+   "box": {
+    "x": 1195,
+    "y": 31,
+    "width": 36,
+    "height": 11
+   },
+   "p0Comparator": "10 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "chromium-light-desktop/settings.png",
+   "expectedSha256": "b9eff5c79843595bd6e6dedbe242a4425380bf3a084e42ab08b8d5835af9dd3b",
+   "actualSha256": "b9eff5c79843595bd6e6dedbe242a4425380bf3a084e42ab08b8d5835af9dd3b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/notification-error.png",
+   "expectedSha256": "9cd245f259ddd93569ffdfee9aa2bc55ab3e1f3469cb59314afed6c27a95e194",
+   "actualSha256": "9cd245f259ddd93569ffdfee9aa2bc55ab3e1f3469cb59314afed6c27a95e194",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/profile-validation.png",
+   "expectedSha256": "a1b7022414a38a54d312788cf4a97956416f44fa38a162f3d194181d86d9479b",
+   "actualSha256": "ebc391044fabe5e5be195d4c7066e29789a784f3a0dd3378afbf0a953656c81a",
+   "bytesEqual": false,
+   "differentPixels": 311,
+   "maxChannelDelta": 60,
+   "box": {
+    "x": 21,
+    "y": 69,
+    "width": 209,
+    "height": 379
+   },
+   "p0Comparator": "22 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "chromium-light-phone/profile.png",
+   "expectedSha256": "499301e9ac2f42611a2aa6b8950da630d2b99910716e4e20f47d485485e8ba04",
+   "actualSha256": "db40b2365a98a538f423f8c7829a9febbceceb03d03b44e949dcc11dce86fc64",
+   "bytesEqual": false,
+   "differentPixels": 13,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 16,
+    "y": 100,
+    "width": 2,
+    "height": 354
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/session-attachment-menu.png",
+   "expectedSha256": "73987e3c014dac469138b1564e21478e93c5d44376607f54f587c292475b1f00",
+   "actualSha256": "73987e3c014dac469138b1564e21478e93c5d44376607f54f587c292475b1f00",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/session-attachment-staged.png",
+   "expectedSha256": "5f8eea566775512397762e9d4a4df146c8f016ae89fd3426a4cdba7be906850b",
+   "actualSha256": "5f8eea566775512397762e9d4a4df146c8f016ae89fd3426a4cdba7be906850b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/session-composer-focus.png",
+   "expectedSha256": "58aa7ab6fe17276dcc3d2fa465d735a3e34950018092e9e8c06fc50461281089",
+   "actualSha256": "58aa7ab6fe17276dcc3d2fa465d735a3e34950018092e9e8c06fc50461281089",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/session-idle.png",
+   "expectedSha256": "dd804528a07f0f37f85a1860fcf7b4918ea1a17cfe0bd840ea08ab84e8ccf79b",
+   "actualSha256": "dd804528a07f0f37f85a1860fcf7b4918ea1a17cfe0bd840ea08ab84e8ccf79b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/session-streaming.png",
+   "expectedSha256": "c8df62d3ac623ce195d663a087e7e54e647567050efc189541e5e0b1534c759a",
+   "actualSha256": "c8df62d3ac623ce195d663a087e7e54e647567050efc189541e5e0b1534c759a",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/settings-saved.png",
+   "expectedSha256": "44429bd7c190d219a4f1f8b8ad4f112a6b678bffac90fb0af557621b849f2a01",
+   "actualSha256": "4d27055239556c19d6b2ddd938f1b758be195eee5d29b5056ccbd86583332f39",
+   "bytesEqual": false,
+   "differentPixels": 1418,
+   "maxChannelDelta": 113,
+   "box": {
+    "x": 159,
+    "y": 44,
+    "width": 126,
+    "height": 76
+   },
+   "p0Comparator": "135 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "chromium-light-phone/settings.png",
+   "expectedSha256": "7236362c58a54143611a5a690d609c5c8da784af570dbe7f4daa019daec6dafd",
+   "actualSha256": "7236362c58a54143611a5a690d609c5c8da784af570dbe7f4daa019daec6dafd",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/notification-error.png",
+   "expectedSha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797",
+   "actualSha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/profile-validation.png",
+   "expectedSha256": "99deef7f1461db0467cce09876082b2f5f8958d80090f528825dfd5d4ee82fc4",
+   "actualSha256": "99deef7f1461db0467cce09876082b2f5f8958d80090f528825dfd5d4ee82fc4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/profile.png",
+   "expectedSha256": "7e602183d7575a135496b41e7cc2845c9ec5d37db6283ccd03a3a59b0c8911fc",
+   "actualSha256": "7e602183d7575a135496b41e7cc2845c9ec5d37db6283ccd03a3a59b0c8911fc",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/session-attachment-menu.png",
+   "expectedSha256": "b2df9e190848e6c5eb244302157ca6989b29626eb5b827479be67df1f7511f22",
+   "actualSha256": "b2df9e190848e6c5eb244302157ca6989b29626eb5b827479be67df1f7511f22",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/session-attachment-staged.png",
+   "expectedSha256": "eb879ff3ef8332a63bd72f1b7a87bde7a406d7fab2ff04e7cf5bf78c31b0d7c9",
+   "actualSha256": "eb879ff3ef8332a63bd72f1b7a87bde7a406d7fab2ff04e7cf5bf78c31b0d7c9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/session-composer-focus.png",
+   "expectedSha256": "e8af680658a0cff3b50b75f3863238c70880ee174dc008fc9f0394dab32ded16",
+   "actualSha256": "e8af680658a0cff3b50b75f3863238c70880ee174dc008fc9f0394dab32ded16",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/session-idle.png",
+   "expectedSha256": "e41f995b0710acf727e92fb2b28659940906489b56a290490ed20046359e9ae4",
+   "actualSha256": "e41f995b0710acf727e92fb2b28659940906489b56a290490ed20046359e9ae4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/session-streaming.png",
+   "expectedSha256": "3a19089bf8d977eff5035d8ec3fa7fb7bbd94fab81547b9d39628f9591ec3b1f",
+   "actualSha256": "3a19089bf8d977eff5035d8ec3fa7fb7bbd94fab81547b9d39628f9591ec3b1f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/settings-saved.png",
+   "expectedSha256": "ef0ad8d75fada97bc7f96fda3c62cad0d741bf2507f6a37c390770ffbced47ba",
+   "actualSha256": "ef0ad8d75fada97bc7f96fda3c62cad0d741bf2507f6a37c390770ffbced47ba",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/settings.png",
+   "expectedSha256": "0ee63c37be663a8e1f281f25f87f0c4ece7b94b9a4547e28145aaa1ef8ca601d",
+   "actualSha256": "0ee63c37be663a8e1f281f25f87f0c4ece7b94b9a4547e28145aaa1ef8ca601d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/notification-error.png",
+   "expectedSha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8",
+   "actualSha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/profile-validation.png",
+   "expectedSha256": "5051bae1c5726c5222bfe49f8d2f1abaf111c35efe08067fc77234a255600cfe",
+   "actualSha256": "4dab04445be4b0cf25c738787b8c4ac7c4ae3cbb62ca5597bef08862025bb644",
+   "bytesEqual": false,
+   "differentPixels": 3994,
+   "maxChannelDelta": 167,
+   "box": {
+    "x": 106,
+    "y": 44,
+    "width": 174,
+    "height": 81
+   },
+   "p0Comparator": "339 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-phone/profile.png",
+   "expectedSha256": "9790302ed85bb6d415885bf18199bcc3d3fc847687f8e32e8fae4712b37998bf",
+   "actualSha256": "9790302ed85bb6d415885bf18199bcc3d3fc847687f8e32e8fae4712b37998bf",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/session-attachment-menu.png",
+   "expectedSha256": "53e77a01dd67f94de15e2620939eff341ab4b84177d5e23fa932d02192724b49",
+   "actualSha256": "53e77a01dd67f94de15e2620939eff341ab4b84177d5e23fa932d02192724b49",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/session-attachment-staged.png",
+   "expectedSha256": "3a76b9156075d82c91d4ca42892fd741f25b827fc842530e74cb0cada15362a6",
+   "actualSha256": "3a76b9156075d82c91d4ca42892fd741f25b827fc842530e74cb0cada15362a6",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/session-composer-focus.png",
+   "expectedSha256": "7c4726da2ea9b3550d24b23d154306fa651197c887b0cdc98e39fe575bed1e29",
+   "actualSha256": "7c4726da2ea9b3550d24b23d154306fa651197c887b0cdc98e39fe575bed1e29",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/session-idle.png",
+   "expectedSha256": "f8d569ed67365e15ecb80d274a6862299cb01f54c889f80ebd450b60ef966b52",
+   "actualSha256": "f8d569ed67365e15ecb80d274a6862299cb01f54c889f80ebd450b60ef966b52",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/session-streaming.png",
+   "expectedSha256": "d4ee34eb79f525cbe1444cd3d3167aa6b62222638499a6343b9300cf50536aad",
+   "actualSha256": "d4ee34eb79f525cbe1444cd3d3167aa6b62222638499a6343b9300cf50536aad",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/settings-saved.png",
+   "expectedSha256": "394ad14943ed5f4e9674dc18a068989b38adcb1924b86cafb1e3a94174a24861",
+   "actualSha256": "394ad14943ed5f4e9674dc18a068989b38adcb1924b86cafb1e3a94174a24861",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/settings.png",
+   "expectedSha256": "f5bf7b5d3bd8101b3ac723f3443bdfcedd1bc0c847080bd7df1c1d07a05da69f",
+   "actualSha256": "f5bf7b5d3bd8101b3ac723f3443bdfcedd1bc0c847080bd7df1c1d07a05da69f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/notification-error.png",
+   "expectedSha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324",
+   "actualSha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/profile-validation.png",
+   "expectedSha256": "9038001c0a8612c4d255d0c1b3ffa8b16d5653a6a172deeed466908daee70bca",
+   "actualSha256": "9038001c0a8612c4d255d0c1b3ffa8b16d5653a6a172deeed466908daee70bca",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/profile.png",
+   "expectedSha256": "0f8618857d899d8ae6d3bb72099706b19663b6796c6928345e972e6b0ba59272",
+   "actualSha256": "0f8618857d899d8ae6d3bb72099706b19663b6796c6928345e972e6b0ba59272",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/session-attachment-menu.png",
+   "expectedSha256": "b69e66a95316eeba4930f739c6a2e874c3bbf42e24e5db890b4627495443cf26",
+   "actualSha256": "b69e66a95316eeba4930f739c6a2e874c3bbf42e24e5db890b4627495443cf26",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/session-attachment-staged.png",
+   "expectedSha256": "eb1e94588de58bfc0844f1796ba802656d11659ec5e8b7399c2723d7046e65d5",
+   "actualSha256": "eb1e94588de58bfc0844f1796ba802656d11659ec5e8b7399c2723d7046e65d5",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/session-composer-focus.png",
+   "expectedSha256": "288a9e1377b5ba80580559fad6d06fa12e67291aee3179545f8f86be9288b8e4",
+   "actualSha256": "288a9e1377b5ba80580559fad6d06fa12e67291aee3179545f8f86be9288b8e4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/session-idle.png",
+   "expectedSha256": "e64dc792099ffb919f88fc019e89b29ea47f6673a8952453b15b25a5ad6f3693",
+   "actualSha256": "e64dc792099ffb919f88fc019e89b29ea47f6673a8952453b15b25a5ad6f3693",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/session-streaming.png",
+   "expectedSha256": "9f84b9d8091fc5e099446abde0e6a3076aa456c0990baf58fecbdfddac8dbc72",
+   "actualSha256": "9f84b9d8091fc5e099446abde0e6a3076aa456c0990baf58fecbdfddac8dbc72",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/settings-saved.png",
+   "expectedSha256": "0e15dc2ec5a3e489f9ccf3feedcea56ec40f82a7e18cd5276c0a5d9327d5bb5c",
+   "actualSha256": "0e15dc2ec5a3e489f9ccf3feedcea56ec40f82a7e18cd5276c0a5d9327d5bb5c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/settings.png",
+   "expectedSha256": "234a2a1225531e4f64e8af53f37b5441b16cda609b684ee7ab1e5cd744181fe6",
+   "actualSha256": "234a2a1225531e4f64e8af53f37b5441b16cda609b684ee7ab1e5cd744181fe6",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/notification-error.png",
+   "expectedSha256": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8",
+   "actualSha256": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/profile-validation.png",
+   "expectedSha256": "658610ffbfe446786ed1487d20295706ca8c81760e9b041186ce07b8a612f90f",
+   "actualSha256": "881862c4cff20e250ce0643e98e22263e76fb3fde6039d912234faec69db1d5d",
+   "bytesEqual": false,
+   "differentPixels": 4863,
+   "maxChannelDelta": 224,
+   "box": {
+    "x": 104,
+    "y": 42,
+    "width": 178,
+    "height": 80
+   },
+   "p0Comparator": "376 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-light-phone/profile.png",
+   "expectedSha256": "7232da9dc15065c7dc14dd61352a6ba12a2251404541e475188dd3a16d26d8da",
+   "actualSha256": "7232da9dc15065c7dc14dd61352a6ba12a2251404541e475188dd3a16d26d8da",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/session-attachment-menu.png",
+   "expectedSha256": "693ed52ac4b28181851cf9c7848d9a16cd929fc9b504079b869c98fcd2588068",
+   "actualSha256": "693ed52ac4b28181851cf9c7848d9a16cd929fc9b504079b869c98fcd2588068",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/session-attachment-staged.png",
+   "expectedSha256": "681d802e82fe6a2e6410ea10439779a564d2bd92e4e2134c5a38872f99425f39",
+   "actualSha256": "681d802e82fe6a2e6410ea10439779a564d2bd92e4e2134c5a38872f99425f39",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/session-composer-focus.png",
+   "expectedSha256": "45254e6ab720f7935fd9bebf13fbaec66de991e40f3b6ab167b30139dd8d8dd7",
+   "actualSha256": "45254e6ab720f7935fd9bebf13fbaec66de991e40f3b6ab167b30139dd8d8dd7",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/session-idle.png",
+   "expectedSha256": "afcf7dc6b95ca73b0bcb60b7e97f9092fb24c2cd2c571a57fe4ae8f09f0ff21b",
+   "actualSha256": "afcf7dc6b95ca73b0bcb60b7e97f9092fb24c2cd2c571a57fe4ae8f09f0ff21b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/session-streaming.png",
+   "expectedSha256": "247f9251aecd81336ed491704932054d9ae7aa34fd865258cc8ce0a03795a11e",
+   "actualSha256": "247f9251aecd81336ed491704932054d9ae7aa34fd865258cc8ce0a03795a11e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/settings-saved.png",
+   "expectedSha256": "4542b2f97ed7533ae431c3acde05003dccb3860d51ae410c5bc16dbb26bd173c",
+   "actualSha256": "4542b2f97ed7533ae431c3acde05003dccb3860d51ae410c5bc16dbb26bd173c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/settings.png",
+   "expectedSha256": "ba72117f996f03fd5149f16b672ecab55e7c5487b3f955b8cb138507e222b075",
+   "actualSha256": "ba72117f996f03fd5149f16b672ecab55e7c5487b3f955b8cb138507e222b075",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  }
+ ]
+}

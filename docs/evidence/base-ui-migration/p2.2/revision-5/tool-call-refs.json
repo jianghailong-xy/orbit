@@ -1,0 +1,32 @@
+[
+  {
+    "ref": "exec-3057ee37-ac81-4c08-accc-6cd4345cb5db",
+    "command": "git add src/web/ui-migration/choices-scroll-observation.mjs src/web/ui-migration/choices-lifecycle.browser.mjs docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.config.mjs && git commit -m \"test(web): observe scroll readiness after Dialog close lifecycle\"",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-dda6ca41-5045-434a-834a-5c2fe9c7cb69",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r5-final-choices-entry npm run test:ui-choices -w @orbit/web -- --grep 'Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits'",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-88f22247-195f-421e-ba55-0ddbfd48069c",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r5-lifecycle-controls node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.config.mjs",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-5d79e94a-2acc-4861-b3c6-13d3ef1a6ff0",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r5-final-lifecycle-repeat npm run test:ui-choices -w @orbit/web -- --grep 'Dialog Popover Select exits restore one layer at a time' --repeat-each 5",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-41018963-3b7a-4c37-b7cb-4ea89d9d11ea",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r5-list-choices npm run test:ui-choices -w @orbit/web -- --list",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-fcd42920-2e2f-40a6-b351-edb4217f5eaa",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r5-source-observation-audit python3 docs/evidence/base-ui-migration/p2.2/revision-5/audit-r5.py",
+    "exitCode": 0
+  }
+]

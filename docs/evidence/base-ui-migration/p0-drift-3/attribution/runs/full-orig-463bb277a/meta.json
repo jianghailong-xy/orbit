@@ -1,0 +1,19 @@
+{
+ "app": "/var/tmp/p0d3/trees/463bb277a",
+ "commit": "463bb277a211c69ab0a14a19e69a71c404fe18d1",
+ "runner": "/var/tmp/p0d3/runners/orig",
+ "runnerCommit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+ "started": "2026-10-07T11:45:26Z",
+ "finished": "2026-10-07T11:49:20Z",
+ "exit": 0,
+ "environment": "p0.2",
+ "stats": {
+  "expected": 76,
+  "unexpected": 0,
+  "flaky": 0,
+  "skipped": 4
+ },
+ "screenshots": 252,
+ "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+}

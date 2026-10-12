@@ -14,14 +14,18 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UploadedFile } from '../attachments/attachments.media';
 import { AVATAR_MAX_BYTES, readAvatar } from './avatar';
 import { UpdatePreferencesDto, UpdateProfileDto } from './dto';
+import { SIGN_IN_METHODS_SELECT, signInMethodsOf } from './sign-in-methods';
+import { normalizeDefaultModels } from '../providers/engine-provider';
 
-/** What every answer about one's own account reads: the account, and when its photo was set. */
+/** What every answer about one's own account reads: the account, when its photo was set, and how
+ *  it signs in. */
 const ME_SELECT = {
   id: true,
   email: true,
@@ -30,15 +34,21 @@ const ME_SELECT = {
   preferences: true,
   role: true,
   avatar: { select: { updatedAt: true } },
+  ...SIGN_IN_METHODS_SELECT,
 } satisfies Prisma.UserSelect;
 
 /** The account as `me` answers with it. `avatarUpdatedAt` is the photo's version — what a client
- *  fetches and caches it by — and null while the account has none. */
-function asMe<T extends { avatar?: { updatedAt: Date } | null }>(account: T) {
-  const { avatar, ...rest } = account;
-  return { ...rest, avatarUpdatedAt: avatar?.updatedAt ?? null };
+ *  fetches and caches it by — and null while the account has none. `signInMethods` says whether it
+ *  has a password and which Google account it is linked to (docs/google-sign-in-design.md §6); the
+ *  password hash it is read from is not answered. */
+function asMe<T extends { avatar?: { updatedAt: Date } | null; passwordHash: string | null; identities: Array<{ email: string }> }>(
+  account: T,
+) {
+  const { avatar, passwordHash, identities, ...rest } = account;
+  return { ...rest, avatarUpdatedAt: avatar?.updatedAt ?? null, signInMethods: signInMethodsOf({ passwordHash, identities }) };
 }
 
+@PatForbidden('ACCOUNT')
 @Controller('users')
 export class UsersController {
   constructor(private readonly prisma: PrismaService) {}
@@ -129,9 +139,11 @@ export class UsersController {
     if (dto.theme !== undefined) merged.theme = dto.theme;
     if (dto.defaultModel !== undefined) merged.defaultModel = dto.defaultModel;
     if (dto.defaultModels !== undefined) {
+      // Keyed by (engine, provider) — `<engine>:<provider>` — and an older client's own keys kept as it
+      // wrote them, beside the new key each means (docs/provider-engine-contract.md §6.5).
       merged.defaultModels = {
         ...((merged.defaultModels ?? {}) as Record<string, string>),
-        ...dto.defaultModels,
+        ...(await normalizeDefaultModels(this.prisma, user.userId, dto.defaultModels)),
       };
     }
     if (dto.defaultPermissionMode !== undefined) merged.defaultPermissionMode = dto.defaultPermissionMode;
@@ -141,6 +153,8 @@ export class UsersController {
     if (dto.notifyAgentMessage !== undefined) merged.notifyAgentMessage = dto.notifyAgentMessage;
     if (dto.enableOrchestration !== undefined) merged.enableOrchestration = dto.enableOrchestration;
     if (dto.modelRouting !== undefined) merged.modelRouting = dto.modelRouting;
+    if (dto.promptSuggestions !== undefined) merged.promptSuggestions = dto.promptSuggestions;
+    if (dto.recaps !== undefined) merged.recaps = dto.recaps;
     return asMe(await this.prisma.user.update({
       where: { id: user.userId },
       data: { preferences: merged as Prisma.InputJsonValue },

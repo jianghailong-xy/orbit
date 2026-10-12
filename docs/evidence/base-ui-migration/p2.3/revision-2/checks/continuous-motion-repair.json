@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "src/web/ui-migration/toasts.config.mjs",
+    "toasts-lifecycle.browser.mjs",
+    "--grep",
+    "card stays fixed",
+    "--project",
+    "chromium-light-desktop",
+    "--project",
+    "webkit-light-phone",
+    "--project",
+    "webkit-light-desktop"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "startedFrom": "0e3b3a61cadc73bda93f06985dbd866e4d1fba79",
+  "finishedAt": "2026-10-04T07:32:25.094501+00:00",
+  "seconds": 39.10198445399874,
+  "exitCode": 1
+}

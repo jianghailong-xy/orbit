@@ -2,16 +2,14 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The bar pinned to the top of the console, on a turn nobody typed.
+/// The bar pinned to the top of the console, over a turn nobody typed.
 ///
 /// The account owner's screenshot (2026-09-17): `↑ Your question  Orbit Watch 01a0ade6-0b07-718…`
-/// with the card directly under it reading "Queued by a watch, not typed by you". The bubble had
-/// already been fixed (`WatchWake.swift`); this bar was the place still calling a wake the person's
-/// own words, and drawing a truncated UUID as what they had said.
-///
-/// So each turn is checked for both halves of what the bar draws: the label that says whose turn it
-/// was, and the line that says what it said — and for a wake both come from the card it points at,
-/// never from the payload. The last test is the guard that was already there and must survive:
+/// with the card directly under it reading "Queued by a watch, not typed by you". The bar then named
+/// a watch's wake in the card's own words — and so "↑ Watch triggered" took it over the reply the
+/// agent simply carried on with, until the wake became a line in that reply (2026-10-09), as a
+/// background job's news had. Neither is the head of a round now, so the bar points at neither and
+/// keeps the person's question. The last test is the guard that was already there and must survive:
 /// pasting a wake's head line into the composer is a message the person typed.
 final class StickySummaryTests: XCTestCase {
     private typealias F = WatchFixture
@@ -41,45 +39,17 @@ final class StickySummaryTests: XCTestCase {
         </scheduled-wakeup>
         """
 
-    // MARK: the four ways a watch wakes a session
-
-    /// A Match: the label is the card's title and the line is the card's own account of the
-    /// condition — "2 of 3 finished · 1 of 3 failed", not `ANY_OF(ALL TASK_TERMINAL 2/3, …)` and
-    /// certainly not the head line's UUID.
-    func testAMatchIsLabelledAndReadAsTheCardReadsIt() {
-        let summary = StickySummary.of(text: F.matchWake())
-        XCTAssertEqual(summary.label, "↑ Watch triggered")
-        XCTAssertEqual(summary.text, "2 of 3 finished · 1 of 3 failed")
-        // The two ways the screenshot's bar was wrong, named outright so a regression says which.
-        XCTAssertNotEqual(summary.label, StickySummary.yourQuestion)
-        XCTAssertFalse(summary.text.contains(F.wakeWatchID), "the bar drew the payload's raw id")
-    }
-
-    func testTheDeadlinePassingIsLabelledAndReadAsTheCardReadsIt() {
-        let summary = StickySummary.of(text: F.expiryWake())
-        XCTAssertEqual(summary.label, "↑ Watch expired")
-        XCTAssertEqual(summary.text,
-                       "Its deadline passed before its condition held. It will not wake this session again.")
-    }
-
-    func testLosingAccessToATargetIsLabelledAndReadAsTheCardReadsIt() {
-        let summary = StickySummary.of(text: F.endWake("REVOKED"))
-        XCTAssertEqual(summary.label, "↑ Watch stopped: access lost")
-        XCTAssertEqual(summary.text,
-                       "This account can no longer read one of its targets, so it reports nothing about them.")
-    }
-
-    /// The longest label there is. It leaves the line no room on a phone, and that was decided
-    /// rather than worked around: the label truncates like any other text (`ConsoleView`'s bar no
-    /// longer pins it at its full width), and no abbreviation is invented for it here.
-    func testEveryTargetBeingGoneIsLabelledAndReadAsTheCardReadsIt() {
-        let summary = StickySummary.of(text: F.endWake("UNRESOLVABLE"))
-        XCTAssertEqual(summary.label, "↑ Watch stopped: every target is gone")
-        XCTAssertEqual(summary.text,
-                       "Every target it watched was deleted, so its condition can never be decided.")
-    }
-
     // MARK: the turns the control plane opens
+
+    /// A watch's wake, in all four of the ways a watch wakes a session, is a line inside the answer
+    /// the agent is still giving: the bar does not point at it, and keeps naming the question that
+    /// answer belongs to. Named in the card's words it read "↑ Watch triggered" over the reply.
+    func testAWatchsWakeIsNoTurnTheBarPointsAt() {
+        for wake in [F.matchWake(), F.expiryWake(), F.endWake("REVOKED"), F.endWake("UNRESOLVABLE")] {
+            XCTAssertNotNil(WatchWakeText.parse(wake), "the fixture is a wake")
+            XCTAssertFalse(StickySummary.isAnchor(text: wake), wake.prefix(60).description)
+        }
+    }
 
     /// A background job's news is a line inside the answer the agent is still giving, not the head
     /// of a round: the bar does not point at it, and keeps naming the question that answer belongs
@@ -102,11 +72,12 @@ final class StickySummaryTests: XCTestCase {
         XCTAssertEqual(summary.text, "and check the dark theme too")
     }
 
-    /// Every other turn is still one the bar points at: a watch's wake, and a person's message —
-    /// including one the control plane appended a note to that is not a wake.
+    /// Every other turn is still one the bar points at: a person's message — including one the
+    /// control plane appended a note to that is not a wake, and one quoting a wake's head line.
     func testEveryOtherTurnIsStillOneTheBarPointsAt() {
-        XCTAssertTrue(StickySummary.isAnchor(text: F.matchWake()))
         XCTAssertTrue(StickySummary.isAnchor(text: "部署"))
+        XCTAssertTrue(StickySummary.isAnchor(
+            text: "what does this mean?\n\nOrbit Watch \(F.wakeWatchID) matched at generation 1: \(F.wakeReason)"))
         XCTAssertTrue(StickySummary.isAnchor(text: "check the dark theme too",
                                              note: "Continue where the previous turn left off."))
     }

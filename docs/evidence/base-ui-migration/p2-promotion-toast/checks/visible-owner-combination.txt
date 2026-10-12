@@ -1,0 +1,78 @@
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs toasts-promotion.browser.mjs --project chromium-light-desktop --project webkit-dark-phone
+
+[WebServer] (node:351503) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 10 tests using 1 worker
+
+(node:351584) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.3s)
+  ✓   2 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+  ✓   3 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:71:1 › clear retains the last shape for exactly 250ms but immediately blocks focus and actions (1.0s)
+  ✓   4 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:112:1 › keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals (1.5s)
+  ✓   5 [chromium-light-desktop] › ui-migration/toasts-promotion.browser.mjs:150:1 › entrance progress survives a modal transfer before its first 180ms completes (1.0s)
+(node:352354) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+  ✓   7 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.2s)
+  ✘   8 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:71:1 › clear retains the last shape for exactly 250ms but immediately blocks focus and actions (846ms)
+(node:352697) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:112:1 › keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals (1.4s)
+  ✓  10 [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:150:1 › entrance progress survives a modal transfer before its first 180ms completes (969ms)
+
+
+  1) [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:71:1 › clear retains the last shape for exactly 250ms but immediately blocks focus and actions 
+
+    Error: expect(received).toMatchObject(expected)
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "focused": false,
+    +   "focused": true,
+        "hidden": "true",
+        "inert": true,
+      }
+
+      92 |       focused: window.departingSlot.contains(document.activeElement), shape: window.departingSlot.firstElementChild.className };
+      93 |   });
+    > 94 |   expect(snapshot).toMatchObject({ inert: true, hidden: 'true', focused: false });
+         |                    ^
+      95 |   expect(snapshot.shape).toContain('toast--card');
+      96 |   await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      97 |   await page.keyboard.press('Enter');
+        at /root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/src/web/ui-migration/toasts-promotion.browser.mjs:94:20
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-867e5-ly-blocks-focus-and-actions-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-867e5-ly-blocks-focus-and-actions-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-867e5-ly-blocks-focus-and-actions-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-phone] › ui-migration/toasts-promotion.browser.mjs:71:1 › clear retains the last shape for exactly 250ms but immediately blocks focus and actions 
+  9 passed (14.9s)
+npm error Lifecycle script `test:ui-toasts` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/toasts.config.mjs toasts-promotion.browser.mjs --project chromium-light-desktop --project webkit-dark-phone

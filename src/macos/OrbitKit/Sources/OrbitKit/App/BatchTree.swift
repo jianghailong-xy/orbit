@@ -10,6 +10,9 @@ import Foundation
 // so the same structure is rendered the way narrow columns have always rendered a hierarchy, as an
 // indented tree. It handles a chain perfectly, reads a fan-out as siblings, and never needs a
 // layout pass.
+//
+// The transcript's record of a decided batch still draws this tree. The review card lists levels
+// instead (BatchReview.swift), because a join is where a tree has to simplify.
 
 /// One row of the tree: the title, already prefixed with its connector glyphs.
 public struct BatchTreeRow: Equatable, Sendable, Identifiable {
@@ -89,18 +92,22 @@ public extension Approvals {
         return rows
     }
 
-    /// A one-line reading of the shape — the caption above the tree, and the whole answer when
-    /// there is no structure to indent.
+    /// A one-line reading of the shape: the caption above the tree or the levels, and the whole
+    /// answer when there is no structure to draw.
+    ///
+    /// Read off the review's levels (`batchLayers`), which are web's layers, so both clients say the
+    /// same sentence about the same batch. "N in parallel after 1" is a claim about the first level,
+    /// so it is said only when one task releases the rest. Said of three tasks that release a fourth,
+    /// it would read backwards.
     static func describeBatchShape(_ tasks: [BatchPreviewTask]) -> String {
         if tasks.isEmpty { return "" }
-        let rows = batchTreeRows(tasks)
-        let edges = rows.filter { $0.depth > 0 }.count
-        if edges == 0 { return tasks.count == 1 ? "a single task" : "\(tasks.count) independent tasks" }
-        let depth = (rows.map(\.depth).max() ?? 0) + 1
-        var widest = 0
-        for d in 0..<depth { widest = max(widest, rows.filter { $0.depth == d }.count) }
+        let layer = batchLayers(tasks)
+        let depth = (layer.max() ?? 0) + 1
+        if depth == 1 { return tasks.count == 1 ? "a single task" : "\(tasks.count) independent tasks" }
+        let counts = (0..<depth).map { d in layer.filter { $0 == d }.count }
+        let widest = counts.max() ?? 0
         if widest == 1 { return "a chain of \(tasks.count)" }
-        if depth == 2 { return "\(widest) in parallel after 1" }
+        if depth == 2 && counts[0] == 1 { return "\(widest) in parallel after 1" }
         return "\(depth) levels, up to \(widest) in parallel"
     }
 }

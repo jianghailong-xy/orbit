@@ -1,0 +1,122 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T07:19:43.089Z",
+    "duration": 28577.854,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Dialog-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+          "sha256": "48fcf945ed44e99ecf3740b0dd73b5d72187d484b6fd363d630034adb83655aa"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Drawer-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+          "sha256": "d6ef205d3ede4f7933ab7ccb02dc45d86344c5c6a934da83bbfd55565621da89"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+          "sha256": "02ddeb6ebc7fd5d245914515bcd9fff4c06de3388c2208eaf726a912cf96c8dc"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+          "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--native-hover-deadline-resumes-after-portal-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+          "sha256": "09111fa1a260271fcdbc1c4005399134a7840645dc786fec86ae04530aa84519"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Dialog-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Dialog-entry--entry-geometry.json",
+          "sha256": "3a9f2887af7279265e55795617e7920a2f9b720c8685c3d147c9d2f2e17bfdae"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Drawer-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Drawer-entry--entry-geometry.json",
+          "sha256": "21bb401f670d3c47dc93d600297cecd21327883a14aed1eaa50aeb231c160b31"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--existing-notification-stays-at-viewport-origin-during-Bottom-drawer-entry--entry-geometry.json",
+          "sha256": "a884c70f34d25d1cad0a20677e7a1d573b1000249f479e18034a5ea96c1c010f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--hover-pause-releases-after-a-keyboard-opened-and-closed-overlay-changes-portal--timer-after-portal.json",
+          "sha256": "5e7066ffeee72477ee1c4b64373ee2bfc67262842e764b626581609189eab3a1"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--native-hover-deadline-resumes-after-portal-changes",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--native-hover-deadline-resumes-after-portal-changes--native-timer.json",
+          "sha256": "5a5b3cd989aab4f690f4b9ce8b5c64344a12fa6eb6335fcfbe77a6b2511ac811"
+        }
+      ]
+    }
+  ]
+}

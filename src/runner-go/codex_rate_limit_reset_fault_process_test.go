@@ -62,7 +62,7 @@ func TestCodexResetFaultProcess(t *testing.T) {
 		sent := time.Now()
 		response, err := transport.heartbeat(HeartbeatRequest{
 			Status: "ONLINE", IdleCapacity: 1, LeaseOwner: transport.leaseOwner,
-			Draining: draining, PlanUsage: combinePlanUsage(nil, probe.snapshot()),
+			Draining: draining, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil),
 		})
 		if err == nil {
 			relay.handle(response.CodexRateLimitResetRequest, sent, draining)
@@ -111,7 +111,7 @@ func TestCodexResetFaultProcess(t *testing.T) {
 		case "heartbeat":
 			heartbeatMu.Lock()
 			draining = cmd.Draining || cmd.DrainingOnReceipt
-			request := HeartbeatRequest{Status: "ONLINE", IdleCapacity: 1, Draining: cmd.Draining, PlanUsage: combinePlanUsage(nil, probe.snapshot())}
+			request := HeartbeatRequest{Status: "ONLINE", IdleCapacity: 1, Draining: cmd.Draining, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil)}
 			if cmd.LeaseOwner == nil || *cmd.LeaseOwner {
 				request.LeaseOwner = transport.leaseOwner
 			}

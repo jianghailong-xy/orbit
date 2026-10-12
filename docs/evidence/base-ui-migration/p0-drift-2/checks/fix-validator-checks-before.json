@@ -1,0 +1,132 @@
+{
+  "ok": false,
+  "target": "chromium-light-desktop/settings.png",
+  "cases": [
+    {
+      "name": "valid: the registry as committed (with its own migrationFix entries)",
+      "expected": "assembled",
+      "outcome": "assembled",
+      "ok": true,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "valid: one more migrationFix naming the fix, its tree, a CONFIRM decision and the isolation proofs",
+      "expected": "assembled",
+      "outcome": "assembled",
+      "ok": true,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "migrationFix without a decision",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "decision is not CONFIRM",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "no evidence revision",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "evidence revision 0",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "no evidence digest",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "no task id",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "decision document missing",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "fix commit abbreviated",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "no generation tree",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "isolation proofs missing",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "migrationFix is null",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    },
+    {
+      "name": "migrationFix is empty",
+      "expected": "refused",
+      "outcome": "assembled",
+      "ok": false,
+      "said": [
+        "P0 expected screenshots: 88 P0.2 originals, 164 main drift references, 0 accepted migration differences."
+      ]
+    }
+  ]
+}

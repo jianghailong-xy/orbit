@@ -67,6 +67,7 @@ const job = (facts: Partial<{
   targetShaBefore: string | null;
   upstreamSha: string | null;
   sourceOnUpstream: boolean | null;
+  sourceFullyApplied: boolean | null;
   receiptIds: string[];
   sourceRef: string;
   startedAt: Date | null;
@@ -77,6 +78,7 @@ const job = (facts: Partial<{
   targetShaBefore: facts.targetShaBefore ?? 'the-upstream-tip',
   upstreamSha: facts.upstreamSha ?? 'the-upstream-tip',
   sourceOnUpstream: facts.sourceOnUpstream === undefined ? null : facts.sourceOnUpstream,
+  sourceFullyApplied: facts.sourceFullyApplied === undefined ? null : facts.sourceFullyApplied,
   receiptIds: facts.receiptIds ?? ['the-receipt-the-answer-wrote'],
   sourceRef: facts.sourceRef ?? 'refs/heads/orbit/the-branch',
   startedAt: facts.startedAt === undefined ? AFTER_THE_SESSION_FINISHED : facts.startedAt,
@@ -400,6 +402,55 @@ test('a NOTHING_TO_LAND counts only on the runner’s measurement that the tip i
     + 'upstream, of the branch the work ended on, after it ended, with no work of the task’s reported '
     + 'anywhere else — and on nothing else: not the state, not the line having been at the upstream, '
     + 'not a session or task status');
+});
+
+test('a NOTHING_TO_LAND whose commits the base already had counts only where the base WAS the upstream', () => {
+  // Every row: one piece on main, and one whose only answer from the line is the runner's
+  // NOTHING_TO_LAND about a branch that carried commits, every one of which the base it was replayed
+  // onto already had (0410). It carries the project-line receipt that answer writes when it speaks for
+  // the task's work. The tip itself is not on the upstream: what is there are copies of its commits.
+  const fullyApplied = (id: string, facts: Parameters<typeof job>[0]) => ({ id, servingTasks: [
+    serving([MERGED_INTO_MAIN]),
+    serving([ALREADY_MERGED_INTO_PROJECT_BRANCH], { jobs: [job({
+      state: 'NOTHING_TO_LAND', sourceFullyApplied: true, sourceOnUpstream: false, ...facts,
+    })] }),
+  ] });
+  assert.deepEqual(criterionLanding([
+    // 2026-10-09: the line was rebuilt from main's tip, so the base the commits were found in WAS
+    // main: no main sync, the line tip and the upstream tip one commit.
+    fullyApplied('the-line-was-main', {}),
+    // The same answer from a line ahead of main: the commits are on the line, and main may not have them.
+    fullyApplied('the-line-was-ahead-of-main', ON_A_LINE_THAT_MOVED),
+    // A main sync ran, so the base was the line and main together, and the answer cannot say which
+    // of the two held the commits.
+    fullyApplied('a-main-sync-ran', { mainSyncSha: 'the-sync-merge' }),
+    // The empty branch's answer, and an answer nobody measured: read exactly as they were before.
+    fullyApplied('the-branch-was-empty', { sourceFullyApplied: false }),
+    fullyApplied('not-measured', { sourceFullyApplied: null }),
+    // Measured, and still about one branch at one moment.
+    fullyApplied('the-session-never-finished', { session: { finishedAt: null } }),
+    fullyApplied('head-ended-elsewhere', { session: { worktreeBranch: 'feat/where-the-work-went' } }),
+    // The answer wrote no receipt: another branch holds work of the task's that the line never saw.
+    { id: 'its-work-is-also-on-another-branch', servingTasks: [
+      serving([MERGED_INTO_MAIN]),
+      serving([], { jobs: [job({
+        state: 'NOTHING_TO_LAND', sourceFullyApplied: true, sourceOnUpstream: false, receiptIds: [],
+      })] }),
+    ] },
+  ], PROJECT_BRANCH), [
+    { definitionId: 'the-line-was-main', landing: 'LANDED' },
+    { definitionId: 'the-line-was-ahead-of-main', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'a-main-sync-ran', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'the-branch-was-empty', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'not-measured', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'the-session-never-finished', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'head-ended-elsewhere', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'its-work-is-also-on-another-branch', landing: 'UNKNOWN' },
+  ], 'the runner measured that every commit the branch carried was already in the base, and the base '
+    + 'was main itself: the task carried nothing main lacks, so it does not hold the criterion off '
+    + 'LANDED. On a line ahead of main the same measurement puts the work on the line, which is '
+    + 'ON_INTEGRATION_LINE like any landing there. And it is let out on that measurement, of the '
+    + 'branch the work ended on, after it ended, with no work reported elsewhere — on nothing else');
 });
 
 test('a declaration is still the whole of §1.1’s first half, whatever the line says', () => {

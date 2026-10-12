@@ -1,0 +1,98 @@
+PASS acceptance rejects missing, unmatched, skipped, failed and incomplete scenarios
+Installing the P0 lock in an isolated temporary directory
+npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+
+added 538 packages in 3s
+npm warn install-scripts 5 packages have install scripts not yet covered by allowScripts:
+npm warn install-scripts   @deepseek-ai/dsh-subprocess-local@0.2.0-rc.2 (postinstall: node scripts/ensure-spawn-helper.mjs)
+npm warn install-scripts   @google/genai@2.21.0 (preinstall: echo 'preinstall: no-op')
+npm warn install-scripts   koffi@3.1.1 (install: node ./cnoke.cjs -P . -D src/koffi --prebuild --release)
+npm warn install-scripts   node-pty@1.2.0-beta.15 (install: node scripts/prebuild.js || node-gyp rebuild; postinstall: node scripts/post-install.js)
+npm warn install-scripts   protobufjs@7.6.6 (postinstall: node scripts/postinstall)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+Real official dsh 0.2.0-rc.2; CLI sha256=1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f; P0 lock sha256=dbec679507e76e3591fe875b7b8e7c59f24f275f9af88058797891fbe0d10c85 (fflate 0.8.3 override)
+=== RUN   TestDshACPRealRunnerMultiTurn
+    dsh_acp_real_test.go:49: CLI identity: executable=/tmp/orbit-dsh-p3a-accept-LNcf1B/install/node_modules/.bin/dsh version=0.2.0-rc.2
+    dsh_acp_real_test.go:173: runner result: turn=t1 status=SUCCEEDED ACP session=8b77afa4-f31f-488a-9138-2656d6d0d340 result="P3A first committed answer" error=""
+    dsh_acp_real_test.go:182: runner result: turn=t2 status=SUCCEEDED ACP session=8b77afa4-f31f-488a-9138-2656d6d0d340 result="P3A second answer after native write" error=""
+    dsh_acp_real_test.go:229: official Messages request: #1 model=deepseek-v4-pro effort=low historyBytes=622
+    dsh_acp_real_test.go:229: official Messages request: #2 model=deepseek-v4-pro effort=low historyBytes=865
+    dsh_acp_real_test.go:229: official Messages request: #3 model=deepseek-v4-pro effort=low historyBytes=1353
+    dsh_acp_real_test.go:240: runner launch: map[argv:[--profile acp --patch /tmp/TestDshACPRealRunnerMultiTurn2296682699/001/dsh-home/orbit.patch.json] cliVersion:0.2.0-rc.2 configHash: dshHome:/tmp/TestDshACPRealRunnerMultiTurn2296682699/001/dsh-home executable:/tmp/orbit-dsh-p3a-accept-LNcf1B/install/node_modules/.bin/dsh provider:dsh runtime:acp subtype:launch]
+--- PASS: TestDshACPRealRunnerMultiTurn (0.70s)
+=== RUN   TestDshACPProcessMultiTurn
+--- PASS: TestDshACPProcessMultiTurn (0.01s)
+=== RUN   TestDshACPResponseBarrier
+--- PASS: TestDshACPResponseBarrier (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures
+=== RUN   TestDshACPStartupAndProtocolFailures/missing-executable
+--- PASS: TestDshACPStartupAndProtocolFailures/missing-executable (0.00s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unsupported-version
+--- PASS: TestDshACPStartupAndProtocolFailures/unsupported-version (0.00s)
+=== RUN   TestDshACPStartupAndProtocolFailures/malformed-stdout
+--- PASS: TestDshACPStartupAndProtocolFailures/malformed-stdout (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/wrong-protocol-version
+--- PASS: TestDshACPStartupAndProtocolFailures/wrong-protocol-version (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/eof-zero
+--- PASS: TestDshACPStartupAndProtocolFailures/eof-zero (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unclosed-tool
+--- PASS: TestDshACPStartupAndProtocolFailures/unclosed-tool (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/rpc-error-does-not-poison-next-turn
+--- PASS: TestDshACPStartupAndProtocolFailures/rpc-error-does-not-poison-next-turn (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/unknown-live-model-rejected
+--- PASS: TestDshACPStartupAndProtocolFailures/unknown-live-model-rejected (0.01s)
+=== RUN   TestDshACPStartupAndProtocolFailures/non-object-result
+--- PASS: TestDshACPStartupAndProtocolFailures/non-object-result (0.01s)
+--- PASS: TestDshACPStartupAndProtocolFailures (0.07s)
+=== RUN   TestDshACPRecordedEventMapping
+=== RUN   TestDshACPRecordedEventMapping/committed_blocks_and_known_context
+--- PASS: TestDshACPRecordedEventMapping/committed_blocks_and_known_context (0.02s)
+=== RUN   TestDshACPRecordedEventMapping/basic_multiturn
+--- PASS: TestDshACPRecordedEventMapping/basic_multiturn (0.02s)
+=== RUN   TestDshACPRecordedEventMapping/native_tools_and_failed_tool
+--- PASS: TestDshACPRecordedEventMapping/native_tools_and_failed_tool (0.02s)
+--- PASS: TestDshACPRecordedEventMapping (0.06s)
+=== RUN   TestDshACPStatusAndUnclosedTools
+=== RUN   TestDshACPStatusAndUnclosedTools/recorded_errors_and_next_turn_recovery
+--- PASS: TestDshACPStatusAndUnclosedTools/recorded_errors_and_next_turn_recovery (0.02s)
+=== RUN   TestDshACPStatusAndUnclosedTools/success
+--- PASS: TestDshACPStatusAndUnclosedTools/success (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/cancelled
+--- PASS: TestDshACPStatusAndUnclosedTools/cancelled (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/max_tokens
+--- PASS: TestDshACPStatusAndUnclosedTools/max_tokens (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/refusal
+--- PASS: TestDshACPStatusAndUnclosedTools/refusal (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/missing_stop
+--- PASS: TestDshACPStatusAndUnclosedTools/missing_stop (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/unknown_stop
+--- PASS: TestDshACPStatusAndUnclosedTools/unknown_stop (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/rpc_error
+--- PASS: TestDshACPStatusAndUnclosedTools/rpc_error (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/unfinished_success
+--- PASS: TestDshACPStatusAndUnclosedTools/unfinished_success (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/unfinished_disconnect
+--- PASS: TestDshACPStatusAndUnclosedTools/unfinished_disconnect (0.00s)
+=== RUN   TestDshACPStatusAndUnclosedTools/unfinished_cancelled
+--- PASS: TestDshACPStatusAndUnclosedTools/unfinished_cancelled (0.00s)
+--- PASS: TestDshACPStatusAndUnclosedTools (0.02s)
+=== RUN   TestDshACPEventAttribution
+--- PASS: TestDshACPEventAttribution (0.00s)
+=== RUN   TestDshACPRunnerProcessFailure
+--- PASS: TestDshACPRunnerProcessFailure (0.01s)
+=== RUN   TestDshACPRunnerMultiTurn
+--- PASS: TestDshACPRunnerMultiTurn (0.01s)
+=== RUN   TestProviderRuntimesDeclareOneTransportPerEngine
+--- PASS: TestProviderRuntimesDeclareOneTransportPerEngine (0.00s)
+=== RUN   TestRuntimeProviderResolvesEveryDeclaredRuntime
+--- PASS: TestRuntimeProviderResolvesEveryDeclaredRuntime (0.00s)
+=== RUN   TestDshACPDispatchPreservesLegacyDeepSeek
+--- PASS: TestDshACPDispatchPreservesLegacyDeepSeek (0.00s)
+=== RUN   TestEverySessionLoopThatCannotSteerRefusesOne
+--- PASS: TestEverySessionLoopThatCannotSteerRefusesOne (0.00s)
+=== RUN   TestOnlyAnImplementedSteerIsDeclaredToTheControlPlane
+--- PASS: TestOnlyAnImplementedSteerIsDeclaredToTheControlPlane (0.00s)
+PASS
+ok  	orbit	0.909s
+P3a acceptance passed: 37 named scenarios, none missing or skipped.

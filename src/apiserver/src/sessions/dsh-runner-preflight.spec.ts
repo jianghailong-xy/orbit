@@ -23,7 +23,7 @@ type ProviderRow = ReturnType<typeof row>;
 
 function fixture(options: {
   provider?: string; providerBuiltin?: boolean; seed?: string; capabilities?: string[];
-  capabilitiesReportedAt?: Date | null; rows?: ProviderRow[]; status?: RunStatus;
+  capabilitiesReportedAt?: Date | null; rows?: ProviderRow[]; status?: RunStatus; permissionMode?: string;
 } = {}) {
   const creates: Array<Record<string, unknown>> = [];
   const updates: Array<Record<string, unknown>> = [];
@@ -34,7 +34,7 @@ function fixture(options: {
   };
   const session = {
     id, ownerId, provider: options.provider ?? 'dsh', providerBuiltin: options.providerBuiltin ?? true,
-    model: null, permissionMode: 'default', usesRuntimeDefaultModel: true,
+    model: null, permissionMode: options.permissionMode ?? 'default', usesRuntimeDefaultModel: true,
     runtimeSessionId: '55555555-5555-4555-8555-555555555555', numTurns: 3,
     startedAt: new Date(), status: options.status ?? RunStatus.FAILED,
     assignedRunnerId: runner.id, assignedRunner: runner, owner: { preferences: {} },
@@ -42,15 +42,19 @@ function fixture(options: {
     deletedAt: null, mergeStatus: null, commitStatus: null,
   };
   const db = {
-    user: { findUnique: async () => ({ preferences: {} }) },
+    // An admin, for whom a shared row resolves as any row of theirs does (usableProviderScope).
+    user: { findUnique: async () => ({ preferences: {}, role: 'ADMIN' }) },
     workspace: { findFirst: async () => ({ runnerId: runner.id, enableWorktree: false }) },
     runner: { findFirst: async () => runner },
     modelProvider: {
       findFirst: async ({ where }: { where: { slug: string; enabled?: boolean } }) =>
         options.rows?.find((provider) => provider.slug === where.slug &&
           (where.enabled === undefined || provider.enabled)) ?? null,
+      // The owner's keys: what the built-in `dsh` picks its default DeepSeek key from (§3.3).
+      findMany: async () => (options.rows ?? []).filter((provider) => provider.enabled),
     },
     providerPool: { findFirst: async () => null },
+    providerSlugAlias: { findUnique: async () => null },
     session: {
       findFirst: async () => session,
       findUniqueOrThrow: async () => session,
@@ -98,7 +102,8 @@ async function rejectsUpgrade(operation: () => Promise<unknown>) {
 test('P1b dsh preflight: direct Harness creation requires a heartbeat capability', async () => {
   for (const capabilities of [undefined, [], ['provider:claude'], ['dsh'], ['provider:dsh']]) {
     for (const permissionMode of [undefined, PermissionMode.BYPASS]) {
-      const f = fixture({ capabilities,
+      // The built-in `dsh` runs on the owner's default DeepSeek key (docs/provider-engine-contract.md §3.3).
+      const f = fixture({ capabilities, rows: [row('my-deepseek', 'claude')],
         capabilitiesReportedAt: !capabilities || capabilities.includes('provider:dsh') ? null : new Date() });
       await rejectsUpgrade(() => f.service.create(ownerId, { ...opening, provider: 'dsh', permissionMode }));
       assert.deepEqual(f.creates, [], JSON.stringify(capabilities));
@@ -142,16 +147,18 @@ test('P1b dsh preflight: resume and config reject withdrawn direct and borrowed 
 
 test('P1b dsh preflight: capable runners still reject unverified Harness permissions', async () => {
   for (const operation of ['create', 'resume', 'config']) {
-    const f = fixture({ capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(),
-      status: operation === 'config' ? RunStatus.AWAITING_INPUT : RunStatus.FAILED });
+    // Plan has no enforceable Harness equivalent (P4); Default, Auto and Don't Ask are admitted. The built-in
+    // `dsh` creates on the owner's default DeepSeek key (§3.3).
+    const f = fixture({ capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(), rows: [row('my-deepseek', 'claude')],
+      status: operation === 'config' ? RunStatus.AWAITING_INPUT : RunStatus.FAILED, permissionMode: PermissionMode.PLAN });
     await assert.rejects(() => operation === 'create'
-      ? f.service.create(ownerId, { ...opening, provider: 'dsh' })
+      ? f.service.create(ownerId, { ...opening, provider: 'dsh', permissionMode: PermissionMode.PLAN })
       : operation === 'resume'
         ? f.service.resume(ownerId, id, continuation)
         : f.service.updateConfig(ownerId, id, { effort: 'high' }),
     (error: unknown) => {
       assert.ok(error instanceof BadRequestException);
-      assert.match(error.message, /permission modes require an enforced file policy/);
+      assert.match(error.message, /DeepSeek Harness cannot enforce permission mode "plan"/);
       return true;
     });
     assert.deepEqual(f.creates, []);
@@ -176,11 +183,13 @@ test('P1b dsh preflight: existing engines and legacy DeepSeek routes remain avai
 
 test('P1b dsh preflight: unresolved and disabled provider identities fail closed', async () => {
   for (const rows of [[], [row('harness-key', 'dsh', false)], [row('harness-key', 'unknown-runtime')]]) {
+    // A key on a protocol no engine speaks runs nowhere (PROVIDER_ENGINE_INCOMPATIBLE, §3.2).
     const explicit = fixture({ rows });
-    await assert.rejects(() => explicit.service.create(ownerId, { ...opening, provider: 'harness-key' }), /provider.*not available/);
+    await assert.rejects(() => explicit.service.create(ownerId, { ...opening, provider: 'harness-key' }),
+      /provider.*not available|cannot run on any engine/);
     assert.deepEqual(explicit.creates, []);
     const inherited = fixture({ rows, seed: 'harness-key' });
-    await assert.rejects(() => inherited.service.create(ownerId, opening), /provider.*not available/);
+    await assert.rejects(() => inherited.service.create(ownerId, opening), /provider.*not available|cannot run on any engine/);
     assert.deepEqual(inherited.creates, []);
     for (const operation of ['resume', 'config']) {
       const f = fixture({ rows, provider: 'harness-key', providerBuiltin: false,
@@ -208,15 +217,29 @@ test('P1b dsh dispatch: unknown runtimes and unavailable providers never resolve
 
 test('P1b dsh dispatch: capability filters preserve configured dsh keyword collisions', async () => {
   const seen: unknown[] = [];
-  const db = { modelProvider: { findMany: async (query: unknown) => { seen.push(query); return [{ slug: 'harness-key' }]; } } };
+  const db = {
+    user: { findUnique: async () => ({ role: 'ADMIN' }) },
+    modelProvider: { findMany: async (query: unknown) => { seen.push(query); return [{ slug: 'harness-key' }]; } },
+  };
+  // A session recorded on the runtime is filtered by that alone (migration 0414); the collisions are
+  // preserved where they still decide anything, on a row without an engine.
   assert.deepEqual(await providerDispatchWhereOn(db as never, ownerId, AgentProvider.DSH), {
     OR: [
-      { provider: AgentProvider.DSH, providerBuiltin: true },
-      { provider: { in: ['harness-key'] }, providerBuiltin: false },
+      { engine: AgentProvider.DSH },
+      { AND: [
+        { engine: null },
+        { OR: [
+          { provider: AgentProvider.DSH, providerBuiltin: true },
+          { provider: { in: ['harness-key'] }, providerBuiltin: false },
+        ] },
+      ] },
     ],
   });
   assert.deepEqual(seen[0], { where: { runtime: AgentProvider.DSH, enabled: true, OR: [{ ownerId: null }, { ownerId }] }, select: { slug: true } });
   assert.deepEqual(await providerDispatchWhereOn(db as never, ownerId, AgentProvider.ANTIGRAVITY), {
-    provider: { in: ['antigravity', 'harness-key'] },
+    OR: [
+      { engine: AgentProvider.ANTIGRAVITY },
+      { AND: [{ engine: null }, { provider: { in: ['antigravity', 'harness-key'] } }] },
+    ],
   });
 });

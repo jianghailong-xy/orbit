@@ -30,28 +30,41 @@ export interface CompletionEvidenceRevision {
 /** The event an evidence revision is recorded under — and in an Automatic project delivered as. */
 const COMPLETION_EVIDENCE_EVENT: CoordinatorWakeEvent = 'COMPLETION_EVIDENCE_REVISED';
 
-function completionEvidenceVersion(input: CompletionEvidenceRevision): string {
-  return [input.revision, input.criterionRevision, input.evidenceDigest].join(':');
+/**
+ * The revision's own three columns — and, for the hand-over a confirmed move makes, the project the
+ * task was moved into. The key names no project (`wakeIdempotencyKey`), which was sound while a
+ * task never left one; a revision that moves undecided has to be handed to its new project under a
+ * key the delivery made before the move cannot have taken.
+ */
+function completionEvidenceVersion(input: CompletionEvidenceRevision, movedInto?: string | null): string {
+  const version = [input.revision, input.criterionRevision, input.evidenceDigest].join(':');
+  return movedInto ? `${version}:moved-into:${movedInto}` : version;
 }
 
 /**
  * Every version below is made only from the immutable fact that changed. Session lifecycle,
  * project task-set membership and timestamps are deliberately absent.
+ *
+ * `movedFromProjectId` marks the hand-over a confirmed MOVE_TASK makes of a revision still waiting
+ * for its decision (`TasksService.handOverMovedEvidence`): the same revision, now to be decided in
+ * `projectId`, keyed with that project so the delivery made before the move does not dedupe it.
  */
 export function completionEvidenceRevisedFact(input: CompletionEvidenceRevision & {
   projectId: string;
   taskId: string;
+  movedFromProjectId?: string;
 }): WakeFact {
   return {
     event: 'COMPLETION_EVIDENCE_REVISED',
     projectId: input.projectId,
     subjectType: 'TASK',
     subjectId: input.taskId,
-    subjectVersion: completionEvidenceVersion(input),
+    subjectVersion: completionEvidenceVersion(input, input.movedFromProjectId ? input.projectId : null),
     detail: {
       evidenceRevision: input.revision,
       criterionRevision: input.criterionRevision,
       evidenceDigest: input.evidenceDigest,
+      ...(input.movedFromProjectId ? { movedFromProjectId: input.movedFromProjectId } : {}),
     },
   };
 }
@@ -61,16 +74,18 @@ export function completionEvidenceRevisedFact(input: CompletionEvidenceRevision 
  * without building it — for a READ that looks a revision's delivery back up
  * (`tasks/pending-evidence-judgments.ts`), which is not a producer of the fact and should not be
  * counted as one by the census of producers (`coordinator-disabled-negatives.spec.ts`).
- * `completion-input.spec.ts` holds the two spellings to one key.
+ * `completion-input.spec.ts` holds the two spellings to one key. `movedInto` is the project a moved
+ * task's revision was handed over to, as the fact's `projectId` is when `movedFromProjectId` is set.
  */
 export function completionEvidenceWakeKey(
   taskId: string,
   input: CompletionEvidenceRevision,
+  movedInto?: string,
 ): string {
   return wakeIdempotencyKey({
     event: COMPLETION_EVIDENCE_EVENT,
     subjectType: 'TASK',
     subjectId: taskId,
-    subjectVersion: completionEvidenceVersion(input),
+    subjectVersion: completionEvidenceVersion(input, movedInto),
   });
 }

@@ -1,0 +1,19 @@
+base tree: f78e93f615fceda94eeea0c9cdd400fb44b7949e, with the delivery's specs copied in:
+ M src/web/ui-migration/choices-first-frame.browser.mjs
+ M src/web/ui-migration/choices-first-option.browser.mjs
+ M src/web/ui-migration/choices-lifecycle.browser.mjs
+ M src/web/ui-migration/choices-motion.browser.mjs
+ M src/web/ui-migration/choices-open-value.browser.mjs
+ M src/web/ui-migration/choices-submenu-geometry.browser.mjs
+ M src/web/ui-migration/choices.browser.mjs
+ M src/web/ui-migration/composer-checks.mjs
+ M src/web/ui-migration/composer-cost.browser.mjs
+ M src/web/ui-migration/composer-input.browser.mjs
+ M src/web/ui-migration/composer.browser.mjs
+ M src/web/ui-migration/controls.browser.mjs
+ M src/web/ui-migration/foundation.browser.mjs
+ M src/web/ui-migration/overlays-app-frame.browser.mjs
+ M src/web/ui-migration/overlays-close-hover.browser.mjs
+ M src/web/ui-migration/overlays.browser.mjs
+ M src/web/ui-migration/toasts.browser.mjs
+after the runs:

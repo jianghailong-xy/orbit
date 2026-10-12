@@ -1,0 +1,92 @@
+[
+ {
+  "group": "session page",
+  "change": [
+   "A12",
+   "A13",
+   "A14"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/breakpoint-961-session.png",
+   "chromium-dark-desktop/notification-error.png",
+   "chromium-dark-desktop/session-attachment-menu.png",
+   "chromium-dark-desktop/session-attachment-staged.png",
+   "chromium-dark-desktop/session-composer-focus.png",
+   "chromium-dark-desktop/session-idle.png",
+   "chromium-dark-desktop/session-streaming.png",
+   "chromium-light-desktop/breakpoint-961-session.png",
+   "chromium-light-desktop/notification-error.png",
+   "chromium-light-desktop/session-attachment-menu.png",
+   "chromium-light-desktop/session-attachment-staged.png",
+   "chromium-light-desktop/session-composer-focus.png",
+   "chromium-light-desktop/session-idle.png",
+   "chromium-light-desktop/session-streaming.png",
+   "webkit-dark-desktop/breakpoint-961-session.png",
+   "webkit-dark-desktop/session-attachment-menu.png",
+   "webkit-dark-desktop/session-attachment-staged.png",
+   "webkit-dark-desktop/session-composer-focus.png",
+   "webkit-dark-desktop/session-idle.png",
+   "webkit-dark-desktop/session-streaming.png",
+   "webkit-light-desktop/breakpoint-961-session.png",
+   "webkit-light-desktop/session-attachment-menu.png",
+   "webkit-light-desktop/session-attachment-staged.png",
+   "webkit-light-desktop/session-composer-focus.png",
+   "webkit-light-desktop/session-idle.png",
+   "webkit-light-desktop/session-streaming.png"
+  ],
+  "mainCommits": [
+   "33e0e2e09",
+   "cbe6a6635",
+   "3960c19c2",
+   "9d3751ec2"
+  ],
+  "projectLine": [
+   "cbe6a6635",
+   "17980cb7c"
+  ],
+  "generatedFrom": "full-9d3751ec2"
+ },
+ {
+  "group": "session page",
+  "change": [
+   "A13",
+   "A14"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/breakpoint-959-session.png",
+   "chromium-dark-phone/notification-error.png",
+   "chromium-dark-phone/session-attachment-menu.png",
+   "chromium-dark-phone/session-attachment-staged.png",
+   "chromium-dark-phone/session-composer-focus.png",
+   "chromium-dark-phone/session-idle.png",
+   "chromium-dark-phone/session-streaming.png",
+   "chromium-light-desktop/breakpoint-959-session.png",
+   "chromium-light-phone/notification-error.png",
+   "chromium-light-phone/session-attachment-menu.png",
+   "chromium-light-phone/session-attachment-staged.png",
+   "chromium-light-phone/session-composer-focus.png",
+   "chromium-light-phone/session-idle.png",
+   "chromium-light-phone/session-streaming.png",
+   "webkit-dark-desktop/breakpoint-959-session.png",
+   "webkit-dark-phone/session-attachment-menu.png",
+   "webkit-dark-phone/session-attachment-staged.png",
+   "webkit-dark-phone/session-composer-focus.png",
+   "webkit-dark-phone/session-idle.png",
+   "webkit-dark-phone/session-streaming.png",
+   "webkit-light-desktop/breakpoint-959-session.png",
+   "webkit-light-phone/session-attachment-menu.png",
+   "webkit-light-phone/session-attachment-staged.png",
+   "webkit-light-phone/session-composer-focus.png",
+   "webkit-light-phone/session-idle.png",
+   "webkit-light-phone/session-streaming.png"
+  ],
+  "mainCommits": [
+   "3960c19c2",
+   "9d3751ec2"
+  ],
+  "projectLine": [
+   "17980cb7c"
+  ],
+  "generatedFrom": "full-9d3751ec2"
+ }
+]

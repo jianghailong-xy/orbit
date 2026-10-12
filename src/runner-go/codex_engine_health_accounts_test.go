@@ -188,11 +188,11 @@ func TestCodexEngineHealthAccountsOnlyForAnInstalledEngine(t *testing.T) {
 	// Claude keeps a login per directory too now, so it reports its own Default — one account, no
 	// slot added — while an engine whose CLI has a single login for the machine reports none.
 	writeFakeBin(t, binDir, "claude", `case "$1 $2" in "auth status") echo '{"loggedIn":true}' ;; *) exit 2 ;; esac`)
-	writeFakeBin(t, binDir, "kimi", `case "$1 $2" in "auth status") echo '{"loggedIn":true}' ;; *) exit 2 ;; esac`)
+	writeFakeBin(t, binDir, "opencode", `case "$1 $2" in "auth list") echo '1 credential' ;; *) exit 2 ;; esac`)
 	claude, _ := specFor(providerClaude)
-	kimi, _ := specFor(providerKimi)
+	opencode, _ := specFor(providerOpenCode)
 
-	engines := heartbeatEngines(t, probeEngines([]engineSpec{claude, kimi, codexSpecForTest(t)}, binDir))
+	engines := heartbeatEngines(t, probeEngines([]engineSpec{claude, opencode, codexSpecForTest(t)}, binDir))
 	claudeAccounts, _ := engines[0]["accounts"].([]interface{})
 	if len(claudeAccounts) != 1 {
 		t.Fatalf("claude accounts = %#v, want just its Default", engines[0]["accounts"])
@@ -201,7 +201,7 @@ func TestCodexEngineHealthAccountsOnlyForAnInstalledEngine(t *testing.T) {
 		t.Fatalf("claude account = %#v, want Default at ~/.claude", got)
 	}
 	if _, ok := engines[1]["accounts"]; ok {
-		t.Fatalf("kimi reported accounts: %#v", engines[1])
+		t.Fatalf("opencode reported accounts: %#v", engines[1])
 	}
 	if accounts, _ := engines[2]["accounts"].([]interface{}); len(accounts) != 2 {
 		t.Fatalf("codex accounts = %#v, want Default and Work", engines[2]["accounts"])

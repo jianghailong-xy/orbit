@@ -1,0 +1,50 @@
+{
+  "reviewedSourceCommit": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+  "latestSourceCommit": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+  "latestWebTreeUnchanged": true,
+  "method": "Direct view_image of unmodified PNG files, alongside complete-pixel audit; no generated images or retouched screenshots.",
+  "observations": [
+    {
+      "name": "nested mobile theme switch",
+      "after": "two-browser-smoke/webkit-dark-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+      "finding": "The test switches dark to light. Notification remains at the viewport top over the nested modal; diagnostic and Copy error remain legible."
+    },
+    {
+      "name": "expanded pinned and passing stack",
+      "after": "two-browser-smoke/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "reference": "main-stack-reference/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "finding": "All pinned cards and transient notifications remain visible without overlap. Main puts Show less after passing notifications; project historical screenshot placed it before them."
+    },
+    {
+      "name": "phone confirmation failure",
+      "after": "toasts-run/webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+      "before": "../p2.3/revision-3/toasts-run/webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+      "finding": "Toast pixels and viewport positioning match. The visible difference is the Save button fill, outside the notification (x294..358,y224..256). No claim that the whole page is pixel-identical."
+    },
+    {
+      "name": "phone selected diagnostic",
+      "after": "toasts-run/webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+      "before": "../p2.3/revision-3/toasts-run/webkit-light-phone--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+      "finding": "The after image shows the selected diagnostic text highlight where the historical image shows unselected text. Rest of screenshot matches by pixel audit; images remain unmodified."
+    },
+    {
+      "name": "desktop selected diagnostic",
+      "after": "first-matrix-diagnostic/webkit-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+      "before": "../p2.3/revision-3/toasts-run/webkit-dark-desktop--copyable-diagnostics-and-live-announcements-survive-nested-overlays-and-theme-changes--nested-toast-opposite-theme.png",
+      "finding": "Historical image retains blue selected-text highlight; later image clears it. Difference lies at diagnostic text x954..1099,y69..83."
+    }
+  ],
+  "finalDirectReview": {
+    "sourceCommit": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "images": [
+      {
+        "file": "latest-toasts-run/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+        "finding": "Two pinned cards, a short pill and the Undo result are distinct, right-aligned and do not overlap one another. Show less follows the whole stack as main specifies."
+      },
+      {
+        "file": "latest-toasts-run/webkit-dark-phone--keyed-transient-and-pinned-transitions-retain-one-slot-without-replaying-entrance-inside-nested-modals--keyed-attention.png",
+        "finding": "The one attention card stays at the phone viewport top across the bottom drawer and nested dialog. Retry merge and Copy error are visible; no duplicate Open session is rendered."
+      }
+    ]
+  }
+}

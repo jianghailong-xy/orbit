@@ -1,0 +1,247 @@
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs --project=webkit-dark-phone --grep unchanged appearance
+
+[WebServer] (node:1953737) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:1953834) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.6s)
+  ✘  2 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (936ms)
+(node:1954088) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (903ms)
+
+
+  1) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -16,11 +16,11 @@
+          "lineHeight": "18.4px",
+          "padding": "0px",
+          "pointerEvents": "none",
+          "tag": "SECTION",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -39,11 +39,11 @@
+          "lineHeight": "20px",
+          "padding": "12px 12px 12px 14px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -62,11 +62,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedule",
+    -     "width": 322,
+    +     "width": 330,
+          "x": 31,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -85,11 +85,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "SPAN",
+          "text": "Couldn't save the schedule",
+    -     "width": 256,
+    +     "width": 264,
+          "x": 63,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -109,11 +109,11 @@
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "BUTTON",
+          "text": "",
+          "width": 22,
+    -     "x": 331,
+    +     "x": 339,
+          "y": 69,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+          "border": "1px solid rgb(52, 52, 55)",
+    @@ -131,11 +131,11 @@
+          "lineHeight": "18px",
+          "padding": "7px 10px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "revision 12 is stale",
+    -     "width": 290,
+    +     "width": 298,
+          "x": 63,
+          "y": 99,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+
+      54 |     const after = await measure(region);
+      55 |     await attach(info, 'appearance', { before, after });
+    > 56 |     expect(after).toEqual(before);
+         |                   ^
+      57 |     await shot(info, 'with-overlay', region);
+      58 |     await shot(info, 'notification-and-overlay', page);
+      59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19
+
+    Error Context: .toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-existin-02f2d-r-with-unchanged-appearance-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -16,11 +16,11 @@
+          "lineHeight": "18.4px",
+          "padding": "0px",
+          "pointerEvents": "none",
+          "tag": "SECTION",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "linear-gradient(rgba(245, 74, 69, 0.16), rgba(245, 74, 69, 0.16)) repeat scroll 0% 0% / auto padding-box border-box, rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -39,11 +39,11 @@
+          "lineHeight": "20px",
+          "padding": "12px 12px 12px 14px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedulerevision 12 is staleCopy error",
+    -     "width": 350,
+    +     "width": 358,
+          "x": 16,
+          "y": 56,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -62,11 +62,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "Couldn't save the schedule",
+    -     "width": 322,
+    +     "width": 330,
+          "x": 31,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -85,11 +85,11 @@
+          "lineHeight": "20px",
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "SPAN",
+          "text": "Couldn't save the schedule",
+    -     "width": 256,
+    +     "width": 264,
+          "x": 63,
+          "y": 69,
+        },
+        Object {
+          "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+    @@ -109,11 +109,11 @@
+          "padding": "0px",
+          "pointerEvents": "auto",
+          "tag": "BUTTON",
+          "text": "",
+          "width": 22,
+    -     "x": 331,
+    +     "x": 339,
+          "y": 69,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+          "border": "1px solid rgb(52, 52, 55)",
+    @@ -131,11 +131,11 @@
+          "lineHeight": "18px",
+          "padding": "7px 10px",
+          "pointerEvents": "auto",
+          "tag": "DIV",
+          "text": "revision 12 is stale",
+    -     "width": 290,
+    +     "width": 298,
+          "x": 63,
+          "y": 99,
+        },
+        Object {
+          "background": "rgb(43, 43, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+
+      54 |     const after = await measure(region);
+      55 |     await attach(info, 'appearance', { before, after });
+    > 56 |     expect(after).toEqual(before);
+         |                   ^
+      57 |     await shot(info, 'with-overlay', region);
+      58 |     await shot(info, 'notification-and-overlay', page);
+      59 |     const dismiss = region.getByRole('button', { name: 'Dismiss', exact: true });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts.browser.mjs:56:19
+
+    Error Context: .toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts.browser.mjs-existin-33673-r-with-unchanged-appearance-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance 
+    [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance 
+  1 passed (5.3s)
+npm error Lifecycle script `test:ui-toasts` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/toasts.config.mjs --project=webkit-dark-phone --grep 'unchanged appearance'

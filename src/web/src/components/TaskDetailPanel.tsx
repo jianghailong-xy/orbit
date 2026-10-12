@@ -15,8 +15,20 @@ import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { RunnerModelCatalog } from '@orbit/shared';
-import { Alert, Avatar, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
+import { AgentProvider, ALL_ENGINES, ENGINE_CLI_NAMES, isEngine, type RunnerModelCatalog } from '@orbit/shared';
+import { Alert } from './ui/Alert';
+import { Avatar } from './ui/Avatar';
+import { Button } from './ui/Button';
+import { Combobox } from './ui/Combobox';
+import { Dialog } from './ui/Dialog';
+import { Menu } from './ui/Menu';
+import { Popconfirm } from './ui/Popconfirm';
+import { Segmented } from './ui/Segmented';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
+import { Switch } from './ui/Switch';
+import { Textarea } from './ui/Textarea';
+import { Tooltip } from './ui/Tooltip';
 import { Fragment, lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
@@ -24,20 +36,28 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api, getShareLink, type ModelHintLevel, type ModelHintOption, type TaskRunRoute } from '../api';
 import { copyText } from '../lib/clipboard';
+import { mainBranchName } from '../lib/projectStart';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { reportTaskRunConflict, type TaskRunConflictToast } from './TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
 import {
-  modelOptionsForProvider,
+  defaultEngineOf,
+  isLoginProvider,
+  modelOptionsFor,
+  providerEngines,
+  sessionEngineOf,
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
-import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
+import { currentProviderChoice, engineProviders, engineTitleFor, type ChoiceSources } from '../lib/sessionProviderChoices';
+import { BrandMark } from './NewSessionProviderHero';
 import { encodeId } from '../lib/idCodec';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration, type FilterableTask } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
 import { meQuery, ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
+import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
+import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
@@ -416,7 +436,7 @@ export function ownerConfirmedTask(
  * loses the appointment they set. Saying so is cheaper than a confirmation dialog, and it is the
  * same sentence the Start at editor carries, so the two cannot disagree.
  *
- * '' means no tooltip at all — antd renders nothing for an empty title, which is right for an
+ * '' means no tooltip at all — the Tooltip renders nothing for empty content, which is right for an
  * unscheduled task with nothing standing in its way.
  *
  * Pure and exported: the hint lives inside a Tooltip, which a static render reduces to an
@@ -575,7 +595,10 @@ interface WorkspaceRow {
   name: string;
   runnerId?: string | null;
   antigravityKeyAvailableByRunner?: Record<string, boolean>;
-  /** The workspace's own provider — what a task with no pin of its own inherits. */
+  /** What a task with no pin of its own inherits: the engine and the provider its project last ran
+   *  (workspace-provider.ts). `provider` is the deprecated alias of `lastProvider`. */
+  lastEngine?: string | null;
+  lastProvider?: string | null;
   provider?: string | null;
   /** Smart model selection: its task runs get a model and effort picked per run. */
   modelRouting?: boolean;
@@ -605,6 +628,7 @@ export function TaskDetailPanel({
   // opens, under the dialog's own key — so the panel itself asks nothing more on the way in.
   const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
   const shareQ = useQuery({
     queryKey: shareLinkQueryKey('TASK', taskId),
     queryFn: () => getShareLink('TASK', taskId),
@@ -763,38 +787,85 @@ export function TaskDetailPanel({
     queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
   });
 
-  // The provider/model override pickers below need the same two sources the workspace and New
-  // Session pickers use: the owner's configured (BYOK) providers, and the model catalogue the
-  // assignee's runner reported — model ids are per-machine, so they come from that runner.
+  // The engine/provider/model pins below need the same sources the New Session pickers use: the
+  // owner's keys and account pools — the shared pools they are in first, as the composer lists them —
+  // and the model catalogue the assignee's runner reported — model ids are per-machine, so they come
+  // from that runner.
   const providersQ = useQuery(providersQuery());
+  const accountPoolsQ = useQuery(providerPoolsQuery());
+  const sharedPoolsQ = useQuery(sharedPoolsQuery());
   const runnersQ = useQuery(runnersQuery());
-  const configuredProviders: ConfiguredProvider[] = providersQ.data ?? [];
+  const accountPools = useMemo(
+    () => [...(sharedPoolsQ.data ?? []).map(sharedPoolAsProviderPool), ...(accountPoolsQ.data ?? [])],
+    [sharedPoolsQ.data, accountPoolsQ.data],
+  );
+  const configuredProviders: ConfiguredProvider[] = useMemo(
+    () => [...(providersQ.data ?? []), ...poolsAsProviders(accountPools)],
+    [providersQ.data, accountPools],
+  );
   const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
   const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
   const navigate = useNavigate();
-  const runProviderChoices = providerChoices(
-    configuredProviders,
-    assigneeRunner?.modelCatalog,
-    assigneeRunner?.runtimeDefaultModels,
-    undefined,
-    [],
-    assigneeRunner?.planUsage,
-    assigneeRunner?.antigravity,
-    assigneeWorkspace
+  // What an unpinned task runs on: what its assignee's project last ran, engine and provider both.
+  const assigneeProvider = assigneeWorkspace?.lastProvider ?? assigneeWorkspace?.provider ?? AgentProvider.CLAUDE;
+  const assigneeEngine = sessionEngineOf(assigneeWorkspace?.lastEngine, assigneeProvider, configuredProviders);
+  // The task's own pins (docs/provider-engine-contract.md §1.2): an engine, a credential it runs, a
+  // model. A provider pinned alone — by an older client — runs on its default engine.
+  const pinnedProvider: string | null = q.data?.provider ?? null;
+  const pinnedEngine: AgentProvider | null = isEngine(q.data?.engine) ? q.data.engine : null;
+  const runEngine: AgentProvider =
+    pinnedEngine ?? (pinnedProvider ? (defaultEngineOf(pinnedProvider, configuredProviders) ?? assigneeEngine) : assigneeEngine);
+  // This panel judges no engine health (it has none to), only what the assignee's runner says about
+  // DeepSeek Harness and Antigravity — the two the server admits on the runner's own word.
+  const choiceSources: ChoiceSources = {
+    configured: configuredProviders,
+    modelCatalog: assigneeRunner?.modelCatalog,
+    runtimeDefaultModels: assigneeRunner?.runtimeDefaultModels,
+    pools: accountPools,
+    antigravity: assigneeRunner?.antigravity,
+    antigravityKeyAvailable: assigneeWorkspace
       ? assigneeWorkspace.antigravityKeyAvailableByRunner?.[assigneeRunner?.id] === true
       : assigneeRunner?.antigravity?.envKeyAvailable === true,
-  );
-  // Task pins already offer OpenCode; preserve it while applying Gemini's admission state.
-  runProviderChoices.splice(3, 0, currentProviderChoice('opencode', runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders));
-  if (q.data?.provider && !runProviderChoices.some((choice) => choice.slug === q.data.provider)) {
-    runProviderChoices.unshift(currentProviderChoice(q.data.provider, runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders, assigneeRunner?.runtimeDefaultModels, assigneeRunner?.antigravity));
-  }
-  // The provider whose model space the Model picker lists: the task's own pin when it has one,
-  // otherwise the assignee workspace's — so the models offered always match what the run will use.
-  const effectiveProvider = q.data?.provider ?? assigneeWorkspace?.provider ?? null;
+    dshRunner: assigneeRunner,
+  };
+  // Past the engine's default credential — its own sign-in on the runner, OpenCode's own configuration,
+  // DeepSeek Harness's first DeepSeek key, which "Engine default" stands for — the account pools and
+  // the keys the engine runs. A pinned provider it does not list is kept on top, so the box still says
+  // what is pinned.
+  const engineDefaultKey = engineProviders(AgentProvider.DSH, choiceSources).find((c) => c.kind === 'key') ?? null;
+  const pinCredentials = engineProviders(runEngine, choiceSources).filter((c) => c.kind === 'pool' || c.kind === 'key');
+  const pinnedOffList =
+    pinnedProvider && !pinCredentials.some((c) => c.slug === pinnedProvider)
+      ? currentProviderChoice(runEngine, pinnedProvider, pinCredentials, choiceSources)
+      : null;
+  const assigneeRunnerName = assigneeRunner?.displayName || assigneeRunner?.name;
+  /** What "Engine default" runs a task on (§3.2, only an engine named): the runner's own sign-in, OpenCode's own configuration, the first DeepSeek key. */
+  const engineDefaultLabel =
+    runEngine === AgentProvider.DSH
+      ? (engineDefaultKey?.label ?? 'first DeepSeek key')
+      : runEngine === AgentProvider.OPENCODE
+        ? "OpenCode's own sign-in"
+        : assigneeRunnerName
+          ? `sign-in on ${assigneeRunnerName}`
+          : 'runner sign-in';
+  const pinLabelOf = (slug: string): string => {
+    const pin = pinCredentials.find((c) => c.slug === slug) ?? pinnedOffList;
+    if (pin?.kind === 'login' || isLoginProvider(slug)) return assigneeRunnerName ? `Sign-in on ${assigneeRunnerName}` : 'Runner sign-in';
+    if (pin?.kind === 'opencode') return pin.label;
+    return pin?.label ?? slug;
+  };
+  // The credential whose model space the Model picker lists: the task's own pin, the engine's default
+  // credential under an engine pinned alone, else the assignee's.
+  const runProvider: string =
+    pinnedProvider ??
+    (pinnedEngine
+      ? pinnedEngine === AgentProvider.DSH
+        ? (engineDefaultKey?.slug ?? AgentProvider.DSH)
+        : pinnedEngine
+      : assigneeProvider);
   const modelOptions = useMemo(
-    () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
-    [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
+    () => modelOptionsFor(runEngine, runProvider, assigneeRunner?.modelCatalog, configuredProviders),
+    [runEngine, runProvider, assigneeRunner?.modelCatalog, configuredProviders],
   );
   // The account's switch for smart model selection. Off (the default), none of it is drawn here:
   // no Suggested, no ✦ placeholder, and runs read as they did before routing.
@@ -858,20 +929,49 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error("Couldn't change the assignee", e.message),
   });
 
-  // Pin (or clear, when null) the provider/model this task's runs use instead of the assignee
-  // workspace's. Clearing the provider clears the model with it: a model id only means anything
-  // inside one provider's model space, so leaving it behind would pin a stale id.
+  // Pin (or clear, when null) the engine/provider/model this task's runs use instead of the assignee
+  // workspace's. Moving either clears the model with it: a model id only means anything inside one
+  // engine and provider's model space, so leaving it behind would pin a stale id.
   const updateRunTarget = useMutation({
-    mutationFn: (body: { provider?: string | null; model?: string | null }) =>
+    mutationFn: (body: { engine?: string | null; provider?: string | null; model?: string | null }) =>
       api(`/tasks/${taskId}`, { method: 'PATCH', body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    // Only the Provider field's write carries `provider`; the Model field's carries `model` alone.
+    // Each field's write says which it was: the Engine field's carries `engine`, the Provider field's
+    // `provider` alone, the Model field's `model` alone.
     onError: (e: Error, body) =>
-      message.error('provider' in body ? "Couldn't change the provider" : "Couldn't change the model", e.message),
+      message.error(
+        'engine' in body ? "Couldn't change the engine" : 'provider' in body ? "Couldn't change the provider" : "Couldn't change the model",
+        e.message,
+      ),
   });
+  // A pinned credential the new engine does not run gives way to that engine's default, and a model
+  // never survives the move (board 6 ③). Back on the assignee's, nothing stays pinned.
+  const pinEngine = (engine: AgentProvider | null): void => {
+    if (engine === pinnedEngine) return;
+    if (!engine) {
+      updateRunTarget.mutate({ engine: null, provider: null, model: null });
+      return;
+    }
+    const keep = !!pinnedProvider && providerEngines(pinnedProvider, configuredProviders).includes(engine);
+    updateRunTarget.mutate({ engine, ...(pinnedProvider && !keep ? { provider: null } : {}), model: null });
+  };
+  // A credential is pinned with the engine it runs on — the shown one — so a task names the pair
+  // (§3.5); "Engine default" takes the credential pin back.
+  const pinProvider = (slug: string | null): void => {
+    if (!slug) {
+      if (pinnedProvider) updateRunTarget.mutate({ provider: null, model: null });
+      return;
+    }
+    const choice = pinCredentials.find((row) => row.slug === slug);
+    if (choice?.unavailable) {
+      navigate(choice.fixHref ?? `/infrastructure?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? runEngine}`);
+      return;
+    }
+    if (slug !== pinnedProvider) updateRunTarget.mutate({ engine: runEngine, provider: slug, model: null });
+  };
 
   // The tier this task's runs are routed at (model routing §3.1). A pick here is the person's own,
   // so it clears the coordinator's reason along with the tier that reason argued for; No suggestion
@@ -1032,7 +1132,7 @@ export function TaskDetailPanel({
   // Mirrors the composer's `/` command menu (WorkspaceView): while the caret sits right
   // after an `@token`, show owned workspaces; picking one inserts `@<name> ` (the trailing
   // space drops the token regex, so the menu auto-hides).
-  const taRef = useRef<any>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionDismissed, setMentionDismissed] = useState(false);
@@ -1066,7 +1166,7 @@ export function TaskDetailPanel({
     setDraft(next);
     setMentionDismissed(false);
     setTimeout(() => {
-      const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+      const ta = taRef.current;
       if (ta) {
         ta.focus();
         ta.setSelectionRange(before.length, before.length);
@@ -1086,7 +1186,9 @@ export function TaskDetailPanel({
   // §13.6: the chip says how the task ENDED, not only what its status column holds. A cancelled
   // attempt that was re-run reads as Superseded, in amber, because the work is still happening.
   const status = taskOutcomeChip(task);
-  const landing = landingBadge(q.data?.integration);
+  // Named by the project's main branch, which the task read carries beside its landing.
+  const mainBranch = mainBranchName(q.data?.integration?.mainBranch);
+  const landing = landingBadge(q.data?.integration, mainBranch);
   const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
@@ -1308,18 +1410,18 @@ export function TaskDetailPanel({
               the way into it. It replaces a disabled button reading "Running" — true, and the one
               thing a reader who wants to see it cannot act on. */}
           {entry.kind === 'OPEN_RUN' && entry.href ? (
-            <Tooltip title={entry.hint}>
+            <Tooltip content={entry.hint}>
               <Link to={entry.href}>
-                <Button icon={<ArrowRightOutlined />} type="primary">
+                <Button icon={<ArrowRightOutlined />} variant="primary">
                   {entry.label}
                 </Button>
               </Link>
             </Tooltip>
           ) : (
-            <Tooltip title={executeHint}>
+            <Tooltip content={executeHint}>
               <span style={{ display: 'inline-flex' }}>
                 <Button
-                  type="primary"
+                  variant="primary"
                   icon={<PlayCircleOutlined />}
                   loading={running}
                   disabled={executeDisabled}
@@ -1345,27 +1447,25 @@ export function TaskDetailPanel({
         <Popconfirm
           title="Delete this task?"
           description="A run still in flight is stopped. This action cannot be undone."
-          okText="Delete"
+          confirmText="Delete"
           cancelText="Cancel"
-          okButtonProps={{ danger: true, loading: deleting }}
+          danger
+          confirmLoading={deleting}
           onConfirm={onDelete}
-        >
-          <Button type="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />
-        </Popconfirm>
+          trigger={<Button variant="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />}
+        />
         {/* Two words for two links (docs/share-links-design.md §8): Copy link is the signed-in
             address, for yourself; Share… is the public one. Copy as Markdown needs neither. */}
-        <Dropdown
-          trigger={['click']}
+        <Menu
           open={menuOpen}
           onOpenChange={setMenuOpen}
-          menu={{
-            className: 'tdp-more-menu',
-            items: [
+          popupClassName="tdp-more-menu"
+          items={[
               {
                 key: 'copy-link',
                 icon: <LinkOutlined />,
                 label: 'Copy link',
-                onClick: () => {
+                onSelect: () => {
                   setMenuOpen(false);
                   void copyText(taskAppUrl(taskId)).then((ok) =>
                     ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
@@ -1375,6 +1475,7 @@ export function TaskDetailPanel({
               {
                 key: 'share',
                 icon: <GlobalOutlined className={liveLink ? 'session-share-icon-live' : undefined} />,
+                textValue: 'Share…',
                 label: liveLink ? (
                   <span className="scope-menu-row">
                     Share…<span className="scope-menu-value">Live link</span>
@@ -1382,7 +1483,7 @@ export function TaskDetailPanel({
                 ) : (
                   'Share…'
                 ),
-                onClick: () => {
+                onSelect: () => {
                   setMenuOpen(false);
                   setShareOpen(true);
                 },
@@ -1392,7 +1493,7 @@ export function TaskDetailPanel({
                 icon: <FileMarkdownOutlined />,
                 label: 'Copy as Markdown',
                 disabled: !q.data,
-                onClick: () => {
+                onSelect: () => {
                   setMenuOpen(false);
                   if (!q.data) return;
                   void copyText(taskMarkdown(q.data, taskAppUrl(taskId))).then((ok) =>
@@ -1400,17 +1501,15 @@ export function TaskDetailPanel({
                   );
                 },
               },
-            ],
-          }}
-        >
-          <Button type="text" icon={<MoreOutlined />} aria-label="More actions" />
-        </Dropdown>
-        <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+          ]}
+          trigger={<Button ref={moreButton} variant="text" icon={<MoreOutlined />} aria-label="More actions" />}
+        />
+        <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
       </div>
 
       {q.isLoading ? (
         <div className="tdp-loading">
-          <Spin />
+          <Spinner />
         </div>
       ) : q.isError ? (
         <div className="tdp-empty">Failed to load task details.</div>
@@ -1421,7 +1520,7 @@ export function TaskDetailPanel({
           {landing ? (
             <section className="tdp-section" aria-label="Task landing">
               <div className="tdp-section-title">Landing</div>
-              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} />
+              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
             </section>
           ) : null}
           {/* The check that settles this row, under the row it checks — the relation the database
@@ -1448,19 +1547,17 @@ export function TaskDetailPanel({
             <div className="tdp-section-title">Details</div>
             <div className="tdp-field">
               <span className="tdp-field-label">Assignee</span>
-              <Select
+              <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={task?.assignee?.id ?? undefined}
+                value={task?.assignee?.id ?? null}
                 placeholder="Unassigned"
-                allowClear
-                showSearch
-                optionFilterProp="label"
+                clearable
                 loading={workspacesQ.isLoading || updateAssignee.isPending}
                 disabled={updateAssignee.isPending}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
                 options={workspaceList.map((a) => ({ value: a.id, label: a.name }))}
-                onChange={(val) => updateAssignee.mutate(val ?? null)}
+                onValueChange={(val) => updateAssignee.mutate(val)}
               />
             </div>
             {/* The tier the coordinator suggested (model routing §3.1), with the model and effort it
@@ -1470,34 +1567,35 @@ export function TaskDetailPanel({
               <div className="tdp-field">
                 <span className="tdp-field-label">Suggested</span>
                 <div className="tdp-field-stack">
-                  <Select<ModelHintPick['value'], ModelHintPick>
+                  <Select<ModelHintPick['value']>
                     className="tdp-assignee-select"
-                    classNames={{ popup: { root: 'tdp-hint-popup' } }}
+                    popupClassName="tdp-hint-popup"
                     variant="borderless"
-                    value={q.data?.modelHint ?? undefined}
+                    value={q.data?.modelHint ?? null}
                     placeholder={NO_SUGGESTION}
                     loading={updateModelHint.isPending}
                     disabled={updateModelHint.isPending}
-                    popupMatchSelectWidth={false}
+                    matchTriggerWidth={false}
                     options={modelHintPicks}
-                    labelRender={({ value, label }) => (
+                    renderValue={(value, option) => (
                       <span className="tdp-hint-value">
                         <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
-                        {label}
+                        {option?.label ?? value}
                       </span>
                     )}
-                    optionRender={(option) => (
-                      <div className={`tdp-hint-option${option.data.value ? '' : ' is-none'}`}>
-                        {option.data.value && (
-                          <span className={`tdp-hint-dot is-${option.data.value.toLowerCase()}`} />
-                        )}
-                        <div>
-                          <div className="tdp-hint-option-name">{option.data.label}</div>
-                          <div className="tdp-hint-option-detail">{option.data.detail}</div>
+                    renderOption={(option) => {
+                      const pick = modelHintPicks.find((row) => row.value === option.value)!;
+                      return (
+                        <div className={`tdp-hint-option${pick.value ? '' : ' is-none'}`}>
+                          {pick.value && <span className={`tdp-hint-dot is-${pick.value.toLowerCase()}`} />}
+                          <div>
+                            <div className="tdp-hint-option-name">{pick.label}</div>
+                            <div className="tdp-hint-option-detail">{pick.detail}</div>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    onChange={(next) => {
+                      );
+                    }}
+                    onValueChange={(next) => {
                       const level = next || null;
                       if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
                     }}
@@ -1509,56 +1607,114 @@ export function TaskDetailPanel({
               </div>
             )}
             <div className="tdp-field">
-              <span className="tdp-field-label">Provider</span>
-              <Select
+              <span className="tdp-field-label">Engine</span>
+              <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={q.data?.provider ?? undefined}
-                // Unpinned is the normal case, so say what it actually does rather than "None".
-                placeholder={
-                  assigneeWorkspace ? `Assignee's (${assigneeWorkspace.provider ?? 'claude'})` : "Assignee's"
+                value={pinnedEngine as string | null}
+                // Unpinned is the normal case, so say what it actually does rather than "None": the
+                // assignee's engine — or, under a provider an older client pinned alone, that provider's.
+                placeholder={pinnedProvider ? ENGINE_CLI_NAMES[runEngine] : `Assignee's · ${ENGINE_CLI_NAMES[assigneeEngine]}`}
+                clearable
+                loading={updateRunTarget.isPending}
+                disabled={updateRunTarget.isPending}
+                matchTriggerWidth={false}
+                options={[
+                  { value: '', label: "Assignee's" },
+                  { label: '', options: ALL_ENGINES.map((engine) => ({ value: engine, label: ENGINE_CLI_NAMES[engine] })) },
+                ]}
+                renderOption={(option) =>
+                  option.value ? (
+                    <span className="tdp-pin-option">
+                      <BrandMark choice={engineTitleFor(option.value as AgentProvider)} size={16} />
+                      {option.label}
+                    </span>
+                  ) : (
+                    <span className="tdp-pin-option">
+                      {option.label}
+                      <span className="tdp-pin-detail">{ENGINE_CLI_NAMES[assigneeEngine]}</span>
+                    </span>
+                  )
                 }
-                allowClear
-                showSearch
-                optionFilterProp="label"
+                renderValue={(value, option) => (
+                  <span className="tdp-pin-option">
+                    {isEngine(value) && <BrandMark choice={engineTitleFor(value)} size={16} />}
+                    {option?.label ?? value}
+                  </span>
+                )}
+                onValueChange={(val) => pinEngine(isEngine(val) ? val : null)}
+              />
+            </div>
+            <div className="tdp-field">
+              <span className="tdp-field-label">Provider</span>
+              <Combobox
+                className="tdp-assignee-select"
+                variant="borderless"
+                value={pinnedProvider}
+                placeholder={`Engine default · ${engineDefaultLabel}`}
+                clearable
                 loading={providersQ.isLoading || updateRunTarget.isPending}
                 disabled={updateRunTarget.isPending}
-                popupMatchSelectWidth={false}
-                options={runProviderChoices.map((choice) => ({ value: choice.slug, label: choice.label }))}
-                optionRender={(option) => {
-                  const choice = runProviderChoices.find((row) => row.slug === option.data.value)!;
-                  return <span>{choice.label}{choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}{choice.unavailable && <small className="np-label-detail">{choice.unavailable} →</small>}</span>;
-                }}
-                labelRender={({ value, label }) => {
-                  const choice = runProviderChoices.find((row) => row.slug === value);
-                  return <span>{label}{choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>;
-                }}
-                onChange={(val) => {
-                  const choice = runProviderChoices.find((row) => row.slug === val);
-                  if (choice?.unavailable) {
-                    navigate(`/providers?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? choice.slug}`);
-                    return;
+                matchTriggerWidth={false}
+                // Only what the engine runs (board 6 ②): "Engine default" first, then its pools and keys.
+                options={[
+                  { value: '', label: 'Engine default' },
+                  ...(pinnedOffList ? [{ value: pinnedOffList.slug, label: pinLabelOf(pinnedOffList.slug) }] : []),
+                  ...[
+                    { label: 'Account pools', rows: pinCredentials.filter((c) => c.kind === 'pool') },
+                    { label: runEngine === AgentProvider.DSH ? 'Your DeepSeek keys' : 'Your keys', rows: pinCredentials.filter((c) => c.kind === 'key') },
+                  ]
+                    .filter((group) => group.rows.length > 0)
+                    .map((group) => ({ label: group.label, options: group.rows.map((c) => ({ value: c.slug, label: c.label })) })),
+                ]}
+                renderOption={(option) => {
+                  if (!option.value) {
+                    return (
+                      <span className="tdp-pin-option">
+                        {option.label}
+                        <span className="tdp-pin-detail">
+                          {runEngine === AgentProvider.DSH ? 'first DeepSeek key' : runEngine === AgentProvider.OPENCODE ? 'own sign-in' : 'runner sign-in'}
+                        </span>
+                      </span>
+                    );
                   }
-                  updateRunTarget.mutate({ provider: val ?? null, model: null });
+                  const choice = pinCredentials.find((row) => row.slug === option.value) ?? pinnedOffList;
+                  return (
+                    <span className="tdp-pin-option">
+                      {choice && (choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                      {option.label}
+                      {choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                      {choice?.unavailable && <span className="tdp-pin-detail">{choice.unavailable} →</span>}
+                    </span>
+                  );
                 }}
+                renderValue={(value) => {
+                  const choice = pinCredentials.find((row) => row.slug === value) ?? pinnedOffList;
+                  return (
+                    <span className="tdp-pin-option">
+                      {choice && (choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                      {pinLabelOf(value)}
+                      {choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                    </span>
+                  );
+                }}
+                onValueChange={(val) => pinProvider(val || null)}
               />
             </div>
             <div className="tdp-field">
               <span className="tdp-field-label">Model</span>
-              <Select
+              <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={q.data?.model ?? undefined}
+                value={q.data?.model ?? null}
                 // Unpinned on an assignee with smart selection on, each run's model is picked for it.
                 placeholder={
                   smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
                 }
-                allowClear
-                showSearch
-                optionFilterProp="label"
+                clearable
                 loading={runnersQ.isLoading || updateRunTarget.isPending}
                 disabled={updateRunTarget.isPending}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
                 // A model the catalogue doesn't name (an id pinned by a workspace or the API) still
                 // has to render as itself rather than vanish from the box.
                 options={
@@ -1566,24 +1722,22 @@ export function TaskDetailPanel({
                     ? [...modelOptions, { value: q.data.model, label: q.data.model }]
                     : modelOptions
                 }
-                onChange={(val) => updateRunTarget.mutate({ model: val ?? null })}
+                onValueChange={(val) => updateRunTarget.mutate({ model: val })}
               />
             </div>
             <div className="tdp-field">
               <span className="tdp-field-label">List</span>
-              <Select
+              <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={q.data?.listId ?? undefined}
+                value={q.data?.listId ?? null}
                 placeholder="No list"
-                allowClear
-                showSearch
-                optionFilterProp="label"
+                clearable
                 loading={taskListsQ.isLoading || updateList.isPending}
                 disabled={updateList.isPending}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
                 options={(taskListsQ.data ?? []).map((l) => ({ value: l.id, label: l.title }))}
-                onChange={(val) => updateList.mutate(val ?? null)}
+                onValueChange={(val) => updateList.mutate(val)}
               />
             </div>
             {/* Last of the fields that can be changed, before the read-only provenance below.
@@ -1622,15 +1776,15 @@ export function TaskDetailPanel({
                 </span>
               )}
               {hasDependencyRelations && (
-                <Segmented
-                  className="tdp-dependency-view"
+                <Segmented<'graph' | 'list'>
                   size="small"
+                  className="tdp-dependency-view"
                   value={dependencyView}
                   options={[
                     { label: 'Graph', value: 'graph' },
                     { label: 'List', value: 'list' },
                   ]}
-                  onChange={(value) => setDependencyViewOverride(value as 'graph' | 'list')}
+                  onValueChange={setDependencyViewOverride}
                   aria-label="Dependency view"
                 />
               )}
@@ -1653,9 +1807,9 @@ export function TaskDetailPanel({
               <div className="tdp-muted">No dependencies</div>
             ) : dependencyView === 'graph' ? (
               dependencyGraphQ.isLoading ? (
-                <div className="tdp-dependency-graph-loading"><Spin size="small" /></div>
+                <div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>
               ) : (
-                <Suspense fallback={<div className="tdp-dependency-graph-loading"><Spin size="small" /></div>}>
+                <Suspense fallback={<div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>}>
                   <LazyTaskDependencyGraph
                     graph={dependencyGraph}
                     title={task?.title ?? 'Current task'}
@@ -1692,17 +1846,16 @@ export function TaskDetailPanel({
                   : 'Graph expansion limit reached. Some branch connections remain collapsed.'}
               </div>
             )}
-            <Select
+            <Combobox
               style={{ width: '100%', marginTop: 8 }}
               placeholder="Add a prerequisite…"
               value={null}
-              showSearch
-              filterOption={false}
+              filter={false}
               onSearch={setDependencyQuery}
               loading={dependencyTasksQ.isLoading || addDependency.isPending}
-              popupMatchSelectWidth={false}
+              matchTriggerWidth={false}
               options={dependencyOptions}
-              onChange={(val) => {
+              onValueChange={(val) => {
                 if (val) addDependency.mutate(val);
                 setDependencyQuery('');
               }}
@@ -1715,7 +1868,7 @@ export function TaskDetailPanel({
                   size="small"
                   checked={task?.autoRunWhenReady ?? true}
                   loading={setAutoRun.isPending}
-                  onChange={(v) => setAutoRun.mutate(v)}
+                  onCheckedChange={(v) => setAutoRun.mutate(v)}
                 />
                 <span>Auto-run when all prerequisites finish</span>
               </div>
@@ -1905,7 +2058,7 @@ export function TaskDetailPanel({
             ))}
           </div>
         )}
-        <Input.TextArea
+        <Textarea
           ref={taRef}
           value={draft}
           onChange={(e) => {
@@ -1944,45 +2097,54 @@ export function TaskDetailPanel({
             }
           }}
         />
-        <Button type="primary" onClick={submit} loading={addComment.isPending} disabled={!draft.trim()}>
+        <Button variant="primary" onClick={submit} loading={addComment.isPending} disabled={!draft.trim()}>
           Send
         </Button>
       </div>
 
-      <Modal
+      <Dialog
         open={reopening}
         title={REOPEN_MODAL_TITLE}
-        okText={REOPEN_MODAL_OK}
-        cancelText="Back"
-        okButtonProps={{ loading: reopen.isPending }}
-        onOk={() => reopen.mutate()}
-        onCancel={() => {
+        className="tdp-reopen-dialog"
+        onClose={() => {
           reopen.reset();
           setReopening(false);
         }}
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                reopen.reset();
+                setReopening(false);
+              }}
+            >
+              Back
+            </Button>
+            <Button variant="primary" loading={reopen.isPending} onClick={() => reopen.mutate()}>
+              {REOPEN_MODAL_OK}
+            </Button>
+          </>
+        }
       >
         {reopenParagraphs(task).map((paragraph) => (
-          <Typography.Paragraph
-            key={paragraph.text}
-            strong={paragraph.strong}
-            type={paragraph.strong ? undefined : 'secondary'}
-          >
-            {paragraph.text}
-          </Typography.Paragraph>
+          <p key={paragraph.text} className={`tdp-reopen-paragraph${paragraph.strong ? ' is-strong' : ''}`}>
+            {paragraph.strong ? <strong>{paragraph.text}</strong> : paragraph.text}
+          </p>
         ))}
         {/* The server's own sentence, where the press earned one. Kept inside the question rather
             than behind it: the reader is still deciding, and a refusal is part of what they are
             deciding with. */}
         {reopen.error ? (
-          <Alert
-            type="error"
-            showIcon
-            message="Task status was not changed"
-            description={(reopen.error as Error).message}
-          />
+          <Alert type="error" title="Task status was not changed" description={(reopen.error as Error).message} />
         ) : null}
-      </Modal>
-      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} kind="TASK" rootId={taskId} />
+      </Dialog>
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        kind="TASK"
+        rootId={taskId}
+        returnFocus={moreButton}
+      />
     </aside>
   );
 }

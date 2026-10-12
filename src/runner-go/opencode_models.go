@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -54,41 +52,11 @@ func fetchOpenCodeModelCatalog(ctx context.Context, dir string) ([]ModelInfo, er
 // runner's private machine home. Never use the shared OS temp directory: another local account
 // could plant an ancestor opencode.json there.
 func fetchGlobalOpenCodeModelCatalog(ctx context.Context) ([]ModelInfo, error) {
-	dir, err := openCodeGlobalCatalogDir()
+	dir, err := privateProbeDir("opencode-model-catalog")
 	if err != nil {
 		return nil, err
 	}
 	return fetchOpenCodeModelCatalog(ctx, dir)
-}
-
-func openCodeGlobalCatalogDir() (string, error) {
-	home := machineHome()
-	if runtime.GOOS != "windows" {
-		info, err := os.Lstat(home)
-		if err != nil {
-			return "", fmt.Errorf("inspect runner home for OpenCode catalog: %w", err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
-			return "", fmt.Errorf("runner home %s is not a private directory", home)
-		}
-	}
-	dir := filepath.Join(home, "opencode-model-catalog")
-	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
-		return "", fmt.Errorf("create private OpenCode model directory: %w", err)
-	}
-	info, err := os.Lstat(dir)
-	if err != nil {
-		return "", fmt.Errorf("inspect private OpenCode model directory: %w", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return "", fmt.Errorf("OpenCode model directory %s is not a private directory", dir)
-	}
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(dir, 0o700); err != nil {
-			return "", fmt.Errorf("secure private OpenCode model directory: %w", err)
-		}
-	}
-	return dir, nil
 }
 
 // parseOpenCodeModelCatalog parses the CLI's repeated pair format:

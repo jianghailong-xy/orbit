@@ -1,0 +1,59 @@
+
+> @orbit/web@0.1.0 pretest:ui-controls
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-controls
+> playwright test --config ui-migration/controls.config.mjs
+
+[WebServer] (node:3957666) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 24 tests using 1 worker
+
+(node:3957741) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/controls.browser.mjs:53:1 › fixed control states match AntD geometry, typography and surfaces (2.6s)
+  ✓   2 [chromium-light-desktop] › ui-migration/controls.browser.mjs:145:1 › hover and keyboard focus preserve visible control feedback (5.7s)
+  ✓   3 [chromium-light-desktop] › ui-migration/controls.browser.mjs:180:1 › keyboard, labels, loading, disabled and native form values work (2.0s)
+(node:3958574) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-phone] › ui-migration/controls.browser.mjs:53:1 › fixed control states match AntD geometry, typography and surfaces (3.1s)
+  ✓   5 [chromium-light-phone] › ui-migration/controls.browser.mjs:145:1 › hover and keyboard focus preserve visible control feedback (5.8s)
+  ✓   6 [chromium-light-phone] › ui-migration/controls.browser.mjs:180:1 › keyboard, labels, loading, disabled and native form values work (1.7s)
+(node:3960654) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:53:1 › fixed control states match AntD geometry, typography and surfaces (2.5s)
+  ✓   8 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:145:1 › hover and keyboard focus preserve visible control feedback (5.7s)
+  ✓   9 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:180:1 › keyboard, labels, loading, disabled and native form values work (1.8s)
+(node:3961894) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [chromium-dark-phone] › ui-migration/controls.browser.mjs:53:1 › fixed control states match AntD geometry, typography and surfaces (2.4s)
+  ✓  11 [chromium-dark-phone] › ui-migration/controls.browser.mjs:145:1 › hover and keyboard focus preserve visible control feedback (5.7s)
+  ✓  12 [chromium-dark-phone] › ui-migration/controls.browser.mjs:180:1 › keyboard, labels, loading, disabled and native form values work (1.9s)
+(node:3963266) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-light-desktop] › ui-migration/controls.browser.mjs:53:1 › fixed control states match AntD geometry, typography and surfaces (3.3s)
+  ✓  14 [webkit-light-desktop] › ui-migration/controls.browser.mjs:145:1 › hover and keyboard focus preserve visible control feedback (6.4s)
+  ✓  15 [webkit-light-desktop] › ui-migration/controls.browser.mjs:180:1 › keyboard, labels, loading, disabled and native form values work (2.6s)
+(node:3965539) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [webkit-light-phone] › ui-migration/controls.browser.mjs:53:1 › fixed control states match AntD geometry, typography and surfaces (2.3s)
+  ✓  17 [webkit-light-phone] › ui-migration/controls.browser.mjs:145:1 › hover and keyboard focus preserve visible control feedback (6.2s)
+  ✓  18 [webkit-light-phone] › ui-migration/controls.browser.mjs:180:1 › keyboard, labels, loading, disabled and native form values work (1.9s)
+(node:3966797) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:53:1 › fixed control states match AntD geometry, typography and surfaces (3.0s)
+  ✓  20 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:145:1 › hover and keyboard focus preserve visible control feedback (6.0s)
+  ✓  21 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:180:1 › keyboard, labels, loading, disabled and native form values work (2.1s)
+(node:3968955) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  22 [webkit-dark-phone] › ui-migration/controls.browser.mjs:53:1 › fixed control states match AntD geometry, typography and surfaces (2.1s)
+  ✓  23 [webkit-dark-phone] › ui-migration/controls.browser.mjs:145:1 › hover and keyboard focus preserve visible control feedback (5.6s)
+  ✓  24 [webkit-dark-phone] › ui-migration/controls.browser.mjs:180:1 › keyboard, labels, loading, disabled and native form values work (1.9s)
+
+  24 passed (1.5m)

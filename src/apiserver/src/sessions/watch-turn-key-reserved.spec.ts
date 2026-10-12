@@ -289,3 +289,32 @@ test('POST /runner/projects/:id/coordinator/messages refuses a clientTurnId in t
   assert.equal(d.coordinatorMessages[0].clientTurnId, ORDINARY_KEY);
   assert.match(d.coordinatorMessages[1].clientTurnId, /^[0-9a-f-]{36}$/);
 });
+
+test('every door refuses a clientTurnId in the EXECUTABLE acceptance namespace', async () => {
+  // D3: a shell turn under this prefix reaches the runner as the task's acceptance command, which the
+  // runner runs itself even on DeepSeek Harness where a person's `!` shell is refused. A caller who
+  // could name the key could run a shell there and have its exit code judged against the task.
+  const KEY = 'system:task-acceptance:v1:66666666-6666-4666-8666-666666666666:0';
+  const d = doors();
+  const refusesAcceptance = async (door: string, call: () => Promise<unknown>) => {
+    const thrown = await call().then(() => undefined, (error: unknown) => error);
+    assert.ok(thrown instanceof BadRequestException, `${door} did not refuse the acceptance prefix`);
+    const refusal = JSON.stringify(thrown.getResponse());
+    assert.match(refusal, /system:task-acceptance:v1:/, `${door}'s refusal does not name the prefix: ${refusal}`);
+    assert.match(refusal, /reserved/i, `${door}'s refusal does not say the prefix is reserved: ${refusal}`);
+  };
+  await refusesAcceptance('the public turn route', async () =>
+    d.browser.turn(USER, SESSION_ID, { clientTurnId: KEY, kind: 'shell', content: 'echo forged' } as SessionTurnDto));
+  await refusesAcceptance('the resume route', async () =>
+    d.browser.resume(USER, SESSION_ID, { clientTurnId: KEY, content: 'echo forged' }));
+  await refusesAcceptance('the interrupt route', async () =>
+    d.browser.interrupt(USER, SESSION_ID, { clientTurnId: KEY, content: 'echo forged' }));
+  await refusesAcceptance('the runner send door, padded', async () =>
+    d.runner.sendMessage(RUNNER, undefined, CALLER, 'tok', SESSION_ID, { message: 'echo forged', clientTurnId: ` ${KEY} ` }));
+  await refusesAcceptance('the project coordinator door', async () =>
+    d.project.sendToCoordinator(RUNNER, PROJECT_ID, CALLER, 'tok', { message: 'echo forged', clientTurnId: KEY }));
+  assert.equal(d.turns.length + d.resumes.length + d.interrupts.length + d.coordinatorMessages.length, 0,
+    'a refused acceptance key still reached the service');
+  await d.browser.turn(USER, SESSION_ID, { clientTurnId: 'system:task-acceptance-notes', content: 'not the namespace' });
+  assert.equal(d.turns.length, 1);
+});

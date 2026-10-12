@@ -1,0 +1,51 @@
+# The second version's rounds 1-4, as run (raw runs in /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/<dir>): run, HEAD, results, exit code.
+== killed-run-1
+f-p42-ref            b201ebe94 | stopped before it ended
+== killed-run-2
+f-p42-del            97ab985d4 | stopped before it ended
+f-p42-ref            b201ebe94 |  4 skipped  180 passed (19.1m) exit=0 
+== runs-def134095
+c-controls           54622530e |  32 passed (2.1m) exit=0 
+c-merge-full         54622530e |  Test Files 364 passed (364)  Tests 4672 passed (4672) exit=0 
+c-merge              54622530e |  Test Files 7 failed | 357 passed (364)  Tests 2 failed | 4615 passed (4617) exit=1 
+c-overlays           54622530e |  96 passed (4.2m) exit=0 
+f-p0-del             54622530e |  12 failed  11 skipped  89 passed (4.9m) exit=1 
+f-p0-ref             c6bc33e86 |  12 failed  11 skipped  89 passed (4.6m) exit=1 
+f-p0-standard-base   def134095 |  20 failed  11 skipped  81 passed (4.4m) exit=1 
+f-p0-standard        54622530e |  20 failed  11 skipped  81 passed (4.2m) exit=1 
+f-p0-strict          54622530e |  12 failed  11 skipped  89 passed (5.2m) exit=1 
+f-p41-base           def134095 |  8 failed  88 passed (3.2m) exit=1 
+f-p41-del            54622530e |  8 failed  88 passed (3.2m) exit=1 
+f-p42-del            54622530e |  4 skipped  180 passed (11.6m) exit=0 
+f-p42-ref            c6bc33e86 |  4 skipped  180 passed (20.4m) exit=0 
+f-p42-repeat         54622530e |  30 passed (2.7m) exit=0 
+pilot-base           def134095 |  1 failed  7 skipped  80 passed (3.9m) exit=1 
+pilot-base-wdp       def134095 |  1 skipped  10 passed (32.5s) exit=0 
+pilot-del            54622530e |  7 skipped  81 passed (4.2m) exit=0 
+pilot-del-wdp        54622530e |  1 skipped  10 passed (35.3s) exit=0 
+probe-geometry-del   54622530e |  32 passed (1.5m) exit=0 
+probe-geometry-ref   c6bc33e86 |  32 passed (1.7m) exit=0 
+rename-after         54622530e |  30 passed (1.4m) exit=0 
+rename-before        0b0e9a721 |  30 passed (1.5m) exit=0 
+== runs-bcc89c7af
+c-controls           8af0c298d |  32 passed (2.5m) exit=0 
+c-merge              8af0c298d |  Test Files 365 passed (365)  Tests 4680 passed (4680) exit=0 
+c-overlays           8af0c298d |  96 passed (4.9m) exit=0 
+f-p0-del             8af0c298d |  12 failed  11 skipped  89 passed (5.3m) exit=1 
+f-p0-ref             1400754db |  12 failed  11 skipped  89 passed (5.5m) exit=1 
+f-p0-standard-base   bcc89c7af |  20 failed  11 skipped  81 passed (5.5m) exit=1 
+f-p0-standard        8af0c298d |  20 failed  11 skipped  81 passed (4.1m) exit=1 
+f-p0-strict          8af0c298d |  12 failed  11 skipped  89 passed (5.5m) exit=1 
+f-p41-base           bcc89c7af |  8 failed  88 passed (3.7m) exit=1 
+f-p41-del            8af0c298d |  8 failed  88 passed (3.7m) exit=1 
+f-p42-del            8af0c298d |  4 skipped  180 passed (13.0m) exit=0 
+f-p42-ref            1400754db |  4 skipped  180 passed (20.0m) exit=0 
+f-p42-repeat         8af0c298d |  30 passed (3.3m) exit=0 
+pilot-base           bcc89c7af |  7 skipped  81 passed (4.3m) exit=0 
+pilot-del            8af0c298d |  7 skipped  81 passed (5.0m) exit=0 
+probe-geometry-del   8af0c298d |  32 passed (1.5m) exit=0 
+probe-geometry-ref   1400754db |  32 passed (1.6m) exit=0 
+rename-after         8af0c298d |  30 passed (1.5m) exit=0 
+rename-before        b23a48e30 |  30 passed (1.6m) exit=0 
+== killed-run-3
+f-p42-ref            61ef054c1 | stopped before it ended

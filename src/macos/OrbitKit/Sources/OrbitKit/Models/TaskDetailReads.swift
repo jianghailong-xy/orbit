@@ -123,6 +123,8 @@ public struct AttributionDiscovery: Decodable, Equatable, Sendable {
 }
 
 public struct AttributionCrossing: Decodable, Equatable, Sendable {
+    /// `FILE_TASK` / `DEPEND_ON_TASK` / `MOVE_TASK`.
+    public let kind: String?
     /// `PENDING` / `APPROVED` / `DENIED` / `APPLIED`.
     public let state: String
     public let from: AttributionProjectRef?
@@ -130,8 +132,9 @@ public struct AttributionCrossing: Decodable, Equatable, Sendable {
     public let code: String?
     public let requiredAction: String?
 
-    public init(state: String, from: AttributionProjectRef? = nil, to: AttributionProjectRef? = nil,
-                code: String? = nil, requiredAction: String? = nil) {
+    public init(kind: String? = nil, state: String, from: AttributionProjectRef? = nil,
+                to: AttributionProjectRef? = nil, code: String? = nil, requiredAction: String? = nil) {
+        self.kind = kind
         self.state = state
         self.from = from
         self.to = to

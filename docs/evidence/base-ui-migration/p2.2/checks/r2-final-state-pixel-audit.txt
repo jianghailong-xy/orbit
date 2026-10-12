@@ -1,0 +1,1 @@
+{"static": {"pairs": 208, "identical": 130, "differentSize": 0, "sameSizeWithDifferences": 78}, "motion": {"pairs": 96, "identical": 6, "differentSize": 0, "sameSizeWithDifferences": 90}}

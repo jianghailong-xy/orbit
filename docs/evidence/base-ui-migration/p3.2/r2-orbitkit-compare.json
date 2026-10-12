@@ -1,0 +1,20 @@
+{
+ "tip": {
+  "summary": "Executed 3218 tests, with 5 tests skipped and 4 failures (0 unexpected) in 54.857 (54.857) seconds",
+  "failed": [
+   "ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle",
+   "WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder",
+   "WikiCopyParityTests.testTheHomeReadsItsBandsByKind"
+  ]
+ },
+ "delivery": {
+  "summary": "Executed 3218 tests, with 5 tests skipped and 4 failures (0 unexpected) in 51.701 (51.701) seconds",
+  "failed": [
+   "ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle",
+   "WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder",
+   "WikiCopyParityTests.testTheHomeReadsItsBandsByKind"
+  ]
+ },
+ "onlyDelivery": [],
+ "onlyTip": []
+}

@@ -1,0 +1,190 @@
+[
+ {
+  "trace": "chromium-dark-phone--email-tags-support-controlled-typing-separators-composition-Enter-blur-and-deletion--trace.zip",
+  "moduleRequests": 28,
+  "failedRequests": [
+   {
+    "url": ":4177/src/components/ui/Input.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 102.9
+   },
+   {
+    "url": ":4177/src/components/ui/Dialog.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 115.3
+   },
+   {
+    "url": ":4177/src/components/ui/Overlay.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 115.4
+   },
+   {
+    "url": ":4177/src/components/ui/Menu.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 115.4
+   },
+   {
+    "url": ":4177/src/components/ui/Popover.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 115.4
+   },
+   {
+    "url": ":4177/src/components/ui/Tooltip.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 115.4
+   },
+   {
+    "url": ":4177/src/components/ui/Select.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 115.4
+   },
+   {
+    "url": ":4177/src/components/ui/Combobox.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 115.4
+   },
+   {
+    "url": ":4177/src/components/ui/MultiSelect.tsx",
+    "status": -1,
+    "failure": null,
+    "ms": 115.5
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.css",
+    "status": -1,
+    "failure": null,
+    "ms": 115.5
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/client-HvpxMbDi.js?v=4b7e2d66",
+    "status": -1,
+    "failure": null,
+    "ms": 115.5
+   }
+  ],
+  "networkChangedConsoleErrors": 11,
+  "slowestRequests": [
+   {
+    "url": ":4177/node_modules/.vite/deps/antd.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 438.0
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/@ant-design_icons.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 371.9
+   },
+   {
+    "url": ":4177/node_modules/.vite/deps/react.js?v=4b7e2d66",
+    "status": 200,
+    "failure": null,
+    "ms": 284.3
+   },
+   {
+    "url": ":4177/src/components/ui/foundation.css",
+    "status": 200,
+    "failure": null,
+    "ms": 284.0
+   },
+   {
+    "url": ":4177/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+    "status": 200,
+    "failure": null,
+    "ms": 229.4
+   }
+  ],
+  "console": [
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   },
+   {
+    "type": "error",
+    "text": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+   }
+  ],
+  "pageErrors": [
+   ""
+  ],
+  "lastActions": [
+   {
+    "api": "hook",
+    "title": "Worker Cleanup",
+    "start": 806413.212,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browser\"",
+    "start": 806413.759,
+    "error": null
+   },
+   {
+    "api": "fixture",
+    "title": "Fixture \"browserName\"",
+    "start": 806448.058,
+    "error": null
+   },
+   {
+    "api": "newPage",
+    "title": null,
+    "start": 790574.175,
+    "error": null
+   },
+   {
+    "api": "goto",
+    "title": null,
+    "start": 790637.651,
+    "error": null
+   },
+   {
+    "api": "expect",
+    "title": "Expect \"toHaveText\"",
+    "start": 791311.289,
+    "error": null
+   }
+  ]
+ }
+]

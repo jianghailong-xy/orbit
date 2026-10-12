@@ -1,0 +1,20 @@
+{"app": "/var/tmp/p23b1/trees/verify", "commit": "43e1d0f44e9e981e191f488a7d64556ae0de4123", "dirty": "", "runner": "77233e226b4e8a96d38517a4a68329052d5f04d6", "started": "2026-10-07T00:56:59Z", "args": "--project=chromium-light-desktop --project=chromium-light-phone -g settings$"}
+[WebServer] (node:2983421) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 131 P0.2 originals, 121 main drift references, 0 accepted migration differences.
+
+Running 2 tests using 1 worker
+
+(node:2983495) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/motion-verify/snapshots/chromium-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/motion-verify/snapshots/chromium-light-desktop/settings-saved.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/b1-state.diag.mjs:139:3 › settings (1.9s)
+(node:2983856) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /var/tmp/p23b1/runs/motion-verify/snapshots/chromium-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /var/tmp/p23b1/runs/motion-verify/snapshots/chromium-light-phone/settings-saved.png, writing actual.
+  ✓  2 [chromium-light-phone] › ui-migration/b1-state.diag.mjs:139:3 › settings (1.5s)
+
+  2 passed (4.8s)
+# exit 0

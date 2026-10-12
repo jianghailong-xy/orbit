@@ -46,6 +46,50 @@ export function sessionProjectMembershipSql(sessionAlias: string): Prisma.Sql {
   )`;
 }
 
+/** Every session that can be a member of `projectId`, read from that project's own rows through their
+ *  indexes: its coordinator, the sessions executing or about its tasks, its open judgment sessions, and
+ *  every session whose root is one of those. A superset — precedence can still put one of them in
+ *  another project, or keep a child with its own membership out — so it is only ever narrowed by
+ *  sessionProjectMembershipSql. Each source of directProjectMembershipSql needs a branch here.
+ *
+ *  The task branches are joins so the planner can start from either side: from the project's tasks
+ *  when it has few, from the sessions that have a task when it has most of them (one production
+ *  project holds 98% of all tasks; an array of its task ids took 0.4 s). The `IS NOT NULL` the join
+ *  already implies is spelled out because it is what tells the planner how few those sessions are. */
+function projectMembershipCandidatesSql(projectId: string): Prisma.Sql {
+  return Prisma.sql`
+    WITH direct(id) AS (
+      SELECT p.coordinator_session_id FROM project p
+        WHERE p.id = ${projectId}::uuid AND p.coordinator_session_id IS NOT NULL
+      UNION ALL
+      SELECT ts.id FROM session ts JOIN task t ON t.id = ts.task_id
+        WHERE ts.task_id IS NOT NULL AND t.project_id = ${projectId}::uuid
+      UNION ALL
+      SELECT cs.id FROM session cs JOIN task t ON t.id = cs.context_task_id
+        WHERE cs.context_task_id IS NOT NULL AND t.project_id = ${projectId}::uuid
+      UNION ALL
+      SELECT w.session_id FROM project_coordinator_wake w
+        WHERE w.project_id = ${projectId}::uuid AND w.status = 'SESSION_OPENED' AND w.session_id IS NOT NULL
+    )
+    SELECT id FROM direct
+    UNION
+    SELECT child.id FROM session child WHERE child.root_session_id = ANY(ARRAY(SELECT id FROM direct))`;
+}
+
+/** `(sessionProjectMembershipSql(alias) ->> 'projectId')::uuid = projectId`, with the same answer for
+ *  every session, but membership is computed only for the candidates above: as a filter, the bare
+ *  comparison runs the membership subqueries for every row the rest of the WHERE leaves — every
+ *  completed session of the owner, in the Completed view. The candidates, and their children, are
+ *  matched with `= ANY` of an array, which stays an index lookup however its size is misestimated;
+ *  `IN` lets a misestimate turn it into a scan of the whole table. */
+export function sessionInProjectSql(sessionAlias: string, projectId: string): Prisma.Sql {
+  const s = Prisma.raw(sessionAlias);
+  return Prisma.sql`(
+    ${s}.id = ANY(ARRAY(${projectMembershipCandidatesSql(projectId)}))
+    AND (${sessionProjectMembershipSql(sessionAlias)} ->> 'projectId')::uuid = ${projectId}::uuid
+  )`;
+}
+
 export async function readSessionProjectMembership(
   prisma: Pick<PrismaService, '$queryRaw'>,
   sessionId: string,

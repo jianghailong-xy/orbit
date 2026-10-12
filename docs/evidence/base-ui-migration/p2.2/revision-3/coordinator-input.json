@@ -1,0 +1,28 @@
+{
+  "taskId": "34Za394q2ZEgr7TKprjkF",
+  "criterion": {
+    "key": "1BvO6hYrlFnU60JqxQPUHt",
+    "text": "P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。"
+  },
+  "comments": [
+    {
+      "id": "34a1pf5orvgxhcj0NbDXN",
+      "body": "r2 独立审查结论：证据足以确认本任务菜单/浮层/选择子范围。固定源码 b6a8009ef（运行时3f3a29737）上，协调者独立22单测、样例类型、Web build通过；完整8环境520项为519通过/1超时、无skip。唯一失败为webkit-light-phone的submenu left edge：在打开根菜单后的动效capture（choices-motion.browser.mjs:70/168）等待records>0超时，未执行到子菜单断言；trace中菜单data-open、animationName=orbit-slide-up-in、reducedMotion=false，采集records为空。同一源码、断言及90秒超时的原用例随后独立5次均通过。未发现可复现组件失效，保留自动化采集不稳定记录；不改写成单次520/520全绿。首次重复命令因grep过严未选中测试，其命令错误单列保留、未计入验证。\n\n原SEND_BACK的动效缺失和手机附件布局变化已补齐：手机旧几何完全恢复（只保留任务明确17px字），入/退场、翻转原点、三层Esc/焦点、退出重开、减少动态效果、触摸、清除、多选/IME合成场景有直接验证。独立复算304对原图差异，核对2931附件引用、1923历史文件未变；3027索引原件由b6a8009ef及仅新增3份原始日志的d5716beb完整覆盖，补充提交逐项哈希核对通过。970项冻结输入核对无意外变动。\n\n完整独立审查原件已保存为 /root/.orbit/uploads/01a1023e-9bb2-75b0-8a60-7d4b29ba57ed/p22-r2-coordinator-review.zip（SHA256 a9650aafe26a94d46df16bc8632b4f685dd0aa5b3e7680bd177b913a8cbfd950）。其中含summary、所有检查命令/日志、完整浏览器JSON（嵌入原始附件）、原失败trace、5次复验JSON和采集诊断、像素/哈希审计；原工作目录 /tmp/orbit-p22-r2-coordinator-review-w5m_j86w。实际重复报告路径记录在summary内。\n\n不主张原图全部逐像素相同，也不主张真机iOS/原生IME、真实后端和整站P7已完成；P2.3/确认范围仍按各自任务及集成回执判断。",
+      "createdAt": "2026-10-04T10:38:01.823Z",
+      "authorPublicId": "34ZHGcIxwsZUxkgh2z65V"
+    },
+    {
+      "id": "34a2L1x3W2iPgPRYaVAMn",
+      "body": "集成返工：第 2 代落地已从 CHECK_FAILED 变为 REBASE CONFLICT（作业 7Bc8O9sQAGL8iMs1csyrfB，待办 34a2IGHUrDYadWRjJSKt7），不能原样 integration_retry。上轮基线 6 文件 30 项已修复，P2.3 又于 10:56:37 UTC 落到项目分支 18e75cfe14d0a0858c9a46e514535439c9cdf9d8（回执 34a2Hx37O7Rrhx0SmmPi8）。协调者已只读比较任务 d5716beb168861834aed8ef22a99a5b966866322 与当前项目分支，merge-base 为 67e62c0b4028eefe2c619dac80d3fac312cea601；冲突均是双方在同一位置追加测试配置，没有业务组件代码冲突。\n\n请在本任务执行会话和自己的工作树中接入实际最新项目分支，保留已验收的 P2.2 实现及全部历史证据，最小解决三个冲突：\n1. src/web/.gitignore 同时保留 .choices-results/、.toasts-results/、.reviews-results/ 与原有输出目录规则。\n2. src/web/package.json 同时保留 test:ui-choices/pretest:ui-choices 和 test:ui-toasts/pretest:ui-toasts，其他现有 scripts/dependencies 原样保留，不以单侧覆盖解决。\n3. src/web/ui-migration/playwright.config.mjs 的 testIgnore 同时保留 choices*.browser.mjs 与 toasts*.browser.mjs 以及原有 foundation/controls/overlays 规则；这些专项测试必须由各自配置继续收集，不是跳过验证。不得改变 assertions、retries、超时、历史截图或既有业务代码来解冲突。\n\n交付要求：记录原任务 tip、接入的项目 tip、最终提交/树及逐文件冲突处置；核对相对两个父版本的 diff，证明没有丢掉任一批实现、测试入口或证据。按当前锁文件准备隔离依赖。最终组合树执行既定 npm run build -w @orbit/web && npm run test -w @orbit/web；对 choices/toasts/P0 配置分别 --list，核对原有测试仍全部收集且不会混入错误 fixture（既有 counts: choices 520、toasts 232、P0 104，以实际列表说明增量）；执行受配置整合影响的类型/入口检查。若运行时代码和测试断言完全未变，无需机械重跑已审查的全部截图矩阵；如另有必须修改的运行时或行为，先说明原因并追加相应回归，不隐藏新失败。\n\n提交第 3 版结构化完成证据，明确本轮为集成冲突修复，复用 r2 的组件保真证据并补齐最终组合树检查。r2 独立 519/520 + 唯一动效采集超时后原用例 5/5 通过的边界继续保留，不改写成单次全绿。原 3 份 reviewer 日志补充提交 d5716beb 必须保留。仍使用 codex / gpt-6-astra、L 档。由平台对新的交付执行落地，协调会话不手工改集成分支。",
+      "createdAt": "2026-10-04T10:58:38.806Z",
+      "authorPublicId": "34ZHGcIxwsZUxkgh2z65V"
+    },
+    {
+      "id": "34a2OqiC81xWjpMWeEjHc",
+      "body": "本次结束事件的判断记录（按本轮 project_get、task_list、task_get、session_get 读取的最新状态）：\n\n[P2.2 实现菜单、浮层与选择控件](orbit-task:34Za394q2ZEgr7TKprjkF) 当前为 OPEN，依赖 READY，autoRunWhenReady=true，dispatchHold=false，未见 dispatchRefusal。其[执行会话](orbit-session:7l2CrZ6sQjn1pT3ErCzlWB) 已恢复为 RUNNING；latest assistant 输出明确正在读取最新返工评论、接入项目提交、检查专项发现列表并提交第3版。因此继续现有任务即可，无需新增同范围任务或重复 task_start。\n\n当前未结事项是第2代落地的 REBASE CONFLICT（三处测试配置），以 2026-10-04T10:58:38.806Z 的既有返工评论为执行依据。[P2.3 复核并适配 Orbit 通知与反馈服务](orbit-task:34Za3974yqnhjQsRBl0R3) 当前 DONE，落地状态为 ON_INTEGRATION_LINE／LANDED；其实际落地后，P2.2 需保留 choices/toasts 两套入口及 P0 排除规则完成组合树检查。\n\n历史 r2 独立审查记录可继续作为组件子范围的证据：22单测、样例类型及构建通过；完整矩阵519/520，唯一动效采集超时后原用例5/5通过，保留原始失败及证据边界。该记录不证明新的组合树已通过或 P2.2 已落地，本轮未重新运行这些检查。\n\n还缺：第3版固定最终提交/树、三个冲突逐项处置与双侧差异核对、既定 build && test 通过、choices/toasts/P0 测试发现列表（原计数520/232/104及实际增量）、相关类型/入口检查，以及随后平台的实际落地回执。既有运行时、断言、历史截图与归档日志须保留。P3 继续由原生依赖等待本任务完成及落地；项目后续 P3–P7 的既有任务仍待推进。\n\n本轮将发现和缺口留在原任务，不修改项目验收标准或项目状态；项目完成由账号所有者结合最终直接证据决定。",
+      "createdAt": "2026-10-04T11:01:09.393Z",
+      "authorPublicId": "34ZHGcIxwsZUxkgh2z65V"
+    }
+  ],
+  "note": "Copied from task_get/project_get for provenance; task comments do not substitute for structured evidence."
+}

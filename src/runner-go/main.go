@@ -64,17 +64,21 @@ Usage:
   orbit status                      Show this directory's runner and its control-plane status
   orbit doctor                      Check the coding-engine CLIs, sign-in, and service PATH
   orbit engine-update               Update the coding-engine CLIs now (the periodic check, on demand)
-  orbit resume [session-id]         Resume a session in its coding runtime
+  orbit resume [session-id]         Resume a session in its engine's CLI
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
   orbit project <command>           Manage an Orbit project's durable context
   orbit session <command>           Orchestrate agent sessions (when enabled)
   orbit agent <command>             Inspect and configure agents (when enabled)
-  orbit provider <command>          List the providers a session or task may run on
+  orbit provider <command>          List and configure the providers sessions and tasks get credentials from
   orbit watch <command>             Wait on Orbit tasks and sessions without polling
   orbit wiki <command>              Read the Orbit wiki and propose to it
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
+  orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
+  orbit logout [--keep-token]       Revoke that token and forget it
+  orbit whoami [--json]             Show who the CLI acts as, and why
+  orbit api [-X METHOD] PATH        Call the Orbit REST API as yourself
   orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit host setup --server URL     Set this machine up for runners (root, once per host)
   orbit hostd [--foreground]        Serve the machine broker (systemd starts this, not you)
@@ -88,6 +92,8 @@ installation and sign-in guidance.
 
 Env:
   ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
+  ORBIT_USER_TOKEN         A personal access token to act as, in place of 'orbit login' (CI, containers)
+  ORBIT_SERVER_URL         The server ORBIT_USER_TOKEN belongs to
   ORBIT_NO_SELFUPDATE      Disable startup and periodic runner auto-updates
   ORBIT_NO_ENGINE_UPDATE   Disable the periodic coding-engine CLI update check
 `
@@ -161,16 +167,26 @@ when no engine is installed. Runs automatically at the end of 'orbit register'.
 Usage:
   orbit resume [session-id]
 
-Resumes the given session in its original coding runtime and
-original work directory. The session ID is the one shown in the web UI URL
-(e.g. /sessions/<id>). If omitted, lists sessions available on this machine.
+Resumes the given session in its original engine's CLI and original work directory.
+The session ID is the one shown in the web UI URL (e.g. /sessions/<id>). If omitted,
+lists sessions available on this machine.
+
+The engine is the one the session runs on, which never changes: this machine's own
+record of the run, or for a session that never ran here the engine the control plane
+reports for it. A DeepSeek Harness session is not opened here — Orbit drives Harness
+over ACP, the Harness it installs has no terminal interface, and the session's
+DeepSeek key reaches it only with each run Orbit dispatches — so it is refused,
+saying how to continue it instead.
 `,
 	"upgrade": `orbit upgrade — force-reinstall the latest orbit binary
 
 Usage:
   orbit upgrade
 
-Use this if the startup auto-update isn't working.
+Use this if the startup auto-update isn't working. On an install whose binary still
+sits in root's /usr/local/bin, sudo orbit upgrade moves it into ~/.orbit/bin of the
+account the runner service runs as, links /usr/local/bin/orbit to it and restarts the
+service, so later releases install themselves.
 `,
 	"engine-update": `orbit engine-update — update the coding-engine CLIs now
 
@@ -192,6 +208,10 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 	"watch":     watchHelp,
 	"wiki":      wikiHelp,
 	"token":     tokenHelp,
+	"login":     loginHelp,
+	"logout":    logoutHelp,
+	"whoami":    whoamiHelp,
+	"api":       apiHelp,
 	"host":      hostHelp,
 	"capabilities": `orbit capabilities — show agent-safe Orbit CLI capabilities
 
@@ -355,6 +375,26 @@ func main() {
 	case "token":
 		if err := cmdTokenCLI(args[1:], os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit token:", err)
+			os.Exit(1)
+		}
+	case "login":
+		if err := cmdLoginCLI(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit login:", err)
+			os.Exit(1)
+		}
+	case "logout":
+		if err := cmdLogoutCLI(args[1:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit logout:", err)
+			os.Exit(1)
+		}
+	case "whoami":
+		if err := cmdWhoamiCLI(args[1:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit whoami:", err)
+			os.Exit(1)
+		}
+	case "api":
+		if err := cmdAPICLI(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit api:", err)
 			os.Exit(1)
 		}
 	case "capabilities":
@@ -591,7 +631,17 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "no runner config found — run `orbit register` first")
 		os.Exit(1)
 	}
+	// A managed runner's Pod says which instance it is (managed_instance.go); one that said so
+	// unreadably does not start as though it had said nothing.
+	if err := checkManagedRunnerInstance(); err != nil {
+		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
+		os.Exit(1)
+	}
 	runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
+	// Its Pod ends Failed, not Succeeded: the instance did not finish, it was retired or fenced.
+	if managedInstanceRevokedSeen.Load() {
+		os.Exit(3)
+	}
 }
 
 // clearInheritedSessionContext removes a legacy/stale session identity inherited
@@ -721,15 +771,7 @@ func cmdResume(args []string) {
 			fmt.Fprintf(os.Stderr, "session %q not found: %v\n", sessionID, err)
 			os.Exit(1)
 		}
-		meta = &sessionMeta{
-			Provider:         resp.Provider,
-			SessionUUID:      resp.SessionUUID,
-			RuntimeSessionID: resp.RuntimeSessionID,
-			Title:            resp.Title,
-		}
-		if resp.WorkDir != nil {
-			meta.WorkDir = *resp.WorkDir
-		}
+		meta = resumeMetaFromServer(resp)
 		// Cache it so future resumes are offline-capable.
 		_ = os.MkdirAll(sessionDir, 0o755)
 		if b, err := json.Marshal(meta); err == nil {
@@ -737,19 +779,57 @@ func cmdResume(args []string) {
 		}
 	}
 
+	// Refused before anything is printed as resuming: the engine decides, and one this terminal
+	// cannot open is said as that rather than as a CLI that starts on a conversation it is not.
+	cmd, err := resumeCommand(sessionID, sessionDir, meta)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	fmt.Printf("resuming session %s", sessionID)
 	if meta.Title != "" {
 		fmt.Printf(" — %s", meta.Title)
 	}
 	fmt.Println()
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		os.Exit(1)
+	}
+}
 
+// resumeMetaFromServer is the record `orbit resume` keeps of a session it knows only from the control
+// plane. Its engine is the session's own as the server reports it (docs/provider-engine-contract.md
+// §6.3): `engine`, or — from a control plane older than that field — `provider`, which carried it.
+func resumeMetaFromServer(resp *SessionMetaResponse) *sessionMeta {
+	meta := &sessionMeta{
+		Provider:         strings.TrimSpace(resp.Engine),
+		SessionUUID:      resp.SessionUUID,
+		RuntimeSessionID: resp.RuntimeSessionID,
+		Title:            resp.Title,
+	}
+	if meta.Provider == "" {
+		meta.Provider = resp.Provider
+	}
+	if resp.WorkDir != nil {
+		meta.WorkDir = *resp.WorkDir
+	}
+	return meta
+}
+
+// resumeCommand is the CLI that reopens a session's conversation in this terminal, chosen by the
+// engine the session runs on (meta.Provider), or why there is none. Nothing is started here.
+func resumeCommand(sessionID, sessionDir string, meta *sessionMeta) (*exec.Cmd, error) {
 	var cmd *exec.Cmd
 	switch strings.ToLower(strings.TrimSpace(meta.Provider)) {
 	case providerCodex:
 		state, err := codexStateForResume(sessionDir, meta)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "cannot resolve this Codex session's state:", err)
-			os.Exit(1)
+			return nil, fmt.Errorf("cannot resolve this Codex session's state: %w", err)
 		}
 		sessionID := meta.RuntimeSessionID
 		if sessionID == "" {
@@ -766,44 +846,46 @@ func cmdResume(args []string) {
 		}
 	case providerKimi:
 		if meta.RuntimeSessionID == "" {
-			fmt.Fprintln(os.Stderr, "this Kimi session has no runtime session id yet")
-			os.Exit(1)
+			return nil, fmt.Errorf("this Kimi session has no runtime session id yet")
 		}
 		cmd = exec.Command(providerKimi, "--resume", meta.RuntimeSessionID)
+		// kimi finds the conversation in its KIMI_CODE_HOME: the account's the session ran on, or —
+		// with none recorded — Default's, which this terminal's own environment selects.
+		if meta.KimiCodeHome != "" {
+			cmd.Env = envWithValue(os.Environ(), "KIMI_CODE_HOME", meta.KimiCodeHome)
+		}
 	case providerOpenCode:
 		if meta.RuntimeSessionID == "" {
-			fmt.Fprintln(os.Stderr, "this OpenCode session has not been initialized yet")
-			os.Exit(1)
+			return nil, fmt.Errorf("this OpenCode session has not been initialized yet")
 		}
 		cmd = exec.Command(providerOpenCode, "--session", meta.RuntimeSessionID)
 	case providerAntigravity:
 		if meta.RuntimeSessionID == "" {
-			fmt.Fprintln(os.Stderr, "this Antigravity session has no conversation yet")
-			os.Exit(1)
+			return nil, fmt.Errorf("this Antigravity session has no conversation yet")
 		}
 		// The conversation lives in the session's own Gemini directory, not in ~/.gemini; agy
 		// reads GEMINI_API_KEY from this terminal's environment.
 		geminiDir, err := antigravityGeminiDir(sessionDir)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "cannot resolve this session's Gemini directory:", err)
-			os.Exit(1)
+			return nil, fmt.Errorf("cannot resolve this session's Gemini directory: %w", err)
 		}
 		cmd = exec.Command(agyExecutable, "--gemini_dir="+geminiDir, "--conversation", meta.RuntimeSessionID)
+	case providerDsh:
+		// Not the claude fallback below, which would start Claude Code on an id that is a Harness
+		// conversation. Orbit runs Harness only as an ACP server in a per-session home it seals
+		// (dsh_environment.go), the pinned install ships no terminal profile, and the session's key
+		// comes with each dispatch and is never stored here — so this terminal has nothing to open.
+		return nil, fmt.Errorf("this session runs on DeepSeek Harness, which orbit resume cannot open in a terminal: "+
+			"Orbit drives Harness over ACP, the Harness it installs has no terminal interface, and the session's "+
+			"DeepSeek key reaches it only with each run Orbit dispatches. Continue it in Orbit, or from here with "+
+			"`orbit session send %s --message TEXT --resume-if-ended`", publicID(sessionID))
 	default:
 		cmd = exec.Command("claude", "--resume", meta.SessionUUID)
 	}
 	if meta.WorkDir != "" {
 		cmd.Dir = expandTilde(meta.WorkDir)
 	}
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		os.Exit(1)
-	}
+	return cmd, nil
 }
 
 const base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"

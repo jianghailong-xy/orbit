@@ -1,0 +1,38 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop'",
+ "env": {
+  "KW2_BURST": "1",
+  "KW2_PACED": "1"
+ },
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "5cd02c2ae6c75f315427f26b87b8ba7838c73b8f",
+ "webTree": "12df001756f4904c1a1da822cc99dc89538a0bd6",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T12:16:10.609984+00:00",
+ "endedAt": "2026-10-07T12:27:43.953444+00:00",
+ "loadAverage": {
+  "start": [
+   13.86328125,
+   17.48486328125,
+   20.099609375
+  ],
+  "end": [
+   7.97998046875,
+   11.92724609375,
+   15.98388671875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "94e0ccd31f8ccb218e4ec938b23e06e0c24186f4392e416b18774a972b4efae5",
+ "outputBytes": 63353,
+ "raw": "/var/tmp/kw2-246921c8/runs/dev-check",
+ "stats": {
+  "expected": 338,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 692722.2000000001,
+  "samples": 338
+ }
+}

@@ -1,0 +1,6 @@
+28405c86d docs(web): archive the Menu window probe before and after the fix
+fix-select-keys-burst-after-field exit 0 {"destination":"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-after-field","stats":{"startTime":"2026-10-07T05:36
+fix-select-keys-burst-after-sample exit 0 {"destination":"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-after-sample","stats":{"startTime":"2026-10-07T05:3
+fix-select-keys-burst-after-antd exit 0 {"destination":"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-after-antd","stats":{"startTime":"2026-10-07T05:41:
+fix-select-keys-burst-after-search-multiple exit 0 {"destination":"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-after-search-multiple","stats":{"startTime":"2026-1
+fix-select-keys-burst-after-menu exit 0 {"destination":"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-after-menu","stats":{"startTime":"2026-10-07T05:47:

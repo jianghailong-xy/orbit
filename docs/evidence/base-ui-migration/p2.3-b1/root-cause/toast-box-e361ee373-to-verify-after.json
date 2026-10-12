@@ -1,0 +1,1055 @@
+{
+ "a": "diag-e361ee373",
+ "b": "diag-verify-after",
+ "rows": [
+  {
+   "screenshot": "chromium-dark-desktop/notification-error.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    870,
+    0,
+    428,
+    196
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-dark-desktop/profile-validation.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 6,
+   "maxChannelDelta": 1,
+   "clusters": [
+    {
+     "x": 527,
+     "y": 242,
+     "width": 4,
+     "height": 3,
+     "pixels": 6
+    }
+   ],
+   "toastBox": [
+    870,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 6
+  },
+  {
+   "screenshot": "chromium-dark-desktop/settings-saved.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 101925,
+   "maxChannelDelta": 223,
+   "clusters": [
+    {
+     "x": 500,
+     "y": 249,
+     "width": 560,
+     "height": 60,
+     "pixels": 14737
+    },
+    {
+     "x": 500,
+     "y": 711,
+     "width": 560,
+     "height": 63,
+     "pixels": 14661
+    },
+    {
+     "x": 500,
+     "y": 450,
+     "width": 560,
+     "height": 60,
+     "pixels": 14208
+    },
+    {
+     "x": 500,
+     "y": 331,
+     "width": 560,
+     "height": 32,
+     "pixels": 10722
+    },
+    {
+     "x": 500,
+     "y": 793,
+     "width": 560,
+     "height": 32,
+     "pixels": 10722
+    },
+    {
+     "x": 500,
+     "y": 531,
+     "width": 560,
+     "height": 32,
+     "pixels": 10720
+    },
+    {
+     "x": 501,
+     "y": 832,
+     "width": 558,
+     "height": 42,
+     "pixels": 8017
+    },
+    {
+     "x": 501,
+     "y": 370,
+     "width": 558,
+     "height": 49,
+     "pixels": 6820
+    }
+   ],
+   "toastBox": [
+    870,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 101925
+  },
+  {
+   "screenshot": "chromium-dark-phone/notification-error.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    230
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-dark-phone/profile-validation.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 98,
+   "maxChannelDelta": 2,
+   "clusters": [
+    {
+     "x": 366,
+     "y": 95,
+     "width": 8,
+     "height": 8,
+     "pixels": 8
+    },
+    {
+     "x": 343,
+     "y": 556,
+     "width": 6,
+     "height": 6,
+     "pixels": 8
+    },
+    {
+     "x": 41,
+     "y": 644,
+     "width": 3,
+     "height": 4,
+     "pixels": 8
+    },
+    {
+     "x": 41,
+     "y": 730,
+     "width": 3,
+     "height": 4,
+     "pixels": 8
+    },
+    {
+     "x": 41,
+     "y": 558,
+     "width": 2,
+     "height": 4,
+     "pixels": 7
+    },
+    {
+     "x": 41,
+     "y": 582,
+     "width": 3,
+     "height": 4,
+     "pixels": 7
+    },
+    {
+     "x": 41,
+     "y": 668,
+     "width": 3,
+     "height": 4,
+     "pixels": 7
+    },
+    {
+     "x": 41,
+     "y": 754,
+     "width": 3,
+     "height": 4,
+     "pixels": 7
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 12,
+   "insideToastBoxMax": 1,
+   "outsideToastBox": 86
+  },
+  {
+   "screenshot": "chromium-dark-phone/settings-saved.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 36854,
+   "maxChannelDelta": 212,
+   "clusters": [
+    {
+     "x": 16,
+     "y": 603,
+     "width": 358,
+     "height": 88,
+     "pixels": 12500
+    },
+    {
+     "x": 16,
+     "y": 484,
+     "width": 358,
+     "height": 89,
+     "pixels": 12401
+    },
+    {
+     "x": 16,
+     "y": 722,
+     "width": 358,
+     "height": 87,
+     "pixels": 11929
+    },
+    {
+     "x": 146,
+     "y": 843,
+     "width": 26,
+     "height": 1,
+     "pixels": 9
+    },
+    {
+     "x": 16,
+     "y": 841,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 372,
+     "y": 841,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 122,
+     "y": 843,
+     "width": 3,
+     "height": 1,
+     "pixels": 3
+    },
+    {
+     "x": 55,
+     "y": 843,
+     "width": 2,
+     "height": 1,
+     "pixels": 2
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 36854
+  },
+  {
+   "screenshot": "chromium-light-desktop/notification-error.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    870,
+    0,
+    428,
+    196
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-light-desktop/profile-validation.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 9,
+   "maxChannelDelta": 1,
+   "clusters": [
+    {
+     "x": 1058,
+     "y": 379,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 1058,
+     "y": 408,
+     "width": 2,
+     "height": 3,
+     "pixels": 4
+    }
+   ],
+   "toastBox": [
+    870,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 9
+  },
+  {
+   "screenshot": "chromium-light-desktop/settings-saved.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 50714,
+   "maxChannelDelta": 224,
+   "clusters": [
+    {
+     "x": 500,
+     "y": 249,
+     "width": 560,
+     "height": 60,
+     "pixels": 7147
+    },
+    {
+     "x": 500,
+     "y": 711,
+     "width": 560,
+     "height": 63,
+     "pixels": 6966
+    },
+    {
+     "x": 501,
+     "y": 832,
+     "width": 558,
+     "height": 42,
+     "pixels": 6919
+    },
+    {
+     "x": 501,
+     "y": 370,
+     "width": 558,
+     "height": 49,
+     "pixels": 6647
+    },
+    {
+     "x": 500,
+     "y": 450,
+     "width": 560,
+     "height": 60,
+     "pixels": 6625
+    },
+    {
+     "x": 525,
+     "y": 631,
+     "width": 439,
+     "height": 52,
+     "pixels": 5727
+    },
+    {
+     "x": 501,
+     "y": 571,
+     "width": 558,
+     "height": 41,
+     "pixels": 4299
+    },
+    {
+     "x": 500,
+     "y": 331,
+     "width": 560,
+     "height": 32,
+     "pixels": 1776
+    }
+   ],
+   "toastBox": [
+    870,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 50714
+  },
+  {
+   "screenshot": "chromium-light-phone/notification-error.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    230
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "chromium-light-phone/profile-validation.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 43,
+   "maxChannelDelta": 1,
+   "clusters": [
+    {
+     "x": 366,
+     "y": 95,
+     "width": 8,
+     "height": 8,
+     "pixels": 8
+    },
+    {
+     "x": 21,
+     "y": 446,
+     "width": 3,
+     "height": 2,
+     "pixels": 5
+    },
+    {
+     "x": 346,
+     "y": 558,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 347,
+     "y": 582,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 346,
+     "y": 644,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 347,
+     "y": 668,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 346,
+     "y": 730,
+     "width": 3,
+     "height": 4,
+     "pixels": 5
+    },
+    {
+     "x": 347,
+     "y": 754,
+     "width": 2,
+     "height": 4,
+     "pixels": 5
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 8,
+   "insideToastBoxMax": 1,
+   "outsideToastBox": 35
+  },
+  {
+   "screenshot": "chromium-light-phone/settings-saved.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 20887,
+   "maxChannelDelta": 224,
+   "clusters": [
+    {
+     "x": 16,
+     "y": 484,
+     "width": 358,
+     "height": 89,
+     "pixels": 7119
+    },
+    {
+     "x": 16,
+     "y": 603,
+     "width": 358,
+     "height": 88,
+     "pixels": 7099
+    },
+    {
+     "x": 16,
+     "y": 722,
+     "width": 358,
+     "height": 87,
+     "pixels": 6643
+    },
+    {
+     "x": 146,
+     "y": 843,
+     "width": 26,
+     "height": 1,
+     "pixels": 9
+    },
+    {
+     "x": 16,
+     "y": 841,
+     "width": 2,
+     "height": 3,
+     "pixels": 6
+    },
+    {
+     "x": 372,
+     "y": 841,
+     "width": 2,
+     "height": 3,
+     "pixels": 6
+    },
+    {
+     "x": 122,
+     "y": 843,
+     "width": 3,
+     "height": 1,
+     "pixels": 3
+    },
+    {
+     "x": 55,
+     "y": 843,
+     "width": 2,
+     "height": 1,
+     "pixels": 2
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 20887
+  },
+  {
+   "screenshot": "webkit-dark-desktop/notification-error.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    196
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-desktop/profile-validation.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-desktop/settings-saved.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 102958,
+   "maxChannelDelta": 223,
+   "clusters": [
+    {
+     "x": 492,
+     "y": 711,
+     "width": 560,
+     "height": 63,
+     "pixels": 14948
+    },
+    {
+     "x": 492,
+     "y": 249,
+     "width": 560,
+     "height": 60,
+     "pixels": 14764
+    },
+    {
+     "x": 492,
+     "y": 450,
+     "width": 560,
+     "height": 60,
+     "pixels": 14228
+    },
+    {
+     "x": 492,
+     "y": 331,
+     "width": 560,
+     "height": 32,
+     "pixels": 10722
+    },
+    {
+     "x": 492,
+     "y": 793,
+     "width": 560,
+     "height": 32,
+     "pixels": 10722
+    },
+    {
+     "x": 492,
+     "y": 531,
+     "width": 560,
+     "height": 32,
+     "pixels": 10720
+    },
+    {
+     "x": 493,
+     "y": 832,
+     "width": 558,
+     "height": 42,
+     "pixels": 8147
+    },
+    {
+     "x": 493,
+     "y": 370,
+     "width": 558,
+     "height": 49,
+     "pixels": 6875
+    }
+   ],
+   "toastBox": [
+    862,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 102958
+  },
+  {
+   "screenshot": "webkit-dark-phone/notification-error.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    230
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-phone/profile-validation.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    400,
+    104
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-dark-phone/settings-saved.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 36713,
+   "maxChannelDelta": 212,
+   "clusters": [
+    {
+     "x": 16,
+     "y": 603,
+     "width": 350,
+     "height": 89,
+     "pixels": 12377
+    },
+    {
+     "x": 16,
+     "y": 484,
+     "width": 350,
+     "height": 90,
+     "pixels": 12349
+    },
+    {
+     "x": 16,
+     "y": 722,
+     "width": 350,
+     "height": 87,
+     "pixels": 11963
+    },
+    {
+     "x": 146,
+     "y": 843,
+     "width": 26,
+     "height": 1,
+     "pixels": 9
+    },
+    {
+     "x": 16,
+     "y": 841,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 364,
+     "y": 841,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 122,
+     "y": 843,
+     "width": 3,
+     "height": 1,
+     "pixels": 3
+    },
+    {
+     "x": 55,
+     "y": 843,
+     "width": 2,
+     "height": 1,
+     "pixels": 2
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 36713
+  },
+  {
+   "screenshot": "webkit-light-desktop/notification-error.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    196
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-desktop/profile-validation.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    862,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-desktop/settings-saved.png",
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 52100,
+   "maxChannelDelta": 224,
+   "clusters": [
+    {
+     "x": 492,
+     "y": 249,
+     "width": 560,
+     "height": 60,
+     "pixels": 7271
+    },
+    {
+     "x": 492,
+     "y": 711,
+     "width": 560,
+     "height": 63,
+     "pixels": 7144
+    },
+    {
+     "x": 493,
+     "y": 831,
+     "width": 558,
+     "height": 43,
+     "pixels": 7037
+    },
+    {
+     "x": 493,
+     "y": 370,
+     "width": 558,
+     "height": 49,
+     "pixels": 6787
+    },
+    {
+     "x": 492,
+     "y": 450,
+     "width": 560,
+     "height": 60,
+     "pixels": 6761
+    },
+    {
+     "x": 517,
+     "y": 631,
+     "width": 440,
+     "height": 53,
+     "pixels": 5907
+    },
+    {
+     "x": 493,
+     "y": 571,
+     "width": 558,
+     "height": 41,
+     "pixels": 4376
+    },
+    {
+     "x": 492,
+     "y": 331,
+     "width": 560,
+     "height": 32,
+     "pixels": 1783
+    }
+   ],
+   "toastBox": [
+    862,
+    0,
+    428,
+    86
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 52100
+  },
+  {
+   "screenshot": "webkit-light-phone/notification-error.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    408,
+    230
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-phone/profile-validation.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 0,
+   "maxChannelDelta": 0,
+   "clusters": [],
+   "toastBox": [
+    0,
+    22,
+    400,
+    104
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 0
+  },
+  {
+   "screenshot": "webkit-light-phone/settings-saved.png",
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 21268,
+   "maxChannelDelta": 224,
+   "clusters": [
+    {
+     "x": 16,
+     "y": 484,
+     "width": 350,
+     "height": 90,
+     "pixels": 7252
+    },
+    {
+     "x": 16,
+     "y": 603,
+     "width": 350,
+     "height": 89,
+     "pixels": 7213
+    },
+    {
+     "x": 16,
+     "y": 722,
+     "width": 350,
+     "height": 87,
+     "pixels": 6778
+    },
+    {
+     "x": 145,
+     "y": 843,
+     "width": 27,
+     "height": 1,
+     "pixels": 10
+    },
+    {
+     "x": 16,
+     "y": 841,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 364,
+     "y": 841,
+     "width": 2,
+     "height": 3,
+     "pixels": 5
+    },
+    {
+     "x": 122,
+     "y": 843,
+     "width": 3,
+     "height": 1,
+     "pixels": 3
+    },
+    {
+     "x": 55,
+     "y": 843,
+     "width": 2,
+     "height": 1,
+     "pixels": 2
+    }
+   ],
+   "toastBox": [
+    0,
+    22,
+    408,
+    104
+   ],
+   "insideToastBox": 0,
+   "insideToastBoxMax": 0,
+   "outsideToastBox": 21268
+  }
+ ]
+}

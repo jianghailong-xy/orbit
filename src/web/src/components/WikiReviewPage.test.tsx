@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import type { WikiChangeset, WikiChangesetOp } from '@orbit/shared';
+import { wikiProposalsBanner, wikiProposalsWaiting, wikiWaiting } from '../lib/wikiSpace';
 import { WikiReviewPage } from './WikiReviewPage';
 
 // Nothing in these tests may reach the network: every read is answered from the query cache the
@@ -183,6 +184,16 @@ describe('Review — one card per op', () => {
     expect(html).toContain('Agents stop getting this entry');
   });
 
+  it('names the entry a retirement is about by the title the queue carries, before its own read lands', () => {
+    const named = { ...RETIRE, entryTitle: 'Wakeups are lost when the engine is recycled' } as WikiChangesetOp;
+    const html = paint([changeset({ id: 'changeset-three', ops: [named] })]);
+    expect(html).toContain('Retire <span class="q">“Wakeups are lost when the engine is recycled”</span>');
+    // Without it the card can only say "entry" until the entry's own read answers.
+    expect(paint([changeset({ id: 'changeset-three', ops: [RETIRE] })])).toContain(
+      'Retire <span class="q">“entry”</span>',
+    );
+  });
+
   it('says what an add was compared against, and that it collided with nothing', () => {
     const html = paint([changeset({ ops: [ADD] })], 'orbit');
     expect(html).toContain('Similar entries');
@@ -221,5 +232,39 @@ describe('Review — one card per op', () => {
     const html = paint([]);
     expect(html).toContain('Nothing is waiting for you.');
     expect(html).not.toContain('class="approval-card');
+  });
+});
+
+/**
+ * Review's head over every space (design §12.3.3, the owner's call of 2026-10-06): the proposals alone —
+ * what Activity's first banner counts, every space's `pendingOps` — and nothing a plan waits on, which the
+ * sidebar and the head's Activity badge add to them.
+ */
+describe('Review’s head across spaces', () => {
+  it('counts every space’s proposals, and not what the plans wait on', () => {
+    const spaces = [
+      { id: 'orbit', slug: 'orbit', title: 'orbit', repoUrlNorm: 'github.com/jianghailong-xy/orbit', pendingOps: 1, planWaiting: 1 },
+      { id: 'wikova', slug: 'wikova', title: 'wikova', repoUrlNorm: 'github.com/jianghailong-xy/wikova', pendingOps: 2, planWaiting: 2 },
+    ];
+    const queue = [
+      changeset({ id: 'in-orbit', spaceId: 'orbit', ops: [op()] }),
+      changeset({ id: 'in-wikova', spaceId: 'wikova', sessionId: '0196b000-0000-7000-8000-00000000abcd', ops: [op(), op()] }),
+    ];
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(['wiki', 'review', null], queue);
+    client.setQueryData(['wiki', 'spaces'], spaces);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <WikiReviewPage spaceSlug={null} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const proposals = wikiProposalsWaiting(spaces);
+    expect(proposals).toBe(3);
+    expect(wikiWaiting(spaces)).toBe(6);
+    expect(html).toContain(`<div class="rv-sub">${proposals} proposals from 2 sessions · oldest`);
+    // The banner that opens this page says the same number first.
+    expect(wikiProposalsBanner(spaces, 'orbit')).toBe(`${proposals} proposals to review · 2 in wikova`);
   });
 });

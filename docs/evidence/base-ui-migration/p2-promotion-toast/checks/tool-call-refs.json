@@ -1,0 +1,268 @@
+[
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-5738077a-f527-4584-a150-326a8defc675",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py mechanical-toast-unit npm test -w @orbit/web -- src/lib/toast.test.tsx src/lib/toastFeed.test.ts",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-3346e1c7-0a5c-4520-bbdb-9725cc6eccdc",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py mechanical-native npm run test:ui-toasts -w @orbit/web -- toasts-promotion.browser.mjs --grep 'exit keeps' --project chromium-light-desktop --project webkit-dark-phone --max-failures 2",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-aac3fbbc-cfca-484f-b2c4-9ed420697f8f",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py mechanical-hover-unit npm test -w @orbit/web -- src/lib/toast.test.tsx",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-200785c8-553b-46cf-bde7-d1f5f42949ca",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py hover-release-unit npm test -w @orbit/web -- src/lib/toast.test.tsx src/lib/toastFeed.test.ts",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-f0cbf5cb-1878-4483-8107-925a048a56bb",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py animation-phase-repair npm run test:ui-toasts -w @orbit/web -- toasts-promotion.browser.mjs --grep 'exit keeps|entrance progress' --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-7b999208-455e-4f1a-a24b-e1fff1b95c4f",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py exit-style-diagnostic npm run test:ui-toasts -w @orbit/web -- toasts-promotion.browser.mjs --grep 'exit keeps.*no-preference' --project chromium-light-desktop",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-0b1faba4-0db8-4d21-9de8-67889aacd4cc",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py animation-resume-repair npm run test:ui-toasts -w @orbit/web -- toasts-promotion.browser.mjs --grep 'exit keeps|entrance progress' --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-52b3b4ed-8eac-41aa-a829-cf1f18cb233e",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py fixture-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-19c2d9ce-9ae5-43c4-b1ac-f89641ae40ef",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py exit-host-diagnostic npm run test:ui-toasts -w @orbit/web -- toasts-promotion.browser.mjs --grep 'exit keeps.*no-preference' --project chromium-light-desktop",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-bd01152d-54a8-4c80-bfdf-af87b95f5b54",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py visible-owner-combination npm run test:ui-toasts -w @orbit/web -- toasts-promotion.browser.mjs --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-e5f4abc9-38b5-4e57-9645-e6348f83049d",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py toast-test-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-c523a0b0-9854-43f4-8d64-6af8bba3129e",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py main-reference node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-main-reference/src/web/ui-migration/toasts-reference.config.mjs",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-d2685afa-8962-49c8-a4dd-3609529df636",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py two-browser-smoke npm run test:ui-toasts -w @orbit/web -- --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-aed99233-ed4c-411d-9718-423003517111",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py project-reference node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.config.mjs",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-ff57f746-f879-4a4c-8b06-3dac1a7575e6",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py verified-mechanical-regression node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-reference.config.mjs --grep 'exit keeps.*no-preference|clear retains' --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-5eea4394-1a0c-4d02-a6c5-72bdfaa27923",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py committed-types bash -c 'node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-2bb93975-38d6-4386-84ed-2f32871f5a12",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py committed-build-and-test bash -c 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-1150964c-f70a-43d2-b2f4-e43d12a51e8d",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py main-stack-reference node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-main-reference/src/web/ui-migration/toasts-reference.config.mjs --grep 'mixed pinned'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-08bcc2df-f0d3-420c-a9d9-981debce3af4",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py project-stack-reference node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.config.mjs --grep 'mixed pinned'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-8b94fde1-dbdb-4c91-a193-2b36e681b6ae",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py committed-notifications npm run test:ui-toasts -w @orbit/web",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-862afb1d-ce47-4de7-abc3-ec3121bf2759",
+    "command": "python3 docs/evidence/base-ui-migration/p2.3/collect.py docs/evidence/base-ui-migration/p2-promotion-toast/committed-notifications-raw docs/evidence/base-ui-migration/p2-promotion-toast/toasts-run\nNO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py artifact-audit python3 docs/evidence/base-ui-migration/p2-promotion-toast/audit.py",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-2e1dd6cc-26eb-43a5-95e8-d105be99b3f3",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py final-types bash -c 'node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-30106df4-adcf-4ed3-9009-099b012099ed",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py settled-main-stack node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-main-reference/src/web/ui-migration/toasts-reference.config.mjs --grep 'mixed pinned'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-2341552f-5310-45f6-8561-66c68e1c0ecf",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py settled-final-stack node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-final-reference/src/web/ui-migration/toasts-reference.config.mjs --grep 'mixed pinned'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-02452061-412c-4367-950e-ab08343edf4d",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py final-build-and-test bash -c 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-4bfbdda0-8668-4b95-9330-a9275eaeb453",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py settled-project-stack node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-project-reference/src/web/ui-migration/toasts-reference.config.mjs --grep 'mixed pinned'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-35dfca9b-bc10-4dff-8e03-318fa838e1a6",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py compositing-reference node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-compositing-reference/src/web/ui-migration/toasts-reference.config.mjs --grep 'mixed pinned'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-001f78bd-8abe-449f-97e0-dfc796f69bd5",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py final-notifications npm run test:ui-toasts -w @orbit/web",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-c3ce6976-a1fa-4c70-9270-87ae93736b7f",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py verified-mechanical-final-test node node_modules/@playwright/test/cli.js test --config /tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-reference.config.mjs --grep 'exit keeps.*no-preference' --project chromium-light-desktop --project webkit-dark-phone",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-c93db8ec-6db3-4a43-b2cd-57f3791645b4",
+    "command": "python3 docs/evidence/base-ui-migration/p2.3/collect.py docs/evidence/base-ui-migration/p2-promotion-toast/final-notifications-raw docs/evidence/base-ui-migration/p2-promotion-toast/toasts-run\nNO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py final-artifact-audit python3 docs/evidence/base-ui-migration/p2-promotion-toast/audit.py",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-0f504b42-b2db-49cf-89b5-81f3248bc8c6",
+    "command": "NO_COLOR=1 XDG_CACHE_HOME=/tmp/p2-promotion-toast-cache python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py latest-overlay bash scripts/worktree-overlay.sh",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-f6afc0de-396b-4e61-881d-e2c7388f2d5a",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py latest-types bash -c 'node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-2e5416cd-ef85-457d-9681-faca14cd6614",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py latest-build-and-test bash -c 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-bcab894b-5eb3-46fe-9ebf-31b4d981dff5",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py latest-notifications npm run test:ui-toasts -w @orbit/web",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-e9e44fca-1e37-4d28-8940-350d0d769192",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py delivery-types bash -c 'node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-f9b93073-52bb-403e-83e4-b81eb1a2895f",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py delivery-build-and-test bash -c 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-967d9afb-0a2d-45b4-9d35-5721f6d218cb",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py delivery-notifications npm run test:ui-toasts -w @orbit/web",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "kind": "TOOL_CALL",
+    "ref": "exec-12b627c7-2cd6-48e8-8d12-713b1a4db435",
+    "command": "NO_COLOR=1 python3 docs/evidence/base-ui-migration/p2-promotion-toast/record-check.py delivery-artifact-audit python3 docs/evidence/base-ui-migration/p2-promotion-toast/audit.py",
+    "status": "completed",
+    "exitCode": 0
+  }
+]

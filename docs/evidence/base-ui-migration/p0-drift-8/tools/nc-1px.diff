@@ -1,0 +1,39 @@
+diff --git a/src/web/src/components/TaskDetailPanel.tsx b/src/web/src/components/TaskDetailPanel.tsx
+index 85b863893..ca03cecd4 100644
+--- a/src/web/src/components/TaskDetailPanel.tsx
++++ b/src/web/src/components/TaskDetailPanel.tsx
+@@ -1604,7 +1604,7 @@ export function TaskDetailPanel({
+               </div>
+             )}
+             <div className="tdp-field">
+-              <span className="tdp-field-label">Engine</span>
++              <span className="tdp-field-label" style={{ marginLeft: 1 }}>Engine</span>
+               <Combobox
+                 className="tdp-assignee-select"
+                 variant="borderless"
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 05c0a3e04..401b59b5a 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -8465,7 +8465,7 @@ button.chat-jump-start:hover {
+    pulled up against the bubble above: it is the answer's first line, not the question's last. */
+ .chat-turn-head {
+   margin: -2px 0 4px;
+-  padding: 0 12px;
++  padding: 0 12px 0 13px;
+   font-size: 12px;
+   line-height: 1.5;
+   color: var(--text-3);
+diff --git a/src/web/src/pages/SettingsPage.tsx b/src/web/src/pages/SettingsPage.tsx
+index 9f235b27e..d2adcd4db 100644
+--- a/src/web/src/pages/SettingsPage.tsx
++++ b/src/web/src/pages/SettingsPage.tsx
+@@ -25,7 +25,7 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
+       }}
+     >
+       <div>
+-        <div>{label}</div>
++        <div style={label === 'Session recaps' ? { marginLeft: 1 } : undefined}>{label}</div>
+         <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{hint}</div>
+       </div>
+       <div style={{ flex: 'none' }}>{children}</div>

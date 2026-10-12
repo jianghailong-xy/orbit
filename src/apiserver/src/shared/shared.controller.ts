@@ -42,7 +42,8 @@ export class SharedController {
    * shape its page has always read — title, workspace, status, the tail page of its events and
    * `hasMore` (`limit` / `maxPayload` as on the events page below). A task root is the task as its
    * layers show it (share-links/public-task.ts); a project root is the project's seven blocks
-   * (share-links/public-project.ts) and `scope`, what the link opens besides it. The one request
+   * (share-links/public-project.ts) and `scope`, what the link opens besides it; a wiki root is the
+   * space's written documents by category (share-links/public-wiki.ts). The one request
    * that counts as a view — unless it is the owner's Preview (`preview=1`), which is them looking,
    * not a visitor. The count is information, not a boundary, so the flag is taken at its word.
    */
@@ -61,7 +62,9 @@ export class SharedController {
           .then((transcript) => ({ ...head, ...transcript, events: shown(link, transcript.events) }))
       : link.kind === 'TASK'
         ? { ...head, root: await this.links.taskPage(link) }
-        : { ...head, ...(await this.links.projectPage(link)) };
+        : link.kind === 'WIKI'
+          ? { ...head, root: await this.links.wikiPage(link) }
+          : { ...head, ...(await this.links.projectPage(link)) };
     if (preview !== '1') await this.links.recordView(link.id);
     return body;
   }
@@ -77,21 +80,31 @@ export class SharedController {
     return this.links.projectTask(link, taskId);
   }
 
+  /**
+   * One of a wiki link's written documents (`doc`), with the link's `include` and the wiki's name for
+   * the breadcrumb. Its footnotes only with Footnotes. A document the plan does not have, one nobody
+   * has written, and any other kind of link are the one 404. Not a view.
+   */
+  @Get(':token/docs/:slug')
+  async wikiDoc(@Param('token') token: string, @Param('slug') slug: string) {
+    const link = await this.links.resolve(token);
+    return this.links.wikiDoc(link, slug);
+  }
+
   /** A page of the shared transcript: the newest `limit` (≤ 500, default 200) events, or those
-   *  just older than `before`; `maxPayload` trims bulky tool bodies and marks them `truncated`. */
+   *  just older than `before`; `maxPayload` trims bulky tool bodies and marks them `truncated`.
+   *  With `after`, what the session has added since that seq instead, and its header as it stands
+   *  now (SessionsService.getSharedEventsAfter) — the read a page following a live session makes. */
   @Get(':token/events')
   async events(
     @Param('token') token: string,
     @Query('before') before?: string,
+    @Query('after') after?: string,
     @Query('limit') limit?: string,
     @Query('maxPayload') maxPayload?: string,
   ) {
     const link = await this.sessionLink(token);
-    const page = await this.sessions.getSharedEventPage(link.sessionId, {
-      before: num(before),
-      limit: num(limit),
-      maxPayload: parseMaxPayload(maxPayload),
-    });
+    const page = await this.pageOf(link.sessionId, { before, after, limit, maxPayload });
     return { ...page, events: shown(link, page.events) };
   }
 
@@ -135,16 +148,13 @@ export class SharedController {
     @Param('token') token: string,
     @Param('sessionId', PublicIdPipe) sessionId: string,
     @Query('before') before?: string,
+    @Query('after') after?: string,
     @Query('limit') limit?: string,
     @Query('maxPayload') maxPayload?: string,
   ) {
     const link = await this.links.resolve(token);
     await this.links.openConversation(link, sessionId);
-    const page = await this.sessions.getSharedEventPage(sessionId, {
-      before: num(before),
-      limit: num(limit),
-      maxPayload: parseMaxPayload(maxPayload),
-    });
+    const page = await this.pageOf(sessionId, { before, after, limit, maxPayload });
     return { ...page, events: shown(link, page.events) };
   }
 
@@ -188,6 +198,20 @@ export class SharedController {
     const link = await this.sessionLink(token);
     const { data, mimeType, disposition } = await this.sessions.getLegacyArtifactForShared(link.sessionId, artifactPath);
     return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
+  }
+
+  /** One page of a conversation the link opens, as both events routes read it: what came after
+   *  `after` when it is given, as the owner's `events/page` reads it; else the page before `before`,
+   *  or the tail. */
+  private pageOf(
+    sessionId: string,
+    query: { before?: string; after?: string; limit?: string; maxPayload?: string },
+  ) {
+    const opts = { limit: num(query.limit), maxPayload: parseMaxPayload(query.maxPayload) };
+    const after = num(query.after);
+    return after !== undefined
+      ? this.sessions.getSharedEventsAfter(sessionId, { ...opts, after })
+      : this.sessions.getSharedEventPage(sessionId, { ...opts, before: num(query.before) });
   }
 
   /** The transcript routes serve a session root only; on any other link they are not there. */

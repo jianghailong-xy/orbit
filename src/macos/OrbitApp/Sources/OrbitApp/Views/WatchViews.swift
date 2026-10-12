@@ -79,8 +79,9 @@ struct WatchDetailContent: View {
                 }
             }
         }
-        .confirmationDialog("Stop watching?", isPresented: $confirmingStop, titleVisibility: .visible) {
+        .orbitConfirmation("Stop watching?", isPresented: $confirmingStop) {
             Button("Stop", role: .destructive) { run(.stop) }
+            Button("Keep watching", role: .cancel) {}
         } message: {
             Text(WatchProjection.stopWarning(for: watch))
         }

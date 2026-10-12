@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { SessionCreatedTasksService } from './session-created-tasks.service';
@@ -19,6 +20,7 @@ export class SessionCreatedTasksController {
    * (`SessionCreatedTasks`, @orbit/shared). `limit` caps `items` (default 20, at most 50) and
    * nothing else. Another account's session answers 404, exactly as a missing one does.
    */
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get(':id/created-tasks')
   read(
     @CurrentUser() user: AuthUser,

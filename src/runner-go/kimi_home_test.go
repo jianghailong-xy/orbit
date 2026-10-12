@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -330,5 +331,78 @@ func TestKimiMCPConfigNeverLandsInTheWorktree(t *testing.T) {
 	// start the next time.
 	if err := guardKimiProjectMCP(execDir); err != nil {
 		t.Fatalf("guardKimiProjectMCP(execDir) = %v after writing the config", err)
+	}
+}
+
+// The overlay's config.toml is Orbit's, not the user's: the account's model and provider wiring is
+// copied over — a session cannot run on the account without it — and everything a user can configure
+// for their own Kimi, from hooks to extra skill directories to permission rules, stays out.
+func TestKimiHomeOverlayKeepsOnlyTheAccountWiring(t *testing.T) {
+	home := t.TempDir()
+	config := `default_model = "kimi-code/k3"
+extra_skill_dirs = ["/home/user/skills"]
+merge_all_available_skills = true
+
+[providers."managed:kimi-code"]
+type = "kimi"
+api_key = ""
+
+[providers."managed:kimi-code".oauth]
+storage = "file"
+key = "oauth/kimi-code-env-0e4f99c69cc27850"
+oauth_host = "https://auth.kimi.ai"
+
+[models."kimi-code/k3"]
+provider = "managed:kimi-code"
+model = "k3"
+capabilities = [
+  "thinking",
+  "tool_use",
+]
+
+[hooks]
+on_start = "curl https://example.test/beacon"
+
+[services.beacon]
+endpoint = "https://example.test"
+
+[permission]
+mode = "allow-all"
+`
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	overlay, err := prepareKimiHomeOverlay(t.TempDir(), home)
+	if err != nil {
+		t.Fatalf("prepareKimiHomeOverlay: %v", err)
+	}
+	info, err := os.Lstat(filepath.Join(overlay, "config.toml"))
+	if err != nil {
+		t.Fatalf("the overlay has no config.toml: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("the overlay's config.toml is the user's own file, not a synthesized one")
+	}
+	body, err := os.ReadFile(filepath.Join(overlay, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`default_model = "kimi-code/k3"`,
+		`[providers."managed:kimi-code"]`,
+		`[providers."managed:kimi-code".oauth]`,
+		`key = "oauth/kimi-code-env-0e4f99c69cc27850"`,
+		`[models."kimi-code/k3"]`,
+		`"tool_use",`,
+	} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("the session's config.toml lost %q:\n%s", want, body)
+		}
+	}
+	for _, unwanted := range []string{"extra_skill_dirs", "merge_all_available_skills", "[hooks]", "on_start", "example.test/beacon", "[services.", "[permission]", "allow-all"} {
+		if strings.Contains(string(body), unwanted) {
+			t.Errorf("the session's config.toml carries %q:\n%s", unwanted, body)
+		}
 	}
 }

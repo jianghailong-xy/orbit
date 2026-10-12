@@ -23,6 +23,9 @@ export interface ProjectTaskMark extends TaskDependencyGraphNode {
   runReason?: TaskRunReason | null;
   /** Its background jobs have stopped producing output (see `runningLabel`). */
   runStalled?: boolean;
+  /** How it is settled (`EXECUTABLE`, `EVIDENCE_JUDGMENT`, `OWNER_CONFIRMED`, …): what the start card
+   *  reads to say which of the plan comes to the owner. Absent from an older server. */
+  completionCriterion?: string;
 }
 
 export type ProjectTaskWorkState =
@@ -143,7 +146,8 @@ export interface ProjectDependencyGraphResponse {
   folded: boolean;
   /** The project is bigger than one request reads, or its fold than one response carries. */
   truncated: boolean;
-  limits: { maxTasks: number; maxMarks: number };
+  /** The ceiling it was read under. Absent from a graph nobody had to read a ceiling for. */
+  limits?: { maxTasks: number; maxMarks: number };
 }
 
 /** What a mark says it is, for a reader and for a screen reader. */

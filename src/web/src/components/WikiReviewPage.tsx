@@ -3,19 +3,23 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   AimOutlined,
+  ArrowLeftOutlined,
   CheckOutlined,
   DownOutlined,
   GlobalOutlined,
   LeftOutlined,
   RightOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Dropdown, Modal } from 'antd';
 import type { WikiEntryChanges } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty } from './WikiCards';
 import { WikiTitleSummaryFields } from './WikiEntryDrawer';
 import { WikiAim } from './WikiMarks';
 import { WikiSourceList } from './WikiSources';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Menu } from './ui/Menu';
 import { wikiEntriesQuery, wikiEntryQuery, wikiReviewQuery, wikiSpacesQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -61,6 +65,8 @@ import {
   wikiWebDerivedWarning,
   wikiChangesDiff,
   wikiDecidedToast,
+  wikiDecisionRefusal,
+  wikiRecordedDecision,
   type WikiChangeset,
   type WikiAnchor,
   type WikiChangesetOp,
@@ -146,8 +152,11 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
 
   return (
     <div className="rv-page">
-      <div className="wk-crumb">
-        <Link to={spaceSlug ? `/wiki/${spaceSlug}` : '/wiki'}>{WIKI_TITLE}</Link>
+      <div className="wk-crumb wk-crumb--back">
+        <Link to={spaceSlug ? `/wiki/${spaceSlug}` : '/wiki'}>
+          <ArrowLeftOutlined className="back" />
+          {WIKI_TITLE}
+        </Link>
         <RightOutlined className="ic" />
         <span>{WIKI_REVIEW_TITLE}</span>
       </div>
@@ -196,9 +205,13 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
               <span className="pos">
                 {wikiOfCount(current + 1, shown.length)}
               </span>
-              <Button disabled={current >= shown.length - 1} onClick={() => setAt(current + 1)}>
+              <Button
+                disabled={current >= shown.length - 1}
+                onClick={() => setAt(current + 1)}
+                icon={<RightOutlined />}
+                iconPlacement="end"
+              >
                 {WIKI_NEXT}
-                <RightOutlined />
               </Button>
             </div>
           )}
@@ -269,8 +282,9 @@ function ReviewCard({
   // the kind it retires are the entry's.
   const target = useQuery({ ...wikiEntryQuery(op.entryId ?? null) });
   const kind = (draft.kind as string) ?? (target.data?.kind ?? null);
+  // Until that read lands, or when it fails, the title Review's own read carries for the entry.
   const title =
-    typeof draft.title === 'string' ? draft.title : (target.data?.title ?? null);
+    typeof draft.title === 'string' ? draft.title : (target.data?.title ?? op.entryTitle ?? null);
   const kindWord = kind ? wikiKindWord(kind) : WIKI_ENTRY_WORD;
 
   const write = useWikiWrite((decisions: WikiDecision[]) => decideWikiChangeset(changeset.id, decisions));
@@ -278,13 +292,18 @@ function ReviewCard({
 
   // The outcome in the answer's own words, and the entry it was about on the line under it: by the
   // time the toast lands the pager has moved on to the next card. An edit names the entry by the
-  // title the owner gave it.
-  const decided = (action: WikiDecision['action'], about: string | null | undefined = title) =>
-    toast.success(wikiDecidedToast(op.op, action), about ?? undefined);
+  // title the owner gave it. The words are what the server RECORDED, read off its answer: an op it
+  // could not apply is answered 200 too, recorded `conflict` or `withdrawn` (`wikiDecisionRefusal`),
+  // and that is said as the refusal it is, never as the answer's own word.
+  const decided = (action: WikiDecision['action'], answer: WikiChangeset, about: string | null | undefined = title) => {
+    const refusal = wikiDecisionRefusal(wikiRecordedDecision(answer, op.id), op.op, action);
+    if (refusal) toast.error(WIKI_DECIDE_FAILED, refusal);
+    else toast.success(wikiDecidedToast(op.op, action), about ?? undefined);
+  };
   const decide = async (decision: WikiDecision) => {
     try {
-      await write.mutateAsync([decision]);
-      decided(decision.action);
+      const answer = await write.mutateAsync([decision]);
+      decided(decision.action, answer);
     } catch (error) {
       toast.error(WIKI_DECIDE_FAILED, error instanceof Error ? error.message : undefined);
     }
@@ -296,10 +315,12 @@ function ReviewCard({
   // are that entry's with the amend's changes over them.
   const proposed = payload.entry || target.data || target.isError ? proposedText(payload, target.data) : null;
   // Edit's answer, from its form. A refusal is thrown back for the form to show rather than toasted
-  // here: the reason is about what the owner typed, and the form keeps that open beside it.
+  // here: the reason is about what the owner typed, and the form keeps that open beside it. An answer
+  // the server recorded without applying it is not about the words — the op no longer waits, and the
+  // re-read that follows takes its card, and the form in it, away — so it is toasted, as Accept's is.
   const acceptEdited = async (edited: WikiEntryChanges) => {
-    await write.mutateAsync([{ opId: op.id, action: 'edit', edited }]);
-    decided('edit', edited.title ?? title);
+    const answer = await write.mutateAsync([{ opId: op.id, action: 'edit', edited }]);
+    decided('edit', answer, edited.title ?? title);
   };
 
   const sources = sourcesOf(op);
@@ -488,19 +509,19 @@ function ReviewCard({
             >
               {WIKI_REVIEW_EDIT}
             </button>
-            <Dropdown
-              trigger={['click']}
-              menu={{
-                items: WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label })),
-                onClick: ({ key }) =>
-                  decide({ opId: op.id, action: 'reject', reason: key as WikiDecision['reason'] }),
-              }}
-            >
-              <button type="button" className="card-action card-action--secondary">
-                {WIKI_REVIEW_REJECT}
-                <DownOutlined className="ic" />
-              </button>
-            </Dropdown>
+            <Menu
+              items={WIKI_REJECT_MENU.map(({ reason, label }) => ({
+                key: reason,
+                label,
+                onSelect: () => decide({ opId: op.id, action: 'reject', reason: reason as WikiDecision['reason'] }),
+              }))}
+              trigger={
+                <button type="button" className="card-action card-action--secondary">
+                  {WIKI_REVIEW_REJECT}
+                  <DownOutlined className="ic" />
+                </button>
+              }
+            />
             <span className="grow" />
             <span className="note">{op.tainted ? WIKI_WEB_DERIVED_NOTE : WIKI_ACCEPT_NOTE}</span>
           </>
@@ -513,8 +534,8 @@ function ReviewCard({
         <ProposalEditor
           proposed={{ title: target.data.title, summary: target.data.summary }}
           onAccept={async (edited) => {
-            await write.mutateAsync([{ opId: op.id, action: 'amend', edited }]);
-            decided('amend', edited.title ?? title);
+            const answer = await write.mutateAsync([{ opId: op.id, action: 'amend', edited }]);
+            decided('amend', answer, edited.title ?? title);
           }}
           onClose={() => setAmending(false)}
           okText={WIKI_AMEND}
@@ -574,20 +595,29 @@ function ProposalEditor({
   };
 
   return (
-    <Modal
+    <Dialog
       open
       title={okText === WIKI_REVIEW_ACCEPT ? WIKI_REVIEW_EDIT : okText}
-      onCancel={onClose}
-      onOk={submit}
-      okText={okText}
-      okButtonProps={{ disabled: Object.keys(edited).length === 0 || title.trim().length === 0 }}
-      confirmLoading={saving}
-      destroyOnHidden
+      onClose={onClose}
+      className="wk-proposal-dialog"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={Object.keys(edited).length === 0 || title.trim().length === 0}
+            loading={saving}
+            onClick={() => void submit()}
+          >
+            {okText}
+          </Button>
+        </>
+      }
     >
       <p className="wk-modal-note">{note}</p>
       <WikiTitleSummaryFields title={title} summary={summary} onTitle={setTitle} onSummary={setSummary} />
-      {refusal && <Alert type="error" showIcon title={refusal} style={{ marginTop: 8 }} />}
-    </Modal>
+      {refusal && <Alert type="error" title={refusal} style={{ marginTop: 8 }} />}
+    </Dialog>
   );
 }
 

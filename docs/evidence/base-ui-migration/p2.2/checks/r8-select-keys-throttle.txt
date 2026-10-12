@@ -1,0 +1,14 @@
+
+Running 9 tests using 1 worker
+
+  ✓  1 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter at 1x CPU throttling (13.3s)
+  ✓  2 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter at 6x CPU throttling (14.0s)
+  ✓  3 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › orbit-field ArrowDown ArrowDown Enter at 20x CPU throttling (18.4s)
+  ✓  4 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter at 1x CPU throttling (12.5s)
+  ✓  5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter at 6x CPU throttling (13.5s)
+  ✓  6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › orbit-sample ArrowDown ArrowDown Enter at 20x CPU throttling (17.4s)
+  ✓  7 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter at 1x CPU throttling (12.8s)
+  ✓  8 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter at 6x CPU throttling (13.7s)
+  ✓  9 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys.browser.mjs:34:3 › antd-sample ArrowDown ArrowDown Enter at 20x CPU throttling (18.0s)
+
+  9 passed (2.2m)

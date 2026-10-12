@@ -24,6 +24,7 @@ final class SessionMessageWiringTests: XCTestCase {
     }
 
     private static let consolePath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"
+    private static let rowPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/UserTurnRow.swift"
     private static let cardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/SessionMessageCardView.swift"
     private static let iosProject = "src/ios/project.yml"
 
@@ -58,39 +59,46 @@ final class SessionMessageWiringTests: XCTestCase {
     }
 
     func testTheTranscriptAsksForTheCardFirstAndKeepsTheBubbleWithoutOne() throws {
+        // The transcript draws a user turn with the one row both states share (`UserTurnRow`).
         let view = try section(try source(Self.consolePath),
                                from: "struct TranscriptItemView: View", to: "case .assistant(let b)")
-        let user = statements(try section(view, from: "case .user(let b):", to: "UserBubbleView(bubble: b)\n"))
-        XCTAssertEqual(user.dropFirst().first, "if let card = b.sessionMessage {",
+        XCTAssertTrue(statements(view).contains("UserTurnRow(bubble: b)"),
+                      "the transcript no longer draws a user turn with the row that asks for the card")
+        let row = try section(try source(Self.rowPath), from: "struct UserTurnRow: View", to: "private func attachedRest")
+        let user = statements(try section(row, from: "var body: some View {",
+                                          to: "UserBubbleView(bubble: b, onCancelQueued: cancel)\n"))
+        let first = try XCTUnwrap(user.firstIndex { $0.hasPrefix("if ") }, "the row asks nothing about the turn")
+        XCTAssertEqual(user[first], "if let card = b.sessionMessage {",
                        "the card is no longer the first thing a user turn is asked about")
         // The branch itself: the card, drawn from the turn's own words and note, and then on to the
         // readings every other turn has always had.
-        XCTAssertEqual(Array(user.dropFirst(2).prefix(4)), [
+        XCTAssertEqual(Array(user[(first + 1)...].prefix(4)), [
             "SessionMessageCardView(card: card, text: b.text, ts: b.ts,",
-            "undelivered: b.undelivered || b.delivery == \"failed\",",
-            "attached: b.attached)",
+            "undelivered: undelivered,",
+            "attached: b.attached, onCancelQueued: cancel)",
             "} else if let card = b.itemCard {",
         ], "a turn with a sender is not drawn as the session-message card")
-        XCTAssertTrue(view.contains("UserBubbleView(bubble: b)"), "a turn with no sender lost its bubble")
+        XCTAssertTrue(row.contains("UserBubbleView(bubble: b, onCancelQueued: cancel)"),
+                      "a turn with no sender lost its bubble")
         // Not behind a platform: one branch, drawn by both shells.
         XCTAssertFalse(user.contains { $0.hasPrefix("#if") }, "the card is drawn on one platform only")
     }
 
-    /// While it waits in the queue it is the same card, asked about before the shapes its words could
-    /// take, with the queue's Cancel at its foot — and nothing else in the queued row draws it.
+    /// While it waits in the queue it is the same card — the queued row is the transcript's own row,
+    /// which asks for it before the shapes its words could take — with the queue's Cancel at its foot.
     func testTheQueuedRowDrawsTheCardFirstWithItsCancel() throws {
         let row = statements(try section(try source(Self.consolePath),
                                          from: "case .queued(let bubble):", to: "case .bottom:"))
-        XCTAssertEqual(row.dropFirst().first, "if let card = bubble.sessionMessage {",
-                       "a queued message from another session is no longer asked about first")
-        XCTAssertEqual(Array(row.dropFirst(2).prefix(5)), [
-            "SessionMessageCardView(card: card, text: bubble.text, ts: bubble.ts,",
-            "undelivered: bubble.undelivered,",
-            "onCancelQueued: bubble.turnId == nil || bubble.steer",
-            "? nil : { Task { await console.cancelQueued(bubble) } })",
-            "} else if let card = bubble.itemCard {",
-        ], "a queued message from another session is not drawn as its card, with its Cancel — and "
-            + "none for a steer, which the server refuses to withdraw")
+        XCTAssertEqual(Array(row.dropFirst()), [
+            "UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {",
+            "Task { await console.cancelQueued(bubble) }",
+            "})",
+        ], "a queued message from another session is not drawn by the row that draws its card")
+        let controls = statements(try section(try source(Self.rowPath),
+                                              from: "struct QueuedControls", to: "struct UserTurnRow"))
+        XCTAssertTrue(controls.contains("onCancel = bubble.turnId == nil || bubble.steer ? nil : cancel"),
+                      "a queued message from another session is offered a Cancel the server refuses: "
+                          + "none for a steer, nor before the turn id is known")
         // Cancel is the console's ordinary withdraw, whose composer rule keeps the words out
         // (`QueuedTurnRestoreTests`); the card offers it only while the message is still queued.
         let card = statements(try source(Self.cardPath))

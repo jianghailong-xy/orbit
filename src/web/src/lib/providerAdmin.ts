@@ -1,3 +1,5 @@
+import type { AgentProvider } from '@orbit/shared';
+
 // The provider *management* surface shared by the list page and the connect page: the row shape
 // the API returns, and where that list lives.
 
@@ -13,7 +15,13 @@ export interface ProviderRow {
   id: string;
   slug: string;
   label: string;
+  /** The protocol the key's endpoint speaks, named by the engine that speaks it natively. Which
+   *  engines run the key is `engines`. */
   runtime: string;
+  /** Every engine this key runs on, the one a session naming only the key gets first — the server's
+   *  answer (docs/provider-engine-contract.md §6.3), since only the server, holding the key, can tell
+   *  a Claude subscription token, which runs on Claude Code alone. */
+  engines: AgentProvider[];
   baseUrl: string;
   models: ProviderModelRow[];
   defaultModel: string | null;
@@ -25,6 +33,10 @@ export interface ProviderRow {
   followsPreset: boolean;
   enabled: boolean;
   hasApiKey: boolean;
+  /** When a session last RAN on this key — the server's own read (providers/provider-last-used.ts),
+   *  which counts direct and pool-dispatched sessions that actually took a turn — or null for a key
+   *  nothing has spent yet. The keys table shows it beside the enabled state. */
+  lastUsedAt?: string | null;
   /** Why this key may not join an account pool — the server's own admission test, since the key
    *  itself never reaches the browser — or null when it may. */
   poolRefusal?: { reason: string; message: string } | null;

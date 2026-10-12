@@ -1,16 +1,21 @@
 import Foundation
 
-// Public links (docs/share-links-design.md §4–§5): a `share_link` row of its own, rooted at exactly
-// one session, task or project, with the layers it includes, an expiry, and how often it was
-// opened. The public address is `<baseURL>/s/<token>`. Mirrors `src/web/src/api.ts` (`ShareLink`
-// and its neighbours) and the owner view `share-links.service.ts` answers.
+// Public links (docs/share-links-design.md §4–§5, §10): a `share_link` row of its own, rooted at
+// exactly one session, task, project or wiki space, with the layers it includes, an expiry, and how
+// often it was opened. The public address is `<baseURL>/s/<token>`. Mirrors `src/web/src/api.ts`
+// (`ShareLink` and its neighbours) and the owner view `share-links.service.ts` answers.
 
 /// What a link is rooted at. Each kind's owner endpoints hang off the root's own path:
-/// `GET | PUT | DELETE /{sessions|tasks|projects}/:id/share`.
+/// `GET | PUT | DELETE /{sessions|tasks|projects|wiki/spaces}/:id/share`.
+///
+/// A closed set: Settings → Shared links asks the server for these kinds by name
+/// (`APIClient.shareLinks`), and a server lists no other, so a kind added later never reaches a
+/// build that cannot decode it.
 public enum ShareRootKind: String, Codable, Sendable, CaseIterable {
     case session = "SESSION"
     case task = "TASK"
     case project = "PROJECT"
+    case wiki = "WIKI"
 
     /// The path segment the root's `…/:id/share` endpoints live under.
     public var pathSegment: String {
@@ -18,15 +23,16 @@ public enum ShareRootKind: String, Codable, Sendable, CaseIterable {
         case .session: return "sessions"
         case .task: return "tasks"
         case .project: return "projects"
+        case .wiki: return "wiki/spaces"
         }
     }
 }
 
 /// A layer a link can turn on or off. Which of them a link has depends on its root. The root's own
-/// content — a session's Messages, a task's or a project's Overview — is not one of them: every link
-/// includes it.
+/// content — a session's Messages, a task's or a project's Overview, a wiki's Documents — is not one
+/// of them: every link includes it.
 public enum ShareLayer: String, Codable, Sendable, CaseIterable {
-    case taskPages, commentsAndFiles, conversations, toolOutput
+    case taskPages, commentsAndFiles, conversations, toolOutput, footnotes
 }
 
 /// The layers a link includes. The owner read answers every layer its root has, resolved over the
@@ -37,13 +43,15 @@ public struct ShareInclude: Codable, Equatable, Sendable {
     public var commentsAndFiles: Bool?
     public var conversations: Bool?
     public var toolOutput: Bool?
+    public var footnotes: Bool?
 
     public init(taskPages: Bool? = nil, commentsAndFiles: Bool? = nil, conversations: Bool? = nil,
-                toolOutput: Bool? = nil) {
+                toolOutput: Bool? = nil, footnotes: Bool? = nil) {
         self.taskPages = taskPages
         self.commentsAndFiles = commentsAndFiles
         self.conversations = conversations
         self.toolOutput = toolOutput
+        self.footnotes = footnotes
     }
 
     public subscript(layer: ShareLayer) -> Bool? {
@@ -53,6 +61,7 @@ public struct ShareInclude: Codable, Equatable, Sendable {
             case .commentsAndFiles: return commentsAndFiles
             case .conversations: return conversations
             case .toolOutput: return toolOutput
+            case .footnotes: return footnotes
             }
         }
         set {
@@ -61,6 +70,7 @@ public struct ShareInclude: Codable, Equatable, Sendable {
             case .commentsAndFiles: commentsAndFiles = newValue
             case .conversations: conversations = newValue
             case .toolOutput: toolOutput = newValue
+            case .footnotes: footnotes = newValue
             }
         }
     }
@@ -82,21 +92,23 @@ public enum ShareLinkState: String, Codable, Sendable {
 }
 
 /// The root a link is for, named and placed: a session root also says where it is filed and when
-/// it completed.
+/// it completed. A wiki space has no status; its `slug` is the owner's address for it.
 public struct ShareRootSummary: Codable, Equatable, Sendable {
     public let id: String
     public let title: String?
     public let status: String?
     public let lifecycleState: String?
     public let completedAt: String?
+    public let slug: String?
 
     public init(id: String, title: String? = nil, status: String? = nil, lifecycleState: String? = nil,
-                completedAt: String? = nil) {
+                completedAt: String? = nil, slug: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
         self.lifecycleState = lifecycleState
         self.completedAt = completedAt
+        self.slug = slug
     }
 }
 
@@ -142,7 +154,8 @@ public struct ShareLink: Codable, Equatable, Sendable, Identifiable {
 /// How much each of a root's layers holds, so the panel can say what a link exposes before anyone
 /// opens it: a session's messages and tool calls; a task's comments, input files and transcripts; a
 /// project's tasks, their comments and files, their runs, and the transcripts (the runs plus the
-/// coordinator's conversation when it has one). A count the root does not have is absent.
+/// coordinator's conversation when it has one); a wiki's written documents and the footnotes their
+/// pages carry. A count the root does not have is absent.
 public struct ShareCounts: Codable, Equatable, Sendable {
     public let messages: Int?
     public let toolCalls: Int?
@@ -151,9 +164,12 @@ public struct ShareCounts: Codable, Equatable, Sendable {
     public let files: Int?
     public let runs: Int?
     public let transcripts: Int?
+    public let documents: Int?
+    public let footnotes: Int?
 
     public init(messages: Int? = nil, toolCalls: Int? = nil, tasks: Int? = nil, comments: Int? = nil,
-                files: Int? = nil, runs: Int? = nil, transcripts: Int? = nil) {
+                files: Int? = nil, runs: Int? = nil, transcripts: Int? = nil, documents: Int? = nil,
+                footnotes: Int? = nil) {
         self.messages = messages
         self.toolCalls = toolCalls
         self.tasks = tasks
@@ -161,11 +177,13 @@ public struct ShareCounts: Codable, Equatable, Sendable {
         self.files = files
         self.runs = runs
         self.transcripts = transcripts
+        self.documents = documents
+        self.footnotes = footnotes
     }
 }
 
-/// `GET /{sessions|tasks|projects}/:id/share`: the root's link that has not ended — nil when it has
-/// none — with its layers' counts.
+/// `GET /{sessions|tasks|projects|wiki/spaces}/:id/share`: the root's link that has not ended — nil
+/// when it has none — with its layers' counts.
 public struct ShareLinkRead: Codable, Equatable, Sendable {
     public let link: ShareLink?
     public let counts: ShareCounts?
@@ -176,8 +194,8 @@ public struct ShareLinkRead: Codable, Equatable, Sendable {
     }
 }
 
-/// `PUT /{sessions|tasks|projects}/:id/share`: open the root's link, or change the open one. A field
-/// left out is left as it is; `expiresAt: .clear` is Never. Idempotent server-side.
+/// `PUT /{sessions|tasks|projects|wiki/spaces}/:id/share`: open the root's link, or change the open
+/// one. A field left out is left as it is; `expiresAt: .clear` is Never. Idempotent server-side.
 public struct PutShareLinkRequest: Encodable, Equatable, Sendable {
     public var include: ShareInclude?
     public var expiresAt: FieldUpdate<String>

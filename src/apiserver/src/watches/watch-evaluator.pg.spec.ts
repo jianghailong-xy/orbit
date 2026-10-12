@@ -48,6 +48,7 @@ import {
   WatchEvaluation,
   WatchEvaluatorOptions,
   WatchEvaluatorService,
+  watchHintFor,
 } from './watch-evaluator.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -210,6 +211,7 @@ async function insertSession(row: {
   completedAt?: boolean;
   deletedAt?: boolean;
   runnerId?: string;
+  owner?: string;
 }): Promise<string> {
   const id = randomUUID();
   await sql.query(
@@ -217,7 +219,7 @@ async function insertSession(row: {
                            "completed_at","deleted_at","assigned_runner_id")
      VALUES ($1,'watched session','p',$2,$2,now(),$3,$4,
              CASE WHEN $5::boolean THEN now() END, CASE WHEN $6::boolean THEN now() END, $7)`,
-    [id, ownerId, row.status, row.endReason ?? null, row.completedAt ?? false, row.deletedAt ?? false, row.runnerId ?? null],
+    [id, row.owner ?? ownerId, row.status, row.endReason ?? null, row.completedAt ?? false, row.deletedAt ?? false, row.runnerId ?? null],
   );
   return id;
 }
@@ -673,6 +675,30 @@ test('notifications dropped on purpose are caught by the periodic reconciliation
   prompt.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [other], resync: false });
   const [match] = await eventually('the hinted Match', () => readMatches(hinted), (m) => m.length === 1);
   assert.ok(match.matchedAt < first.nextEvaluateAt!, 'a delivered hint still waited for the sweep');
+});
+
+test('a task.changed on a session\'s key moves the watches of that session\'s account, and no other account\'s', { skip, timeout: 60_000 }, async () => {
+  const hinted = replica();
+  const work = await insertTask('OPEN');
+  const watch = await insertWatch([{ kind: 'TASK', id: work }], all('TASK_TERMINAL'));
+  const own = await insertSession({ status: 'RUNNING' });
+  const theirs = await insertSession({ status: 'RUNNING', owner: otherOwnerId });
+  hinted.evaluator.start();
+  const first = await eventually('its first evaluation', () => readWatch(watch), (w) => w.evaluatedAt !== null);
+  await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [work]);
+
+  // A runner re-publishes the events it posts on its own session: another account's machine naming
+  // this account's task there is matched among its own account's watches, and moves none of these.
+  const foreign = watchHintFor(theirs, event(RunEventType.TASK_CHANGED, { taskIds: [work] }));
+  assert.deepEqual(foreign, { kind: 'TASK', ids: [work], owner: { sessionId: theirs } });
+  assert.equal(await hinted.evaluator.hint(foreign.kind, foreign.ids, foreign.owner), 0, 'another account\'s session moved the watch');
+  assert.equal((await readWatch(watch)).nextEvaluateAt, first.nextEvaluateAt);
+
+  // The control plane's own announcement on a session of the account (`publishTaskChanged`) is still a
+  // hint, matched long before the sweep as one on the account's key is.
+  hinted.realtime.publishTaskChanged(own, work);
+  const [match] = await eventually('the hinted Match', () => readMatches(watch), (m) => m.length === 1);
+  assert.ok(match.matchedAt < first.nextEvaluateAt!, 'a hint on the account\'s own session still waited for the sweep');
 });
 
 test('a burst of hints naming a watch whose landing is parked on a lock waits for nothing: it holds none of its replica\'s pooled connections, and the watch is still evaluated once the landing lets go', { skip, timeout: 120_000 }, async () => {

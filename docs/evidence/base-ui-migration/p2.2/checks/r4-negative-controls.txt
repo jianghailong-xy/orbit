@@ -1,0 +1,257 @@
+[WebServer] (node:370925) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:371004) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock (226ms)
+(node:371138) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects late scroll lock (253ms)
+(node:371297) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   3 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock (221ms)
+(node:371397) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects late scroll lock (261ms)
+(node:371507) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock (222ms)
+(node:371594) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects late scroll lock (239ms)
+(node:371721) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   7 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock (224ms)
+(node:371885) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   8 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects late scroll lock (255ms)
+(node:371981) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   9 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock (285ms)
+(node:372125) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects late scroll lock (310ms)
+(node:372265) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  11 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock (267ms)
+(node:372396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects late scroll lock (304ms)
+(node:372534) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  13 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock (287ms)
+(node:372764) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  14 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects late scroll lock (305ms)
+(node:372926) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  15 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock (275ms)
+(node:373119) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects late scroll lock (309ms)
+
+
+  1) [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+
+    Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')
+        at eval (eval at evaluate (:311:30), <anonymous>:6:47)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:311:30), <anonymous>:6:47)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20
+
+    Error Context: src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+
+    Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')
+        at eval (eval at evaluate (:311:30), <anonymous>:6:47)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:311:30), <anonymous>:6:47)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26
+
+    Error Context: src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+
+    Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')
+        at eval (eval at evaluate (:311:30), <anonymous>:6:47)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:311:30), <anonymous>:6:47)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20
+
+    Error Context: src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+
+    Error: page.evaluate: TypeError: Cannot read properties of null (reading 'scrollHeight')
+        at eval (eval at evaluate (:311:30), <anonymous>:6:47)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:311:30), <anonymous>:6:47)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26
+
+    Error Context: src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+
+    Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')
+
+       at ../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48
+
+      46 |   const viewport = page.viewportSize();
+      47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);
+    > 48 |   await page.evaluate((inputType) => {
+         |              ^
+      49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,
+      50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,
+      51 |       input: null, movedAfterMs: null };
+        at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20
+
+    Error Context: src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+
+    Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')
+
+       at ../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48
+
+      46 |   const viewport = page.viewportSize();
+      47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);
+    > 48 |   await page.evaluate((inputType) => {
+         |              ^
+      49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,
+      50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,
+      51 |       input: null, movedAfterMs: null };
+        at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26
+
+    Error Context: src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+
+    Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')
+
+       at ../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48
+
+      46 |   const viewport = page.viewportSize();
+      47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);
+    > 48 |   await page.evaluate((inputType) => {
+         |              ^
+      49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,
+      50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,
+      51 |       input: null, movedAfterMs: null };
+        at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:20
+
+    Error Context: src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+
+    Error: page.evaluate: TypeError: null is not an object (evaluating 'document.scrollingElement.scrollHeight')
+
+       at ../../../../../src/web/ui-migration/choices-scroll-observation.mjs:48
+
+      46 |   const viewport = page.viewportSize();
+      47 |   if (inputType === 'wheel') await page.mouse.move(viewport.width - 12, viewport.height - 24);
+    > 48 |   await page.evaluate((inputType) => {
+         |              ^
+      49 |     const state = { limitMs: 250, startedAt: performance.now(), before: scrollY,
+      50 |       scrollHeight: document.scrollingElement.scrollHeight, viewportHeight: innerHeight,
+      51 |       input: null, movedAfterMs: null };
+        at scrollPage (/root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-scroll-observation.mjs:48:14)
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:27:26
+
+    Error Context: src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/scroll-negative-control.br-79af6-ejects-retained-scroll-lock-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8 failed
+    [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+    [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+    [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+    [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+    [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+    [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+    [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control.browser.mjs:6:42 › observer rejects retained scroll lock 
+  8 passed (9.3s)

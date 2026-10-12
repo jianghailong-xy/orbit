@@ -121,7 +121,8 @@ public enum ShareMarkdown {
     /// The project: its title, where it stands and how far its work has got, its goal, each stated
     /// criterion with what its work has done, its tasks, and the link back to it — in the words the
     /// project page uses. `buckets` and `tasks` are what the page's Work overview and Tasks blocks
-    /// have read, when they have.
+    /// have read, when they have. Where met work landed names the project's main branch, which the
+    /// document carries (`integration.upstreamRef`).
     public static func project(_ project: ProjectDocument, link: String,
                                buckets: ProjectPanoramaBuckets? = nil,
                                tasks: [ProjectTaskRow]? = nil) -> String {
@@ -138,6 +139,7 @@ public enum ShareMarkdown {
         let goal = project.goal?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         out += ["", "## Goal", "", goal.isEmpty ? "No goal set" : goal]
 
+        let main = RunSettings.mainBranchName(project.integration?.upstreamRef)
         out += ["", "## Acceptance criteria", ""]
         if project.acceptanceCriteriaItems.isEmpty { out.append("No criteria are stated for this project.") }
         for criterion in project.acceptanceCriteriaItems {
@@ -145,7 +147,7 @@ public enum ShareMarkdown {
             if criterion.satisfied == true {
                 answer = " — Met by its work"
                 if let landing = criterion.landing, !landing.isEmpty {
-                    answer += " · \(landingWords[landing] ?? landing)"
+                    answer += " · \(landingWords(landing, main: main))"
                 }
             } else if criterion.satisfied == false {
                 answer = " — Not met by its work"
@@ -180,6 +182,14 @@ public enum ShareMarkdown {
         "ON_INTEGRATION_LINE": "on the project branch · not on main yet",
         "UNKNOWN": "no merge receipt either way",
     ]
+
+    /// The same, said of the project's main branch by name — `landingWords`, for a project on main
+    /// (web `landingWords`). A landing this build does not know prints as itself.
+    public static func landingWords(_ landing: String, main: String) -> String {
+        if landing == "LANDED" { return "on \(main)" }
+        if landing == "ON_INTEGRATION_LINE" { return "on the project branch · not on \(main) yet" }
+        return landingWords[landing] ?? landing
+    }
 
     /// A task row's status in the task pill's words (web `taskStatusLabel`): a running task says
     /// Running whatever its stored status.

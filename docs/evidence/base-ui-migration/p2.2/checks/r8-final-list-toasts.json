@@ -1,0 +1,13 @@
+{
+  "command": "node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/toasts.config.mjs --list --reporter=list",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_f841f7f77c7f",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "8a29e349324e7aaca83827a52148b540c118b992",
+  "webTree": "9aa3a0b96d7c1e3fd473995798774d4f20144885",
+  "started": "2026-10-06T06:30:00Z",
+  "outputLastWritten": "2026-10-06T06:30:01.240388+00:00",
+  "exitCode": 0,
+  "outputSha256": "43e200019fe0759666ab20f5551a8431f18e0c92661c8499ab81139116388a67",
+  "outputBytes": 39115
+}

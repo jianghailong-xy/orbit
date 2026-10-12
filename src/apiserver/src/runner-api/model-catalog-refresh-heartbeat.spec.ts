@@ -26,6 +26,8 @@ function harness(pending: boolean) {
         where: { id?: string; modelCatalogRefreshAt?: unknown };
         data: { modelCatalogRefreshAt?: Date | null };
       }) => {
+        // Another one-slot request the same beat claims (selfUpdateRequestedAt): not this relay's.
+        if (!('modelCatalogRefreshAt' in args.where)) return { count: 0 };
         claims.push(args);
         if (args.where.id !== RUNNER_ID) return { count: 0 };
         const wantsPending =

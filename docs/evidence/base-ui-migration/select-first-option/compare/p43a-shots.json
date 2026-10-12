@@ -1,0 +1,269 @@
+{
+ "counts": {
+  "anti-aliasing": 2,
+  "byte-identical": 38,
+  "beyond": 8
+ },
+ "shots": {
+  "chromium-dark-desktop/p43a-coordinator-landing.png": {
+   "class": "anti-aliasing",
+   "differing": 9,
+   "over2": 0,
+   "max": 1
+  },
+  "chromium-dark-desktop/p43a-coordinator-menu.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-dark-desktop/p43a-coordinator-rebind.png": {
+   "class": "beyond",
+   "differing": 14765,
+   "over2": 14639,
+   "max": 15,
+   "box": [
+    408,
+    272,
+    872,
+    304
+   ]
+  },
+  "chromium-dark-desktop/p43a-coordinator-replace.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-dark-desktop/p43a-coordinator-unavailable.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-dark-desktop/p43a-coordinator.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-dark-phone/p43a-coordinator-landing.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-dark-phone/p43a-coordinator-menu.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-dark-phone/p43a-coordinator-rebind.png": {
+   "class": "beyond",
+   "differing": 10059,
+   "over2": 9963,
+   "max": 16,
+   "box": [
+    36,
+    280,
+    354,
+    312
+   ]
+  },
+  "chromium-dark-phone/p43a-coordinator-replace.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-dark-phone/p43a-coordinator-unavailable.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-dark-phone/p43a-coordinator.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-desktop/p43a-coordinator-landing.png": {
+   "class": "anti-aliasing",
+   "differing": 3,
+   "over2": 0,
+   "max": 1
+  },
+  "chromium-light-desktop/p43a-coordinator-menu.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-desktop/p43a-coordinator-rebind.png": {
+   "class": "beyond",
+   "differing": 14721,
+   "over2": 14564,
+   "max": 10,
+   "box": [
+    408,
+    272,
+    872,
+    304
+   ]
+  },
+  "chromium-light-desktop/p43a-coordinator-replace.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-desktop/p43a-coordinator-unavailable.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-desktop/p43a-coordinator.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-phone/p43a-coordinator-landing.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-phone/p43a-coordinator-menu.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-phone/p43a-coordinator-rebind.png": {
+   "class": "beyond",
+   "differing": 10037,
+   "over2": 9876,
+   "max": 10,
+   "box": [
+    36,
+    280,
+    354,
+    312
+   ]
+  },
+  "chromium-light-phone/p43a-coordinator-replace.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-phone/p43a-coordinator-unavailable.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "chromium-light-phone/p43a-coordinator.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-desktop/p43a-coordinator-landing.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-desktop/p43a-coordinator-menu.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-desktop/p43a-coordinator-rebind.png": {
+   "class": "beyond",
+   "differing": 14776,
+   "over2": 14649,
+   "max": 15,
+   "box": [
+    408,
+    272,
+    872,
+    304
+   ]
+  },
+  "webkit-dark-desktop/p43a-coordinator-replace.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-desktop/p43a-coordinator-unavailable.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-desktop/p43a-coordinator.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-phone/p43a-coordinator-landing.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-phone/p43a-coordinator-menu.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-phone/p43a-coordinator-rebind.png": {
+   "class": "beyond",
+   "differing": 10104,
+   "over2": 9977,
+   "max": 15,
+   "box": [
+    36,
+    280,
+    354,
+    312
+   ]
+  },
+  "webkit-dark-phone/p43a-coordinator-replace.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-phone/p43a-coordinator-unavailable.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-dark-phone/p43a-coordinator.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-desktop/p43a-coordinator-landing.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-desktop/p43a-coordinator-menu.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-desktop/p43a-coordinator-rebind.png": {
+   "class": "beyond",
+   "differing": 14703,
+   "over2": 14558,
+   "max": 10,
+   "box": [
+    408,
+    272,
+    872,
+    304
+   ]
+  },
+  "webkit-light-desktop/p43a-coordinator-replace.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-desktop/p43a-coordinator-unavailable.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-desktop/p43a-coordinator.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-phone/p43a-coordinator-landing.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-phone/p43a-coordinator-menu.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-phone/p43a-coordinator-rebind.png": {
+   "class": "beyond",
+   "differing": 10031,
+   "over2": 9886,
+   "max": 10,
+   "box": [
+    36,
+    280,
+    354,
+    312
+   ]
+  },
+  "webkit-light-phone/p43a-coordinator-replace.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-phone/p43a-coordinator-unavailable.png": {
+   "class": "byte-identical",
+   "differing": 0
+  },
+  "webkit-light-phone/p43a-coordinator.png": {
+   "class": "byte-identical",
+   "differing": 0
+  }
+ }
+}

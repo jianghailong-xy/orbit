@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { actingSession } from './wiki.controller';
@@ -16,6 +17,7 @@ import { WikiRolloutGuard } from './wiki-rollout';
  * WIKI_OWNER_CHANNEL_ONLY before anything is read.
  */
 @UseGuards(JwtAuthGuard, WikiRolloutGuard)
+@PatForbidden('OWNER_INTERACTIVE')
 @Controller('wiki')
 export class WikiRunsController {
   constructor(private readonly runs: WikiRunReads) {}

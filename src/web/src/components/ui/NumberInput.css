@@ -1,0 +1,109 @@
+/* NumberInput: the frame, hover, focus and disabled states of .orbit-text-control, 90px wide by
+   default, with the text field filling it and the replaced field's step buttons at its end: hidden
+   until the pointer is over the field, then a 22px column of two 7px arrows split by the border
+   colour, the hovered one taller (60%) and in the primary colour. */
+.orbit-number-input {
+  display: inline-flex;
+  width: 90px;
+  padding-block: 0;
+  overflow: hidden;
+}
+
+.orbit-number-input[data-size='small'] {
+  padding-inline: 7px;
+  border-radius: var(--orbit-radius-sm);
+}
+
+.orbit-number-input-field {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  appearance: textfield;
+  transition: all 0.2s linear;
+}
+
+.orbit-number-input[data-size='small'] .orbit-number-input-field {
+  padding-block: 0;
+}
+
+.orbit-number-input-field::placeholder {
+  color: var(--orbit-control-disabled-text);
+  opacity: 1;
+  user-select: none;
+}
+
+.orbit-number-input-field:disabled {
+  cursor: not-allowed;
+}
+
+.orbit-number-input-actions {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 0;
+  height: 100%;
+  overflow: hidden;
+  opacity: 0;
+  background: var(--bg-raised);
+  transition: all 0.2s;
+}
+
+.orbit-number-input:hover .orbit-number-input-actions {
+  width: 22px;
+  opacity: 1;
+}
+
+.orbit-number-input-action {
+  display: flex;
+  flex: auto;
+  align-items: center;
+  justify-content: center;
+  height: 50%;
+  overflow: hidden;
+  border-inline-start: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 7px;
+  line-height: 0;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s linear;
+}
+
+.orbit-number-input-action + .orbit-number-input-action {
+  border-block-start: 1px solid var(--border);
+}
+
+.orbit-number-input-action:hover:not([aria-disabled='true']) {
+  height: 60%;
+  color: var(--orbit-control-primary);
+}
+
+.orbit-number-input-action:active:not([aria-disabled='true']) {
+  background: var(--orbit-fill-alter);
+}
+
+.orbit-number-input-action[aria-disabled='true'] {
+  color: var(--orbit-control-disabled-text);
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-number-input-field,
+  .orbit-number-input-actions,
+  .orbit-number-input-action {
+    transition: none;
+  }
+}

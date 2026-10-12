@@ -1,0 +1,1908 @@
+{
+ "note": "Clusters of differing pixels (8-connected after a 6 px dilation). The toast card is at x 1118.97-1264, y 16-52 on desktop and x 123-263, y 56-92 on phones (B1-success-pill.json computedStyles); its box-shadow 0 8px 22px extends about 30 px around it.",
+ "b1_e361ee373_to_57f792135": {
+  "chromium-dark-desktop/profile-validation.png": {
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 508,
+   "maxChannelDelta": 88,
+   "p0Comparator": "18 pixels (ratio 0.01 of all image pixels) are different.",
+   "clusters": [
+    {
+     "x": 1165,
+     "y": 28,
+     "width": 82,
+     "height": 11,
+     "pixels": 490
+    },
+    {
+     "x": 527,
+     "y": 242,
+     "width": 4,
+     "height": 3,
+     "pixels": 6
+    },
+    {
+     "x": 1058,
+     "y": 379,
+     "width": 2,
+     "height": 3,
+     "pixels": 4
+    },
+    {
+     "x": 1058,
+     "y": 408,
+     "width": 2,
+     "height": 3,
+     "pixels": 4
+    },
+    {
+     "x": 528,
+     "y": 715,
+     "width": 3,
+     "height": 2,
+     "pixels": 4
+    }
+   ]
+  },
+  "chromium-light-desktop/profile-validation.png": {
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 495,
+   "maxChannelDelta": 113,
+   "p0Comparator": "83 pixels (ratio 0.01 of all image pixels) are different.",
+   "clusters": [
+    {
+     "x": 1165,
+     "y": 28,
+     "width": 82,
+     "height": 11,
+     "pixels": 495
+    }
+   ]
+  },
+  "chromium-light-phone/profile-validation.png": {
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 316,
+   "maxChannelDelta": 60,
+   "p0Comparator": "22 pixels (ratio 0.01 of all image pixels) are different.",
+   "clusters": [
+    {
+     "x": 164,
+     "y": 69,
+     "width": 19,
+     "height": 10,
+     "pixels": 123
+    },
+    {
+     "x": 194,
+     "y": 71,
+     "width": 36,
+     "height": 8,
+     "pixels": 183
+    },
+    {
+     "x": 43,
+     "y": 282,
+     "width": 4,
+     "height": 3,
+     "pixels": 7
+    },
+    {
+     "x": 346,
+     "y": 308,
+     "width": 3,
+     "height": 4,
+     "pixels": 3
+    }
+   ]
+  },
+  "chromium-dark-phone/profile-validation.png": {
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 313,
+   "maxChannelDelta": 48,
+   "p0Comparator": "match",
+   "clusters": [
+    {
+     "x": 164,
+     "y": 69,
+     "width": 19,
+     "height": 10,
+     "pixels": 123
+    },
+    {
+     "x": 194,
+     "y": 71,
+     "width": 36,
+     "height": 8,
+     "pixels": 180
+    },
+    {
+     "x": 43,
+     "y": 282,
+     "width": 4,
+     "height": 3,
+     "pixels": 6
+    },
+    {
+     "x": 366,
+     "y": 446,
+     "width": 3,
+     "height": 2,
+     "pixels": 4
+    }
+   ]
+  },
+  "webkit-light-phone/profile-validation.png": {
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 4863,
+   "maxChannelDelta": 224,
+   "p0Comparator": "376 pixels (ratio 0.01 of all image pixels) are different.",
+   "clusters": [
+    {
+     "x": 157,
+     "y": 42,
+     "width": 8,
+     "height": 5,
+     "pixels": 8
+    },
+    {
+     "x": 221,
+     "y": 42,
+     "width": 8,
+     "height": 5,
+     "pixels": 8
+    },
+    {
+     "x": 104,
+     "y": 43,
+     "width": 141,
+     "height": 78,
+     "pixels": 2848
+    },
+    {
+     "x": 225,
+     "y": 43,
+     "width": 57,
+     "height": 78,
+     "pixels": 1982
+    },
+    {
+     "x": 157,
+     "y": 92,
+     "width": 4,
+     "height": 1,
+     "pixels": 4
+    },
+    {
+     "x": 157,
+     "y": 117,
+     "width": 8,
+     "height": 5,
+     "pixels": 5
+    },
+    {
+     "x": 221,
+     "y": 117,
+     "width": 8,
+     "height": 5,
+     "pixels": 8
+    }
+   ]
+  },
+  "webkit-dark-phone/profile-validation.png": {
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 3994,
+   "maxChannelDelta": 167,
+   "p0Comparator": "339 pixels (ratio 0.01 of all image pixels) are different.",
+   "clusters": [
+    {
+     "x": 106,
+     "y": 44,
+     "width": 139,
+     "height": 79,
+     "pixels": 2440
+    },
+    {
+     "x": 223,
+     "y": 44,
+     "width": 57,
+     "height": 76,
+     "pixels": 1551
+    },
+    {
+     "x": 155,
+     "y": 124,
+     "width": 4,
+     "height": 1,
+     "pixels": 3
+    }
+   ]
+  },
+  "chromium-light-desktop/settings-saved.png": {
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 97,
+   "maxChannelDelta": 59,
+   "p0Comparator": "10 pixels (ratio 0.01 of all image pixels) are different.",
+   "clusters": [
+    {
+     "x": 1195,
+     "y": 31,
+     "width": 8,
+     "height": 11,
+     "pixels": 59
+    },
+    {
+     "x": 1222,
+     "y": 31,
+     "width": 9,
+     "height": 8,
+     "pixels": 38
+    }
+   ]
+  },
+  "chromium-dark-desktop/settings-saved.png": {
+   "size": [
+    1280,
+    900
+   ],
+   "pixels": 97,
+   "maxChannelDelta": 49,
+   "p0Comparator": "match",
+   "clusters": [
+    {
+     "x": 1195,
+     "y": 31,
+     "width": 8,
+     "height": 11,
+     "pixels": 59
+    },
+    {
+     "x": 1222,
+     "y": 31,
+     "width": 9,
+     "height": 8,
+     "pixels": 38
+    }
+   ]
+  },
+  "chromium-light-phone/settings-saved.png": {
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 1418,
+   "maxChannelDelta": 113,
+   "p0Comparator": "135 pixels (ratio 0.01 of all image pixels) are different.",
+   "clusters": [
+    {
+     "x": 239,
+     "y": 44,
+     "width": 1,
+     "height": 1,
+     "pixels": 1
+    },
+    {
+     "x": 233,
+     "y": 45,
+     "width": 52,
+     "height": 74,
+     "pixels": 851
+    },
+    {
+     "x": 233,
+     "y": 54,
+     "width": 1,
+     "height": 1,
+     "pixels": 1
+    },
+    {
+     "x": 159,
+     "y": 68,
+     "width": 91,
+     "height": 14,
+     "pixels": 563
+    },
+    {
+     "x": 233,
+     "y": 109,
+     "width": 1,
+     "height": 1,
+     "pixels": 1
+    },
+    {
+     "x": 239,
+     "y": 119,
+     "width": 1,
+     "height": 1,
+     "pixels": 1
+    }
+   ]
+  },
+  "chromium-dark-phone/settings-saved.png": {
+   "size": [
+    390,
+    844
+   ],
+   "pixels": 1309,
+   "maxChannelDelta": 90,
+   "p0Comparator": "95 pixels (ratio 0.01 of all image pixels) are different.",
+   "clusters": [
+    {
+     "x": 235,
+     "y": 39,
+     "width": 1,
+     "height": 1,
+     "pixels": 1
+    },
+    {
+     "x": 233,
+     "y": 40,
+     "width": 58,
+     "height": 84,
+     "pixels": 735
+    },
+    {
+     "x": 231,
+     "y": 49,
+     "width": 10,
+     "height": 7,
+     "pixels": 4
+    },
+    {
+     "x": 159,
+     "y": 68,
+     "width": 91,
+     "height": 14,
+     "pixels": 559
+    },
+    {
+     "x": 235,
+     "y": 124,
+     "width": 1,
+     "height": 1,
+     "pixels": 1
+    },
+    {
+     "x": 306,
+     "y": 640,
+     "width": 4,
+     "height": 3,
+     "pixels": 4
+    },
+    {
+     "x": 305,
+     "y": 653,
+     "width": 5,
+     "height": 5,
+     "pixels": 5
+    }
+   ]
+  }
+ },
+ "settingsSaved_separation": {
+  "chromium-light-desktop/settings-saved.png": {
+   "p02_to_mainDriftReference (A4, main 4088d37e6 / 82c7e92ff)": {
+    "size": [
+     1280,
+     900
+    ],
+    "pixels": 50714,
+    "maxChannelDelta": 224,
+    "p0Comparator": "14851 pixels (ratio 0.02 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 500,
+      "y": 249,
+      "width": 560,
+      "height": 40,
+      "pixels": 4374
+     },
+     {
+      "x": 525,
+      "y": 289,
+      "width": 361,
+      "height": 20,
+      "pixels": 2773
+     },
+     {
+      "x": 500,
+      "y": 331,
+      "width": 560,
+      "height": 32,
+      "pixels": 1776
+     },
+     {
+      "x": 525,
+      "y": 370,
+      "width": 432,
+      "height": 33,
+      "pixels": 3876
+     },
+     {
+      "x": 501,
+      "y": 384,
+      "width": 558,
+      "height": 35,
+      "pixels": 2771
+     },
+     {
+      "x": 500,
+      "y": 450,
+      "width": 560,
+      "height": 40,
+      "pixels": 4431
+     },
+     {
+      "x": 525,
+      "y": 489,
+      "width": 328,
+      "height": 21,
+      "pixels": 2194
+     },
+     {
+      "x": 500,
+      "y": 531,
+      "width": 560,
+      "height": 32,
+      "pixels": 1776
+     },
+     {
+      "x": 525,
+      "y": 571,
+      "width": 348,
+      "height": 33,
+      "pixels": 2959
+     },
+     {
+      "x": 991,
+      "y": 576,
+      "width": 46,
+      "height": 26,
+      "pixels": 782
+     },
+     {
+      "x": 501,
+      "y": 611,
+      "width": 558,
+      "height": 1,
+      "pixels": 558
+     },
+     {
+      "x": 525,
+      "y": 631,
+      "width": 174,
+      "height": 14,
+      "pixels": 907
+     },
+     {
+      "x": 991,
+      "y": 646,
+      "width": 46,
+      "height": 35,
+      "pixels": 1034
+     },
+     {
+      "x": 525,
+      "y": 650,
+      "width": 409,
+      "height": 14,
+      "pixels": 2241
+     },
+     {
+      "x": 525,
+      "y": 671,
+      "width": 439,
+      "height": 12,
+      "pixels": 2579
+     },
+     {
+      "x": 500,
+      "y": 711,
+      "width": 560,
+      "height": 41,
+      "pixels": 4361
+     },
+     {
+      "x": 525,
+      "y": 751,
+      "width": 439,
+      "height": 23,
+      "pixels": 2605
+     },
+     {
+      "x": 500,
+      "y": 793,
+      "width": 560,
+      "height": 32,
+      "pixels": 1776
+     },
+     {
+      "x": 525,
+      "y": 832,
+      "width": 211,
+      "height": 33,
+      "pixels": 1831
+     },
+     {
+      "x": 858,
+      "y": 832,
+      "width": 177,
+      "height": 35,
+      "pixels": 4354
+     },
+     {
+      "x": 941,
+      "y": 842,
+      "width": 30,
+      "height": 14,
+      "pixels": 176
+     },
+     {
+      "x": 501,
+      "y": 873,
+      "width": 558,
+      "height": 1,
+      "pixels": 558
+     },
+     {
+      "x": 500,
+      "y": 895,
+      "width": 3,
+      "height": 5,
+      "pixels": 11
+     },
+     {
+      "x": 1057,
+      "y": 895,
+      "width": 3,
+      "height": 5,
+      "pixels": 11
+     }
+    ]
+   },
+   "mainDriftReference_to_tip (tip-a run, da13423d3)": {
+    "size": [
+     1280,
+     900
+    ],
+    "pixels": 97,
+    "maxChannelDelta": 59,
+    "p0Comparator": "10 pixels (ratio 0.01 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 1195,
+      "y": 31,
+      "width": 8,
+      "height": 11,
+      "pixels": 59
+     },
+     {
+      "x": 1222,
+      "y": 31,
+      "width": 9,
+      "height": 8,
+      "pixels": 38
+     }
+    ]
+   }
+  },
+  "chromium-dark-desktop/settings-saved.png": {
+   "p02_to_mainDriftReference (A4, main 4088d37e6 / 82c7e92ff)": {
+    "size": [
+     1280,
+     900
+    ],
+    "pixels": 101925,
+    "maxChannelDelta": 223,
+    "p0Comparator": "15638 pixels (ratio 0.02 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 500,
+      "y": 249,
+      "width": 560,
+      "height": 40,
+      "pixels": 11982
+     },
+     {
+      "x": 525,
+      "y": 289,
+      "width": 361,
+      "height": 20,
+      "pixels": 2755
+     },
+     {
+      "x": 500,
+      "y": 331,
+      "width": 560,
+      "height": 32,
+      "pixels": 10722
+     },
+     {
+      "x": 525,
+      "y": 370,
+      "width": 432,
+      "height": 33,
+      "pixels": 3848
+     },
+     {
+      "x": 501,
+      "y": 384,
+      "width": 558,
+      "height": 35,
+      "pixels": 2972
+     },
+     {
+      "x": 500,
+      "y": 450,
+      "width": 560,
+      "height": 40,
+      "pixels": 12022
+     },
+     {
+      "x": 525,
+      "y": 489,
+      "width": 328,
+      "height": 21,
+      "pixels": 2186
+     },
+     {
+      "x": 500,
+      "y": 531,
+      "width": 560,
+      "height": 32,
+      "pixels": 10720
+     },
+     {
+      "x": 525,
+      "y": 571,
+      "width": 348,
+      "height": 33,
+      "pixels": 2931
+     },
+     {
+      "x": 991,
+      "y": 576,
+      "width": 46,
+      "height": 26,
+      "pixels": 991
+     },
+     {
+      "x": 501,
+      "y": 611,
+      "width": 558,
+      "height": 1,
+      "pixels": 558
+     },
+     {
+      "x": 525,
+      "y": 631,
+      "width": 174,
+      "height": 14,
+      "pixels": 899
+     },
+     {
+      "x": 991,
+      "y": 646,
+      "width": 46,
+      "height": 35,
+      "pixels": 1131
+     },
+     {
+      "x": 525,
+      "y": 650,
+      "width": 409,
+      "height": 14,
+      "pixels": 2221
+     },
+     {
+      "x": 525,
+      "y": 671,
+      "width": 439,
+      "height": 12,
+      "pixels": 2567
+     },
+     {
+      "x": 500,
+      "y": 711,
+      "width": 560,
+      "height": 41,
+      "pixels": 12076
+     },
+     {
+      "x": 525,
+      "y": 751,
+      "width": 439,
+      "height": 23,
+      "pixels": 2585
+     },
+     {
+      "x": 500,
+      "y": 793,
+      "width": 560,
+      "height": 32,
+      "pixels": 10722
+     },
+     {
+      "x": 525,
+      "y": 832,
+      "width": 211,
+      "height": 33,
+      "pixels": 1818
+     },
+     {
+      "x": 858,
+      "y": 832,
+      "width": 177,
+      "height": 32,
+      "pixels": 5641
+     },
+     {
+      "x": 501,
+      "y": 873,
+      "width": 558,
+      "height": 1,
+      "pixels": 558
+     },
+     {
+      "x": 500,
+      "y": 895,
+      "width": 3,
+      "height": 5,
+      "pixels": 10
+     },
+     {
+      "x": 1057,
+      "y": 895,
+      "width": 3,
+      "height": 5,
+      "pixels": 10
+     }
+    ]
+   },
+   "mainDriftReference_to_tip (tip-a run, da13423d3)": {
+    "size": [
+     1280,
+     900
+    ],
+    "pixels": 97,
+    "maxChannelDelta": 49,
+    "p0Comparator": "match",
+    "clusters": [
+     {
+      "x": 1195,
+      "y": 31,
+      "width": 8,
+      "height": 11,
+      "pixels": 59
+     },
+     {
+      "x": 1222,
+      "y": 31,
+      "width": 9,
+      "height": 8,
+      "pixels": 38
+     }
+    ]
+   }
+  },
+  "chromium-light-phone/settings-saved.png": {
+   "p02_to_mainDriftReference (A4, main 4088d37e6 / 82c7e92ff)": {
+    "size": [
+     390,
+     844
+    ],
+    "pixels": 20887,
+    "maxChannelDelta": 224,
+    "p0Comparator": "7358 pixels (ratio 0.03 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 16,
+      "y": 484,
+      "width": 358,
+      "height": 34,
+      "pixels": 2478
+     },
+     {
+      "x": 305,
+      "y": 517,
+      "width": 46,
+      "height": 26,
+      "pixels": 783
+     },
+     {
+      "x": 41,
+      "y": 524,
+      "width": 235,
+      "height": 27,
+      "pixels": 3117
+     },
+     {
+      "x": 17,
+      "y": 561,
+      "width": 356,
+      "height": 12,
+      "pixels": 741
+     },
+     {
+      "x": 16,
+      "y": 603,
+      "width": 358,
+      "height": 35,
+      "pixels": 2674
+     },
+     {
+      "x": 303,
+      "y": 638,
+      "width": 46,
+      "height": 26,
+      "pixels": 783
+     },
+     {
+      "x": 41,
+      "y": 645,
+      "width": 228,
+      "height": 27,
+      "pixels": 2972
+     },
+     {
+      "x": 17,
+      "y": 682,
+      "width": 356,
+      "height": 9,
+      "pixels": 670
+     },
+     {
+      "x": 16,
+      "y": 722,
+      "width": 358,
+      "height": 34,
+      "pixels": 2493
+     },
+     {
+      "x": 305,
+      "y": 755,
+      "width": 46,
+      "height": 26,
+      "pixels": 783
+     },
+     {
+      "x": 41,
+      "y": 762,
+      "width": 228,
+      "height": 28,
+      "pixels": 2727
+     },
+     {
+      "x": 17,
+      "y": 800,
+      "width": 356,
+      "height": 9,
+      "pixels": 640
+     },
+     {
+      "x": 16,
+      "y": 841,
+      "width": 2,
+      "height": 3,
+      "pixels": 6
+     },
+     {
+      "x": 372,
+      "y": 841,
+      "width": 2,
+      "height": 3,
+      "pixels": 6
+     },
+     {
+      "x": 55,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     },
+     {
+      "x": 122,
+      "y": 843,
+      "width": 3,
+      "height": 1,
+      "pixels": 3
+     },
+     {
+      "x": 146,
+      "y": 843,
+      "width": 5,
+      "height": 1,
+      "pixels": 5
+     },
+     {
+      "x": 160,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     },
+     {
+      "x": 170,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     }
+    ]
+   },
+   "mainDriftReference_to_tip (tip-a run, da13423d3)": {
+    "size": [
+     390,
+     844
+    ],
+    "pixels": 1418,
+    "maxChannelDelta": 113,
+    "p0Comparator": "135 pixels (ratio 0.01 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 239,
+      "y": 44,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 233,
+      "y": 45,
+      "width": 52,
+      "height": 74,
+      "pixels": 851
+     },
+     {
+      "x": 233,
+      "y": 54,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 159,
+      "y": 68,
+      "width": 91,
+      "height": 14,
+      "pixels": 563
+     },
+     {
+      "x": 233,
+      "y": 109,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 239,
+      "y": 119,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     }
+    ]
+   }
+  },
+  "chromium-dark-phone/settings-saved.png": {
+   "p02_to_mainDriftReference (A4, main 4088d37e6 / 82c7e92ff)": {
+    "size": [
+     390,
+     844
+    ],
+    "pixels": 36854,
+    "maxChannelDelta": 212,
+    "p0Comparator": "7801 pixels (ratio 0.03 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 16,
+      "y": 484,
+      "width": 358,
+      "height": 34,
+      "pixels": 7569
+     },
+     {
+      "x": 305,
+      "y": 517,
+      "width": 46,
+      "height": 26,
+      "pixels": 991
+     },
+     {
+      "x": 41,
+      "y": 524,
+      "width": 235,
+      "height": 27,
+      "pixels": 3102
+     },
+     {
+      "x": 17,
+      "y": 561,
+      "width": 356,
+      "height": 12,
+      "pixels": 739
+     },
+     {
+      "x": 16,
+      "y": 603,
+      "width": 358,
+      "height": 35,
+      "pixels": 7880
+     },
+     {
+      "x": 303,
+      "y": 638,
+      "width": 46,
+      "height": 26,
+      "pixels": 991
+     },
+     {
+      "x": 41,
+      "y": 645,
+      "width": 228,
+      "height": 27,
+      "pixels": 2961
+     },
+     {
+      "x": 17,
+      "y": 682,
+      "width": 356,
+      "height": 9,
+      "pixels": 668
+     },
+     {
+      "x": 16,
+      "y": 722,
+      "width": 358,
+      "height": 34,
+      "pixels": 7585
+     },
+     {
+      "x": 305,
+      "y": 755,
+      "width": 46,
+      "height": 26,
+      "pixels": 991
+     },
+     {
+      "x": 41,
+      "y": 762,
+      "width": 228,
+      "height": 28,
+      "pixels": 2715
+     },
+     {
+      "x": 17,
+      "y": 800,
+      "width": 356,
+      "height": 9,
+      "pixels": 638
+     },
+     {
+      "x": 16,
+      "y": 841,
+      "width": 2,
+      "height": 3,
+      "pixels": 5
+     },
+     {
+      "x": 372,
+      "y": 841,
+      "width": 2,
+      "height": 3,
+      "pixels": 5
+     },
+     {
+      "x": 55,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     },
+     {
+      "x": 122,
+      "y": 843,
+      "width": 3,
+      "height": 1,
+      "pixels": 3
+     },
+     {
+      "x": 146,
+      "y": 843,
+      "width": 5,
+      "height": 1,
+      "pixels": 5
+     },
+     {
+      "x": 160,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     },
+     {
+      "x": 170,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     }
+    ]
+   },
+   "mainDriftReference_to_tip (tip-a run, da13423d3)": {
+    "size": [
+     390,
+     844
+    ],
+    "pixels": 1308,
+    "maxChannelDelta": 90,
+    "p0Comparator": "95 pixels (ratio 0.01 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 235,
+      "y": 39,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 233,
+      "y": 40,
+      "width": 58,
+      "height": 84,
+      "pixels": 735
+     },
+     {
+      "x": 231,
+      "y": 49,
+      "width": 10,
+      "height": 7,
+      "pixels": 4
+     },
+     {
+      "x": 159,
+      "y": 68,
+      "width": 91,
+      "height": 14,
+      "pixels": 559
+     },
+     {
+      "x": 235,
+      "y": 124,
+      "width": 1,
+      "height": 1,
+      "pixels": 1
+     },
+     {
+      "x": 366,
+      "y": 627,
+      "width": 8,
+      "height": 8,
+      "pixels": 8
+     }
+    ]
+   }
+  },
+  "webkit-light-desktop/settings-saved.png": {
+   "p02_to_mainDriftReference (A4, main 4088d37e6 / 82c7e92ff)": {
+    "size": [
+     1280,
+     900
+    ],
+    "pixels": 52100,
+    "maxChannelDelta": 224,
+    "p0Comparator": "15035 pixels (ratio 0.02 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 492,
+      "y": 249,
+      "width": 560,
+      "height": 40,
+      "pixels": 4438
+     },
+     {
+      "x": 517,
+      "y": 289,
+      "width": 361,
+      "height": 20,
+      "pixels": 2833
+     },
+     {
+      "x": 492,
+      "y": 331,
+      "width": 560,
+      "height": 32,
+      "pixels": 1783
+     },
+     {
+      "x": 517,
+      "y": 370,
+      "width": 432,
+      "height": 33,
+      "pixels": 3971
+     },
+     {
+      "x": 493,
+      "y": 384,
+      "width": 558,
+      "height": 35,
+      "pixels": 2816
+     },
+     {
+      "x": 492,
+      "y": 450,
+      "width": 560,
+      "height": 40,
+      "pixels": 4527
+     },
+     {
+      "x": 517,
+      "y": 490,
+      "width": 328,
+      "height": 20,
+      "pixels": 2234
+     },
+     {
+      "x": 492,
+      "y": 531,
+      "width": 560,
+      "height": 32,
+      "pixels": 1783
+     },
+     {
+      "x": 517,
+      "y": 571,
+      "width": 348,
+      "height": 33,
+      "pixels": 3019
+     },
+     {
+      "x": 983,
+      "y": 576,
+      "width": 46,
+      "height": 26,
+      "pixels": 799
+     },
+     {
+      "x": 493,
+      "y": 611,
+      "width": 558,
+      "height": 1,
+      "pixels": 558
+     },
+     {
+      "x": 517,
+      "y": 631,
+      "width": 174,
+      "height": 14,
+      "pixels": 921
+     },
+     {
+      "x": 983,
+      "y": 646,
+      "width": 46,
+      "height": 35,
+      "pixels": 1056
+     },
+     {
+      "x": 517,
+      "y": 650,
+      "width": 409,
+      "height": 15,
+      "pixels": 2354
+     },
+     {
+      "x": 1264,
+      "y": 667,
+      "width": 8,
+      "height": 51,
+      "pixels": 388
+     },
+     {
+      "x": 517,
+      "y": 672,
+      "width": 440,
+      "height": 12,
+      "pixels": 2632
+     },
+     {
+      "x": 492,
+      "y": 711,
+      "width": 560,
+      "height": 41,
+      "pixels": 4473
+     },
+     {
+      "x": 517,
+      "y": 751,
+      "width": 440,
+      "height": 23,
+      "pixels": 2671
+     },
+     {
+      "x": 492,
+      "y": 793,
+      "width": 560,
+      "height": 32,
+      "pixels": 1783
+     },
+     {
+      "x": 850,
+      "y": 831,
+      "width": 177,
+      "height": 36,
+      "pixels": 4415
+     },
+     {
+      "x": 517,
+      "y": 832,
+      "width": 211,
+      "height": 34,
+      "pixels": 1881
+     },
+     {
+      "x": 933,
+      "y": 842,
+      "width": 30,
+      "height": 14,
+      "pixels": 183
+     },
+     {
+      "x": 493,
+      "y": 873,
+      "width": 558,
+      "height": 1,
+      "pixels": 558
+     },
+     {
+      "x": 492,
+      "y": 895,
+      "width": 3,
+      "height": 5,
+      "pixels": 12
+     },
+     {
+      "x": 1049,
+      "y": 895,
+      "width": 3,
+      "height": 5,
+      "pixels": 12
+     }
+    ]
+   },
+   "mainDriftReference_to_tip (tip-a run, da13423d3)": {
+    "size": [
+     1280,
+     900
+    ],
+    "pixels": 0,
+    "maxChannelDelta": 0,
+    "p0Comparator": "match",
+    "clusters": []
+   }
+  },
+  "webkit-dark-desktop/settings-saved.png": {
+   "p02_to_mainDriftReference (A4, main 4088d37e6 / 82c7e92ff)": {
+    "size": [
+     1280,
+     900
+    ],
+    "pixels": 102958,
+    "maxChannelDelta": 223,
+    "p0Comparator": "15705 pixels (ratio 0.02 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 492,
+      "y": 249,
+      "width": 560,
+      "height": 39,
+      "pixels": 11964
+     },
+     {
+      "x": 517,
+      "y": 289,
+      "width": 361,
+      "height": 20,
+      "pixels": 2800
+     },
+     {
+      "x": 492,
+      "y": 331,
+      "width": 560,
+      "height": 32,
+      "pixels": 10722
+     },
+     {
+      "x": 517,
+      "y": 370,
+      "width": 432,
+      "height": 33,
+      "pixels": 3921
+     },
+     {
+      "x": 493,
+      "y": 384,
+      "width": 558,
+      "height": 35,
+      "pixels": 2954
+     },
+     {
+      "x": 492,
+      "y": 450,
+      "width": 560,
+      "height": 39,
+      "pixels": 12019
+     },
+     {
+      "x": 517,
+      "y": 490,
+      "width": 328,
+      "height": 20,
+      "pixels": 2209
+     },
+     {
+      "x": 492,
+      "y": 531,
+      "width": 560,
+      "height": 32,
+      "pixels": 10720
+     },
+     {
+      "x": 517,
+      "y": 571,
+      "width": 348,
+      "height": 33,
+      "pixels": 2984
+     },
+     {
+      "x": 983,
+      "y": 576,
+      "width": 45,
+      "height": 25,
+      "pixels": 957
+     },
+     {
+      "x": 493,
+      "y": 611,
+      "width": 558,
+      "height": 1,
+      "pixels": 558
+     },
+     {
+      "x": 517,
+      "y": 631,
+      "width": 174,
+      "height": 14,
+      "pixels": 907
+     },
+     {
+      "x": 983,
+      "y": 646,
+      "width": 45,
+      "height": 34,
+      "pixels": 1092
+     },
+     {
+      "x": 517,
+      "y": 650,
+      "width": 409,
+      "height": 15,
+      "pixels": 2322
+     },
+     {
+      "x": 1264,
+      "y": 667,
+      "width": 8,
+      "height": 51,
+      "pixels": 388
+     },
+     {
+      "x": 517,
+      "y": 672,
+      "width": 440,
+      "height": 12,
+      "pixels": 2604
+     },
+     {
+      "x": 492,
+      "y": 711,
+      "width": 560,
+      "height": 40,
+      "pixels": 12312
+     },
+     {
+      "x": 517,
+      "y": 751,
+      "width": 440,
+      "height": 23,
+      "pixels": 2636
+     },
+     {
+      "x": 492,
+      "y": 793,
+      "width": 560,
+      "height": 32,
+      "pixels": 10722
+     },
+     {
+      "x": 517,
+      "y": 832,
+      "width": 211,
+      "height": 34,
+      "pixels": 1859
+     },
+     {
+      "x": 850,
+      "y": 832,
+      "width": 177,
+      "height": 34,
+      "pixels": 5730
+     },
+     {
+      "x": 493,
+      "y": 873,
+      "width": 558,
+      "height": 1,
+      "pixels": 558
+     },
+     {
+      "x": 492,
+      "y": 895,
+      "width": 3,
+      "height": 5,
+      "pixels": 10
+     },
+     {
+      "x": 1049,
+      "y": 895,
+      "width": 3,
+      "height": 5,
+      "pixels": 10
+     }
+    ]
+   },
+   "mainDriftReference_to_tip (tip-a run, da13423d3)": {
+    "size": [
+     1280,
+     900
+    ],
+    "pixels": 0,
+    "maxChannelDelta": 0,
+    "p0Comparator": "match",
+    "clusters": []
+   }
+  },
+  "webkit-light-phone/settings-saved.png": {
+   "p02_to_mainDriftReference (A4, main 4088d37e6 / 82c7e92ff)": {
+    "size": [
+     390,
+     844
+    ],
+    "pixels": 21268,
+    "maxChannelDelta": 224,
+    "p0Comparator": "7409 pixels (ratio 0.03 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 16,
+      "y": 484,
+      "width": 350,
+      "height": 34,
+      "pixels": 2406
+     },
+     {
+      "x": 297,
+      "y": 517,
+      "width": 46,
+      "height": 26,
+      "pixels": 799
+     },
+     {
+      "x": 41,
+      "y": 524,
+      "width": 211,
+      "height": 28,
+      "pixels": 3085
+     },
+     {
+      "x": 17,
+      "y": 562,
+      "width": 348,
+      "height": 12,
+      "pixels": 962
+     },
+     {
+      "x": 16,
+      "y": 603,
+      "width": 350,
+      "height": 35,
+      "pixels": 2716
+     },
+     {
+      "x": 295,
+      "y": 638,
+      "width": 46,
+      "height": 26,
+      "pixels": 799
+     },
+     {
+      "x": 41,
+      "y": 645,
+      "width": 228,
+      "height": 28,
+      "pixels": 3033
+     },
+     {
+      "x": 17,
+      "y": 683,
+      "width": 348,
+      "height": 9,
+      "pixels": 665
+     },
+     {
+      "x": 16,
+      "y": 722,
+      "width": 350,
+      "height": 34,
+      "pixels": 2549
+     },
+     {
+      "x": 297,
+      "y": 755,
+      "width": 46,
+      "height": 26,
+      "pixels": 799
+     },
+     {
+      "x": 41,
+      "y": 762,
+      "width": 228,
+      "height": 28,
+      "pixels": 2796
+     },
+     {
+      "x": 17,
+      "y": 800,
+      "width": 348,
+      "height": 9,
+      "pixels": 634
+     },
+     {
+      "x": 16,
+      "y": 841,
+      "width": 2,
+      "height": 3,
+      "pixels": 5
+     },
+     {
+      "x": 364,
+      "y": 841,
+      "width": 2,
+      "height": 3,
+      "pixels": 5
+     },
+     {
+      "x": 55,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     },
+     {
+      "x": 122,
+      "y": 843,
+      "width": 3,
+      "height": 1,
+      "pixels": 3
+     },
+     {
+      "x": 145,
+      "y": 843,
+      "width": 6,
+      "height": 1,
+      "pixels": 6
+     },
+     {
+      "x": 160,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     },
+     {
+      "x": 170,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     }
+    ]
+   },
+   "mainDriftReference_to_tip (tip-a run, da13423d3)": {
+    "size": [
+     390,
+     844
+    ],
+    "pixels": 0,
+    "maxChannelDelta": 0,
+    "p0Comparator": "match",
+    "clusters": []
+   }
+  },
+  "webkit-dark-phone/settings-saved.png": {
+   "p02_to_mainDriftReference (A4, main 4088d37e6 / 82c7e92ff)": {
+    "size": [
+     390,
+     844
+    ],
+    "pixels": 36713,
+    "maxChannelDelta": 212,
+    "p0Comparator": "7795 pixels (ratio 0.03 of all image pixels) are different.",
+    "clusters": [
+     {
+      "x": 16,
+      "y": 484,
+      "width": 350,
+      "height": 34,
+      "pixels": 7386
+     },
+     {
+      "x": 297,
+      "y": 517,
+      "width": 45,
+      "height": 25,
+      "pixels": 957
+     },
+     {
+      "x": 41,
+      "y": 524,
+      "width": 211,
+      "height": 28,
+      "pixels": 3051
+     },
+     {
+      "x": 17,
+      "y": 562,
+      "width": 348,
+      "height": 12,
+      "pixels": 955
+     },
+     {
+      "x": 16,
+      "y": 603,
+      "width": 350,
+      "height": 35,
+      "pixels": 7764
+     },
+     {
+      "x": 296,
+      "y": 638,
+      "width": 45,
+      "height": 25,
+      "pixels": 957
+     },
+     {
+      "x": 41,
+      "y": 645,
+      "width": 228,
+      "height": 28,
+      "pixels": 2995
+     },
+     {
+      "x": 17,
+      "y": 683,
+      "width": 348,
+      "height": 9,
+      "pixels": 661
+     },
+     {
+      "x": 16,
+      "y": 722,
+      "width": 350,
+      "height": 34,
+      "pixels": 7617
+     },
+     {
+      "x": 297,
+      "y": 755,
+      "width": 45,
+      "height": 25,
+      "pixels": 957
+     },
+     {
+      "x": 41,
+      "y": 762,
+      "width": 228,
+      "height": 28,
+      "pixels": 2758
+     },
+     {
+      "x": 17,
+      "y": 800,
+      "width": 348,
+      "height": 9,
+      "pixels": 631
+     },
+     {
+      "x": 16,
+      "y": 841,
+      "width": 2,
+      "height": 3,
+      "pixels": 5
+     },
+     {
+      "x": 364,
+      "y": 841,
+      "width": 2,
+      "height": 3,
+      "pixels": 5
+     },
+     {
+      "x": 55,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     },
+     {
+      "x": 122,
+      "y": 843,
+      "width": 3,
+      "height": 1,
+      "pixels": 3
+     },
+     {
+      "x": 146,
+      "y": 843,
+      "width": 5,
+      "height": 1,
+      "pixels": 5
+     },
+     {
+      "x": 160,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     },
+     {
+      "x": 170,
+      "y": 843,
+      "width": 2,
+      "height": 1,
+      "pixels": 2
+     }
+    ]
+   },
+   "mainDriftReference_to_tip (tip-a run, da13423d3)": {
+    "size": [
+     390,
+     844
+    ],
+    "pixels": 0,
+    "maxChannelDelta": 0,
+    "p0Comparator": "match",
+    "clusters": []
+   }
+  }
+ }
+}

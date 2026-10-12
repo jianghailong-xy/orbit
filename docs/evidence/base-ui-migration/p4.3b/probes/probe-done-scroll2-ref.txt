@@ -1,0 +1,48 @@
+probe: probe-done-scroll2.browser.mjs tree: ref head: 40f79c5ab4618c4718201cd13a096b66fbd5977c projects: chromium-light-phone chromium-dark-phone webkit-dark-phone chromium-light-desktop started: 2026-10-09T14:05:41Z load: 10.97 8.69 6.51 10/4216 3980769
+PROBE ref chromium-light-desktop opened {"top":0,"active":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusin","target":"BUTTON.project-open-item-action is-primary"}
+PROBE   {"kind":"focusout","target":"BUTTON.project-open-item-action is-primary","related":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusin","target":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focus","target":"BUTTON.ant-modal-close","options":{"preventScroll":true},"before":0,"after":0}
+PROBE ref chromium-light-desktop not yet pressed {"top":0,"active":"BODY."}
+PROBE   {"kind":"focusout","target":"BUTTON.ant-modal-close","related":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusin","target":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusout","target":"BUTTON.card-action card-action--secondary","related":"null"}
+PROBE ref chromium-light-desktop typed {"top":0,"active":"TEXTAREA.ant-input css-oc1rc0 ant-input-outlined "}
+PROBE   {"kind":"focusin","target":"TEXTAREA.ant-input css-oc1rc0 ant-input-mouse-act"}
+PROBE ref chromium-light-phone opened {"top":0,"active":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusin","target":"BUTTON.project-open-item-action is-primary"}
+PROBE   {"kind":"focusout","target":"BUTTON.project-open-item-action is-primary","related":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusin","target":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focus","target":"BUTTON.ant-modal-close","options":{"preventScroll":true},"before":0,"after":0}
+PROBE ref chromium-light-phone not yet pressed {"top":7,"active":"BODY."}
+PROBE   {"kind":"focusout","target":"BUTTON.ant-modal-close","related":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusin","target":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusout","target":"BUTTON.card-action card-action--secondary","related":"null"}
+PROBE   {"kind":"scroll","top":7,"active":"BODY."}
+PROBE ref chromium-light-phone typed {"top":7,"active":"TEXTAREA.ant-input css-oc1rc0 ant-input-outlined "}
+PROBE   {"kind":"focusin","target":"TEXTAREA.ant-input css-oc1rc0 ant-input-mouse-act"}
+PROBE ref chromium-dark-phone opened {"top":0,"active":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusin","target":"BUTTON.project-open-item-action is-primary"}
+PROBE   {"kind":"focusout","target":"BUTTON.project-open-item-action is-primary","related":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusin","target":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focus","target":"BUTTON.ant-modal-close","options":{"preventScroll":true},"before":0,"after":0}
+PROBE ref chromium-dark-phone not yet pressed {"top":7,"active":"BODY."}
+PROBE   {"kind":"focusout","target":"BUTTON.ant-modal-close","related":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusin","target":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusout","target":"BUTTON.card-action card-action--secondary","related":"null"}
+PROBE   {"kind":"scroll","top":7,"active":"BODY."}
+PROBE ref chromium-dark-phone typed {"top":7,"active":"TEXTAREA.ant-input css-oc1rc0 ant-input-outlined "}
+PROBE   {"kind":"focusin","target":"TEXTAREA.ant-input css-oc1rc0 ant-input-mouse-act"}
+PROBE ref webkit-dark-phone opened {"top":0,"active":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusin","target":"BUTTON.project-open-item-action is-primary"}
+PROBE   {"kind":"focusout","target":"BUTTON.project-open-item-action is-primary","related":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusin","target":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focus","target":"BUTTON.ant-modal-close","options":{"preventScroll":true},"before":0,"after":0}
+PROBE ref webkit-dark-phone not yet pressed {"top":7,"active":"BODY."}
+PROBE   {"kind":"scroll","top":7,"active":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focusout","target":"BUTTON.ant-modal-close","related":"BUTTON.card-action card-action--secondary"}
+PROBE   {"kind":"focusin","target":"BUTTON.card-action card-action--secondary"}
+PROBE ref webkit-dark-phone typed {"top":7,"active":"TEXTAREA.ant-input css-oc1rc0 ant-input-outlined "}
+PROBE   {"kind":"focusin","target":"TEXTAREA.ant-input css-oc1rc0 ant-input-mouse-act"}
+  4 passed (9.0s)

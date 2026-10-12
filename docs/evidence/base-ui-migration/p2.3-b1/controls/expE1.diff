@@ -1,0 +1,13 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 3c550f375..5410f5211 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -293,8 +293,6 @@ body {
+   font-size: 14px;
+   line-height: 20px;
+   text-align: start;
+-  /* Keep the original card's rasterization when its host enters the top layer. */
+-  will-change: transform;
+ }
+ :root[data-theme='dark'] .toast {
+   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);

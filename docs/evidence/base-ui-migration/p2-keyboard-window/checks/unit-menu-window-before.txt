@@ -1,0 +1,131 @@
+46a418fba Merge orbit/p2-menu-select-antd-288742: keyboard-window probe, baselines and delivered-tree checks from the previous session
+?? src/web/src/components/ui/Menu.test.tsx
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/components/ui/Menu.test.tsx
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.2 [39m[90m/var/tmp/p2kw-c2604b/before/src/web[39m
+
+ [31m❯[39m src/components/ui/Menu.test.tsx [2m([22m[2m18 tests[22m[2m | [22m[31m6 failed[39m[2m)[22m[33m 404[2mms[22m[39m
+   [31m❯[39m Menu keys pressed before focus enters the open menu [2m(18)[22m
+     [32m✓[39m ["ArrowDown","ArrowDown","Enter"] with focus in the menu (the reference)[32m 119[2mms[22m[39m
+     [32m✓[39m ["ArrowDown","Enter"] with focus in the menu (the reference)[32m 22[2mms[22m[39m
+     [32m✓[39m ["ArrowDown","ArrowUp","Enter"] with focus in the menu (the reference)[32m 21[2mms[22m[39m
+     [32m✓[39m ["Enter","ArrowDown","Enter"] with focus in the menu (the reference)[32m 21[2mms[22m[39m
+     [32m✓[39m ["Enter","ArrowUp","Enter"] with focus in the menu (the reference)[32m 19[2mms[22m[39m
+     [32m✓[39m ["Enter","Enter"] with focus in the menu (the reference)[32m 17[2mms[22m[39m
+     [32m✓[39m ["ArrowUp","Enter"] with focus in the menu (the reference)[32m 16[2mms[22m[39m
+     [32m✓[39m ["ArrowUp","ArrowUp","Enter"] with focus in the menu (the reference)[32m 18[2mms[22m[39m
+     [32m✓[39m ["ArrowUp","ArrowDown","Enter"] with focus in the menu (the reference)[32m 17[2mms[22m[39m
+[31m     [31m×[31m ["ArrowDown","ArrowDown","Enter"] before focus enters the menu runs what the reference runs[39m[32m 18[2mms[22m[39m
+[31m     [31m×[31m ["ArrowDown","Enter"] before focus enters the menu runs what the reference runs[39m[32m 15[2mms[22m[39m
+     [32m✓[39m ["ArrowDown","ArrowUp","Enter"] before focus enters the menu runs what the reference runs[32m 15[2mms[22m[39m
+[31m     [31m×[31m ["Enter","ArrowDown","Enter"] before focus enters the menu runs what the reference runs[39m[32m 15[2mms[22m[39m
+     [32m✓[39m ["Enter","ArrowUp","Enter"] before focus enters the menu runs what the reference runs[32m 16[2mms[22m[39m
+[31m     [31m×[31m ["Enter","Enter"] before focus enters the menu runs what the reference runs[39m[32m 13[2mms[22m[39m
+[31m     [31m×[31m ["ArrowUp","Enter"] before focus enters the menu runs what the reference runs[39m[32m 12[2mms[22m[39m
+[31m     [31m×[31m ["ArrowUp","ArrowUp","Enter"] before focus enters the menu runs what the reference runs[39m[32m 14[2mms[22m[39m
+     [32m✓[39m ["ArrowUp","ArrowDown","Enter"] before focus enters the menu runs what the reference runs[32m 14[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 6 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/components/ui/Menu.test.tsx[2m > [22mMenu keys pressed before focus enters the open menu[2m > [22m["ArrowDown","ArrowDown","Enter"] before focus enters the menu runs what the reference runs
+[41m[1m FAIL [22m[49m src/components/ui/Menu.test.tsx[2m > [22mMenu keys pressed before focus enters the open menu[2m > [22m["Enter","ArrowDown","Enter"] before focus enters the menu runs what the reference runs
+[31m[1mAssertionError[22m: expected [] to deeply equal [ 'Image' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [[39m
+[32m-   "Image",[39m
+[32m- ][39m
+[31m+ [][39m
+
+[36m [2m❯[22m src/components/ui/Menu.test.tsx:[2m129:17[22m[39m
+    [90m127|[39m     expect(document.activeElement).toBe(trigger());
+    [90m128|[39m     for (const key of rest) await press(key);
+    [90m129|[39m     expect(ran).toEqual([runs]);
+    [90m   |[39m                 [31m^[39m
+    [90m130|[39m     await runFrames();
+    [90m131|[39m     expect(ran).toEqual([runs]);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/components/ui/Menu.test.tsx[2m > [22mMenu keys pressed before focus enters the open menu[2m > [22m["ArrowDown","Enter"] before focus enters the menu runs what the reference runs
+[41m[1m FAIL [22m[49m src/components/ui/Menu.test.tsx[2m > [22mMenu keys pressed before focus enters the open menu[2m > [22m["Enter","Enter"] before focus enters the menu runs what the reference runs
+[31m[1mAssertionError[22m: expected [] to deeply equal [ 'File' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [[39m
+[32m-   "File",[39m
+[32m- ][39m
+[31m+ [][39m
+
+[36m [2m❯[22m src/components/ui/Menu.test.tsx:[2m129:17[22m[39m
+    [90m127|[39m     expect(document.activeElement).toBe(trigger());
+    [90m128|[39m     for (const key of rest) await press(key);
+    [90m129|[39m     expect(ran).toEqual([runs]);
+    [90m   |[39m                 [31m^[39m
+    [90m130|[39m     await runFrames();
+    [90m131|[39m     expect(ran).toEqual([runs]);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/components/ui/Menu.test.tsx[2m > [22mMenu keys pressed before focus enters the open menu[2m > [22m["ArrowUp","Enter"] before focus enters the menu runs what the reference runs
+[31m[1mAssertionError[22m: expected [] to deeply equal [ 'Command' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [[39m
+[32m-   "Command",[39m
+[32m- ][39m
+[31m+ [][39m
+
+[36m [2m❯[22m src/components/ui/Menu.test.tsx:[2m129:17[22m[39m
+    [90m127|[39m     expect(document.activeElement).toBe(trigger());
+    [90m128|[39m     for (const key of rest) await press(key);
+    [90m129|[39m     expect(ran).toEqual([runs]);
+    [90m   |[39m                 [31m^[39m
+    [90m130|[39m     await runFrames();
+    [90m131|[39m     expect(ran).toEqual([runs]);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/components/ui/Menu.test.tsx[2m > [22mMenu keys pressed before focus enters the open menu[2m > [22m["ArrowUp","ArrowUp","Enter"] before focus enters the menu runs what the reference runs
+[31m[1mAssertionError[22m: expected [] to deeply equal [ 'Shell' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [[39m
+[32m-   "Shell",[39m
+[32m- ][39m
+[31m+ [][39m
+
+[36m [2m❯[22m src/components/ui/Menu.test.tsx:[2m129:17[22m[39m
+    [90m127|[39m     expect(document.activeElement).toBe(trigger());
+    [90m128|[39m     for (const key of rest) await press(key);
+    [90m129|[39m     expect(ran).toEqual([runs]);
+    [90m   |[39m                 [31m^[39m
+    [90m130|[39m     await runFrames();
+    [90m131|[39m     expect(ran).toEqual([runs]);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m12 passed[39m[22m[90m (18)[39m
+[2m   Start at [22m 12:13:30
+[2m   Duration [22m 1.07s[2m (tests 40%, import 26%, environment 25%, transform 8%)[22m
+
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /var/tmp/p2kw-c2604b/before/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /var/tmp/p2kw-c2604b/before/src/web
+npm error command failed
+npm error command sh -c vitest run --maxWorkers=2 src/components/ui/Menu.test.tsx

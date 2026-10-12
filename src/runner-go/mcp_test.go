@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestMCPPermissionPromptToolCanBeDisabled(t *testing.T) {
@@ -116,6 +121,31 @@ func TestMCPTaskRequestConfirmationPostsTheClaimWithBothAttributionHeaders(t *te
 	}
 	// Both headers: the session is the declaration's subject, so it is authenticated rather than
 	// typed into the body — the control plane takes it only from the task's own run.
+	if gotAgent != "a1" || gotSession != "s1" {
+		t.Fatalf("attribution headers = agent %q, session %q", gotAgent, gotSession)
+	}
+}
+
+func TestMCPTaskCommentPostsWithBothAttributionHeaders(t *testing.T) {
+	var gotMethod, gotPath, gotAgent, gotSession string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotAgent, gotSession = r.Header.Get("X-Orbit-Agent-Id"), r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"id":"c1"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "s1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_comment", map[string]interface{}{"body": "looked at it"})
+	if res["isError"] == true {
+		t.Fatalf("task_comment returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/tasks/t1/comments" || gotBody["body"] != "looked at it" {
+		t.Fatalf("task_comment sent %s %s %#v", gotMethod, gotPath, gotBody)
+	}
+	// The session is what lets the control plane record which run, and which attempt, wrote it.
 	if gotAgent != "a1" || gotSession != "s1" {
 		t.Fatalf("attribution headers = agent %q, session %q", gotAgent, gotSession)
 	}
@@ -1139,5 +1169,463 @@ func TestMCPSessionSendAndInterruptPutTheSameRequestOnTheWire(t *testing.T) {
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("requests =\n%#v\nwant\n%#v", calls, want)
+	}
+}
+
+// ownerWaitDouble is a control plane whose create cards stay PENDING until the test answers them.
+type ownerWaitDouble struct {
+	mu       sync.Mutex
+	cards    []map[string]interface{}
+	status   map[string]string
+	created  []http.Header
+	requests []string
+	srv      *httptest.Server
+}
+
+func newOwnerWaitDouble(t *testing.T) *ownerWaitDouble {
+	d := &ownerWaitDouble{status: map[string]string{}}
+	d.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		d.requests = append(d.requests, r.Method+" "+r.URL.Path)
+		switch {
+		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/approvals"):
+			id := fmt.Sprintf("card-%d", len(d.cards)+1)
+			d.cards = append(d.cards, body)
+			d.status[id] = "PENDING"
+			_, _ = fmt.Fprintf(w, `{"id":%q,"status":"PENDING"}`, id)
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = fmt.Fprintf(w, `{"status":%q}`, d.status[r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]])
+		case r.Method == "POST" && r.URL.Path == "/api/runner/tasks":
+			d.created = append(d.created, r.Header.Clone())
+			_, _ = w.Write([]byte(`{"id":"handed-off-task"}`))
+		default:
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(d.srv.Close)
+	return d
+}
+
+func (d *ownerWaitDouble) snapshot() (cards []map[string]interface{}, created []http.Header, requests []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append(cards, d.cards...), append(created, d.created...), append(requests, d.requests...)
+}
+
+func (d *ownerWaitDouble) decide(id, status string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.status[id] = status
+}
+
+var ownerWaitTaskArgs = map[string]interface{}{"title": "handed off", "completionCriterion": "EVIDENCE_JUDGMENT"}
+
+func resultText(res map[string]interface{}) string {
+	return res["content"].([]map[string]interface{})[0]["text"].(string)
+}
+
+// Under an engine that ends tool calls on its own deadline, a create that waits for the owner returns
+// at once and hands the wait to a runner-hosted job: the job files the card (naming itself, so the card
+// outlives the turn), writes only on a confirmation, and wakes the session with the call's own result.
+func TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline(t *testing.T) {
+	d := newOwnerWaitDouble(t)
+	// The job runs this test binary as `orbit mcp`, which reaches the double through ORBIT_HOME.
+	home, err := os.MkdirTemp("", "mcpho")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	config, _ := json.Marshal(RunnerConfig{ServerURL: d.srv.URL, RunnerID: "r", RunnerToken: "tok"})
+	if err := os.WriteFile(filepath.Join(home, "config.json"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", home)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wakesMu sync.Mutex
+	wakes := map[string]bgWake{}
+	bg := newBgTailer(ctx, func(string, map[string]interface{}) {}, nil)
+	bg.wakeSessionVia(func(w bgWake) error { wakesMu.Lock(); wakes[w.JobID] = w; wakesMu.Unlock(); return nil })
+	defer bg.stopAll()
+	svc := &bgJobService{bg: bg, token: "ho-token", execDir: home, scratchDir: home, sessionID: "sess-ho"}
+	socket := filepath.Join(home, "bg.sock")
+	stop, err := startBgJobService(ctx, svc, socket, filepath.Join(home, "bg.token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	t.Setenv(envBgSocket, socket)
+	t.Setenv(envBgToken, "ho-token")
+	s := &mcpServer{t: NewTransport(d.srv.URL, "tok"), sessionID: "sess-ho", agentID: "agent-ho", taskID: "task-ho", callTimeout: time.Minute}
+
+	for i, decision := range []string{"ALLOWED", "DENIED"} {
+		started := time.Now()
+		res := s.callTool("task_create", ownerWaitTaskArgs)
+		text := resultText(res)
+		jobID := handedOffJobID(text)
+		if res["isError"] == true || !strings.Contains(text, "Not done yet") || jobID == "" || time.Since(started) > 5*time.Second {
+			t.Fatalf("the call did not return at once with its job: %s", text)
+		}
+		var cards []map[string]interface{}
+		awaitCondition(t, 30*time.Second, "the job never filed the card", func() bool {
+			cards, _, _ = d.snapshot()
+			return len(cards) == i+1
+		})
+		if cards[i]["toolName"] != taskCreateApprovalToolName || cards[i]["backgroundJobId"] != jobID {
+			t.Fatalf("card = %+v", cards[i])
+		}
+		time.Sleep(300 * time.Millisecond)
+		if _, created, _ := d.snapshot(); len(created) != i {
+			t.Fatal("a task was written before the owner answered")
+		}
+		d.decide(fmt.Sprintf("card-%d", i+1), decision)
+		var wake bgWake
+		awaitCondition(t, 30*time.Second, "the job never woke the session", func() bool {
+			wakesMu.Lock()
+			defer wakesMu.Unlock()
+			wake = wakes[jobID]
+			return wake.JobID != ""
+		})
+		_, created, _ := d.snapshot()
+		switch decision {
+		case "ALLOWED":
+			if len(created) != 1 || created[0].Get("X-Orbit-Agent-Id") != "agent-ho" || created[0].Get("X-Orbit-Session-Id") != "sess-ho" ||
+				!strings.Contains(wake.OutputExcerpt, "handed-off-task") {
+				t.Fatalf("confirmed: created=%v wake=%q", created, wake.OutputExcerpt)
+			}
+		case "DENIED":
+			if len(created) != 1 || !strings.Contains(wake.OutputExcerpt, "the human rejected this task") {
+				t.Fatalf("declined: created=%d wake=%q", len(created), wake.OutputExcerpt)
+			}
+		}
+	}
+	if leftovers, _ := filepath.Glob(filepath.Join(os.TempDir(), "orbit-mcp-handoff-*.json")); len(leftovers) != 0 {
+		t.Fatalf("request files left behind: %v", leftovers)
+	}
+}
+
+// With nowhere to hand the wait to, the call is refused before anything is filed: a refusal the model
+// sees, and nothing the owner could still confirm into a write.
+func TestMCPOwnerWaitIsRefusedWithoutAJobService(t *testing.T) {
+	d := newOwnerWaitDouble(t)
+	t.Setenv(envBgSocket, "")
+	t.Setenv(envBgToken, "")
+	s := &mcpServer{t: NewTransport(d.srv.URL, "tok"), sessionID: "sess-ho", agentID: "agent-ho", callTimeout: time.Minute}
+	for _, name := range []string{"task_create", "task_create_batch", "project_create", "project_blocker_resolve",
+		"tasklist_propose_dag", "provider_create", "provider_update", "provider_delete"} {
+		res := s.callTool(name, map[string]interface{}{"title": "x", "tasks": []interface{}{ownerWaitTaskArgs}})
+		if text := resultText(res); res["isError"] != true || !strings.Contains(text, "nothing was filed or written") {
+			t.Fatalf("%s: %s", name, text)
+		}
+	}
+	if _, _, requests := d.snapshot(); len(requests) != 0 {
+		t.Fatalf("a refused call reached the control plane: %v", requests)
+	}
+}
+
+// Every other runtime starts `orbit mcp` without a deadline, and a create there still asks and waits
+// inside the call, exactly as before: the card is filed by this process and the write follows the yes.
+func TestMCPOwnerWaitBlocksInTheCallWithoutAnEngineDeadline(t *testing.T) {
+	t.Setenv(envMCPCallTimeout, "")
+	if got := mcpCallTimeoutFromEnv(); got != 0 {
+		t.Fatalf("no deadline set, read %s", got)
+	}
+	d := newOwnerWaitDouble(t)
+	s := &mcpServer{t: NewTransport(d.srv.URL, "tok"), sessionID: "sess-ho", agentID: "agent-ho"}
+	done := make(chan map[string]interface{})
+	go func() { done <- s.callTool("task_create", ownerWaitTaskArgs) }()
+	awaitCondition(t, 10*time.Second, "no card was filed", func() bool { cards, _, _ := d.snapshot(); return len(cards) == 1 })
+	select {
+	case res := <-done:
+		t.Fatalf("the call returned before the owner answered: %v", res)
+	case <-time.After(500 * time.Millisecond):
+	}
+	if cards, _, _ := d.snapshot(); cards[0]["backgroundJobId"] != nil {
+		t.Fatalf("the card was filed by a job: %+v", cards[0])
+	}
+	d.decide("card-1", "ALLOWED")
+	res := <-done
+	if _, created, _ := d.snapshot(); res["isError"] == true || len(created) != 1 || !strings.Contains(resultText(res), "handed-off-task") {
+		t.Fatalf("result = %v, created = %d", res, len(created))
+	}
+	// A dry-run batch asks nobody, and is not handed off even under a deadline.
+	if waitsForTheOwner("task_create_batch", map[string]interface{}{"dryRun": true}) {
+		t.Fatal("a dry run was treated as waiting for the owner")
+	}
+}
+
+// The inline waits a call may hold — session_create's wait, session_merge's waitSeconds — end within half
+// the engine's deadline, and are untouched without one.
+func TestMCPInlineWaitsEndBeforeAnEngineDeadline(t *testing.T) {
+	t.Setenv(envMCPCallTimeout, "")
+	if got := sessionWaitPolls(0); got != maxSessionWaitPolls {
+		t.Fatalf("without a deadline polls = %d", got)
+	}
+	t.Setenv(envMCPCallTimeout, "60")
+	if got := time.Duration(sessionWaitPolls(0)) * sessionWaitInterval; got > 30*time.Second || got <= 0 {
+		t.Fatalf("under a 60s deadline the session wait is %s", got)
+	}
+	var mu sync.Mutex
+	var waits []interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		waits = append(waits, body["waitSeconds"])
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	for _, timeout := range []time.Duration{0, time.Minute} {
+		s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess-ho", allowOrchestration: true, callTimeout: timeout}
+		if res := s.callTool("session_merge", map[string]interface{}{"sessionId": "child", "waitSeconds": float64(120)}); res["isError"] == true {
+			t.Fatalf("merge: %v", res)
+		}
+	}
+	if fmt.Sprint(waits) != "[120 30]" {
+		t.Fatalf("waitSeconds sent = %v, want 120 without a deadline and 30 under 60s", waits)
+	}
+}
+
+// engineDoorCall is one MCP tool call that may carry `engine`, and the request it must turn into.
+type engineDoorCall struct {
+	tool    string
+	request string
+	args    map[string]interface{}
+	// body reads the object the engine belongs on out of the forwarded request body.
+	body func(map[string]interface{}) map[string]interface{}
+}
+
+func engineDoorCalls(pins map[string]interface{}) []engineDoorCall {
+	with := func(args map[string]interface{}) map[string]interface{} {
+		for key, value := range pins {
+			args[key] = value
+		}
+		return args
+	}
+	whole := func(body map[string]interface{}) map[string]interface{} { return body }
+	return []engineDoorCall{
+		{tool: "session_create", request: "POST /api/runner/sessions", body: whole,
+			args: with(map[string]interface{}{"prompt": "review the change"})},
+		{tool: "task_create", request: "POST /api/runner/tasks", body: whole,
+			args: with(map[string]interface{}{"title": "Pinned", "completionCriterion": "EVIDENCE_JUDGMENT"})},
+		{tool: "task_create_batch", request: "POST /api/runner/tasks/batch-create",
+			args: map[string]interface{}{"tasks": []interface{}{
+				with(map[string]interface{}{"title": "Pinned", "completionCriterion": "EVIDENCE_JUDGMENT"}),
+			}},
+			body: func(body map[string]interface{}) map[string]interface{} {
+				items, _ := body["tasks"].([]interface{})
+				if len(items) != 1 {
+					return nil
+				}
+				item, _ := items[0].(map[string]interface{})
+				return item
+			}},
+		{tool: "task_update", request: "PATCH /api/runner/tasks/task-1", body: whole,
+			args: with(map[string]interface{}{"taskId": "task-1"})},
+		{tool: "task_batch_pin", request: "POST /api/runner/tasks/batch-pin", body: whole,
+			args: with(map[string]interface{}{"projectId": "01a02d83-7c58-708c-8d7c-103d15523d70"})},
+	}
+}
+
+// callEngineDoor runs one call against a stand-in control plane and returns the request it made. The
+// task tools run headless, so no confirmation card stands between the call and its write; the session
+// tool runs from a session with orchestration on, which is the only place it exists.
+func callEngineDoor(t *testing.T, call engineDoorCall) (string, map[string]interface{}) {
+	t.Helper()
+	var requests []string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		gotBody = nil
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"id":"created","changed":1}`))
+	}))
+	defer srv.Close()
+	mcp := &mcpServer{t: NewTransport(srv.URL, "runner-token"), agentID: "agent-1"}
+	if call.tool == "session_create" {
+		mcp.sessionID, mcp.orchestrationToken, mcp.allowOrchestration = "caller-session", "session-token", true
+	}
+	if res := mcp.callTool(call.tool, call.args); res["isError"] == true {
+		t.Fatalf("%s returned an error: %#v", call.tool, res["content"])
+	}
+	if len(requests) != 1 || requests[0] != call.request {
+		t.Fatalf("%s made %v, want one %s", call.tool, requests, call.request)
+	}
+	return requests[0], call.body(gotBody)
+}
+
+// T5 (docs/provider-engine-contract.md §6.1–6.2): every MCP door that writes a provider also takes
+// `engine` and hands it to the server as given — a value, and on the task pins null, which clears only
+// the engine pin.
+func TestMCPEngineReachesEveryDoorThatTakesIt(t *testing.T) {
+	for _, call := range engineDoorCalls(map[string]interface{}{"engine": "dsh", "provider": "deepseek-2"}) {
+		t.Run(call.tool, func(t *testing.T) {
+			_, body := callEngineDoor(t, call)
+			if body["engine"] != "dsh" || body["provider"] != "deepseek-2" {
+				t.Fatalf("%s forwarded %#v, want engine dsh on provider deepseek-2", call.tool, body)
+			}
+		})
+	}
+	for _, call := range engineDoorCalls(map[string]interface{}{"engine": nil}) {
+		if call.tool != "task_update" && call.tool != "task_batch_pin" {
+			continue
+		}
+		t.Run(call.tool+" clears", func(t *testing.T) {
+			_, body := callEngineDoor(t, call)
+			if engine, present := body["engine"]; !present || engine != nil {
+				t.Fatalf("%s engine = %#v (present=%v), want an explicit null", call.tool, engine, present)
+			}
+		})
+	}
+}
+
+// The calls written before engines existed name only a provider. They must reach the server exactly
+// as they did — no engine at all, not a null one and not a guess — so the server runs each on the
+// engine that provider always ran on.
+func TestMCPProviderAloneSendsNoEngine(t *testing.T) {
+	for _, call := range engineDoorCalls(map[string]interface{}{"provider": "deepseek-2"}) {
+		t.Run(call.tool, func(t *testing.T) {
+			_, body := callEngineDoor(t, call)
+			if body["provider"] != "deepseek-2" {
+				t.Fatalf("%s forwarded %#v, want provider deepseek-2", call.tool, body)
+			}
+			if engine, present := body["engine"]; present {
+				t.Fatalf("%s invented an engine: %#v", call.tool, engine)
+			}
+		})
+	}
+}
+
+// Each of the five schemas declares `engine` with all six engines, in the CLI names a person knows
+// them by; the task pins take null too, since null is how a pin is cleared.
+func TestMCPEngineSchemasNameTheSixEngines(t *testing.T) {
+	tools := toolDescriptors(false, true)
+	batchItem := func() map[string]interface{} {
+		props := mcpToolProps(tools, "task_create_batch")
+		tasks, _ := props["tasks"].(map[string]interface{})
+		items, _ := tasks["items"].(map[string]interface{})
+		itemProps, _ := items["properties"].(map[string]interface{})
+		return itemProps
+	}
+	for _, tc := range []struct {
+		tool     string
+		props    map[string]interface{}
+		nullable bool
+	}{
+		{tool: "session_create", props: mcpToolProps(tools, "session_create")},
+		{tool: "task_create", props: mcpToolProps(tools, "task_create"), nullable: true},
+		{tool: "task_create_batch item", props: batchItem(), nullable: true},
+		{tool: "task_update", props: mcpToolProps(tools, "task_update"), nullable: true},
+		{tool: "task_batch_pin", props: mcpToolProps(tools, "task_batch_pin"), nullable: true},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			engine, _ := tc.props["engine"].(map[string]interface{})
+			if engine == nil {
+				t.Fatalf("%s has no engine property", tc.tool)
+			}
+			var enum []string
+			hasNull := false
+			switch values := engine["enum"].(type) {
+			case []string:
+				enum = values
+			case []interface{}:
+				for _, value := range values {
+					if value == nil {
+						hasNull = true
+						continue
+					}
+					enum = append(enum, value.(string))
+				}
+			}
+			if !reflect.DeepEqual(enum, []string{"claude", "codex", "kimi", "antigravity", "opencode", "dsh"}) {
+				t.Fatalf("%s engine enum = %#v", tc.tool, engine["enum"])
+			}
+			if hasNull != tc.nullable {
+				t.Fatalf("%s engine enum null = %v, want %v", tc.tool, hasNull, tc.nullable)
+			}
+			description, _ := engine["description"].(string)
+			for _, name := range []string{"Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"} {
+				if !strings.Contains(description, name) {
+					t.Fatalf("%s engine description does not name %s: %q", tc.tool, name, description)
+				}
+			}
+		})
+	}
+}
+
+// The provider tools and the fields that name a provider describe the split: a provider is where a
+// credential comes from, the engine is the CLI, every engine is named, and deleting a key no longer
+// claims to move what used it onto the runner's Claude sign-in.
+func TestMCPProviderAndAgentDescriptionsFollowTheDecoupledModel(t *testing.T) {
+	tools := toolDescriptors(false, true)
+	description := func(name string) string {
+		for _, tool := range tools {
+			if tool["name"] == name {
+				text, _ := tool["description"].(string)
+				return text
+			}
+		}
+		t.Fatalf("no MCP tool %s", name)
+		return ""
+	}
+	propDescription := func(tool, prop string) string {
+		schema, _ := mcpToolProps(tools, tool)[prop].(map[string]interface{})
+		text, _ := schema["description"].(string)
+		return text
+	}
+
+	deletion := description("provider_delete")
+	if strings.Contains(deletion, "built-in claude") || strings.Contains(deletion, "runs on the built-in") {
+		t.Fatalf("provider_delete still says a deleted key's work moves to Claude: %q", deletion)
+	}
+	for _, want := range []string{"keep their engine", "cannot start again until it is re-pinned"} {
+		if !strings.Contains(deletion, want) {
+			t.Fatalf("provider_delete does not say %q: %q", want, deletion)
+		}
+	}
+	list := description("provider_list")
+	for _, want := range []string{"`engines`", "credential", "antigravity", "dsh", "DeepSeek Harness on the owner's first enabled DeepSeek key"} {
+		if !strings.Contains(list, want) {
+			t.Fatalf("provider_list does not say %q: %q", want, list)
+		}
+	}
+	for _, tool := range []string{"provider_create", "provider_update"} {
+		schema, _ := mcpToolProps(tools, tool)["runtime"].(map[string]interface{})
+		if !reflect.DeepEqual(schema["enum"], []string{"claude", "codex", "kimi", "antigravity"}) {
+			t.Fatalf("%s runtime enum = %#v, want the four protocols", tool, schema["enum"])
+		}
+		if text, _ := schema["description"].(string); !strings.Contains(text, "protocol") || strings.Contains(text, "coding engine that drives it") {
+			t.Fatalf("%s runtime is not described as the protocol: %q", tool, text)
+		}
+	}
+	if !strings.Contains(description("provider_update"), "refused while an open session or a task pin uses the key") {
+		t.Fatalf("provider_update does not say when a protocol change is refused: %q", description("provider_update"))
+	}
+	for _, tool := range []string{"task_create", "task_update", "task_batch_pin", "session_create"} {
+		text := propDescription(tool, "provider")
+		for _, want := range []string{"credential", "\"claude\"", "\"codex\"", "\"kimi\"", "\"antigravity\"", "\"opencode\"", "\"dsh\"", "provider_list"} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s provider description does not say %s: %q", tool, want, text)
+			}
+		}
+	}
+	if text := propDescription("task_create", "model"); !strings.Contains(text, "engine and provider") {
+		t.Fatalf("task_create model description = %q", text)
+	}
+	if strings.Contains(taskModelHintDescription, "The engine is still specified with provider") ||
+		!strings.Contains(taskModelHintDescription, "engine and provider") {
+		t.Fatalf("taskModelHintDescription = %q", taskModelHintDescription)
+	}
+	if !strings.Contains(description("agent_list"), "lastEngine") {
+		t.Fatalf("agent_list does not name the engine the project last ran on: %q", description("agent_list"))
+	}
+	for _, tool := range []string{"agent_create", "agent_update"} {
+		if !strings.Contains(description(tool), "no engine or provider") {
+			t.Fatalf("%s does not say an agent has no engine or provider: %q", tool, description(tool))
+		}
 	}
 }

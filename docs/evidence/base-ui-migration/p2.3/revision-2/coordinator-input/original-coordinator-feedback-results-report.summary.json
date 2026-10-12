@@ -1,0 +1,421 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/tmp/orbit-p23-reference-review-9h13op3k/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "src/web/ui-migration/coordinator-feedback.config.mjs"
+  ],
+  "configFile": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/ui-migration/coordinator-feedback.config.mjs",
+  "rootDir": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/.coordinator-feedback-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "coordinator-feedback.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/.coordinator-feedback-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "coordinator-feedback.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/.coordinator-feedback-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14380 --strictPort",
+   "cwd": "/tmp/orbit-p23-reference-review-9h13op3k/src/web/",
+   "url": "http://127.0.0.1:14380",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "coordinator-feedback.browser.mjs",
+   "file": "coordinator-feedback.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "existing notification stays at viewport origin during Dialog entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2608,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:03:36.288Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "aa3041591f803d7ddae1-e31719dd43b23d55f520",
+     "file": "coordinator-feedback.browser.mjs",
+     "line": 10,
+     "column": 3
+    },
+    {
+     "title": "existing notification stays at viewport origin during Drawer entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1987,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:03:38.963Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "aa3041591f803d7ddae1-5c68a73e2cffb783004a",
+     "file": "coordinator-feedback.browser.mjs",
+     "line": 10,
+     "column": 3
+    },
+    {
+     "title": "existing notification stays at viewport origin during Bottom drawer entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2064,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:03:40.956Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "aa3041591f803d7ddae1-8f19d57b86b02273dc3f",
+     "file": "coordinator-feedback.browser.mjs",
+     "line": 10,
+     "column": 3
+    },
+    {
+     "title": "hover pause releases after a keyboard opened and closed overlay changes portal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1304,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:03:43.025Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "timer-after-portal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "aa3041591f803d7ddae1-4f195f5703ae88662b37",
+     "file": "coordinator-feedback.browser.mjs",
+     "line": 46,
+     "column": 1
+    },
+    {
+     "title": "existing notification stays at viewport origin during Dialog entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2218,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:03:44.738Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "aa3041591f803d7ddae1-6885bc54f9690769eeaa",
+     "file": "coordinator-feedback.browser.mjs",
+     "line": 10,
+     "column": 3
+    },
+    {
+     "title": "existing notification stays at viewport origin during Drawer entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2097,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:03:47.059Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "aa3041591f803d7ddae1-6ebc7d2a023395d7a54c",
+     "file": "coordinator-feedback.browser.mjs",
+     "line": 10,
+     "column": 3
+    },
+    {
+     "title": "existing notification stays at viewport origin during Bottom drawer entry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1855,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:03:49.163Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "entry-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "aa3041591f803d7ddae1-eca700672baabe1fb010",
+     "file": "coordinator-feedback.browser.mjs",
+     "line": 10,
+     "column": 3
+    },
+    {
+     "title": "hover pause releases after a keyboard opened and closed overlay changes portal",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1268,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T07:03:51.030Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "timer-after-portal",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "aa3041591f803d7ddae1-a76955afdfd08db4ba9c",
+     "file": "coordinator-feedback.browser.mjs",
+     "line": 46,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T07:03:35.470Z",
+  "duration": 16957.081000000002,
+  "expected": 8,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

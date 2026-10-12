@@ -1,0 +1,11 @@
+--- a/src/web/src/pages/ProfilePage.tsx
++++ b/src/web/src/pages/ProfilePage.tsx
+@@ -93,7 +93,7 @@
+     <div style={{ maxWidth: 560, margin: '0 auto' }}>
+       <h1 className="page-title">Profile</h1>
+ 
+-      <Card title="Basic information" style={{ marginBottom: 16 }}>
++      <Card title="Basic information" style={{ marginBottom: 17 }}>
+         <div style={{ display: 'grid', gap: 20 }}>
+           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+             <Avatar size={64} src={photo.data} style={{ background: 'var(--brand)', flex: 'none', fontSize: 28 }}>

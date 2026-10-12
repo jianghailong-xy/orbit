@@ -1,0 +1,12 @@
+label=select-test-fix-restored
+head=77583b32725d298dec5cddad1a74dc951edcda54
+branch=orbit/p2-p3-select-menu-tab-3336b7
+status_begin
+  ?? docs/evidence/base-ui-migration/p2-p3-hardening/
+status_end
+command=cd src/web && NO_COLOR=1 npx vitest run src/components/ui/Select.test.tsx --reporter=verbose --reporter=json --outputFile.json=../../docs/evidence/base-ui-migration/p2-p3-hardening/runs/select-test-fix-restored/vitest.json
+start=2026-10-07T12:05:44Z
+load_start=11.44 20.40 22.50
+end=2026-10-07T12:05:46Z
+load_end=11.44 20.40 22.50
+exit=0

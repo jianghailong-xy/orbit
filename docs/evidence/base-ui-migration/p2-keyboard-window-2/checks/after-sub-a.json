@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' (orbit-submenu|orbit-submenu-sample|orbit-session) (sub-right|sub-right-enter|sub-right-down-enter|sub-right-up-enter|sub-right-left) (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "069601b675c735a69263f4a75f8d4349c0877c77",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T15:00:22.384826+00:00",
+ "endedAt": "2026-10-07T15:32:17.842035+00:00",
+ "loadAverage": {
+  "start": [
+   14.4677734375,
+   15.0556640625,
+   12.99462890625
+  ],
+  "end": [
+   37.87890625,
+   51.47705078125,
+   39.078125
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "43709ef5164c41289d522cd3b48110a0eb7675c225304ec8ecb0de856b47f468",
+ "outputBytes": 112876,
+ "raw": "/var/tmp/kw2-246921c8/runs/after-sub-a",
+ "stats": {
+  "expected": 600,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 1915125.416,
+  "samples": 600
+ }
+}

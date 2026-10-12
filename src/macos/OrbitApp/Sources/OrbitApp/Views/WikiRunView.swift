@@ -52,16 +52,6 @@ struct WikiRunPage: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .confirmationDialog(WikiModeCopy.rejectOnRecord,
-                            isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } }),
-                            titleVisibility: .visible) {
-            ForEach(WikiRejectReason.allCases, id: \.self) { reason in
-                Button(WikiCopy.rejectReasonLabel(reason)) {
-                    if let id = rejecting?.entryId { actions.reject(id, reason) }
-                    rejecting = nil
-                }
-            }
-        }
     }
 
     /// The kicker, the count as the title, when — then Revert run… and Open session side by side.
@@ -159,6 +149,19 @@ struct WikiRunPage: View {
             if answerable {
                 Button(WikiCopy.reject, role: .destructive) { rejecting = row }
             }
+        }
+        // On the entry's own row, whose swipe raises it, so the panel opens against the row rather
+        // than at the top of the page.
+        .orbitConfirmation(WikiModeCopy.rejectOnRecord,
+                           isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } })) {
+            ForEach(WikiRejectReason.allCases, id: \.self) { reason in
+                Button(WikiCopy.rejectReasonLabel(reason)) {
+                    if let id = rejecting?.entryId { actions.reject(id, reason) }
+                    rejecting = nil
+                }
+            }
+            // The reasons are the question; this is the way out of it.
+            Button(WikiModeCopy.cancel, role: .cancel) {}
         }
     }
 }

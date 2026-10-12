@@ -1,0 +1,17 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web
+
+
+ Test Files  294 passed (294)
+      Tests  3642 passed (3642)
+   Start at  15:24:25
+   Duration  228.69s (tests 47%, import 38%, environment 13%, transform 3%)
+
+     Import  642 modules were evaluated 2418 times · 162.90s total, 38% of tracked time
+             ~48.91s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+

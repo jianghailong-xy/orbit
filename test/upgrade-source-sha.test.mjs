@@ -199,8 +199,8 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
       .trim()
       .split('\n')
       .map((line) => line.split('\t'));
-    const build = calls.find(([, args]) => args === 'compose build apiserver web');
-    assert.deepEqual(build, [head, 'compose build apiserver web']);
+    const build = calls.find(([, args]) => args === 'compose build apiserver wiki-worker web');
+    assert.deepEqual(build, [head, 'compose build apiserver wiki-worker web']);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
@@ -256,7 +256,7 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
       const build = readFileSync(dockerLog, 'utf8')
         .split('\n')
         .map((line) => line.split('\t'))
-        .find(([, call]) => call === 'compose build apiserver web');
+        .find(([, call]) => call === 'compose build apiserver wiki-worker web');
       return { run, built: build?.[0], why: `${relative} ${args.join(' ')}\n${run.stdout}\n${run.stderr}` };
     };
 

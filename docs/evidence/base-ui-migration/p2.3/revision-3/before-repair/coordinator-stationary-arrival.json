@@ -1,0 +1,89 @@
+[
+  {
+    "browser": "chromium",
+    "variant": "revision2",
+    "elapsedMs": 6503,
+    "remaining": 0,
+    "events": [
+      {
+        "type": "mouseout",
+        "target": "",
+        "time": 1024.2000000178814
+      },
+      {
+        "type": "mouseover",
+        "target": "toast-action",
+        "time": 1024.300000011921
+      },
+      {
+        "type": "mouseover",
+        "target": "",
+        "time": 7018.5
+      }
+    ]
+  },
+  {
+    "browser": "chromium",
+    "variant": "reference",
+    "elapsedMs": 6502,
+    "remaining": 1,
+    "events": [
+      {
+        "type": "mouseout",
+        "target": "",
+        "time": 992.1999999880791
+      },
+      {
+        "type": "mouseover",
+        "target": "toast-action",
+        "time": 992.4000000059605
+      }
+    ]
+  },
+  {
+    "browser": "webkit",
+    "variant": "revision2",
+    "elapsedMs": 6503,
+    "remaining": 0,
+    "events": [
+      {
+        "type": "mouseout",
+        "target": "",
+        "time": 771
+      },
+      {
+        "type": "mouseover",
+        "target": "toast-action",
+        "time": 771
+      },
+      {
+        "type": "mouseout",
+        "target": "toast-layer",
+        "time": 6773
+      },
+      {
+        "type": "mouseover",
+        "target": "",
+        "time": 6773
+      }
+    ]
+  },
+  {
+    "browser": "webkit",
+    "variant": "reference",
+    "elapsedMs": 6505,
+    "remaining": 1,
+    "events": [
+      {
+        "type": "mouseout",
+        "target": "",
+        "time": 562
+      },
+      {
+        "type": "mouseover",
+        "target": "toast-action",
+        "time": 563
+      }
+    ]
+  }
+]

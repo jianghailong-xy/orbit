@@ -1,0 +1,367 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-keyboard-window/fix-repeat-exit-frames-after/<name>",
+ "files": [
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 2270,
+   "sha256": "e93424324f2fad7aa39b5e26ad0c429348b07acc67911cc01a56b273b1baa318",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 204,
+   "sha256": "6b2fec0e88ed4e47f53cc5917700d66e3dbfe4edf976b88ecf985458426a32d5",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 14,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 27
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--nested-lifecycle.json",
+   "bytes": 2995,
+   "sha256": "f36512c1b553f79823be213b6b4b312fc5b6aa97faf22b5afe640bdc517c1613",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--page-scroll.json",
+   "bytes": 204,
+   "sha256": "f056a9dc6752ffc20ab59bfb7001df50b61f60114a5fae23399a61c41d0610eb",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 10,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 44
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-1--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "0cee160be439b0e97c6bbc0aa5c97f0cc05e3119197bbf135e774e2770018ac7",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 52,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 273,
+    "unlockedAfterMs": 62,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--nested-lifecycle.json",
+   "bytes": 1592,
+   "sha256": "ef0b58d444dc9865efe03d9ba1dd4c7e87e6bbb6b8e11ccc8636bb44607bb764",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--page-scroll.json",
+   "bytes": 204,
+   "sha256": "ab23fbe14b03375cace807495330b5be67d62ff139944691517f74cdaee0f7e5",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 13,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 33
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-2--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "d9a3a49be082bffed9225770e16735b05cc6b453921505e7e365ec0e2a5c929e",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 40,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 251,
+    "unlockedAfterMs": 46,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--nested-lifecycle.json",
+   "bytes": 2854,
+   "sha256": "ad856f4ca228ac37801a0542f586eb4a0e8bf2b58eb3df907b5112da34841549",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--page-scroll.json",
+   "bytes": 204,
+   "sha256": "8e237a989ba31859576238d628f6960f65dbb82a164ec32497681fd3a0dfd8b0",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 15,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 27
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-3--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "7c8864dd18856893918484f0ce8b198394dc9c925461be21464c9b381ac9ee97",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 252,
+    "unlockedAfterMs": 50,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--nested-lifecycle.json",
+   "bytes": 2855,
+   "sha256": "1acc62f07d565b57f713baf6c86ab5af399345b51f7110fa6deacd28eebd659a",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--page-scroll.json",
+   "bytes": 204,
+   "sha256": "e58315a98baa6d8ec193a69a0eb9d276be1da7eb6a17bd4121672c1f60220dcf",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 13,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 30
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-4--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "c3d1e9c4630f20537153d1a7a875d95319af7664a03216832d69f31857029bf5",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 40,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 256,
+    "unlockedAfterMs": 46,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-5--nested-lifecycle.json",
+   "bytes": 3525,
+   "sha256": "58183acae666f01f94863c2b3cbeb8b05472811015b3d3eb7e51f542a17aad74",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-5--page-scroll.json",
+   "bytes": 204,
+   "sha256": "ce5fe1af151aa46b3290bdb83268a9155a951f7c7bfd6f756d0131e93b3256ac",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 13,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 26
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-5--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "22e8a0c8197a67b516d311704f341f3fcc30c39964787a4a6bb73556a90cb2e2",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 38,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 240,
+    "unlockedAfterMs": 47,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-6--nested-lifecycle.json",
+   "bytes": 3329,
+   "sha256": "c73f63a73f9163a00fa3d20d4a2daea260a434b9c195768eab45b11b4844cd90",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-6--page-scroll.json",
+   "bytes": 204,
+   "sha256": "a91790b3581681b11f074c4c94dd4157688f1537e97e2a124f5c15a90896026b",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 14,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 29
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-6--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "cb8f049ffaf3480a8677e96236bb3870152882a4129956b4f85f1ae7e2e63e16",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 29,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 237,
+    "unlockedAfterMs": 35,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-7--nested-lifecycle.json",
+   "bytes": 2287,
+   "sha256": "a89212219b60c0558f1acfaedbe7217c9ff35184a6235a0688dacdf18e2d293f",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-7--page-scroll.json",
+   "bytes": 204,
+   "sha256": "68831c3aaeb32f046254a448538782ff1e05a9376ba85635c0d3b3c5c5985b68",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 14,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 26
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-7--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "55c1953a0ea52c5b0992dd493314bfa7c48ed5ec96b3e773154c18d9718b6872",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 39,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 245,
+    "unlockedAfterMs": 48,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-8--nested-lifecycle.json",
+   "bytes": 1593,
+   "sha256": "dc787bdd9d545cc6e598b3c61583d30a5459a851367be7d12a2776f59ea45c1b",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-8--page-scroll.json",
+   "bytes": 204,
+   "sha256": "2f53d10d7bf94788f94cbc25ee973f1b893b310e9e7ae9049e2917d9d86abc91",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 15,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 28
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-8--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "dc8b71af1051bee0d49b0f52ccb9e158254478639f4184719df348aedc3e9f55",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 48,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 251,
+    "unlockedAfterMs": 60,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-9--nested-lifecycle.json",
+   "bytes": 2970,
+   "sha256": "090ea89c64bcf862ea1311f7e062a79b531369f14af0ff4ecf84ab76a2982856",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-9--page-scroll.json",
+   "bytes": 204,
+   "sha256": "d7e6a8da0c0608b2b2d66a3caadadbd1ca4b6ee50e9b65895239175e01558fd9",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 13,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 28
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--repeat-9--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "2d3733f5d4a10a8c296960a30c5162bd08cc40ddcd86201ea7c9914043886abc",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 37,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 244,
+    "unlockedAfterMs": 45,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "13c29de3cfadfd66dfda7d3a8ed6456042a455179d86b4b36cdbed5eb4112592",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 34,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 241,
+    "unlockedAfterMs": 41,
+    "readyAfterCloseMs": 0
+   }
+  }
+ ]
+}

@@ -1,0 +1,113 @@
+<!doctype html>
+<!-- Design board 5 (web): switching provider inside a session (the composer's model menu). "现在" is drawn from
+     today's WorkspaceView.tsx modelMenuItems, sessionProviderChoices.ts (engineTitleFor, sameRuntimeChoices,
+     currentProviderChoice) and taskRunHandoff.ts; "改后" is the proposal. Hand-drawn on the shipped tokens; not
+     shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>5 · Switching provider in a session (web) — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .cases { display: grid; grid-template-columns: 600px 600px minmax(0, 1fr); gap: 18px 34px; align-items: start; }
+  .cases .case { grid-column: 1 / -1; margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--border-subtle); font-size: 14px; font-weight: 650; }
+  .cases .case:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  .cases .hd { font-size: 12.5px; font-weight: 600; color: var(--text-2); display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .menus2 { display: inline-flex; align-items: flex-start; gap: 6px; }
+  .menus2 .w-menu:first-child { width: 252px; }
+  .menus2 > .w-menu + .w-menu, .menus2 > .m-mark { margin-top: 42px; }
+  .menus2 .w-menu + .w-menu, .menus2 .m-mark .w-menu { width: 318px; }
+  .cases .m-cap { margin-top: 0; }
+  .strip { margin-top: 10px; width: 560px; }
+  .warnv { color: var(--warning); }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">5 · 会话里切换 Provider（Web）：只列会话 engine 能用的凭据；菜单标题取自会话自己的 engine</h1>
+  <p class="m-sub zh">点 composer 里的模型（如「DeepSeek V4 Pro Default」）打开的菜单，main 上的结构未变。今天菜单标题和可切换的 provider 都是从会话当前那把 key 的 runtime 推出来的：key 被删或停用时推不出来，就当成 Claude；切到另一个 runtime 的 provider 时标题写成「Claude Code → Codex」。改后会话自己记着 engine（项目验收第 2 条），标题直接读它，Provider 子菜单只列这个 engine 兼容的登录、账号池和 key；engine 换不了，要换就开新会话。数据同板 1、板 4。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 模型菜单 → Provider</div>
+    <div class="cases" id="cases"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+
+<script>
+const main = (engine, provider, models, opts = {}) => menu([
+  { title: opts.title || ENGINES[engine].name, brand: ENGINES[engine].brand, arrow: opts.arrow },
+  ...(provider ? [{ label: 'Provider', sub: provider, hl: true }, { sep: true }] : []),
+  ...models,
+  { sep: true },
+  { label: 'Effort', sub: opts.effort || 'Default' },
+]);
+const T = (k) => ({ tile: k, tileSize: 16 });
+const pair = (a, b) => `<div class="menus2">${a}${b || ''}</div>`;
+const dsModels = [{ label: 'DeepSeek V4 Pro', ck: true }, { label: 'DeepSeek V4 Flash' }];
+const ccModels = [{ label: 'Opus 5.5', ck: true }, { label: 'Sonnet 5.5' }, { label: 'Haiku 4.5' }];
+const chip = (m, e = 'Default') => `<div class="strip">${composer({ ph: 'Reply…', mode: 'Default', chip: `<b>${m}</b> <span class="w-muted">${e}</span>`, open: true })}</div>`;
+const handoff = (text) => `<div class="w-handoff">${text}</div>`;
+
+const cases = [
+  ['DeepSeek Harness 会话：在两把 DeepSeek key 之间切',
+    mk('A', pair(main('dsh', null, dsModels)), true) + chip('DeepSeek V4 Pro'),
+    pair(main('dsh', 'DeepSeek', dsModels), mk(1, menu([
+      { group: 'API keys' },
+      { ...T('deepseek'), label: 'DeepSeek', ck: true },
+      { ...T('deepseek'), label: 'DeepSeek 2' },
+    ]))) + chip('DeepSeek V4 Pro'),
+    '<b>A</b> 今天 Harness 会话只认 Harness key：只有一把时连 Provider 行都没有，用 Claude Code 那把 DeepSeek key 不行。<br><b>1</b> 改后列全部启用的 DeepSeek key。换一把后，DSH 会话在原来的 ACP 会话上继续（契约 §3.6）。'],
+  ['切换之后：composer 下面那句话',
+    `<div style="width:560px">${mk('B', handoff('The turn in flight finishes on deepseek-harness. Your next one runs on deepseek-harness-2.'))}</div>`,
+    `<div style="width:560px">${mk(2, handoff('The turn in flight finishes on DeepSeek. Your next one uses DeepSeek 2.'))}</div>`,
+    '<b>B</b> 今天这句话用的是原始 slug（<code>taskRunHandoff.ts</code>）。<br><b>2</b> 改后用 key 的名字，动词从「runs on」改成「uses」——engine 不变，变的只是凭据。'],
+  ['菜单标题：会话 engine，不会出现「A → B」',
+    mk('C', pair(main('claude', null, ccModels, { arrow: 'Codex', effort: 'Default' })), true),
+    mk(3, pair(main('claude', 'Default', ccModels)), true),
+    '<b>C</b> 今天已结束的会话挑了别的 runtime 的 provider，下一轮就换 CLI，标题写成「Claude Code → Codex」（<code>engineTitleFor</code>）。<br><b>3</b> 改后标题只读会话的 engine，Provider 子菜单里也没有别的 engine 的凭据，所以不会再有箭头。想换 engine 就开新会话；旧客户端硬要换，服务端回答 <code>ENGINE_IMMUTABLE</code>（契约 §3.7）。'],
+  ['会话用的 key 被删了：标题和可选项都不能跟着变',
+    mk('D', pair(main('claude', 'deepseek-harness', dsModels.map((m) => ({ ...m }))), menu([
+      { label: 'deepseek-harness', ck: true },
+      { label: 'Claude' },
+      { label: 'Automatic', q: 'Switches to soonest reset', ind: true },
+      { label: 'Default', q: '5h 23%', ind: true },
+      { label: 'Claude accounts' },
+      { label: 'DeepSeek', det: 'Claude Code' },
+      { label: 'Z.AI (GLM)' },
+      { label: 'Claude Max' },
+    ])), true),
+    pair(main('dsh', '<span class="warnv">Key deleted</span>', dsModels), mk(4, menu([
+      { group: "This session's key" },
+      { ...T('deepseek'), label: 'DeepSeek Harness', q: '<span class="warnv">Deleted</span>', dim: true },
+      { group: 'API keys' },
+      { ...T('deepseek'), label: 'DeepSeek' },
+      { ...T('deepseek'), label: 'DeepSeek 2' },
+    ]))),
+    '<b>D</b> 今天删掉 Harness key 后，这个 Harness 会话在菜单里被当成 Claude：标题 Claude Code，当前项显示成原始 slug，下面列的全是 Claude 的凭据（<code>runtimeForProvider</code> 找不到 key 就落到 Claude）。<br><b>4</b> 改后标题仍是 DeepSeek Harness；Provider 写「Key deleted」，子菜单先列这把已删的 key（灰，不可选），再列可以换过去的 DeepSeek key。停用的 key 同样处理（写 Turned off，点它去 key 页打开）。'],
+];
+document.getElementById('cases').innerHTML = cases.map(([title, now, after, cap]) => `
+  <div class="case zh">${title}</div>
+  <div><div class="hd zh"><span class="m-k">现在</span></div>${now}</div>
+  <div><div class="hd zh"><span class="m-k new">改后</span></div>${after}</div>
+  <p class="m-cap zh">${cap}</p>`).join('');
+
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>Provider 子菜单按会话 engine 列兼容的凭据</b>（T1 兼容表），分组同板 4：Signed in on &lt;机器&gt; / Account pools / API keys。DeepSeek Harness 会话只有 API keys 一组，里面是 DeepSeek key。'],
+  [2, '<b>切换后的提示用 key 名，说「uses」</b>：进行中的这一轮用原来的，下一轮用新的。'],
+  [3, '<b>标题读 <code>session.engine</code></b>，不再从 provider 推；不出现「A → B」。服务端同样拒绝不兼容的切换（T3），旧版 App 发来的也一样。'],
+  [4, '<b>key 被删、停用时</b>，标题和子菜单都不变 engine；当前项写清是哪把 key、出了什么事，并列出能换过去的同 engine 凭据，选一把就修好。'],
+  ['·', '<b>不变的：</b>Provider 行只在有得选时出现；账号的 Automatic 和额度、模型、Effort、Speed 照旧；新会话的 Provider 菜单和这里是同一个（见板 4）。'],
+]);
+finish();
+</script>
+</body>
+</html>

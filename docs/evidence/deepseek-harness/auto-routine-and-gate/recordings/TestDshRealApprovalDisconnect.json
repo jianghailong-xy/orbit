@@ -1,0 +1,170 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "input": {
+          "content": "P4 disconnected write",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalDisconnect3047607036/001/work/disconnected.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "toolName": "write",
+        "toolUseId": "call_p4_1"
+      },
+      "Status": "ALLOWED",
+      "Polls": 10,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "content": "P4 disconnected write",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalDisconnect3047607036/001/work/disconnected.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "toolName": "write",
+        "toolUseId": "call_p4_1"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "file": "absent",
+    "status": "FAILED"
+  },
+  "modelRequests": 1,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalDisconnect3047607036/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalDisconnect3047607036/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "146a3bab19d354c4ce63cab5bda87996c48a67bfdabe0be8e9ac385a7bd5addf",
+        "dshHome": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalDisconnect3047607036/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-OFKGjI/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844",
+        "sessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844",
+        "text": "Write the file."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 47465,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "content": "P4 disconnected write",
+          "file_path": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealApprovalDisconnect3047607036/001/work/disconnected.txt",
+          "justification": "P4 synthetic escalation",
+          "sandbox_permissions": "workspace-write"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "write",
+        "runtimeSessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "dsh ended before this tool returned a final status; side effects may have occurred",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844",
+        "status": "failed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "message": "dsh ACP transport closed: EOF",
+        "runtimeSessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844"
+      },
+      "turn": "t1",
+      "type": "error"
+    },
+    {
+      "payload": {
+        "contextTokens": 47465,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844",
+        "subtype": "error"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "payload": {
+        "provider": "dsh",
+        "runtimeSessionId": "56f76b1f-7b1e-4833-9120-15faabbc8844",
+        "subtype": "process_exited"
+      },
+      "turn": "",
+      "type": "system"
+    }
+  ],
+  "permissionMode": "default",
+  "scenario": "TestDshRealApprovalDisconnect"
+}

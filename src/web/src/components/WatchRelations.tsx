@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { EyeOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Popover } from 'antd';
 import { Link } from 'react-router-dom';
 import type { WatchTargetView, WatchView } from '@orbit/shared';
 import { watchesQuery } from '../lib/queries';
@@ -23,6 +22,7 @@ import {
   targetHref,
   targetName,
   targetNoun,
+  waitsBeyondTasks,
   watchBucket,
   watchHref,
   watchProblem,
@@ -33,6 +33,8 @@ import { CountLine } from './SessionCreatedTasksStrip';
 import { TaskStatusPill } from './TaskStatusPill';
 import { WatchEditorModal } from './WatchEditor';
 import { ObserverLink, WatchStatePill, useNow } from './WatchParts';
+import { Button } from './ui/Button';
+import { Popover } from './ui/Popover';
 
 const rowsOf = (data: unknown): WatchView[] => (Array.isArray(data) ? (data as WatchView[]) : []);
 
@@ -146,26 +148,32 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
     <span className="watch-badges">
       {waitingOn.length > 0 && (
         <Popover
-          trigger="click"
-          placement="bottomLeft"
+          side="bottom"
+          align="start"
           title="This session is waiting on"
-          content={<WatchRowList watches={waitingOn} />}
+          popupClassName="watch-popover"
+          trigger={
+            <button type="button" className="watch-chip">
+              <EyeOutlined /> Following {targets} {targetNoun(waitingOn, targets)}
+            </button>
+          }
         >
-          <button type="button" className="watch-chip">
-            <EyeOutlined /> Following {targets} {targetNoun(waitingOn, targets)}
-          </button>
+          <WatchRowList watches={waitingOn} />
         </Popover>
       )}
       {watchedBy.length > 0 && (
         <Popover
-          trigger="click"
-          placement="bottomLeft"
+          side="bottom"
+          align="start"
           title="Watches on this session"
-          content={<WatchRowList watches={watchedBy} />}
+          popupClassName="watch-popover"
+          trigger={
+            <button type="button" className="watch-chip is-quiet">
+              Followed by {watchedBy.length}
+            </button>
+          }
         >
-          <button type="button" className="watch-chip is-quiet">
-            Followed by {watchedBy.length}
-          </button>
+          <WatchRowList watches={watchedBy} />
         </Popover>
       )}
       <button
@@ -187,7 +195,8 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * Above the composer: the watches this session is waiting on, while any is live — in the Background
+ * Above the composer: the watches this session is waiting on beyond its tasks (a session, say), while
+ * any is live — a task it waits on is an eye in the Tasks card instead — in the Background
  * processes tray's own shell (`.bg-tray`), so the stack above the composer reads as one system, the
  * way Tasks created here does. Always one line first: a lone target by name with where it stands, in
  * its own list's pill; several by what the wait needs, with Tasks created here's sentence over where
@@ -200,7 +209,10 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   const watchesQ = useQuery(watchesQuery());
   const now = useNow();
   const [open, setOpen] = useState(false);
-  const waitingOn = watchesFollowing(rowsOf(watchesQ.data), sessionId).filter(isLiveWatch);
+  // Only what waits beyond tasks: a task the session waits on is an eye in its Tasks card.
+  const waitingOn = watchesFollowing(rowsOf(watchesQ.data), sessionId)
+    .filter(isLiveWatch)
+    .filter(waitsBeyondTasks);
   if (waitingOn.length === 0) return null;
   const { live, single, targetLine } = stripLine(waitingOn);
   const toggle = () => setOpen((o) => !o);

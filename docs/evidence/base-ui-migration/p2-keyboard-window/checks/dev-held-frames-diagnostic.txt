@@ -1,0 +1,119 @@
+
+Running 2 tests using 1 worker
+
+[
+ [
+  "after down",
+  {
+   "expanded": "true",
+   "popupOpen": true,
+   "menus": 1,
+   "attrs": [
+    "data-starting-style= data-side=bottom data-align=start data-open= data-base-ui-focusable= data-variant=attachment data-rootownerid=_r_s_"
+   ],
+   "active": "BUTTON:Add attachment",
+   "action": "none",
+   "held": 2
+  }
+ ],
+ [
+  "after enter",
+  {
+   "expanded": "false",
+   "popupOpen": false,
+   "menus": 1,
+   "attrs": [
+    "data-side=bottom data-align=start data-base-ui-focusable= data-variant=attachment data-rootownerid=_r_s_ data-instant=click data-closed= data-ending-style="
+   ],
+   "active": "menuitem:File",
+   "action": "file",
+   "held": 2
+  }
+ ],
+ [
+  "after 300ms",
+  {
+   "expanded": "false",
+   "popupOpen": false,
+   "menus": 1,
+   "attrs": [
+    "data-side=bottom data-align=start data-base-ui-focusable= data-variant=attachment data-rootownerid=_r_s_ data-instant=click data-closed= data-ending-style="
+   ],
+   "active": "menuitem:File",
+   "action": "file",
+   "held": 2
+  }
+ ],
+ [
+  "after release",
+  {
+   "expanded": "false",
+   "popupOpen": false,
+   "menus": 1,
+   "attrs": [
+    "data-side=bottom data-align=start data-base-ui-focusable= data-variant=attachment data-rootownerid=_r_s_ data-instant=click data-closed= data-ending-style="
+   ],
+   "active": "menuitem:File",
+   "action": "file",
+   "held": 0
+  }
+ ],
+ [
+  "release+500ms",
+  {
+   "expanded": "false",
+   "popupOpen": false,
+   "menus": 1,
+   "attrs": [
+    "data-side=bottom data-align=start data-base-ui-focusable= data-variant=attachment data-rootownerid=_r_s_ data-instant=click data-closed= data-ending-style="
+   ],
+   "active": "menuitem:File",
+   "action": "file",
+   "held": 0
+  }
+ ]
+]
+  ✓  1 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/diag-held.browser.mjs:12:35 › diag down enter hold=true (2.3s)
+[
+ [
+  "after down",
+  {
+   "expanded": "true",
+   "popupOpen": true,
+   "menus": 1,
+   "attrs": [
+    "data-starting-style= data-side=bottom data-align=start data-open= data-base-ui-focusable= data-variant=attachment data-rootownerid=_r_s_"
+   ],
+   "active": "menuitem:File",
+   "action": "none",
+   "held": null
+  }
+ ],
+ [
+  "after enter",
+  {
+   "expanded": "false",
+   "popupOpen": false,
+   "menus": 0,
+   "attrs": [],
+   "active": "BUTTON:Add attachment",
+   "action": "file",
+   "held": null
+  }
+ ],
+ [
+  "after 300ms",
+  {
+   "expanded": "false",
+   "popupOpen": false,
+   "menus": 0,
+   "attrs": [],
+   "active": "BUTTON:Add attachment",
+   "action": "file",
+   "held": null
+  }
+ ]
+]
+  ✓  2 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2-keyboard-window/diag-held.browser.mjs:12:35 › diag down enter hold=false (1.4s)
+
+  2 passed (4.8s)

@@ -1,0 +1,30 @@
+==> postgres postgres:16-alpine as wiki-anchor-demo-e0971f0c on 127.0.0.1:45779
+
+==> 1. verify over the windowed database (scoped to the canary owner)
+
+$ wiki-anchor-canary-verify.mjs --owner afca47e1-c30a-4689-91c6-bff783a7e5bb --refs 5fe4ef214f61ac3838382656aa522f7511bafbfd
+window 2026-10-08T14:03:04.000Z .. 2026-10-08T16:26:00.000Z
+6 anchor check(s) the server path wrote in the window and the runner has not re-checked yet.
+  space 05862b0c-7a6a-4fa3-925f-1e18b6da4eb3: 6 check(s) across 2 entr(ies) — 2 path, 2 symbol, 2 commit
+  entry 2bdf11f3-9f71-4b85-acbb-769a055264c1 (entry 2bdf11f3): 3 — path @0 verified, symbol @1 verified, commit @2 verified
+  entry f7221fa5-7837-42d4-8ac5-4c1d3a57a324 (entry f7221fa5): 3 — path @0 verified, symbol @1 verified, commit @2 verified
+  ok: all six window-written checks are listed
+  ok: the space count names two entries and two of each type
+  ok: one line per affected entry
+
+==> 2. the runner path re-checks every anchor
+
+==> 3. verify again: the window has been re-checked away
+
+$ wiki-anchor-canary-verify.mjs --owner afca47e1-c30a-4689-91c6-bff783a7e5bb --refs 5fe4ef214f61ac3838382656aa522f7511bafbfd
+window 2026-10-08T14:03:04.000Z .. 2026-10-08T16:26:00.000Z
+0 anchor check(s) the server path wrote in the window and the runner has not re-checked yet.
+nothing left of the window: every written check has been re-checked by the runner path.
+  ok: the count is zero once the runner path has re-checked
+  ok: and it says so
+  ok: the pre-window entry is never a finding
+  ok: another owner's entry is never a finding when scoped
+  ok: the pre-window entry is never a finding
+  ok: another owner's entry is never a finding when scoped
+
+DEMO PASS: 9 assertions — the verification lists every window-written check by space, entry and type, and the count comes back zero once the runner path has re-checked them.

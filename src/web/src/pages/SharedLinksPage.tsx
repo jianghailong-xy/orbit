@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CopyOutlined, WarningOutlined } from '@ant-design/icons';
-import { Button, Popconfirm, Spin } from 'antd';
 import { useSearchParams } from 'react-router-dom';
 import { putShareLink, turnOffShareLinks, type ShareLink, type ShareLinkState } from '../api';
 import { canShareKind, ShareModal } from '../components/ShareModal';
 import { taskStatusLabel } from '../components/TaskStatusPill';
+import { Button } from '../components/ui/Button';
+import { Popconfirm } from '../components/ui/Popconfirm';
+import { Spinner } from '../components/ui/Spinner';
 import { copyText } from '../lib/clipboard';
 import { shareLinksQuery } from '../lib/queries';
 import { includeChips, publicLinkUrl, shortDate, staleSessionLinks } from '../lib/shareLinks';
 import { sessionLifecycleLabel, sessionLifecycleStateOf } from '../lib/sessionState';
+import { wikiSpacePath } from '../lib/wiki';
 import { useToast } from '../lib/toast';
 import { ago } from '../lib/watches';
 
@@ -33,8 +36,8 @@ const TABS: readonly { key: Tab; state: ShareLinkState; label: string; empty: st
 
 const isTab = (value: string | null): value is Tab => TABS.some((tab) => tab.key === value);
 
-const KIND_WORD: Record<ShareLink['kind'], string> = { SESSION: 'Session', TASK: 'Task', PROJECT: 'Project' };
-const KIND_LETTER: Record<ShareLink['kind'], string> = { SESSION: 'S', TASK: 'T', PROJECT: 'P' };
+const KIND_WORD: Record<ShareLink['kind'], string> = { SESSION: 'Session', TASK: 'Task', PROJECT: 'Project', WIKI: 'Wiki' };
+const KIND_LETTER: Record<ShareLink['kind'], string> = { SESSION: 'S', TASK: 'T', PROJECT: 'P', WIKI: 'W' };
 /** A project's status in the words the projects pages use (ProjectsPage STATUS_LABEL). */
 const PROJECT_WORD: Record<string, string> = { OPEN: 'Open', DONE: 'Completed', CANCELLED: 'Cancelled' };
 
@@ -42,11 +45,14 @@ const PROJECT_WORD: Record<string, string> = { OPEN: 'Open', DONE: 'Completed', 
 const TURN_OFF_TITLE = 'Turn off this link?';
 const TURN_OFF_DETAIL = 'Anyone who has it loses access right away.';
 
-/** Where the root stands, after what it is: "Session · Completed Sep 22", "Task · Done". */
+/** Where the root stands, after what it is: "Session · Completed Sep 22", "Task · Done". A wiki has
+ *  no status: "Wiki". */
 function rootWhere(link: ShareLink): string {
   const kind = KIND_WORD[link.kind];
-  if (link.kind === 'TASK') return `${kind} · ${taskStatusLabel(link.root.status)}`;
-  if (link.kind === 'PROJECT') return `${kind} · ${PROJECT_WORD[link.root.status] ?? link.root.status}`;
+  if (link.kind === 'WIKI') return kind;
+  const status = link.root.status ?? '';
+  if (link.kind === 'TASK') return `${kind} · ${taskStatusLabel(status)}`;
+  if (link.kind === 'PROJECT') return `${kind} · ${PROJECT_WORD[status] ?? status}`;
   const lifecycle = sessionLifecycleStateOf(link.root);
   const label = sessionLifecycleLabel(lifecycle);
   return lifecycle === 'COMPLETED' && link.root.completedAt
@@ -154,21 +160,22 @@ export function SharedLinksPage() {
           <Popconfirm
             title={stale.length === 1 ? TURN_OFF_TITLE : `Turn off these ${stale.length} links?`}
             description={stale.length === 1 ? TURN_OFF_DETAIL : 'Anyone who has them loses access right away.'}
-            okText="Turn off"
-            okButtonProps={{ danger: true }}
+            confirmText="Turn off"
+            danger
             cancelText="Cancel"
             onConfirm={() => turnOff.mutate(stale.map((link) => link.id))}
-          >
-            <Button size="small" loading={turnOff.isPending}>
-              {stale.length === 1 ? 'Turn off this link' : `Turn off these ${stale.length}`}
-            </Button>
-          </Popconfirm>
+            trigger={
+              <Button size="small" loading={turnOff.isPending}>
+                {stale.length === 1 ? 'Turn off this link' : `Turn off these ${stale.length}`}
+              </Button>
+            }
+          />
         </div>
       )}
       <div role="tabpanel" className="following-panel">
         {linksQ.isPending ? (
           <div className="following-empty">
-            <Spin />
+            <Spinner aria-busy="true" />
           </div>
         ) : linksQ.isError ? (
           <div className="following-empty">
@@ -242,15 +249,16 @@ export function SharedLinksPage() {
                     <Popconfirm
                       title={TURN_OFF_TITLE}
                       description={TURN_OFF_DETAIL}
-                      okText="Turn off"
-                      okButtonProps={{ danger: true }}
+                      confirmText="Turn off"
+                      danger
                       cancelText="Cancel"
                       onConfirm={() => turnOff.mutate([link.id])}
-                    >
-                      <Button size="small" type="text" danger>
-                        Turn off
-                      </Button>
-                    </Popconfirm>
+                      trigger={
+                        <Button size="small" variant="text" danger>
+                          Turn off
+                        </Button>
+                      }
+                    />
                   )}
                   {link.state === 'ENDED' && link.stateReason === 'EXPIRED' && !openRoots.has(link.root.id) && (
                     <Button size="small" loading={shareAgain.isPending} onClick={() => shareAgain.mutate(link)}>
@@ -269,6 +277,7 @@ export function SharedLinksPage() {
           onClose={() => setSettingsFor(null)}
           kind={settingsFor.kind}
           rootId={settingsFor.root.id}
+          appPath={settingsFor.root.slug ? wikiSpacePath(settingsFor.root.slug) : undefined}
         />
       )}
     </div>

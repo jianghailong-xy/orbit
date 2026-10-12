@@ -1,0 +1,27 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --grep popover end zoom origin matches --project chromium-light-desktop --repeat-each 10
+
+
+Running 10 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (3.3s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (3.4s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (5.8s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (7.6s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (6.8s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (3.5s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (4.3s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (11.3s)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (5.7s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (3.0s)
+
+  10 passed (1.2m)

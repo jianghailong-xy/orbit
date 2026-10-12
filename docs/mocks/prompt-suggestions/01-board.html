@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>prompt-suggestions</title>
+<style>
+  /* Mock fonts for a Linux render; a Mac resolves -apple-system / PingFang first and never reaches them. */
+  @font-face { font-family: "MockInter"; src: url("file:///tmp/mockfonts/Inter.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "MockSC"; src: url("file:///tmp/mockfonts/NotoSansSC.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "MockMono"; src: url("file:///tmp/mockfonts/JetBrainsMono.ttf"); font-weight: 100 900; }
+  :root {
+    /* iPhone tokens, as in composer-card-ios.html */
+    --label: #0b0b0c;
+    --secondary: rgb(138, 138, 142);
+    --placeholder: rgba(60, 60, 67, 0.32);
+    --sep: rgba(60, 60, 67, 0.2);
+    --track: rgba(60, 60, 67, 0.16);
+    --tint: #2e6aff;
+    --page: #ffffff;
+    --card: #ffffff;
+    --card-border: rgba(0, 0, 0, 0.13);
+    --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+    --send-off: #d1d1d6;
+    --use-bg: rgba(46, 106, 255, 0.10);
+    --tray: rgba(0, 0, 0, 0.04);
+    --tray-line: rgba(0, 0, 0, 0.10);
+  }
+  .dark {
+    --label: #f5f5f7;
+    --secondary: rgba(235, 235, 245, 0.6);
+    --placeholder: rgba(235, 235, 245, 0.3);
+    --sep: rgba(84, 84, 88, 0.6);
+    --track: rgba(235, 235, 245, 0.18);
+    --tint: #3d7bff;
+    --page: #000000;
+    --card: #1c1c1e;
+    --card-border: rgba(255, 255, 255, 0.1);
+    --card-shadow: none;
+    --send-off: #3a3a3c;
+    --use-bg: rgba(61, 123, 255, 0.18);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; width: max-content; background: #eef0f3; }
+  .m-sheet {
+    width: 1330px; padding: 36px 40px 40px; background: #eef0f3; color: #1f2329;
+    font-family: -apple-system, "SF Pro Text", "PingFang SC", "MockInter", "MockSC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: "SF Mono", Menlo, "MockMono", monospace; }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.2px; }
+  .lede { margin-top: 8px; font-size: 15px; color: #4b5260; line-height: 1.6; max-width: 1220px; }
+  .lede code, .legend code, .notes code { font-size: 12.5px; background: #e2e5ea; border-radius: 4px; padding: 0 4px; }
+  h2 { font-size: 17px; font-weight: 700; margin: 30px 0 12px; display: flex; align-items: baseline; gap: 10px; }
+  h2 small { font-size: 13px; font-weight: 400; color: #6b7280; }
+  .row { display: flex; gap: 22px; align-items: flex-start; }
+  .tile { width: 393px; flex: none; }
+  .cap { font-size: 14px; font-weight: 700; margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; }
+  .cap span { font-weight: 400; color: #6b7280; font-size: 12.5px; }
+  .cap .rec { color: #16833a; font-weight: 700; font-size: 12.5px; }
+  .cap .alt { color: #c2410c; font-weight: 700; font-size: 12.5px; }
+  .legend { margin-top: 10px; font-size: 12.5px; color: #4b5260; line-height: 1.6; }
+  .legend b { color: #1f2329; }
+
+  /* ── phone bottom crop (composer-card-ios.html) ── */
+  .phone {
+    position: relative; width: 393px; height: 318px; overflow: hidden;
+    border-radius: 14px; background: var(--page); color: var(--label);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .phone::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 56px; z-index: 1;
+    background: linear-gradient(var(--page), transparent); }
+  .tail { padding: 0 16px 14px; font-size: 17px; line-height: 26px; color: var(--label); }
+  .band { padding: 12px 16px 10px; border-top: 0.5px solid var(--sep); }
+  .safe { position: relative; height: 34px; flex: none; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: var(--label); }
+
+  .card { position: relative; background: var(--card); border-radius: 24px;
+    box-shadow: 0 0 0 0.5px var(--card-border), var(--card-shadow); }
+  .card.focus { box-shadow: 0 0 0 0.5px rgba(0,0,0,0.26), 0 6px 22px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.05); }
+  .dark .card.focus { box-shadow: 0 0 0 0.5px rgba(255,255,255,0.22); }
+  .field { position: relative; padding: 15px 16px 8px; font-size: 17px; line-height: 22px; min-height: 45px; color: var(--label); }
+  .field .ph { color: var(--placeholder); }
+  .field.sug { display: flex; align-items: center; gap: 10px; padding-right: 10px; }
+  .field.sug .ph { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .use { flex: none; height: 26px; margin: -2px 0; padding: 0 11px; border-radius: 13px; background: var(--use-bg);
+    color: var(--tint); font-size: 14px; font-weight: 600; line-height: 26px; }
+  .caret { display: inline-block; width: 2px; height: 21px; background: var(--tint); vertical-align: -4px; margin-left: 1px; border-radius: 1px; }
+  .toolbar { display: flex; align-items: center; height: 46px; padding: 6px 8px 8px 8px; font-size: 15px; line-height: 20px; }
+  .ic { flex: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--label); }
+  .mode { flex: none; margin-left: 6px; color: var(--secondary); font-weight: 500; white-space: nowrap; }
+  .sp { flex: 1 1 auto; min-width: 10px; }
+  .chip { display: flex; align-items: baseline; gap: 5px; min-width: 0; flex: 0 1 auto; padding: 0 2px; white-space: nowrap; }
+  .chip b { font-weight: 600; color: var(--label); }
+  .chip i { font-style: normal; color: var(--secondary); }
+  .meters { flex: none; display: flex; align-items: center; gap: 8px; margin-left: 12px; }
+  .bar { width: 20px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 2px; background: var(--tint); }
+  .send { flex: none; margin-left: 10px; width: 32px; height: 32px; border-radius: 16px; background: var(--tint); display: flex; align-items: center; justify-content: center; }
+  .send.off { background: var(--send-off); }
+
+  /* Parking-strip cards (BackgroundTrayView / WorktreeBar): 8pt radius, 4% fill, 10% hairline, 30pt row. */
+  .tray { border-radius: 8px; background: var(--tray); box-shadow: inset 0 0 0 1px var(--tray-line); height: 30px;
+    display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 13px; margin-bottom: 8px; white-space: nowrap; }
+  .tray .meta { font-size: 11px; color: var(--secondary); }
+  .tray .grow { flex: 1; }
+  .tray.mono { font-family: "SF Mono", Menlo, "MockMono", monospace; font-size: 12.4px; }
+  .add { color: #248a3d; } .del { color: #d70015; }
+  /* Option B: the capsule above the card (where the reply bar sits in ComposerView). */
+  .sugcap { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; border-radius: 15px;
+    background: var(--tray); box-shadow: inset 0 0 0 1px var(--tray-line); font-size: 13px; color: var(--label); margin-bottom: 6px; max-width: 361px; }
+
+  /* Question preview card in the transcript (ApprovalReviewLayout, compact). */
+  .qcard { margin: 0 16px 14px; border-radius: 14px; padding: 12px 14px 10px; background: rgba(46,106,255,0.06);
+    box-shadow: inset 0 0 0 1px rgba(46,106,255,0.22); font-size: 13px; }
+  .qhead { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 600; }
+  .qsum { margin-top: 6px; color: var(--secondary); line-height: 18px; }
+  .qdiv { height: 0.5px; background: var(--sep); margin: 10px 0 8px; }
+  .qact { display: flex; color: var(--tint); font-weight: 600; }
+  .qact .grow { flex: 1; }
+
+  /* callouts (composer-card boards) */
+  .co { position: absolute; z-index: 4; width: 20px; height: 20px; border-radius: 10px; background: #e0460f; color: #fff;
+    font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #fff; }
+  .dash { position: absolute; z-index: 4; border: 1.5px dashed #e0460f; border-radius: 12px; pointer-events: none; }
+  .spec { position: absolute; z-index: 4; font-size: 11px; font-weight: 700; color: #7c3aed; white-space: nowrap; }
+  .mark { position: relative; outline: 1.5px dashed #e0460f; outline-offset: 3px; }
+  .mark > .co { top: -14px; right: -14px; }
+  .mark > .spec { left: calc(100% + 12px); top: 50%; transform: translateY(-50%); }
+
+  /* ── web pane (composer-card-web.html) ── */
+  .pane { position: relative; width: 860px; flex: none; background: #fff; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.06); padding: 0 24px 18px; color: #1f2329; }
+  .pane::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 40px; z-index: 1; background: linear-gradient(#fff, rgba(255,255,255,0)); }
+  .pane .ptail { padding: 26px 0 8px; font-size: 14px; line-height: 1.7; }
+  .pane .wc { border-top: 1px solid #eceef1; padding-top: 12px; margin-top: 8px; }
+  .wcard { position: relative; background: #fff; border-radius: 24px;
+    box-shadow: 0 0 0 1px #e3e5e8, 0 2px 10px rgba(31,35,41,0.05), 0 10px 30px rgba(31,35,41,0.04); }
+  .wfield { display: flex; align-items: center; gap: 10px; padding: 14px 14px 4px 20px; font-size: 15px; line-height: 24px; min-height: 42px; }
+  .wfield .ph { color: #b3b8bf; flex: 1; }
+  .wuse { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 6px 0 11px; border-radius: 13px;
+    background: rgba(51,112,255,0.08); color: #3370ff; font-size: 13px; font-weight: 600; }
+  .kbd { display: inline-block; height: 18px; padding: 0 6px; border-radius: 5px; background: #fff; color: #646a73;
+    box-shadow: inset 0 0 0 1px #dee0e3, 0 1px 0 #dee0e3; font-size: 11px; font-weight: 600; line-height: 18px; }
+  .wtool { display: flex; align-items: center; height: 48px; padding: 6px 8px 8px; font-size: 13px; line-height: 18px; color: #646a73; }
+  .wtool .ic { color: #1f2329; border-radius: 16px; }
+  .wpill { flex: none; padding: 5px 8px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
+  .wchip { display: flex; align-items: baseline; gap: 5px; padding: 5px 8px; white-space: nowrap; }
+  .wchip b { font-weight: 600; color: #1f2329; }
+  .wmeters { display: flex; align-items: center; gap: 14px; margin: 0 6px 0 10px; font-size: 12px; }
+  .wm { display: inline-flex; align-items: center; gap: 6px; }
+  .ubar { width: 26px; height: 4px; border-radius: 2px; background: #eceef1; overflow: hidden; }
+  .ubar > span { display: block; height: 100%; background: #3370ff; border-radius: 2px; }
+  .wsend { flex: none; margin-left: 6px; width: 32px; height: 32px; border-radius: 16px; background: #d5d8dd; display: flex; align-items: center; justify-content: center; }
+  .side { flex: 1; font-size: 13px; line-height: 1.65; color: #2b303b; background: #fff; border-radius: 14px; padding: 16px 18px; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); }
+  .side b { color: #111; }
+  .side p + p { margin-top: 8px; }
+
+  /* ── notes ── */
+  .notes { margin-top: 30px; background: #fff; border-radius: 14px; padding: 18px 22px; box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 30px; font-size: 13px; line-height: 1.62; color: #2b303b; }
+  .notes h3 { font-size: 14px; margin: 0 0 6px; color: #111; }
+  .notes h3.more { margin-top: 12px; }
+  .notes ul, .notes ol { padding-left: 18px; }
+  .notes li { margin: 2px 0; }
+  .notes b { color: #111; }
+  .sample { color: #1f2329; background: #f1f3f6; border-radius: 4px; padding: 0 4px; }
+</style>
+</head>
+<body>
+<div class="m-sheet">
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="plus" viewBox="0 0 20 20"><path d="M10 3.2v13.6M3.2 10h13.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="up" viewBox="0 0 16 16"><path d="M8 13.2V3.3M3.6 7.6L8 3.2l4.4 4.4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="stop" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.6" fill="#fff"/></symbol>
+  <symbol id="ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="var(--track)" stroke-width="2.3"/><circle cx="8" cy="8" r="6" fill="none" stroke="var(--tint)" stroke-width="2.3" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="22.2" transform="rotate(-90 8 8)"/></symbol>
+  <symbol id="term" viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="11.6" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.2h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="branch" viewBox="0 0 16 16"><path d="M5 2.5v11M5 9c0-2.6 6-2 6-5.2V2.5M11 2.5l-2 2M11 2.5l2 2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cr" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="turn" viewBox="0 0 16 16"><path d="M3.5 3v4.2c0 1.5 1.2 2.8 2.8 2.8h6.5M10 7l2.8 3-2.8 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="qb" viewBox="0 0 18 18"><path d="M9 1.8c4.2 0 7.4 2.8 7.4 6.4S13.2 14.6 9 14.6c-.8 0-1.6-.1-2.3-.3L3 16.2l.9-3.2C2.5 11.8 1.6 10.1 1.6 8.2 1.6 4.6 4.8 1.8 9 1.8z" fill="#2e6aff"/><path d="M7.2 6.6c.1-1 .9-1.6 1.9-1.6 1.1 0 1.9.7 1.9 1.6 0 .7-.4 1.1-1 1.5-.5.3-.8.6-.8 1.2v.3" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><circle cx="9.2" cy="11.2" r=".8" fill="#fff"/></symbol>
+</svg>
+
+<template id="toolbar-idle">
+  <div class="toolbar">
+    <div class="ic"><svg width="20" height="20"><use href="#plus"/></svg></div>
+    <span class="mode">Auto</span><span class="sp"></span>
+    <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+    <span class="meters"><span class="bar"><span style="width:22%"></span></span><svg width="16" height="16"><use href="#ring"/></svg></span>
+    <div class="send off"><svg width="16" height="16"><use href="#up"/></svg></div>
+  </div>
+</template>
+<template id="toolbar-ready">
+  <div class="toolbar">
+    <div class="ic"><svg width="20" height="20"><use href="#plus"/></svg></div>
+    <span class="mode">Auto</span><span class="sp"></span>
+    <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+    <span class="meters"><span class="bar"><span style="width:22%"></span></span><svg width="16" height="16"><use href="#ring"/></svg></span>
+    <div class="send"><svg width="16" height="16"><use href="#up"/></svg></div>
+  </div>
+</template>
+<template id="toolbar-stop">
+  <div class="toolbar">
+    <div class="ic"><svg width="20" height="20"><use href="#plus"/></svg></div>
+    <span class="mode">Auto</span><span class="sp"></span>
+    <span class="chip"><b>Opus 5.5</b><i>Max</i></span>
+    <span class="meters"><span class="bar"><span style="width:24%"></span></span><svg width="16" height="16"><use href="#ring"/></svg></span>
+    <div class="send"><svg width="16" height="16"><use href="#stop"/></svg></div>
+  </div>
+</template>
+
+<h1>Turn 结束后的建议输入 —— iPhone 为准，web 同构</h1>
+<p class="lede">turn 结束后 1–2 秒，Claude Code 会给出一句「你接下来大概会打的话」（<code>--prompt-suggestions</code>，本机 2.1.293 实测）。
+Orbit 把它放进<b>空着的输入框</b>：灰字加行尾一个 <b>Use</b>。点一下，文字填进输入框，<b>不会直接发出</b>；自己打字时它就让开。没有建议时界面和现在完全一样。
+数据用 composer-card 那套：你的会话、Opus 5.5 · Max · Auto。虚线框和红点是标注，不是界面的一部分。</p>
+
+<h2>iPhone · 方案甲 <small>建议写在空输入框里；卡片高度不变，对话区不动</small></h2>
+<div class="row">
+  <div class="tile">
+    <div class="cap">① 现在 <span>turn 刚结束，输入框空着</span></div>
+    <div class="phone">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band"><div class="card">
+        <div class="field"><span class="ph">Message…</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">今天：回复看完，下一句全靠自己打。手机上最常打的恰恰是「好，发吧」「跑一下测试」这种短句。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">② 1–2 秒后 <span class="rec">推荐</span><span>建议换下 Message…</span></div>
+    <div class="phone">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band"><div class="card">
+        <div class="field sug mark" style="border-radius:20px 20px 6px 6px"><span class="ph">好，发 beta</span><span class="use">Use</span><span class="co">1</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend"><b>灰字</b>用系统的 placeholder 色，和 Message… 同一个位置、同一层。<b>Use</b> 是行尾的小胶囊：tint 10% 底、tint 字、高 26。
+      卡片仍是 91，对话区一点不动。发送键仍是灰的，空输入框不会因为有建议就能发。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">③ 点 Use <span>填进去，不发送</span></div>
+    <div class="phone">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band"><div class="card focus">
+        <div class="field">好，发 beta<span class="caret"></span></div>
+        <div data-tpl="toolbar-ready"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">文字进输入框，光标在末尾，键盘弹起（图略），可以接着改，比如补一句「changelog 用中文」。发送键这时才亮。
+      「提交」「推送」这类建议一碰就发太危险，所以点 Use 只填不发（待你定 ②）。</div>
+  </div>
+</div>
+
+<h2>iPhone · 什么时候没有 <small>不是每个 turn 都有：Claude 拿不准就不给，Orbit 再按状态收一道</small></h2>
+<div class="row">
+  <div class="tile">
+    <div class="cap">④ 自己在打字 <span>建议让位</span></div>
+    <div class="phone">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band"><div class="card focus">
+        <div class="field">先别发，changelog 再过一遍<span class="caret"></span></div>
+        <div data-tpl="toolbar-ready"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">输入框一有字，建议就不显示；删空了、它又仍是最新的那条，就回来。和 placeholder 一样的规矩，不用额外的关闭按钮。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">⑤ 运行中 <span>只有「停止」</span></div>
+    <div class="phone">
+      <div class="tail">正在跑 web 的全量测试，第 3 片（S–Z）还剩 41 个文件…</div>
+      <div class="band"><div class="card">
+        <div class="field"><span class="ph">Message…</span></div>
+        <div data-tpl="toolbar-stop"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">turn 没结束不猜下一句。上一条建议在你发出消息的那一刻作废，几台设备同时消失：另一台收到这条消息的 <code>user</code> 事件就收起。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">⑥ 等你回答 <span>有卡片在等你时不出</span></div>
+    <div class="phone">
+      <div class="qcard">
+        <div class="qhead"><svg width="18" height="18"><use href="#qb"/></svg>The coordinator has a question</div>
+        <div class="qsum">先发 beta，还是先修 #412 的回归？</div>
+        <div class="qdiv"></div>
+        <div class="qact">View details &amp; act<span class="grow"></span><svg width="14" height="14"><use href="#cr"/></svg></div>
+      </div>
+      <div class="band"><div class="card">
+        <div class="field"><span class="ph">Message…</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">有待处理的审批或提问（AskUserQuestion、协调者的提问、等你确认完成）时不出建议：这时该回答那张卡，两个入口同时出现会抢注意力。
+      判断用会话摘要里现成的 <code>pendingApprovals</code> / <code>waitingKind</code>。</div>
+  </div>
+</div>
+
+<h2>iPhone · 对照 <small>备选位置、长文本、深色</small></h2>
+<div class="row">
+  <div class="tile">
+    <div class="cap">⑦ 方案乙 <span class="alt">备选</span><span>输入卡片上方的胶囊</span></div>
+    <div class="phone" style="height:398px">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band">
+        <div class="tray"><svg width="12" height="12" style="color:var(--secondary)"><use href="#term"/></svg><b style="font-weight:600">Background processes</b><span class="meta">3 total</span><span class="grow"></span><svg width="10" height="10" style="color:var(--secondary)"><use href="#cr"/></svg></div>
+        <div class="tray mono"><svg width="12" height="12" style="color:var(--secondary)"><use href="#branch"/></svg>orbit/beta-pipeline-4d1c <span class="add">+412</span> <span class="del">−38</span><span class="grow"></span></div>
+        <div class="sugcap mark"><svg width="14" height="14" style="color:var(--secondary)"><use href="#turn"/></svg>好，发 beta<span class="spec">+36pt，对话区上移</span></div>
+        <div class="card">
+          <div class="field"><span class="ph">Message…</span></div>
+          <div data-tpl="toolbar-idle"></div>
+        </div>
+      </div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">更显眼，但有三个代价：多占 36pt；它在停车条下面，和它回应的那句话之间隔着 Background、分支条；
+      <code>parking-strip-in-composer-ios</code> 那版草案正想把输入框上方的东西减掉。所以推荐甲。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">⑧ 长建议 <span>只占一行，尾部截断</span></div>
+    <div class="phone">
+      <div class="tail">已经加上空值处理：读到空单元格就跳过，不计入该列的个数；整列为空时输出 n/a。</div>
+      <div class="band"><div class="card">
+        <div class="field sug"><span class="ph">用一个含空值的示例 CSV 测试一下这段代码的输出</span><span class="use">Use</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">完整文字点 Use 之后在输入框里看。CLI 自己只出 2–12 个词、不到 100 个字符的单句，一行放不下的不多。
+      图里这句是实测输出（第 3 轮那条）加了几个字。</div>
+  </div>
+
+  <div class="tile">
+    <div class="cap">⑨ 深色 <span>同 ②</span></div>
+    <div class="phone dark">
+      <div class="tail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+      <div class="band"><div class="card">
+        <div class="field sug"><span class="ph">好，发 beta</span><span class="use">Use</span></div>
+        <div data-tpl="toolbar-idle"></div>
+      </div></div>
+      <div class="safe"><div class="home"></div></div>
+    </div>
+    <div class="legend">灰字用 <code>placeholderText</code>，深色下自动变浅；Use 的底换成 tint 18%。卡片沿用 composer-card 的深色规则，去阴影、保留描边。</div>
+  </div>
+</div>
+
+<h2>Web 桌面 <small>860px 会话窗格；同一个灰字 + Use，另加 Tab</small></h2>
+<div class="row">
+  <div class="pane">
+    <div class="ptail">矩阵复跑全绿，合并回执已记；main 的 CI 也过了。要我接着发 beta 吗？</div>
+    <div class="wc">
+      <div class="wcard">
+        <div class="wfield"><span class="ph">好，发 beta</span><span class="wuse mark">Use <span class="kbd">Tab</span><span class="co">2</span></span></div>
+        <div class="wtool">
+          <div class="ic"><svg width="18" height="18"><use href="#plus"/></svg></div>
+          <span class="wpill">Auto</span><span class="sp"></span>
+          <span class="wchip"><b>Opus 5.5</b><i style="font-style:normal">Max</i></span>
+          <span class="wmeters">
+            <span class="wm"><span class="ubar"><span style="width:22%"></span></span>22%</span>
+            <span class="wm"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="#eceef1" stroke-width="2.5"/><circle cx="7" cy="7" r="5.5" fill="none" stroke="#3370ff" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.6" stroke-dashoffset="20.4" transform="rotate(-90 7 7)"/></svg>41%</span>
+          </span>
+          <div class="wsend"><svg width="15" height="15"><use href="#up"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="side">
+    <p><b>Tab</b>：输入框为空、<code>/ # @</code> 菜单没开时，Tab 填入建议。菜单开着时 Tab 仍然选菜单项，<code>WorkspaceView.tsx</code> 里现有的按键逻辑不变。点 Use 同样填入。</p>
+    <p>web 现在的 placeholder 是 <b>Reply…</b>，有建议时换成建议。</p>
+    <p><b>macOS</b> 和 iPhone 是同一个 <code>ComposerView</code>，按键同 web（Tab）。<b>web 手机宽度</b>和 iPhone 一样。<b>Android</b> 用 <code>OutlinedTextField</code> 的 placeholder + trailingIcon，结构一一对应。</p>
+  </div>
+</div>
+
+<div class="notes">
+  <div>
+    <h3>什么时候出现（全部满足）</h3>
+    <ol>
+      <li>有<b>当前建议</b>：最后一条 <code>prompt_suggestion</code> 之后，没有新的 <code>user</code>，也没有新的 <code>turn_end</code></li>
+      <li>会话在 Open、可以发送（Completed、Trash 不出）</li>
+      <li>没有在跑的 turn（⑤）</li>
+      <li>没有待处理的审批或提问（⑥）</li>
+      <li>输入框空、没附件、没在回复某条（④）</li>
+      <li>上一轮没失败（API 错误、登录失效、限额各有自己的卡片）</li>
+    </ol>
+    <h3 class="more">什么时候消失</h3>
+    <ul>
+      <li>开始打字（删空会回来）；任何一台设备发出消息；下一个 turn 开始</li>
+      <li>不加 ✕：它不挡东西，不想要就去设置里关</li>
+    </ul>
+    <h3 class="more">为什么不放在对话末尾（虚线气泡）</h3>
+    <ul><li>建议比 turn_end 晚 1–2 秒，那时插一行，正在读的内容会被往上顶；虚线气泡也容易被看成已发出的消息</li></ul>
+  </div>
+  <div>
+    <h3>建议从哪来</h3>
+    <ul>
+      <li><b>Claude Code 自带</b> <code>--prompt-suggestions</code>：result 之后 fork 一次请求（同模型、命中缓存、禁用工具），只要「你正要打的那句」：2–12 个词，跟随你的语言；拿不准、上一条出错、plan 模式、有待批权限时不给；第一轮不给</li>
+      <li><b>实测</b>（2.1.293，haiku）：<span class="sample">用示例数据测试一下这段代码</span> +1.68 s；<span class="sample">用一个含空值的示例 CSV 测试一下</span> +1.20 s；抢答时不出；<code>--resume</code> 后照常</li>
+      <li><b>代价</b>：每轮多一次整段上下文的缓存读，约等于 agent 多走一步，记在会话的 Claude 账号上</li>
+      <li><b>范围</b>：只开 Claude 引擎（Anthropic 账号）；手动会话 + 协调会话；任务列表自动跑的会话、Wiki 维护不开；设置里一个开关</li>
+      <li><b>其他引擎</b>（Codex、Kimi…）没有原生能力：二期可选，用服务端已有的 DeepSeek 补</li>
+    </ul>
+  </div>
+  <div>
+    <h3>要改的</h3>
+    <ul>
+      <li><b>runner</b>：带版本门（≥ 2.1.293）加参数；建议帧记到刚结束的 turn 上，有在途 turn 就丢</li>
+      <li><b>shared / apiserver</b>：新事件 <code>prompt_suggestion</code>（持久化，无迁移）；领取载荷 <code>promptSuggestions</code>；不推进 <code>lastTurnAt</code>，不进搜索、预览、推送</li>
+      <li><b>客户端</b>：<code>ComposerView.swift</code>（iPhone、iPad、Mac 同一份）、<code>WorkspaceView.tsx</code> 的 <code>.composer-box</code>、Android <code>SessionComposer.kt</code>；派生只有三行：收到 <code>prompt_suggestion</code> 记下，收到 <code>user</code> / <code>turn_end</code> 清掉</li>
+    </ul>
+    <h3 class="more">待你定</h3>
+    <ol>
+      <li>位置：<b>甲 灰字放输入框里（推荐）</b> / 乙 输入框上方胶囊</li>
+      <li>Use：<b>只填不发（推荐）</b> / 直接发送</li>
+      <li>范围：<b>手动 + 协调会话（推荐）</b> / 只手动 / 也包括自动跑的任务会话</li>
+      <li>缺省：<b>开，设置里可关（推荐）</b> / 关</li>
+      <li>非 Claude 引擎：<b>先不做（推荐）</b> / 用 DeepSeek 补（每轮最后一条回复会发给 DeepSeek）</li>
+    </ol>
+  </div>
+</div>
+
+</div>
+<script>
+  // Stamp the shared toolbars in (keeps the frames identical where they should be).
+  for (const slot of document.querySelectorAll('[data-tpl]')) {
+    const tpl = document.getElementById(slot.dataset.tpl);
+    slot.replaceWith(tpl.content.cloneNode(true));
+  }
+</script>
+</body>
+</html>

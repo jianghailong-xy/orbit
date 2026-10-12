@@ -1,0 +1,87 @@
+
+Running 3 tests using 1 worker
+
+  ✘  1 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › orbit-field ArrowDown ArrowDown Enter at 1x CPU throttling (1.5m)
+  ✘  2 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › orbit-sample ArrowDown ArrowDown Enter at 1x CPU throttling (1.5m)
+  ✘  3 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › antd-sample ArrowDown ArrowDown Enter at 1x CPU throttling (1.5m)
+
+
+  1) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › orbit-field ArrowDown ArrowDown Enter at 1x CPU throttling 
+
+    Test timeout of 90000ms exceeded.
+
+    Error: page.waitForTimeout: Test timeout of 90000ms exceeded.
+
+      46 |       await page.keyboard.press('ArrowDown');
+      47 |       await page.keyboard.press('Enter');
+    > 48 |       await page.waitForTimeout(1500);
+         |                  ^
+      49 |       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+      50 |       await page.waitForTimeout(300);
+      51 |       const listboxOpen = await page.evaluate(() => [...document.querySelectorAll('[role="listbox"]')].some((el) => el.getBoundingClientRect().height > 0));
+        at /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:48:18
+
+    Error Context: src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-17ec9--Enter-at-1x-CPU-throttling-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-17ec9--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-17ec9--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › orbit-sample ArrowDown ArrowDown Enter at 1x CPU throttling 
+
+    Test timeout of 90000ms exceeded.
+
+    Error: page.waitForTimeout: Test timeout of 90000ms exceeded.
+
+      46 |       await page.keyboard.press('ArrowDown');
+      47 |       await page.keyboard.press('Enter');
+    > 48 |       await page.waitForTimeout(1500);
+         |                  ^
+      49 |       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+      50 |       await page.waitForTimeout(300);
+      51 |       const listboxOpen = await page.evaluate(() => [...document.querySelectorAll('[role="listbox"]')].some((el) => el.getBoundingClientRect().height > 0));
+        at /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:48:18
+
+    Error Context: src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dc437--Enter-at-1x-CPU-throttling-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dc437--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dc437--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › antd-sample ArrowDown ArrowDown Enter at 1x CPU throttling 
+
+    Test timeout of 90000ms exceeded.
+
+    Error: page.waitForTimeout: Test timeout of 90000ms exceeded.
+
+      46 |       await page.keyboard.press('ArrowDown');
+      47 |       await page.keyboard.press('Enter');
+    > 48 |       await page.waitForTimeout(1500);
+         |                  ^
+      49 |       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+      50 |       await page.waitForTimeout(300);
+      51 |       const listboxOpen = await page.evaluate(() => [...document.querySelectorAll('[role="listbox"]')].some((el) => el.getBoundingClientRect().height > 0));
+        at /root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2/docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:48:18
+
+    Error Context: src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dcb49--Enter-at-1x-CPU-throttling-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dcb49--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.choices-results/r8-select-keys-repeat/select-keys-repeat.browser-dcb49--Enter-at-1x-CPU-throttling-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › orbit-field ArrowDown ArrowDown Enter at 1x CPU throttling 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › orbit-sample ArrowDown ArrowDown Enter at 1x CPU throttling 
+    [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.browser.mjs:33:3 › antd-sample ArrowDown ArrowDown Enter at 1x CPU throttling 

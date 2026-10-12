@@ -1,0 +1,12 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 1a05a4792..c4b9e0dd2 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -22393,3 +22393,7 @@ button.agent-progress-agent:hover {
+   text-align: center;
+   text-wrap: balance;
+ }
++
++/* p32acc negative control (scratch commit, not delivered): the task panel's More menu, which only
++   task-action-menu.png shows open, gets 1px more top padding (4px -> 5px). */
++.orbit-menu.tdp-more-menu { padding-top: 5px; }

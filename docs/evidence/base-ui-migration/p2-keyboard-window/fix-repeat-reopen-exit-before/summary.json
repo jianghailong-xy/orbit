@@ -1,0 +1,182 @@
+{
+  "stats": {
+    "startTime": "2026-10-07T06:11:07.446Z",
+    "duration": 30865.203999999998,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2089
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1624
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-1--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1612
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-2--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-3",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1666
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-3--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-4",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1875
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-4--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-5",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1591
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-5--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-6",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1667
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-6--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-7",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1989
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-7--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-8",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 8783
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-8--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-9",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1874
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--normal-attachment-can-reopen-during-exit-without-stale-unmount--repeat-9--reopen.json",
+          "sha256": "7e85045c8a342acd66796f0d59a4e81aaf509a4ab5c4631dba053c28a832d392"
+        }
+      ]
+    }
+  ]
+}

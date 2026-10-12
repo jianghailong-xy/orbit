@@ -11,6 +11,7 @@ import type { SessionCapabilities } from './dto';
 import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
 import type { SessionRequestPeer } from './session-request';
+import type { SessionSourceRefusalDetail, SourceRefusalCode, SourceState } from './source';
 
 /**
  * The user-scoped control-plane stream's wire protocol (`GET /api/events`).
@@ -135,6 +136,10 @@ export interface ControlSessionSummary {
   filingState: SessionFilingState;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
+  /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
+   *  `antigravity`, `opencode`, `dsh`); null when it was never recorded and its credential is gone.
+   *  Absent from an older control plane. */
+  engine?: string | null;
   agentId: string | null;
   agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   /** The session folder this session is filed in, or null when it is in no folder. Always sent by
@@ -147,6 +152,18 @@ export interface ControlSessionSummary {
   projectTitle?: string | null;
   /** Always sent by current servers; null clears membership, absence supports older peers. */
   projectMembership?: SessionProjectMembership | null;
+  /** Which commit this run starts from (`docs/project-source-contract.md` §6.1): `UNBOUND` for
+   *  every Legacy session, `SELECTED` / `PINNED` while a resolved one is being pinned, and
+   *  `REFUSED` when the runner refused its baseline before any engine started. Always sent by a
+   *  server that knows about SOURCE — the "this run never started" card reads it BEFORE the run
+   *  status, because a refused session is not waiting for anything. */
+  sourceState?: SourceState;
+  /** Which §10.1 gate refused it, when `sourceState` is REFUSED; null on every other session, and
+   *  absent only from an older control plane. */
+  sourceRefusalCode?: SourceRefusalCode | null;
+  /** The structured diagnosis that came with the code, with §10.1's `fixAction` in it — what the
+   *  card tells the owner to do. Null on every session that was not refused. */
+  sourceRefusalDetail?: SessionSourceRefusalDetail | null;
   /** Active control-plane repair facts involving this exact Session. Always sent by current
    *  servers (including `[]` on recovery) so a stream upsert can both install and clear one. */
   controlPlaneObligations?: Array<{
@@ -229,6 +246,19 @@ export interface ControlSessionSummary {
   /** When enginePhase entered the phase it holds; null whenever enginePhase is. A keepalive that
    *  re-announces the same phase does not move it. Absent from an older control plane. */
   enginePhaseSince?: string | null;
+  /** The rolling recap and when it was written (`Session.recapText`/`recapAt`), the line the list
+   *  prefers to `lastAssistantText`. Sent as null on a session that has none — a value, so a client
+   *  folding this summary into a row clears the recap a manual refresh dropped; only an absent key,
+   *  from an older control plane, means "unchanged". */
+  recapText?: string | null;
+  recapAt?: string | null;
+  /** The row's two reply previews, clipped exactly as `GET /sessions` clips them. They are part of
+   *  the summary because an already-open list learns a new reply from this event alone: without
+   *  them a client that folds the summary in would leave the row previewing the previous turn.
+   *  Null is a value here too — a preview cleared on the server has to clear on the row — and only
+   *  an absent key means an older control plane. */
+  lastAssistantText?: string | null;
+  lastUserText?: string | null;
 }
 
 /** `data` for `session.ended`. */

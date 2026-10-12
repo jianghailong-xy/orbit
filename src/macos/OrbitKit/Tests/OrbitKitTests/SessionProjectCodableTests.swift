@@ -72,6 +72,21 @@ final class SessionProjectCodableTests: XCTestCase {
         XCTAssertEqual(empty.taskCounts, ProjectSidebarTaskCounts(done: 0, failed: 0, total: 0))
     }
 
+    func testSidebarRowsSayWhetherTheProjectStartedAndOlderReadsDoNot() throws {
+        func row(_ extra: String) throws -> ProjectSummary {
+            try JSONDecoder().decode(ProjectSummary.self, from: Data(
+                #"{"id":"p1","title":"Project","status":"OPEN"\#(extra)}"#.utf8))
+        }
+        XCTAssertEqual(try row(#","startedAt":"2026-10-05T16:00:00.000Z""#).started, true)
+        XCTAssertEqual(try row(#","startedAt":null"#).started, false)
+        XCTAssertNil(try row("").started, "a read that does not carry the field says neither")
+        for extra in [#","startedAt":null"#, #","startedAt":"2026-10-05T16:00:00.000Z""#, ""] {
+            let decoded = try row(extra)
+            XCTAssertEqual(try JSONDecoder().decode(ProjectSummary.self, from: JSONEncoder().encode(decoded)),
+                           decoded, "a null survives the round trip as a null, and an absent field as absent")
+        }
+    }
+
     func testProjectChangedIsRecognizedAsAUserScopedEvent() throws {
         let event = try JSONDecoder().decode(ControlEvent.self, from: Data(#"""
         {"type":"project.changed","sessionId":"","agentId":null,"ts":"2026-10-04T00:00:00Z","data":{"projectId":"p1"}}

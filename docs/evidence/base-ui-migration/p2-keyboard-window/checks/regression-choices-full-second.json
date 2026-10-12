@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && npm run test:ui-choices -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_e5ae06b2fdfe",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "923c8d856c2637fe63a10da9a4f79813894e7a39",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T14:21:27.403481+00:00",
+ "exitCode": 1,
+ "outputSha256": "8ad4d34a1c50d0316ccf57284b263fbec767b3519d8c1dcea34ba1b9e6b86e0c",
+ "outputBytes": 84131,
+ "note": "519 passed / 1 failed: webkit-light-desktop \"no-preference Dialog Popover Select exits restore one layer at a time\", choices-lifecycle.browser.mjs:82 -> :45. The page loaded normally (135 module requests, no network errors); while the Select popup exited, the frame sampler recorded only two frames, opacity 1 visible and then opacity 1 hidden (regression-choices-full-second-traces.json), so the 200ms exit fell between two animation frames and no intermediate opacity was observed. The same case passed in all eight environments in the first run; the tree has no product change."
+}

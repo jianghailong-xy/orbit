@@ -1,0 +1,13 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs --project chromium-dark-desktop --grep '\"'\"'orbit-sample '\"'\"''",
+ "cwd": "/var/tmp/p2kw-c2604b/after3",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "28405c86d217f03c6ed02783ee38e3e3354ed420",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "startedAt": "2026-10-07T05:38:52.015238+00:00",
+ "endedAt": "2026-10-07T05:41:01.069777+00:00",
+ "exitCode": 0,
+ "outputSha256": "f13ffd7e060c04a604e81f7ffa528d984c687236e667952151acdfa0bb732b28",
+ "outputBytes": 8432,
+ "archive": "{\"destination\":\"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-keys-burst-after-sample\",\"stats\":{\"startTime\":\"2026-10-07T05:38:52.460Z\",\"duration\":128466.698,\"expected\":46,\"skipped\":0,\"unexpected\":0,\"flaky\":0},\"artifacts\":46}"
+}

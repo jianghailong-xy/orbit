@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm run test:ui-choices -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_7a25966dac2f",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "0d773a54f75ea27a47976e8131cd7dbb29185367",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T22:42:13.434345+00:00",
+ "exitCode": 1,
+ "outputSha256": "082e1914c19a00fe23dfd4be7bc4657581cd16de5a8a076488835026870e5cdb",
+ "outputBytes": 88079,
+ "note": "517 passed / 3 failed on the delivered tree, all three in choices-motion.browser.mjs:104 and all test timeouts (90s), host load about 22-38 (30.6 min against about 21 min unloaded). chromium-light-phone \"normal top ... search\": the page never mounted; its trace (regression-choices-full-delivered-traces.json) shows 13 module requests aborted with net::ERR_NETWORK_CHANGED before the click. webkit-light-desktop \"normal flipped ... search\" and webkit-dark-phone \"normal flipped ... attachment\": no network errors; on the Orbit side the entrance capture (line 70 via 114) waited for a recorded CSSAnimation that never came: all 32 observations show the popup shown with its entrance animation name and opacity 1 but document.getAnimations() empty, i.e. the 200ms entrance ended before the observer first sampled it (motion-diagnostic attachments)."
+}

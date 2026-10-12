@@ -1,0 +1,198 @@
+
+Running 144 tests using 1 worker
+
+  ✓    1 [chromium-light-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts (8.5s)
+  ✓    2 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (2.4s)
+  ✓    3 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (2.5s)
+  ✓    4 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (3.9s)
+  ✓    5 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (3.1s)
+  ✓    6 [chromium-light-desktop] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (3.5s)
+  ✓    7 [chromium-light-desktop] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (8.5s)
+  ✓    8 [chromium-light-desktop] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (5.1s)
+  ✓    9 [chromium-light-desktop] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (8.7s)
+  ✓   10 [chromium-light-desktop] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (9.1s)
+  ✓   11 [chromium-light-desktop] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (9.0s)
+  ✓   12 [chromium-light-desktop] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (5.1s)
+  ✓   13 [chromium-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px (5.3s)
+  ✓   14 [chromium-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px (5.7s)
+  ✓   15 [chromium-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px (5.3s)
+  ✓   16 [chromium-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px (4.9s)
+  ✓   17 [chromium-light-desktop] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (4.6s)
+  ✓   18 [chromium-light-desktop] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (1.4s)
+  -   19 [chromium-light-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   20 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (2.7s)
+  ✓   21 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (2.2s)
+  ✓   22 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (3.5s)
+  ✓   23 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (3.0s)
+  ✓   24 [chromium-light-phone] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (3.0s)
+  ✓   25 [chromium-light-phone] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (7.7s)
+  ✓   26 [chromium-light-phone] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (4.7s)
+  ✓   27 [chromium-light-phone] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (7.7s)
+  ✓   28 [chromium-light-phone] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (5.5s)
+  ✓   29 [chromium-light-phone] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (6.1s)
+  ✓   30 [chromium-light-phone] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (9.1s)
+  -   31 [chromium-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px
+  -   32 [chromium-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px
+  -   33 [chromium-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px
+  -   34 [chromium-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px
+  ✓   35 [chromium-light-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (9.1s)
+  ✓   36 [chromium-light-phone] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (2.8s)
+  -   37 [chromium-dark-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   38 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (3.8s)
+  ✓   39 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (3.5s)
+  ✓   40 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (5.7s)
+  ✓   41 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (3.4s)
+  ✓   42 [chromium-dark-desktop] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (3.8s)
+  ✓   43 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (10.1s)
+  ✓   44 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (5.0s)
+  ✓   45 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (8.6s)
+  ✓   46 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (5.1s)
+  ✓   47 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (6.2s)
+  ✓   48 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (7.4s)
+  ✓   49 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px (7.3s)
+  ✓   50 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px (7.3s)
+  ✓   51 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px (10.7s)
+  ✓   52 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px (10.6s)
+  ✓   53 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (6.2s)
+  ✓   54 [chromium-dark-desktop] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (1.8s)
+  -   55 [chromium-dark-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   56 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (3.1s)
+  ✓   57 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (2.7s)
+  ✓   58 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (4.2s)
+  ✓   59 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (3.6s)
+  ✓   60 [chromium-dark-phone] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (3.3s)
+  ✓   61 [chromium-dark-phone] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (9.1s)
+  ✓   62 [chromium-dark-phone] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (6.6s)
+  ✓   63 [chromium-dark-phone] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (17.2s)
+  ✓   64 [chromium-dark-phone] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (17.9s)
+  ✓   65 [chromium-dark-phone] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (16.4s)
+  ✓   66 [chromium-dark-phone] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (19.8s)
+  -   67 [chromium-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px
+  -   68 [chromium-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px
+  -   69 [chromium-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px
+  -   70 [chromium-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px
+  ✘   71 [chromium-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (15.4s)
+  ✓   72 [chromium-dark-phone] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (5.0s)
+  -   73 [webkit-light-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   74 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (3.2s)
+  ✓   75 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (2.4s)
+  ✓   76 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (4.1s)
+  ✓   77 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (4.5s)
+  ✓   78 [webkit-light-desktop] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (4.9s)
+  ✓   79 [webkit-light-desktop] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (9.5s)
+  ✓   80 [webkit-light-desktop] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (3.5s)
+  ✓   81 [webkit-light-desktop] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (6.4s)
+  ✓   82 [webkit-light-desktop] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (3.6s)
+  ✓   83 [webkit-light-desktop] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (4.3s)
+  ✓   84 [webkit-light-desktop] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (3.7s)
+  ✓   85 [webkit-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px (3.9s)
+  ✓   86 [webkit-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px (3.9s)
+  ✓   87 [webkit-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px (3.8s)
+  ✓   88 [webkit-light-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px (3.7s)
+  ✓   89 [webkit-light-desktop] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (4.0s)
+  ✓   90 [webkit-light-desktop] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (1.4s)
+  -   91 [webkit-light-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓   92 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (2.4s)
+  ✓   93 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (2.0s)
+  ✓   94 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (3.1s)
+  ✓   95 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (2.7s)
+  ✓   96 [webkit-light-phone] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (2.7s)
+  ✓   97 [webkit-light-phone] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (6.4s)
+  ✓   98 [webkit-light-phone] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (3.7s)
+  ✓   99 [webkit-light-phone] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (6.7s)
+  ✓  100 [webkit-light-phone] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (4.6s)
+  ✓  101 [webkit-light-phone] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (4.7s)
+  ✓  102 [webkit-light-phone] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (4.3s)
+  -  103 [webkit-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px
+  -  104 [webkit-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px
+  -  105 [webkit-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px
+  -  106 [webkit-light-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px
+  ✓  107 [webkit-light-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (4.5s)
+  ✓  108 [webkit-light-phone] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (1.2s)
+  -  109 [webkit-dark-desktop] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓  110 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (2.9s)
+  ✓  111 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (2.5s)
+  ✓  112 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (4.1s)
+  ✓  113 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (2.9s)
+  ✓  114 [webkit-dark-desktop] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (3.7s)
+  ✓  115 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (7.5s)
+  ✓  116 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (4.1s)
+  ✓  117 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (6.8s)
+  ✓  118 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (3.8s)
+  ✓  119 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (5.2s)
+  ✓  120 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (4.4s)
+  ✓  121 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px (4.1s)
+  ✓  122 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px (4.0s)
+  ✓  123 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px (4.0s)
+  ✓  124 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px (4.4s)
+  ✓  125 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (5.0s)
+  ✓  126 [webkit-dark-desktop] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (1.5s)
+  -  127 [webkit-dark-phone] › ui-migration/composer-cost.browser.mjs:10:1 › records per-keystroke cost of the session field with short and long drafts
+  ✓  128 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:85:1 › session: Enter sends, Shift+Enter breaks the line, Chinese composition never sends (4.2s)
+  ✓  129 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:114:1 › comment: Ctrl/Meta+Enter posts, plain Enter and composition keep editing (3.7s)
+  ✓  130 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:133:1 › session menus: arrows, Enter, Tab, Escape and pointer keep the field focused with the caret at the end (4.7s)
+  ✓  131 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:187:1 › comment @-mention restores focus and the caret through the native ref (3.5s)
+  ✓  132 [webkit-dark-phone] › ui-migration/composer-input.browser.mjs:216:1 › paste text and files, the 50,000-character cap and history recall (3.8s)
+  ✓  133 [webkit-dark-phone] › ui-migration/composer.browser.mjs:71:1 › session composer grows, caps, scrolls and draws exactly like the AntD field (7.5s)
+  ✓  134 [webkit-dark-phone] › ui-migration/composer.browser.mjs:134:1 › session composer with staged attachments and while disabled matches the AntD field (3.8s)
+  ✓  135 [webkit-dark-phone] › ui-migration/composer.browser.mjs:153:1 › task comment field sizes from its placeholder, grows to four rows and keeps outlined states (6.8s)
+  ✓  136 [webkit-dark-phone] › ui-migration/composer.browser.mjs:184:1 › the borderless variant on its own matches AntD at rest, focused, hovered and disabled (4.4s)
+  ✓  137 [webkit-dark-phone] › ui-migration/composer.browser.mjs:204:1 › manual height: drag the handle, clamp it, and double-click back to auto-size (5.6s)
+  ✓  138 [webkit-dark-phone] › ui-migration/composer.browser.mjs:262:1 › the mirror paints its glyphs exactly where the field lays out its own text (5.1s)
+  -  139 [webkit-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 599px
+  -  140 [webkit-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 601px
+  -  141 [webkit-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 959px
+  -  142 [webkit-dark-phone] › ui-migration/composer.browser.mjs:321:5 › existing breakpoints › fields match at 961px
+  ✓  143 [webkit-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do (4.5s)
+  ✓  144 [webkit-dark-phone] › ui-migration/composer.browser.mjs:379:5 › normal motion › reduced motion › records the one intended difference: Orbit text fields stop transitioning (1.3s)
+
+
+  1) [chromium-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 8
+
+    @@ -135,9 +135,16 @@
+          "wordBreak": "break-word",
+          "wordSpacing": "0px",
+          "zIndex": "auto",
+        },
+        "sessionUnfocusedRestore": Object {
+    -     "animations": Array [],
+    +     "animations": Array [
+    +       Object {
+    +         "delay": 0,
+    +         "duration": 300,
+    +         "easing": "ease",
+    +         "property": "height",
+    +       },
+    +     ],
+          "height": 62,
+        },
+      }
+
+      368 |     }
+      369 |     await attachJson(info, 'normal-motion', results);
+    > 370 |     expect(results.orbit).toEqual(results.ant);
+          |                           ^
+      371 |     // AntD animates the height while not focus-visible; focused typing in the composer is immediate.
+      372 |     expect(results.orbit.commentShiftEnter.animations).toEqual([{ property: 'height', duration: 300, easing: 'ease', delay: 0 }]);
+      373 |     expect(results.orbit.sessionFocusedShiftEnter.animations).toEqual([]);
+        at /root/.orbit/worktrees/19e1bd82-24ed-5f01-aa89-0aba6767cc1c/src/web/ui-migration/composer.browser.mjs:370:27
+
+    Error Context: ../../../../../../var/tmp/p32r2-final/r2b-composer/composer.browser.mjs-norma-57ec7--as-other-Orbit-controls-do-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../var/tmp/p32r2-final/r2b-composer/composer.browser.mjs-norma-57ec7--as-other-Orbit-controls-do-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../var/tmp/p32r2-final/r2b-composer/composer.browser.mjs-norma-57ec7--as-other-Orbit-controls-do-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-dark-phone] › ui-migration/composer.browser.mjs:339:3 › normal motion › auto-size transitions match AntD; reduced motion drops them as other Orbit controls do 
+  23 skipped
+  120 passed (10.9m)

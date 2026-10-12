@@ -1,0 +1,13 @@
+{
+ "command": "npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_c7a973e7836a",
+ "cwd": "/root/.orbit/worktrees/f9ffd160-2464-5af0-9d66-5af91c8bd5ab",
+ "commit": "632b7950ea2c303b7fab6856365ac233f6359f45",
+ "webTree": "35301ab31d4cd93761cad55eb7bc2bf1f7a3fa98",
+ "outputLastWritten": "2026-10-06T08:31:44.040380+00:00",
+ "exitCode": 0,
+ "outputSha256": "dad932b85641ca915ba1a4dc28d79833d8c5ad91f6c063f0ebebee8aa2de7875",
+ "outputBytes": 850,
+ "note": "2 files / 6 tests passed."
+}

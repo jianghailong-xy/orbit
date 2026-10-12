@@ -1,0 +1,22 @@
+{
+ "probe": "toasts-probe-exit-position.browser.mjs (toasts-promotion.browser.mjs's exit-transfer test, live region position set after the first notice)",
+ "tree": "/var/tmp/34cBi-ref at 15b7b5609 (one tree, one dev server, variants interleaved by --repeat-each=20)",
+ "projects": [
+  "webkit-light-desktop",
+  "webkit-dark-desktop"
+ ],
+ "absolute": {
+  "runs": 80,
+  "failed": 2,
+  "noOwnerSwitch": 2,
+  "switchMsMedian": 132.5,
+  "switchMsP90": 162.0
+ },
+ "fixed": {
+  "runs": 80,
+  "failed": 0,
+  "noOwnerSwitch": 0,
+  "switchMsMedian": 132.5,
+  "switchMsP90": 172.0
+ }
+}

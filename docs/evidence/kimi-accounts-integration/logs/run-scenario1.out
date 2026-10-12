@@ -1,0 +1,55 @@
+== Scenario 1: add a kimi.com account on hpc-kimi from the Providers page ==
+Default home before:
+755 dir .
+600 ebf10133f2aa7762 ./config.toml
+700 dir ./credentials
+600 e75d89b8b7d346b0 ./credentials/kimi-code-env-20ffb8cd802d65b6.json
+600 aed2808f565c295c ./device_id
+digest dedd7517b70952a2 (5 entries) /var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code
+GET /runners/:id engines[kimi] before: {"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","accounts":[{"id":"default","home":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code","auth":"yes","kimiRegion":"global"}],"kimiRegion":"global"}
+signed in on http://127.0.0.1:4741 as owner@kimi-int.test
+shot /var/tmp/kimi-accounts-stack/shots/1-add-account/1a-before.png
+shot /var/tmp/kimi-accounts-stack/shots/1-add-account/1b-name-and-site.png
+site choices shown: ["kimi.com\nMainland China","kimi.ai\nInternational"]
+web → POST /api/runners/34cSsjpxU1AVt4w2wGiis/login {"engine":"kimi","accountName":"Work","region":"mainland-cn"}
+pressed kimi.com — waiting for the runner to pick the sign-in up at its next heartbeat
+web ← 201 /api/runners/34cSsjpxU1AVt4w2wGiis/login {"status":"pending","engine":"kimi","userCode":null,"url":null,"message":null,"account":null}
+device code shown after 3s
+→ GET /api/runners/34cSsjpxU1AVt4w2wGiis/login ← 200
+GET /runners/:id/login: {"status":"awaiting_approval","engine":"kimi","userCode":"42MQ-6MWC","url":"https://www.kimi.com/code/authorize_device?user_code=42MQ-6MWC","message":null,"account":"a70fa033"}
+panel text:
+Account name
+Sign in with the kimi.com account you are adding, then enter this one-time code:
+42MQ-6MWC
+Copy Code & Open kimi.com
+Waiting for you to approve it…
+Cancel
+Use kimi.ai instead
+shot /var/tmp/kimi-accounts-stack/shots/1-add-account/1c-device-code.png
+approving the code on the fake Kimi server as work@kimi.com (the user, in a browser on www.kimi.com)
+fake kimi ← {"ok":true,"user":"work@kimi.com","region":"mainland-cn"}
+GET /runners/:id engines[kimi] after: {"engine":"kimi","installed":true,"version":"2.1.1","auth":"yes","accounts":[{"id":"default","home":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code","auth":"yes","kimiRegion":"global"},{"id":"a70fa033","name":"Work","home":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033","auth":"yes","kimiRegion":"mainland-cn"}],"kimiRegion":"global"}
+shot /var/tmp/kimi-accounts-stack/shots/1-add-account/1d-added.png
+→ GET /api/runners/34cSsjpxU1AVt4w2wGiis/login ← 200
+GET /runners/:id/login after: {"status":"done","engine":"kimi","userCode":null,"url":null,"message":null,"account":"a70fa033"}
+Default home after:
+755 dir .
+600 ebf10133f2aa7762 ./config.toml
+700 dir ./credentials
+600 e75d89b8b7d346b0 ./credentials/kimi-code-env-20ffb8cd802d65b6.json
+600 aed2808f565c295c ./device_id
+digest dedd7517b70952a2 (5 entries) /var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code
+Work home:
+700 dir .
+600 6ecb2550534bc0de ./config.toml
+700 dir ./credentials
+600 2517d09ab93445c6 ./credentials/kimi-code-env-5185ad9246b47ca6.json
+600 8bae06d44f1223bb ./device_id
+digest 993e19356c3771fa (5 entries) /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033
+fake kimi login calls during the scenario: [{"at":"2026-10-08T17:14:09.481Z","event":"invoke","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"},{"at":"2026-10-08T17:14:09.509Z","event":"invoke","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033"},{"at":"2026-10-08T17:14:09.620Z","event":"login.device_code","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033","region":"mainland-cn"},{"at":"2026-10-08T17:14:13.646Z","event":"login.done","kimiCodeHome":"/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033","region":"mainland-cn","user":"work@kimi.com"}]
+PASS new account is kimi.com, signed in
+PASS new account lives in <ORBIT_HOME>/kimi-accounts/<8 hex>
+PASS Default still kimi.ai, signed in
+PASS Default home byte-identical
+PASS fake kimi login ran in the new account's home only
+SCENARIO 1 PASS

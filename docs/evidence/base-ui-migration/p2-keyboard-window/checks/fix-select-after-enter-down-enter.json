@@ -1,0 +1,13 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep '\"'\"' select-enter-down-enter '\"'\"''",
+ "cwd": "/var/tmp/p2kw-c2604b/after2",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "0d0bd2c8a3657a97632cb0b657790b029df3c5eb",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "startedAt": "2026-10-07T06:25:38.384430+00:00",
+ "endedAt": "2026-10-07T06:30:35.835933+00:00",
+ "exitCode": 0,
+ "outputSha256": "3a3acc6be5592c1806ec2a00dd04caef2d5d5bc8bf4116116531bfbcb2cc6ab9",
+ "outputBytes": 22830,
+ "archive": "{\"destination\":\"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-after-enter-down-enter\",\"stats\":{\"startTime\":\"2026-10-07T06:25:38.737Z\",\"duration\":296783.224,\"expected\":120,\"skipped\":0,\"unexpected\":0,\"flaky\":0},\"artifacts\":120}"
+}

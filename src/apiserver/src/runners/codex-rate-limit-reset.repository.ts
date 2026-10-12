@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { CodexRateLimitResetOperation, Prisma } from '@prisma/client';
+import { Prisma, type CodexRateLimitResetOperation } from '@prisma/client';
 import {
   codexResetTransitionViolations,
   type CodexRateLimitResetConsumeOutcome,
@@ -148,17 +148,22 @@ export class CodexRateLimitResetRepository {
   /**
    * Move one operation. `decide` is handed the row as it stands under `FOR UPDATE` and returns the
    * state to write, or null to leave the row as it is. A move the contract does not allow throws
-   * `CodexResetTransitionRefused` and writes nothing. Resolves null when the operation does not exist.
+   * `CodexResetTransitionRefused` and writes nothing. Resolves null when the operation does not exist
+   * — or, given `runnerId`, is not that runner's: a result a runner reports is about its own
+   * operation, and another runner's is neither locked nor read for it.
    */
   async transition(
     id: string,
     decide: (current: CodexRateLimitResetOperationState) => CodexRateLimitResetOperationState | null,
+    runnerId?: string,
   ): Promise<CodexRateLimitResetOperationState | null> {
     return withTransactionRetry(
       this.prisma,
       async (tx) => {
         const locked = await tx.$queryRaw<Array<{ id: string }>>`
-          SELECT "id" FROM "codex_rate_limit_reset_operation" WHERE "id" = ${id}::uuid FOR UPDATE`;
+          SELECT "id" FROM "codex_rate_limit_reset_operation"
+           WHERE "id" = ${id}::uuid ${runnerId === undefined ? Prisma.empty : Prisma.sql`AND "runner_id" = ${runnerId}::uuid`}
+           FOR UPDATE`;
         if (locked.length === 0) return null;
         const current = stateOf(await tx.codexRateLimitResetOperation.findUniqueOrThrow({ where: { id } }));
         const next = decide(current);

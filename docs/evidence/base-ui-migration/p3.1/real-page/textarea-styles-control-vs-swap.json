@@ -1,0 +1,42 @@
+{
+ "compared": 112,
+ "differences": 112,
+ "byKey": {
+  "style.transitionDuration": 88,
+  "style.lineHeight": 24
+ },
+ "samples": {
+  "style.transitionDuration": [
+   {
+    "test": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop",
+    "capture": "breakpoint-599-dialog",
+    "key": "style.transitionDuration",
+    "antd": "0.3s",
+    "orbit": "0s"
+   },
+   {
+    "test": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop",
+    "capture": "breakpoint-601-dialog",
+    "key": "style.transitionDuration",
+    "antd": "0.3s",
+    "orbit": "0s"
+   }
+  ],
+  "style.lineHeight": [
+   {
+    "test": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop",
+    "capture": "breakpoint-599-dialog",
+    "key": "style.lineHeight",
+    "antd": "25.142857px",
+    "orbit": "25.142879px"
+   },
+   {
+    "test": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop",
+    "capture": "breakpoint-601-dialog",
+    "key": "style.lineHeight",
+    "antd": "25.142857px",
+    "orbit": "25.142879px"
+   }
+  ]
+ }
+}

@@ -26,7 +26,7 @@ function read(relative: string): string {
 }
 
 function git(...args: string[]): string {
-  return execFileSync('git', args, { cwd: repoRoot(), encoding: 'utf8' }).trim();
+  return execFileSync('git', args, { cwd: repoRoot(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
 }
 
 const REMOVAL_MIGRATION =
@@ -89,6 +89,9 @@ test('(c) the whole repository is free of references to the dropped table and co
   for (const file of files) {
     // Migrations are append-only history: 0210 must still be able to CREATE what 0225 drops.
     if (file.startsWith('src/apiserver/prisma/migrations/')) continue;
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    if (file.startsWith('docs/evidence/')) continue;
     // This spec and its sibling are where the absence is asserted, so they must name it.
     if (file.includes('startup-removal')) continue;
     if (!/\.(ts|tsx|js|mjs|cjs|go|sql|json|ya?ml|sh|md|swift)$/.test(file)) continue;
@@ -121,6 +124,9 @@ test('(c) the rollout gate has no residual reference either', () => {
   for (const file of files) {
     // 0225's own comment says which flag it is removing; that is the record, not a reader of it.
     if (file.startsWith('src/apiserver/prisma/migrations/')) continue;
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    if (file.startsWith('docs/evidence/')) continue;
     if (file.includes('startup-removal')) continue;
     if (!/\.(ts|tsx|js|mjs|cjs|go|sql|json|ya?ml|sh|md|swift)$/.test(file)) continue;
     let source: string;
@@ -163,15 +169,18 @@ test('(h) no compose service, no resident process, and the files it lived in shr
   const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
   const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)]
     .map((match) => match[1]);
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
+  // test/compose-topology.test.mjs (l) pins its whole definition.
   assert.deepEqual(services, [
-    'postgres', 'pgbackup', 'apiserver', 'web', 'gateway', 'pg-socket',
+    'postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'pg-socket',
   ], 'the removal must not have added a service');
 
   const apiPackage = JSON.parse(read('src/apiserver/package.json')) as {
     scripts: Record<string, string>;
   };
   assert.deepEqual(Object.keys(apiPackage.scripts).filter((name) => name.startsWith('start:')),
-    ['start:dev'],
+    ['start:dev', 'start:wiki-worker'],
     'the removal must not have added a long-running entrypoint');
 
   // A removal migration that adds schema is not a removal.

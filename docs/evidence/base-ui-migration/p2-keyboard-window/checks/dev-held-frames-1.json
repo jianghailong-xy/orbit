@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/after2 && bash scripts/worktree-overlay.sh 2>&1 | tail -3 && unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n 10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/menu-held-frames.config.mjs --project chromium-dark-desktop --project webkit-light-phone'",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_820aef8090c1",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "4fb7ee43f",
+ "webTree": "c3c0956ee13af6c020a3de630819693c99dcd270",
+ "outputLastWritten": "2026-10-07T04:19:30.060321+00:00",
+ "exitCode": null,
+ "outputSha256": "e26e434bc706b39092c3d6774a00aaf492c0fb5dd1a915803a300a93ed6bbf0e",
+ "outputBytes": 3222,
+ "note": "Development pass of the first draft of menu-held-frames.browser.mjs, in a scratch worktree at the fix commit 4fb7ee43f with the draft probe copied in; not counted. Killed by this session after 5 of 20 tests: each ran the expected item (Action file/image/command) but the menu then stayed mounted in its exit state and the menu-count expect timed out. Cause, found with a diagnostic script in the same scratch tree: the draft gave held frames negative ids, and floating-ui's autoUpdate cancels its sentinel id -1 from a ResizeObserver callback, which dropped Base UI's held frame-scheduler tick, so the exit's animations-finished check never ran. In a browser cancelAnimationFrame(-1) is a no-op; the committed probe (5a6ee008a) uses ids from 2^30 upward."
+}

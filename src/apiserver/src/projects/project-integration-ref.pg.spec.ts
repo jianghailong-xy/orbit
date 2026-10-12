@@ -33,6 +33,7 @@ import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectFuseService } from './project-fuse.service';
+import { PROJECT_INTEGRATION_APPROVAL_TOOL_NAME } from './project-integration-approval';
 import { enqueueForDoneTask } from './project-integration-job';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
@@ -849,7 +850,17 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.equal(await defaultMergeTargetOf(stack, f), 'develop');
   });
 
-  await t.test('an agent session’s integration settings are refused INTEGRATION_SETTINGS_OWNER_ONLY',
+  // L5's door, in the two halves it now has. The LINE is the account owner's and is refused a
+  // session whole — this is the case that has always been here. The MERGE CHECK is a session's to
+  // propose and the owner's to allow, so it is refused without the card and written with it; the
+  // whole of that is `project-merge-check-approval.pg.spec.ts`, and what is held here is the seam
+  // between the two, on one project and through the one door:
+  //
+  //   * a merge check this session has no card for is refused — the line stays untouched, and the
+  //     merge check does too, because a refusal writes nothing at all;
+  //   * a line field is refused even when the same request carries a merge check a card DOES cover,
+  //     so a card can never be a way of moving a project's line a field at a time.
+  await t.test('an agent session’s integration LINE is refused INTEGRATION_SETTINGS_OWNER_ONLY',
     async () => {
       const f = await project(stack, 'owner-only');
       const runner = await stack.db.runner.findUniqueOrThrow({ where: { id: f.runnerId } });
@@ -860,18 +871,43 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
         {} as RunnerOrchestrationAuthorizer,
       );
 
+      const refusedByTheOwnerRule = (error: { getStatus?: () => number; getResponse?: () => unknown }) => {
+        assert.equal(error.getStatus?.(), 403, String(error));
+        assert.equal((error.getResponse?.() as { code?: string }).code,
+          'INTEGRATION_SETTINGS_OWNER_ONLY');
+        return true;
+      };
+
       await assert.rejects(
         agentDoor.updateProject(runner, f.projectId, f.coordinatorSessionId,
           { integration: { line: 'MAIN' } } as never),
-        (error: { getStatus?: () => number; getResponse?: () => unknown }) => {
-          assert.equal(error.getStatus?.(), 403, String(error));
-          assert.equal((error.getResponse?.() as { code?: string }).code,
-            'INTEGRATION_SETTINGS_OWNER_ONLY');
-          return true;
-        },
+        refusedByTheOwnerRule,
       );
       assert.deepEqual(lineOf(await integrationOf(door, f)), NOT_DECIDED,
         'a refused write left nothing behind');
+
+      // A merge check is not a way in for the line. The card below is one this session really has,
+      // and it covers the merge check this request carries — the line is refused anyway, and the
+      // refusal takes the merge check with it rather than writing half the object.
+      const card = await stack.db.approval.create({
+        data: {
+          sessionId: f.coordinatorSessionId,
+          toolName: PROJECT_INTEGRATION_APPROVAL_TOOL_NAME,
+          input: { projectId: f.projectId, mergeCheckCommand: 'npm test' },
+        },
+      });
+      await stack.sessions.decideApproval(f.ownerId, f.coordinatorSessionId, card.id,
+        { behavior: 'allow' });
+
+      await assert.rejects(
+        agentDoor.updateProject(runner, f.projectId, f.coordinatorSessionId,
+          { integration: { line: 'MAIN', mergeCheckCommand: 'npm test' } } as never),
+        refusedByTheOwnerRule,
+      );
+      const readBack = await integrationOf(door, f);
+      assert.deepEqual(lineOf(readBack), NOT_DECIDED, 'a refused write left nothing behind');
+      assert.equal(readBack.mergeCheckCommand, null,
+        'the half of the request a card did cover was written by a refused request');
 
       // The same door with no acting session is the owner at their own terminal, and it lands.
       await agentDoor.updateProject(runner, f.projectId, undefined,

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>32 ipad entry</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<link rel="stylesheet" href="wiki-p2.css">
+<link rel="stylesheet" href="wiki-p3.css">
+<style>
+.note-n { position: static !important; display: inline-flex !important; vertical-align: -3px; margin-right: 6px !important; box-shadow: none !important; }
+.m-n.bad, .pb-mark.bad > .m-n { background: #E5484D; color: #fff; }
+.pb-mark.bad { outline-color: #E5484D; }
+.pb-mark.inl { display: inline-flex; align-items: center; vertical-align: middle; flex: none; }
+.pb-legend .pb-mark > .m-n { top: -9px; right: -12px; transform: scale(.85); }
+.pb-ios .pb-mark:not(.inl) > .m-n { right: 4px; }
+.pb-mark.later { outline-color: #8f959e; }
+.pb-mark.later > .m-n { background: #8f959e; color: #fff; }
+.rv-back { font-size: 13px; color: var(--brand); display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.rv-sub { margin-top: 2px; font-size: 13px; color: var(--text-2); }
+/* the drawer strips (06 ②) */
+.st-web { background: var(--bg-raised); padding: 10px 8px 12px; }
+.st-cap { font: 12px/1.5 "Noto Sans CJK SC", sans-serif; color: var(--text-3); padding: 10px 8px 4px; }
+.st-cap:first-child { padding-top: 2px; }
+.st-ios { background: #F9F9F9; padding: 10px 0 12px; }
+.st-ios .st-cap { padding: 10px 22px 4px; }
+.io-drow .num { font-size: 13px; font-weight: 600; color: #FF8C27; font-variant-numeric: tabular-nums; }
+/* the space name: a native select clipped at 120px (≤600px), and SwiftUI's lineLimit(1) */
+.wp-sel .clip { display: inline-block; max-width: 120px; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
+.io-lt.trunc h1 { flex: none; }
+.io-lt.trunc .pb-mark { min-width: 0; flex: 0 1 auto; }
+.io-lt.trunc .io-chip { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.io-chip .ct { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.io-lt .pb-mark.inl { margin-left: auto; }
+/* the home's Contents band — web */
+.wp-sech .more { margin-left: auto; font-size: 12px; color: var(--brand); white-space: nowrap; }
+.wp-cats { display: flex; flex-direction: column; }
+.wp-cat { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--border-subtle); font-size: 14px; color: var(--text-1); padding: 0 2px; }
+.wp-cats > .wp-cat:first-child { border-top: 0; }
+.wp-cat .no { min-width: 18px; font: 600 12px/1 "DejaVu Sans Mono", monospace; color: var(--text-3); }
+.wp-cat .lb { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-cat > .ic { font-size: 11px; color: var(--text-3); flex: none; }
+.wp-cat > .ic.rot { transform: rotate(90deg); }
+.wp-cat.open .lb { font-weight: 600; }
+.wp-cat.doc { min-height: 36px; padding-left: 30px; font-size: 13.5px; border-top-style: dashed; }
+.wp-cat.doc .no { min-width: 30px; }
+.wp-cat.todo .lb { color: var(--text-3); }
+.wp-cat .st { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.wp-cat.nav .tp-ico, .wp-cat.pr .tp-ico { width: 18px; color: var(--text-2); display: inline-flex; justify-content: center; }
+.wp-cat.pr .tdp-badge { font-size: 11px; line-height: 16px; padding: 0 6px; }
+/* the home's Contents band — iOS */
+.io-sech .more.prog { font-size: 15px; white-space: nowrap; }
+.io-tocgrp.home { background: transparent; }
+.io-tocrow .chev.rot { transform: rotate(90deg); }
+.io-tocrow .st { flex: none; font-size: 13px; color: #8A8A8D; }
+.io-tocrow.pr .gl { color: #3C3C43; }
+.io-tocrow.sec::before { left: 46px !important; }
+/* new since the last visit */
+.ndot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); flex: none; display: inline-block; }
+.io-l1 .ndot, .io-sech .ndot { background: #2E6AFF; }
+.newhint { display: inline-flex; align-items: center; gap: 6px; color: var(--brand) !important; font-weight: 600 !important; padding: 0 4px; }
+.io-sech .newhint { color: #2E6AFF !important; font-size: 13px; }
+/* skeleton (loading) */
+.sk { display: inline-block; height: 10px; border-radius: 5px; background: #ECEDF0; }
+.wp-sk { display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid var(--border-subtle); padding: 0 2px; }
+.wp-sk:first-child { border-top: 0; }
+.io-sk { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 16px; position: relative; }
+.io-sk + .io-sk::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: #E5E5EA; }
+/* iOS space menu (a Menu of Toggles: tick column, name, the repository under it) */
+.io-menu { position: absolute; z-index: 8; right: 14px; top: 166px; width: 300px; border-radius: 16px; background: rgba(246,246,248,.98); box-shadow: 0 12px 40px rgba(0,0,0,.20), 0 0 0 .5px rgba(0,0,0,.10); overflow: hidden; }
+.io-mrow { display: flex; gap: 10px; padding: 10px 16px 11px; position: relative; }
+.io-mrow + .io-mrow::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: .5px; background: #D1D1D6; }
+.io-mrow .ck { width: 16px; flex: none; font-size: 15px; padding-top: 2px; }
+.io-mrow b { display: block; font-size: 17px; font-weight: 400; line-height: 22px; }
+.io-mrow .s { display: block; font-size: 13px; line-height: 18px; color: #8A8A8D; }
+.io-dim2 { position: absolute; inset: 0; z-index: 7; background: rgba(0,0,0,.06); }
+/* Android Chrome's picker for a native <select> */
+.ad-dim { position: absolute; inset: 0; z-index: 6; background: rgba(0,0,0,.32); }
+.ad-pick { position: absolute; z-index: 7; left: 36px; right: 36px; top: 250px; background: #fff; border-radius: 24px; padding: 10px 0 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.ad-opt { display: flex; align-items: center; gap: 16px; padding: 13px 24px; font-size: 15px; color: #1f1f1f; }
+.ad-r { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #5f6368; box-sizing: border-box; flex: none; }
+.ad-r.on { border-color: #1a73e8; background: radial-gradient(circle, #1a73e8 0 4px, #fff 5px); }
+/* an empty space: one line */
+.wp-oneline { margin-top: 16px; font-size: 13px; color: var(--text-3); }
+.io-oneline { padding: 14px 16px; font-size: 15px; line-height: 20px; color: #8A8A8D; }
+
+/* v2 · the home is the documents, drawn with the plan page's own document rows (mock 22) */
+.wp-doc > div > .q.lead { color: var(--text-2); }
+.wp-doc.more > div > .q { -webkit-line-clamp: 1; margin: 0; font-size: 12.5px; }
+.wp-doc.more { padding: 8px 2px; }
+.wp-doc .ndot, .io-docrow .ndot { flex: none; }
+.wp-doc > .no .ic { font-size: 12px; color: var(--text-3); }
+.wp-dfoot { display: flex; gap: 18px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 13px; color: var(--brand); }
+.wp-dfoot span { display: inline-flex; align-items: center; gap: 6px; }
+.io-docrow .q.lead { color: #3C3C43; font-size: 15px; line-height: 20px; }
+.io-docrow.more { padding-top: 10px; padding-bottom: 10px; }
+.io-docrow.more .q { -webkit-line-clamp: 1; margin: 0; font-size: 15px; line-height: 22px; color: #8A8A8D; }
+.io-docrow > .no .sf { font-size: 15px; color: #6C6C70; }
+.io-dfoot { display: flex; gap: 18px; padding: 16px 33px 6px; font-size: 15px; color: #2E6AFF; }
+.io-dfoot span { display: inline-flex; align-items: center; gap: 6px; }
+.io-grp-h .all { margin-left: auto; font-size: 15px; color: #2E6AFF; }
+.wp-act { position: relative; overflow: visible; }
+.wp-act .bdg { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--warning-solid); color: #fff; font: 600 11px/18px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px var(--bg-base); box-sizing: border-box; }
+.wp-plabel { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--fill-muted); font-size: 12.5px; color: var(--text-2); }
+.io-dcat { padding: 18px 16px 2px; font-size: 13px; font-weight: 600; color: #8A8A8D; letter-spacing: .2px; }
+.io-doc { position: relative; padding: 10px 16px 11px; }
+.io-doc + .io-doc::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: #D8D8DC; }
+.io-doc .h { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.io-doc .no { flex: none; font: 600 13px/22px "DejaVu Sans Mono", monospace; color: #8A8A8D; }
+.io-doc .t { flex: 1; min-width: 0; font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.io-doc .lead { margin-top: 3px; font-size: 15px; line-height: 20px; color: #3C3C43; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.io-doc.more { display: flex; align-items: center; gap: 6px; padding: 9px 16px 10px; font-size: 15px; color: #8A8A8D; }
+.io-doc.more .sf { margin-left: auto; font-size: 13px; color: #C4C4C6; stroke-width: 2.4; }
+.io-doc .ndot { align-self: center; }
+.io-dfoot { display: flex; gap: 18px; padding: 16px 16px 6px; font-size: 15px; color: #2E6AFF; }
+.io-dfoot span { display: inline-flex; align-items: center; gap: 6px; }
+.io-glass.cap .slot.act { position: relative; }
+.io-glass.cap .slot .bdg { position: absolute; top: 3px; right: 1px; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: #FF8C27; color: #fff; font: 600 11px/17px Inter, sans-serif; text-align: center; box-sizing: border-box; }
+.io-empty-card { margin: 14px 16px 0; padding: 14px 16px; border-radius: 14px; background: #F2F2F7; font-size: 15px; line-height: 21px; color: #3C3C43; }
+.io-empty-card .go { display: inline-block; margin-top: 8px; color: #2E6AFF; font-weight: 600; }
+.wp-empty-card { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--bg-subtle); font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.wp-empty-card .go { display: inline-block; margin-top: 6px; color: var(--brand); font-weight: 600; }
+.io-sech .all { margin-left: auto; font-size: 15px; color: #2E6AFF; }
+/* the space (owner 10-06): one space is its name, a label with nothing to press; two or more are the select / the Menu */
+.io-name { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 15px; flex: none; background: rgba(118, 118, 128, .08); font-size: 15px; color: #6C6C70; }
+.pb-stack { display: flex; flex-direction: column; min-width: 0; }
+.pb-sub { margin: 0 0 7px 2px; font: 600 12.5px/1.5 "Noto Sans CJK SC", sans-serif; color: var(--text-2); }
+.pb-stack > .pb-web + .pb-sub, .pb-stack > .pb-ios + .pb-sub { margin-top: 20px; }
+.io-mrow .mt { flex: 1; min-width: 0; }
+.io-mrow .mw { flex: none; align-self: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #FF8C27; color: #fff; font: 600 13px/22px Inter, sans-serif; text-align: center; box-sizing: border-box; }
+.io-msep { height: 8px; margin: 0; background: rgba(0, 0, 0, .07); }
+.io-mrow.mg { align-items: center; }
+.io-mrow.mg b { flex: 1; }
+.io-mrow.mg .sf { font-size: 19px; color: #000; }
+
+.ipgrid { display: grid; grid-template-columns: 1180px minmax(0, 1fr); column-gap: 30px; align-items: start; }
+.ipgrid .pb-band { grid-column: 1 / -1; }
+.ipad { position: relative; width: 1180px; height: 820px; border-radius: 22px; overflow: hidden; background: #fff; color: #000; display: flex;
+        box-shadow: 0 0 0 1px #d9dbe0, 0 8px 28px rgba(15, 20, 30, .08); font-family: Inter, "Noto Sans SC", sans-serif; }
+.ipad .stat { position: absolute; top: 0; left: 0; right: 0; height: 24px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-size: 13px; font-weight: 600; z-index: 3; }
+.ipad .col { position: relative; height: 100%; overflow: hidden; flex: none; }
+.ipad .side { width: 320px; background: #F9F9F9; border-right: .5px solid #D1D1D6; }
+.ipad .mid { width: 375px; border-right: .5px solid #D1D1D6; background: #fff; }
+.ipad .det { flex: 1; width: auto; background: #fff; }
+.ipad .bar { height: 50px; margin-top: 24px; display: flex; align-items: center; gap: 10px; padding: 0 16px; }
+.ipad .bar .t { font-size: 17px; font-weight: 600; }
+.ipad .bar .sp { flex: 1; }
+.ipad .bar .b { position: relative; width: 36px; height: 36px; border-radius: 18px; background: rgba(120,120,128,.10); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.ipad .bar .b .bdg { position: absolute; top: -3px; right: -4px; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: #FF8C27; color: #fff; font: 600 11px/17px Inter, sans-serif; text-align: center; box-sizing: border-box; }
+.ipad .side .bar b { font-size: 20px; font-weight: 700; }
+.ipad .io-drow { font-size: 16px; padding: 9px 12px; }
+.ipad .io-dlabel2 { padding: 14px 22px 4px; font-size: 13px; font-weight: 600; color: #8A8A8D; }
+.ipad .io-dsep2 { height: .5px; background: #D8D8DC; margin: 8px 22px 0; }
+.ipad .actionbar { position: absolute; left: 10px; right: 10px; bottom: 14px; display: flex; align-items: center; gap: 12px; }
+.ipad .newsess { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 22px; background: #2E6AFF; color: #fff; font-weight: 600; font-size: 15px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.ipad .gear { margin-left: auto; width: 42px; height: 42px; border-radius: 21px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.14); display: flex; align-items: center; justify-content: center; font-size: 19px; }
+.ipad .cu { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #8A8A8D; }
+.ipad .cu .sf { font-size: 46px; stroke-width: 1.4; color: #AEAEB2; }
+.ipad .cu b { font-size: 22px; color: #000; }
+.ipad .cu span { font-size: 15px; }
+.ipad .io-lt { padding-top: 0; }
+.ipad .mid .io-lt.trunc .io-chip .ct { max-width: 200px; }
+.ipad .det .inner { max-width: 680px; }
+.ipad .io-tocrow { font-size: 16px; padding: 9px 16px; }
+.ipad .io-toch { padding: 14px 16px 4px; font-size: 13px; }
+.ipad .io-tocrow.sec, .ipad .io-tocrow.noicon { padding-left: 16px; }
+.ipad .io-tocrow .no { min-width: 30px; font-size: 12px; }
+.ipad .det .io-lt h1 { font-size: 30px; }
+</style>
+<script>addEventListener('load', () => { for (const f of window.__afterLoad || []) f(); });</script>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<script src="wiki-p3-icons.js"></script>
+<div class="m-sheet pb-sheet p2" style="width:1640px">
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="sf-history" viewBox="0 0 24 24"><path d="M4.6 12.4a7.6 7.6 0 1 0 2.3-5.6"/><path d="M4.4 4.6v3.6H8"/><path d="M12 8.2v4.1l2.9 1.8"/></symbol></svg><h1 class="m-h1 zh">32 · iPad：从侧栏进入 Wiki（现状 ｜ 改后 ｜ 说明）</h1>
+<p class="pb-lede zh">iPad 的侧栏就是抽屉，所以「从抽屉进入 Wiki」也包括它。今天管理看板挤在中栏、详情栏空着；改后中栏是目录，详情栏默认就是内容，管理信息进 Activity。数据同图 30。</p>
+<div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag co">协调性</span>同一个词、同一个数在各处口径一致 <span class="pb-tag new">新词</span>要你拍板 <span class="pb-tag done">已定</span>owner 已拍板 <span class="pb-tag later">另议</span>不在这次范围 <span class="pb-tag guess">假设</span>规格没给 / 数据拿不到，图上先这么画 <span class="pb-mark inl" style="padding:0 6px;margin:0 2px 0 8px"><span class="m-n">1</span>改动点</span> <span class="pb-mark bad inl" style="padding:0 6px;margin:0 2px 0 14px"><span class="m-n">A</span>现状的问题</span></div>
+<div class="ipgrid">
+<div class="pb-band zh"><span class="pb-bn">1</span>现状 <small>· 点侧栏的 Wiki</small></div>
+<div class="ipad" data-name="ipad-now"><div class="stat"><span>9:41 Tue Oct 6</span><span>100%</span></div><div class="col side"><div class="bar"><b>Orbit</b><span class="sp"></span><span class="b"><svg class="sf "><use href="#sf-search"/></svg></span></div>
+<div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-grid"/></svg></span><span class="lb">Projects</span></div>
+<div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-checklist"/></svg></span><span class="lb">Tasks</span></div>
+<div class="io-drow sel"><span class="gl"><svg class="sf "><use href="#sf-book"/></svg></span><span class="lb">Wiki</span><span class="sp"></span><span class="num">1</span></div>
+<div class="io-dsep2"></div><div class="io-dlabel2">Workspaces</div>
+<div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">orbit-develop</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">orbit-prod</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">orbit-macos</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">wikova-data</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">wikova-develop</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">wikova-prod</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">wikids</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">lfs</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">HPC</span></div>
+<div class="actionbar"><span class="newsess"><svg class="sf "><use href="#sf-compose"/></svg>New session</span><span class="gear"><svg class="sf "><use href="#sf-gear"/></svg></span></div></div><div class="col mid"><div class="bar"><span class="sp"></span><span class="b"><svg class="sf "><use href="#sf-list"/></svg></span><span class="b"><svg class="sf "><use href="#sf-gear"/></svg></span></div>
+<div class="io-lt trunc"><h1>Wiki</h1><div class="pb-mark bad inl" style="border-radius:17px"><span class="m-n">A</span><span class="io-chip"><span class="ct">github-com-jianghailong-xy-orbit</span><svg class="sf "><use href="#sf-chev-ud"/></svg></span></div></div>
+<div class="io-subt">11,457 entries · Maintained 3h ago <span class="ok">✓</span> · 276 to catch up</div>
+<div class="io-search"><svg class="sf "><use href="#sf-search"/></svg>Search the wiki</div>
+<div class="io-banner"><span class="d"></span>1 proposals to review<svg class="sf "><use href="#sf-chev-r"/></svg></div>
+<div class="io-banner" style="margin-top:1px;background:rgba(46,106,255,.10);"><span class="d" style="background:#2E6AFF"></span>Writing documents · 5 of 35<svg class="sf "><use href="#sf-chev-r"/></svg></div>
+<div class="io-sech" style="padding-top:12px"><b>Principles</b><span class="n">0</span></div><div class="io-row" style="padding-top:2px"><div class="io-l2" style="margin:0">Nothing has been recorded in this space yet.</div></div>
+<div class="io-sech"><b>Recent decisions</b><span class="n">4</span></div><div class="io-row "><div class="io-l1"><span class="t">移除 wiki 自动推送功能而非调整展示</span><span class="sp"></span><span class="when">10/6</span></div><div class="io-l2"><span class="act">Active</span> · wiki auto-attach 整个功能被删除，不再在会话首轮把 &lt;orbit_wiki_context&gt; 塞进用户消息。</div></div><div class="io-row "><div class="io-l1"><span class="t">「有后台工作也给 Stop」是 owner 定的，不是漏判</span><span class="sp"></span><span class="when">10/6</span></div><div class="io-l2"><span class="act">Active</span> · 在 AWAITING_INPUT 但仍有未结束后台工作时也显示 Stop，这是 owner 的明确决定，别当成 bug 改回去。</div></div><div class="io-row "><div class="io-l1"><span class="t">项目会话页列全部会话，行操作按各自生命周期</span><span class="sp"></span><span class="when">10/5</span></div><div class="io-l2"><span class="act">Active</span> · owner 10-04 定：不分 Open/Completed 视图，合并去重（不含 Trash）列出全部成员会话。</div></div>
+</div><div class="col det"><div class="pb-mark bad" style="position:absolute;inset:40px 30px 20px 30px"><span class="m-n">B</span><div class="cu" style="position:static;height:760px"><svg class="sf "><use href="#sf-book"/></svg><b>Wiki</b><span>Pick an entry, or open Review.</span></div></div></div></div><div class="pb-note"><p>iPad 的侧栏就是 iPhone 的抽屉（决定 <span class="en">“iPad 侧栏直接复用 iPhone 抽屉”</span>），点 Wiki 只换分区。今天：</p><p><span class="m-n note-n bad">A</span><b>整张管理看板挤在窄的中栏</b>（≈375pt）：标题、状态行、搜索、两条横幅、Principles、Recent decisions 叠成一长条，space 名截得更短。</p><p><span class="m-n note-n bad">B</span><b>最宽的详情栏是空的</b>：<span class="en">Pick an entry, or open Review.</span>（<code>WikiScreens.swift:137</code>）。进来第一眼，屏幕的一半在等你选东西，而能读的内容一句都没有。</p></div>
+<div class="pb-band zh"><span class="pb-bn">2</span>改后 <small>· 中栏目录，详情栏是内容</small></div>
+<div class="ipad" data-name="ipad-new"><div class="stat"><span>9:41 Tue Oct 6</span><span>100%</span></div><div class="col side"><div class="bar"><b>Orbit</b><span class="sp"></span><span class="b"><svg class="sf "><use href="#sf-search"/></svg></span></div>
+<div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-grid"/></svg></span><span class="lb">Projects</span></div>
+<div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-checklist"/></svg></span><span class="lb">Tasks</span></div>
+<div class="io-drow sel"><span class="gl"><svg class="sf "><use href="#sf-book"/></svg></span><span class="lb">Wiki</span><span class="sp"></span><span class="num">1</span></div>
+<div class="io-dsep2"></div><div class="io-dlabel2">Workspaces</div>
+<div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">orbit-develop</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">orbit-prod</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">orbit-macos</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">wikova-data</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">wikova-develop</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">wikova-prod</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">wikids</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">lfs</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-folder"/></svg></span><span class="lb">HPC</span></div>
+<div class="actionbar"><span class="newsess"><svg class="sf "><use href="#sf-compose"/></svg>New session</span><span class="gear"><svg class="sf "><use href="#sf-gear"/></svg></span></div></div><div class="col mid"><div class="pb-mark" style="position:absolute;inset:28px 6px 6px 6px"><span class="m-n">1</span><div><div class="bar"><span class="t">Wiki</span><span class="io-name">orbit</span><span class="sp"></span></div><div class="io-tocgrp"><div class="io-tocrow sel"><span class="gl"><svg class="sf "><use href="#sf-house"/></svg></span><span class="lb">Home</span></div><div class="io-tocrow"><span class="gl"><svg class="sf "><use href="#sf-grid"/></svg></span><span class="lb">Browse by category</span></div><div class="io-tocrow"><span class="gl"><svg class="sf "><use href="#sf-az"/></svg></span><span class="lb">A–Z index</span></div><div class="io-tocrow"><span class="gl"><svg class="sf "><use href="#sf-plan"/></svg></span><span class="lb">Plan</span></div></div><div class="io-toch">产品概览与架构</div><div class="io-tocgrp"><div class="io-tocrow noicon"><span class="no">1.1</span><span class="lb">产品定位与核心能力</span></div><div class="io-tocrow noicon"><span class="no">1.2</span><span class="lb">系统架构与数据流</span></div><div class="io-tocrow noicon todo"><span class="no">1.3</span><span class="lb">自部署与首次运行</span></div></div><div class="io-toch">任务与项目</div><div class="io-tocgrp"><div class="io-tocrow noicon"><span class="no">2.1</span><span class="lb">任务生命周期与依赖</span></div><div class="io-tocrow noicon todo"><span class="no">2.2</span><span class="lb">项目启动与协调</span></div><div class="io-tocrow noicon todo"><span class="no">2.3</span><span class="lb">完成判据与验收</span></div><div class="io-tocrow noicon todo"><span class="no">2.4</span><span class="lb">项目集成线与落地</span></div></div><div class="io-toch">会话与交互</div><div class="io-tocgrp"><div class="io-tocrow noicon"><span class="no">3.1</span><span class="lb">Session 运行与恢复</span></div><div class="io-tocrow noicon"><span class="no">3.2</span><span class="lb">实时流与推送</span></div><div class="io-tocrow noicon todo"><span class="no">3.3</span><span class="lb">Session 搜索与消息路由</span></div></div><div class="io-toch">Runner 与运行时</div><div class="io-tocgrp"><div class="io-tocrow noicon todo"><span class="no">4.1</span><span class="lb">Runner 注册与排障</span></div><div class="io-tocrow noicon todo"><span class="no">4.2</span><span class="lb">引擎接入与 provider 管理</span></div><div class="io-tocrow noicon todo"><span class="no">4.3</span><span class="lb">Runner CLI 与自动化</span></div></div><div class="pb-cut">… 5–10</div></div></div></div><div class="col det" style="background:#F2F2F7"><div class="bar"><span class="sp"></span><div class="pb-mark inl" style="border-radius:18px"><span class="m-n">3</span><span class="b"><svg class="sf "><use href="#sf-history"/></svg><span class="bdg">1</span></span></div><span class="b"><svg class="sf "><use href="#sf-gear"/></svg></span></div>
+<div class="pb-mark" style="margin:0 8px"><span class="m-n">2</span><div class="inner"><div class="io-subt">35 documents · 5 written</div><div class="io-search"><svg class="sf "><use href="#sf-search"/></svg>Search the wiki</div><div class="io-docs"><div class="io-grp-h"><span class="no">1</span><b>产品概览与架构</b></div><div class="io-card"><div class="io-docrow"><span class="no">1.1</span><div class="tx"><div class="t"><span class="tt">产品定位与核心能力</span></div><div class="q lead">Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow"><span class="no">1.2</span><div class="tx"><div class="t"><span class="tt">系统架构与数据流</span></div><div class="q lead">Orbit 把协调和执行分开：服务器保存意图与历史，注册的 runner 在本来就有仓库、凭据和网络权限的机器上跑 agent 进程。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow more"><span class="no"></span><div class="tx"><div class="q">+1 not written yet</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div></div><div class="io-grp-h"><span class="no">2</span><b>任务与项目</b></div><div class="io-card"><div class="io-docrow"><span class="no">2.1</span><div class="tx"><div class="t"><span class="tt">任务生命周期与依赖</span></div><div class="q lead">任务是持久的排队工作单元：可以归进清单、依赖别的任务；合格的 runner 原子地领取它，开一个会话，再回报结果。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow more"><span class="no"></span><div class="tx"><div class="q">+3 not written yet</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div></div><div class="io-grp-h"><span class="no">3</span><b>会话与交互</b></div><div class="io-card"><div class="io-docrow"><span class="no">3.1</span><div class="tx"><div class="t"><span class="ndot"></span><span class="tt">Session 运行与恢复</span></div><div class="q lead">session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow"><span class="no">3.2</span><div class="tx"><div class="t"><span class="ndot"></span><span class="tt">实时流与推送</span></div><div class="q lead">客户端从每个会话的 SSE 流拿转录事件；用户级控制面流把各处的变化推给所有在线的客户端。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow more"><span class="no"></span><div class="tx"><div class="q">+1 not written yet</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div></div></div></div></div>
+</div></div><div class="pb-note"><p><span class="m-n note-n">1</span><b>中栏 = 目录</b>：Home、Browse by category、A–Z index、Plan，然后各大类和篇——和 web 桌面左边的目录栏（图 29）同一张单子，也和手机 Contents sheet 同一套行。<span class="pb-tag sys">iOS 系统</span>三栏的中栏本来就该是「可选的单子」，Projects、Tasks 都是这样。</p><p><span class="m-n note-n">2</span><b>详情栏默认就是内容</b>（Home 选中）：和手机首页同一份——内容状态、搜索、文档按大类、每篇两行导语。点中栏的篇，详情栏换成文档页。</p><p><span class="m-n note-n">3</span><b>管理信息照样在 Activity</b>：详情栏页头的按钮，数 = 抽屉的数；Activity、Review、设置都开在详情栏。</p><p><span class="pb-tag co">协调性</span>这样 iPad 和 web 桌面是同一个结构（目录栏 + 内容），手机是它的单栏版（图 30 ③）。web 桌面今天的首页（图 29）同样改：主区放内容，Review、Plan、Recently changed、Agents used 进 Activity，见图 33。</p><p><span class="pb-tag guess">假设</span>iPad 横屏 1180×820pt（11 英寸），侧栏 320、中栏 375。</p></div>
+</div>
+</div>
+</body>
+</html>

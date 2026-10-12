@@ -1,0 +1,1362 @@
+{
+  "runs": {
+    "chromium": {
+      "startTime": "2026-10-06T07:57:22.994Z",
+      "duration": 273319.49,
+      "expected": 61,
+      "skipped": 11,
+      "unexpected": 0,
+      "flaky": 0,
+      "tests": 72
+    },
+    "webkit": {
+      "startTime": "2026-10-06T08:02:10.989Z",
+      "duration": 230103.036,
+      "expected": 60,
+      "skipped": 12,
+      "unexpected": 0,
+      "flaky": 0,
+      "tests": 72
+    }
+  },
+  "states": 388,
+  "statesWithDifferences": 0,
+  "pixels": {
+    "captures": 584,
+    "identical": 567,
+    "maxChannelDelta": 2,
+    "nonIdentical": [
+      {
+        "project": "chromium-light-desktop",
+        "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 42,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          577,
+          48
+        ]
+      },
+      {
+        "project": "chromium-light-desktop",
+        "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+        "state": "cleared",
+        "capture": "firstPaint",
+        "pixels": 6,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          19,
+          21,
+          46
+        ]
+      },
+      {
+        "project": "chromium-light-desktop",
+        "file": "chromium-light-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+        "state": "disabled",
+        "capture": "firstPaint",
+        "pixels": 13,
+        "maxChannelDelta": 1,
+        "box": [
+          20,
+          17,
+          25,
+          48
+        ]
+      },
+      {
+        "project": "chromium-light-phone",
+        "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 42,
+        "maxChannelDelta": 2,
+        "box": [
+          16,
+          17,
+          298,
+          101
+        ]
+      },
+      {
+        "project": "chromium-light-phone",
+        "file": "chromium-light-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+        "state": "disabled",
+        "capture": "firstPaint",
+        "pixels": 13,
+        "maxChannelDelta": 1,
+        "box": [
+          16,
+          17,
+          21,
+          51
+        ]
+      },
+      {
+        "project": "chromium-dark-desktop",
+        "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 28,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          577,
+          48
+        ]
+      },
+      {
+        "project": "chromium-dark-desktop",
+        "file": "chromium-dark-desktop--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+        "state": "disabled",
+        "capture": "firstPaint",
+        "pixels": 13,
+        "maxChannelDelta": 1,
+        "box": [
+          20,
+          17,
+          25,
+          48
+        ]
+      },
+      {
+        "project": "chromium-dark-phone",
+        "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 28,
+        "maxChannelDelta": 2,
+        "box": [
+          16,
+          17,
+          298,
+          101
+        ]
+      },
+      {
+        "project": "chromium-dark-phone",
+        "file": "chromium-dark-phone--task-comment-field-sizes-from-its-placeholder-grows-to-four-rows-and-keeps-outlined-states--comment-disabled-text-Read-20only-states.json",
+        "state": "disabled",
+        "capture": "firstPaint",
+        "pixels": 13,
+        "maxChannelDelta": 1,
+        "box": [
+          16,
+          17,
+          21,
+          51
+        ]
+      },
+      {
+        "project": "chromium-light-desktop",
+        "file": "chromium-light-desktop--fields-match-at-599px--comment-width-360-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 42,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          272,
+          101
+        ]
+      },
+      {
+        "project": "chromium-light-desktop",
+        "file": "chromium-light-desktop--fields-match-at-601px--comment-width-360-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 39,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          271,
+          101
+        ]
+      },
+      {
+        "project": "chromium-light-desktop",
+        "file": "chromium-light-desktop--fields-match-at-959px--comment-width-360-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 42,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          272,
+          101
+        ]
+      },
+      {
+        "project": "chromium-light-desktop",
+        "file": "chromium-light-desktop--fields-match-at-961px--comment-width-360-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 42,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          272,
+          92
+        ]
+      },
+      {
+        "project": "chromium-dark-desktop",
+        "file": "chromium-dark-desktop--fields-match-at-599px--comment-width-360-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 29,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          272,
+          101
+        ]
+      },
+      {
+        "project": "chromium-dark-desktop",
+        "file": "chromium-dark-desktop--fields-match-at-601px--comment-width-360-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 25,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          271,
+          101
+        ]
+      },
+      {
+        "project": "chromium-dark-desktop",
+        "file": "chromium-dark-desktop--fields-match-at-959px--comment-width-360-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 28,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          272,
+          101
+        ]
+      },
+      {
+        "project": "chromium-dark-desktop",
+        "file": "chromium-dark-desktop--fields-match-at-961px--comment-width-360-states.json",
+        "state": "idle",
+        "capture": "firstPaint",
+        "pixels": 28,
+        "maxChannelDelta": 2,
+        "box": [
+          20,
+          17,
+          272,
+          92
+        ]
+      }
+    ]
+  },
+  "mirrorProbe": {
+    "chromium-light-desktop": {
+      "ant": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 166,
+        "capped": 0
+      },
+      "orbit": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 166,
+        "capped": 0
+      }
+    },
+    "chromium-light-phone": {
+      "ant": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 166,
+        "capped": 1
+      },
+      "orbit": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 166,
+        "capped": 1
+      }
+    },
+    "chromium-dark-desktop": {
+      "ant": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 163,
+        "capped": 0
+      },
+      "orbit": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 163,
+        "capped": 0
+      }
+    },
+    "chromium-dark-phone": {
+      "ant": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 166,
+        "capped": 1
+      },
+      "orbit": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 166,
+        "capped": 1
+      }
+    },
+    "webkit-light-desktop": {
+      "ant": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 0,
+        "capped": 0
+      },
+      "orbit": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 0,
+        "capped": 0
+      }
+    },
+    "webkit-light-phone": {
+      "ant": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 0,
+        "capped": 0
+      },
+      "orbit": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 0,
+        "capped": 0
+      }
+    },
+    "webkit-dark-desktop": {
+      "ant": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 0,
+        "capped": 0
+      },
+      "orbit": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 0,
+        "capped": 0
+      }
+    },
+    "webkit-dark-phone": {
+      "ant": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 0,
+        "capped": 0
+      },
+      "orbit": {
+        "plain": 0,
+        "lines": 0,
+        "wrapping": 0,
+        "chinese": 0,
+        "chips": 0,
+        "capped": 0
+      }
+    }
+  },
+  "motion": {
+    "chromium-light-desktop": {
+      "ant": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      },
+      "orbit": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      }
+    },
+    "chromium-light-phone": {
+      "ant": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      },
+      "orbit": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      }
+    },
+    "chromium-dark-desktop": {
+      "ant": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      },
+      "orbit": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      }
+    },
+    "chromium-dark-phone": {
+      "ant": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      },
+      "orbit": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      }
+    },
+    "webkit-light-desktop": {
+      "ant": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      },
+      "orbit": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      }
+    },
+    "webkit-light-phone": {
+      "ant": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      },
+      "orbit": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      }
+    },
+    "webkit-dark-desktop": {
+      "ant": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      },
+      "orbit": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      }
+    },
+    "webkit-dark-phone": {
+      "ant": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      },
+      "orbit": {
+        "commentShiftEnter": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ],
+        "sessionFocusedShiftEnter": [],
+        "sessionUnfocusedRestore": [
+          {
+            "property": "height",
+            "duration": 300,
+            "easing": "ease",
+            "delay": 0
+          }
+        ]
+      }
+    }
+  },
+  "reducedMotion": {
+    "chromium-light-desktop": {
+      "ant": "0.3s",
+      "orbit": "0s"
+    },
+    "chromium-light-phone": {
+      "ant": "0.3s",
+      "orbit": "0s"
+    },
+    "chromium-dark-desktop": {
+      "ant": "0.3s",
+      "orbit": "0s"
+    },
+    "chromium-dark-phone": {
+      "ant": "0.3s",
+      "orbit": "0s"
+    },
+    "webkit-light-desktop": {
+      "ant": "0.3s",
+      "orbit": "0s"
+    },
+    "webkit-light-phone": {
+      "ant": "0.3s",
+      "orbit": "0s"
+    },
+    "webkit-dark-desktop": {
+      "ant": "0.3s",
+      "orbit": "0s"
+    },
+    "webkit-dark-phone": {
+      "ant": "0.3s",
+      "orbit": "0s"
+    }
+  },
+  "cost": {
+    "project": "chromium-light-desktop",
+    "method": {
+      "inputWork": "native input event to a microtask after React flushes (render, commit, layout effects, auto-size measurement); 30 trusted keystrokes per draft",
+      "twoFrames": "just before the trusted keypress to the second animation frame after it; Playwright round trip included"
+    },
+    "results": {
+      "ant": {
+        "short": {
+          "inputWork": {
+            "median": 5.100000023841858,
+            "p95": 6.699999988079071,
+            "min": 4.699999988079071,
+            "max": 7.899999976158142
+          },
+          "twoFrames": {
+            "median": 31.099999964237213,
+            "p95": 42.09999996423721,
+            "min": 30.100000023841858,
+            "max": 45.39999997615814
+          },
+          "height": 38
+        },
+        "capped-200-lines": {
+          "inputWork": {
+            "median": 6.600000023841858,
+            "p95": 7.300000011920929,
+            "min": 6.099999964237213,
+            "max": 7.600000023841858
+          },
+          "twoFrames": {
+            "median": 31.5,
+            "p95": 41,
+            "min": 29.899999976158142,
+            "max": 44
+          },
+          "height": 302
+        }
+      },
+      "orbit": {
+        "short": {
+          "inputWork": {
+            "median": 2.800000011920929,
+            "p95": 3.599999964237213,
+            "min": 2.5,
+            "max": 3.899999976158142
+          },
+          "twoFrames": {
+            "median": 31.19999998807907,
+            "p95": 46.30000001192093,
+            "min": 25.899999976158142,
+            "max": 46.89999997615814
+          },
+          "height": 38
+        },
+        "capped-200-lines": {
+          "inputWork": {
+            "median": 3.800000011920929,
+            "p95": 4.599999964237213,
+            "min": 3.400000035762787,
+            "max": 5.100000023841858
+          },
+          "twoFrames": {
+            "median": 31.399999976158142,
+            "p95": 31.80000001192093,
+            "min": 27,
+            "max": 40.19999998807907
+          },
+          "height": 302
+        }
+      }
+    }
+  },
+  "p0Anchors": [],
+  "attachments": 809,
+  "inputBehaviour": {
+    "session-keys-and-ime": {
+      "chromium-light-desktop": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "shift-enter-newline",
+          "enter-sent",
+          "composition-committed",
+          "enter-after-composition-sent",
+          "composition-inside-mention-token"
+        ]
+      },
+      "chromium-light-phone": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "shift-enter-newline",
+          "enter-sent",
+          "composition-committed",
+          "enter-after-composition-sent",
+          "composition-inside-mention-token"
+        ]
+      },
+      "chromium-dark-desktop": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "shift-enter-newline",
+          "enter-sent",
+          "composition-committed",
+          "enter-after-composition-sent",
+          "composition-inside-mention-token"
+        ]
+      },
+      "chromium-dark-phone": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "shift-enter-newline",
+          "enter-sent",
+          "composition-committed",
+          "enter-after-composition-sent",
+          "composition-inside-mention-token"
+        ]
+      },
+      "webkit-light-desktop": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "shift-enter-newline",
+          "enter-sent",
+          "composition-committed",
+          "enter-after-composition-sent",
+          "composition-inside-mention-token"
+        ]
+      },
+      "webkit-light-phone": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "shift-enter-newline",
+          "enter-sent",
+          "composition-committed",
+          "enter-after-composition-sent",
+          "composition-inside-mention-token"
+        ]
+      },
+      "webkit-dark-desktop": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "shift-enter-newline",
+          "enter-sent",
+          "composition-committed",
+          "enter-after-composition-sent",
+          "composition-inside-mention-token"
+        ]
+      },
+      "webkit-dark-phone": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "shift-enter-newline",
+          "enter-sent",
+          "composition-committed",
+          "enter-after-composition-sent",
+          "composition-inside-mention-token"
+        ]
+      }
+    },
+    "comment-keys-and-ime": {
+      "chromium-light-desktop": {
+        "steps": 3,
+        "identical": true,
+        "labels": [
+          "enter-and-shift-enter-newlines",
+          "composition-committed",
+          "posted"
+        ]
+      },
+      "chromium-light-phone": {
+        "steps": 3,
+        "identical": true,
+        "labels": [
+          "enter-and-shift-enter-newlines",
+          "composition-committed",
+          "posted"
+        ]
+      },
+      "chromium-dark-desktop": {
+        "steps": 3,
+        "identical": true,
+        "labels": [
+          "enter-and-shift-enter-newlines",
+          "composition-committed",
+          "posted"
+        ]
+      },
+      "chromium-dark-phone": {
+        "steps": 3,
+        "identical": true,
+        "labels": [
+          "enter-and-shift-enter-newlines",
+          "composition-committed",
+          "posted"
+        ]
+      },
+      "webkit-light-desktop": {
+        "steps": 3,
+        "identical": true,
+        "labels": [
+          "enter-and-shift-enter-newlines",
+          "composition-committed",
+          "posted"
+        ]
+      },
+      "webkit-light-phone": {
+        "steps": 3,
+        "identical": true,
+        "labels": [
+          "enter-and-shift-enter-newlines",
+          "composition-committed",
+          "posted"
+        ]
+      },
+      "webkit-dark-desktop": {
+        "steps": 3,
+        "identical": true,
+        "labels": [
+          "enter-and-shift-enter-newlines",
+          "composition-committed",
+          "posted"
+        ]
+      },
+      "webkit-dark-phone": {
+        "steps": 3,
+        "identical": true,
+        "labels": [
+          "enter-and-shift-enter-newlines",
+          "composition-committed",
+          "posted"
+        ]
+      }
+    },
+    "session-menus": {
+      "chromium-light-desktop": {
+        "steps": 12,
+        "identical": true,
+        "labels": [
+          "slash-open",
+          "slash-arrow-wraps-to-first",
+          "slash-arrow-up-wraps-to-last",
+          "slash-enter-picked",
+          "slash-tab-picked",
+          "slash-escape-dismissed",
+          "mention-ignores-composing-keys",
+          "mention-picked",
+          "reference-open",
+          "reference-picked",
+          "mention-picked-with-pointer",
+          "sent-with-materialized-reference"
+        ]
+      },
+      "chromium-light-phone": {
+        "steps": 12,
+        "identical": true,
+        "labels": [
+          "slash-open",
+          "slash-arrow-wraps-to-first",
+          "slash-arrow-up-wraps-to-last",
+          "slash-enter-picked",
+          "slash-tab-picked",
+          "slash-escape-dismissed",
+          "mention-ignores-composing-keys",
+          "mention-picked",
+          "reference-open",
+          "reference-picked",
+          "mention-picked-with-pointer",
+          "sent-with-materialized-reference"
+        ]
+      },
+      "chromium-dark-desktop": {
+        "steps": 12,
+        "identical": true,
+        "labels": [
+          "slash-open",
+          "slash-arrow-wraps-to-first",
+          "slash-arrow-up-wraps-to-last",
+          "slash-enter-picked",
+          "slash-tab-picked",
+          "slash-escape-dismissed",
+          "mention-ignores-composing-keys",
+          "mention-picked",
+          "reference-open",
+          "reference-picked",
+          "mention-picked-with-pointer",
+          "sent-with-materialized-reference"
+        ]
+      },
+      "chromium-dark-phone": {
+        "steps": 12,
+        "identical": true,
+        "labels": [
+          "slash-open",
+          "slash-arrow-wraps-to-first",
+          "slash-arrow-up-wraps-to-last",
+          "slash-enter-picked",
+          "slash-tab-picked",
+          "slash-escape-dismissed",
+          "mention-ignores-composing-keys",
+          "mention-picked",
+          "reference-open",
+          "reference-picked",
+          "mention-picked-with-pointer",
+          "sent-with-materialized-reference"
+        ]
+      },
+      "webkit-light-desktop": {
+        "steps": 12,
+        "identical": true,
+        "labels": [
+          "slash-open",
+          "slash-arrow-wraps-to-first",
+          "slash-arrow-up-wraps-to-last",
+          "slash-enter-picked",
+          "slash-tab-picked",
+          "slash-escape-dismissed",
+          "mention-ignores-composing-keys",
+          "mention-picked",
+          "reference-open",
+          "reference-picked",
+          "mention-picked-with-pointer",
+          "sent-with-materialized-reference"
+        ]
+      },
+      "webkit-light-phone": {
+        "steps": 12,
+        "identical": true,
+        "labels": [
+          "slash-open",
+          "slash-arrow-wraps-to-first",
+          "slash-arrow-up-wraps-to-last",
+          "slash-enter-picked",
+          "slash-tab-picked",
+          "slash-escape-dismissed",
+          "mention-ignores-composing-keys",
+          "mention-picked",
+          "reference-open",
+          "reference-picked",
+          "mention-picked-with-pointer",
+          "sent-with-materialized-reference"
+        ]
+      },
+      "webkit-dark-desktop": {
+        "steps": 12,
+        "identical": true,
+        "labels": [
+          "slash-open",
+          "slash-arrow-wraps-to-first",
+          "slash-arrow-up-wraps-to-last",
+          "slash-enter-picked",
+          "slash-tab-picked",
+          "slash-escape-dismissed",
+          "mention-ignores-composing-keys",
+          "mention-picked",
+          "reference-open",
+          "reference-picked",
+          "mention-picked-with-pointer",
+          "sent-with-materialized-reference"
+        ]
+      },
+      "webkit-dark-phone": {
+        "steps": 12,
+        "identical": true,
+        "labels": [
+          "slash-open",
+          "slash-arrow-wraps-to-first",
+          "slash-arrow-up-wraps-to-last",
+          "slash-enter-picked",
+          "slash-tab-picked",
+          "slash-escape-dismissed",
+          "mention-ignores-composing-keys",
+          "mention-picked",
+          "reference-open",
+          "reference-picked",
+          "mention-picked-with-pointer",
+          "sent-with-materialized-reference"
+        ]
+      }
+    },
+    "comment-mention-caret": {
+      "chromium-light-desktop": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "mention-open-mid-text",
+          "mention-picked-caret-restored",
+          "mention-picked-with-pointer",
+          "mention-escape-dismissed",
+          "posted-with-mentions"
+        ]
+      },
+      "chromium-light-phone": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "mention-open-mid-text",
+          "mention-picked-caret-restored",
+          "mention-picked-with-pointer",
+          "mention-escape-dismissed",
+          "posted-with-mentions"
+        ]
+      },
+      "chromium-dark-desktop": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "mention-open-mid-text",
+          "mention-picked-caret-restored",
+          "mention-picked-with-pointer",
+          "mention-escape-dismissed",
+          "posted-with-mentions"
+        ]
+      },
+      "chromium-dark-phone": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "mention-open-mid-text",
+          "mention-picked-caret-restored",
+          "mention-picked-with-pointer",
+          "mention-escape-dismissed",
+          "posted-with-mentions"
+        ]
+      },
+      "webkit-light-desktop": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "mention-open-mid-text",
+          "mention-picked-caret-restored",
+          "mention-picked-with-pointer",
+          "mention-escape-dismissed",
+          "posted-with-mentions"
+        ]
+      },
+      "webkit-light-phone": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "mention-open-mid-text",
+          "mention-picked-caret-restored",
+          "mention-picked-with-pointer",
+          "mention-escape-dismissed",
+          "posted-with-mentions"
+        ]
+      },
+      "webkit-dark-desktop": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "mention-open-mid-text",
+          "mention-picked-caret-restored",
+          "mention-picked-with-pointer",
+          "mention-escape-dismissed",
+          "posted-with-mentions"
+        ]
+      },
+      "webkit-dark-phone": {
+        "steps": 5,
+        "identical": true,
+        "labels": [
+          "mention-open-mid-text",
+          "mention-picked-caret-restored",
+          "mention-picked-with-pointer",
+          "mention-escape-dismissed",
+          "posted-with-mentions"
+        ]
+      }
+    },
+    "session-paste-history": {
+      "chromium-light-desktop": {
+        "steps": 8,
+        "identical": true,
+        "labels": [
+          "text-pasted",
+          "files-staged",
+          "length-after-oversized-paste-50000",
+          "history-up-newest",
+          "history-up-older",
+          "history-down",
+          "history-down-restores-draft",
+          "focused-through-ref"
+        ]
+      },
+      "chromium-light-phone": {
+        "steps": 8,
+        "identical": true,
+        "labels": [
+          "text-pasted",
+          "files-staged",
+          "length-after-oversized-paste-50000",
+          "history-up-newest",
+          "history-up-older",
+          "history-down",
+          "history-down-restores-draft",
+          "focused-through-ref"
+        ]
+      },
+      "chromium-dark-desktop": {
+        "steps": 8,
+        "identical": true,
+        "labels": [
+          "text-pasted",
+          "files-staged",
+          "length-after-oversized-paste-50000",
+          "history-up-newest",
+          "history-up-older",
+          "history-down",
+          "history-down-restores-draft",
+          "focused-through-ref"
+        ]
+      },
+      "chromium-dark-phone": {
+        "steps": 8,
+        "identical": true,
+        "labels": [
+          "text-pasted",
+          "files-staged",
+          "length-after-oversized-paste-50000",
+          "history-up-newest",
+          "history-up-older",
+          "history-down",
+          "history-down-restores-draft",
+          "focused-through-ref"
+        ]
+      },
+      "webkit-light-desktop": {
+        "steps": 8,
+        "identical": true,
+        "labels": [
+          "text-pasted",
+          "files-staged",
+          "length-after-oversized-paste-50000",
+          "history-up-newest",
+          "history-up-older",
+          "history-down",
+          "history-down-restores-draft",
+          "focused-through-ref"
+        ]
+      },
+      "webkit-light-phone": {
+        "steps": 8,
+        "identical": true,
+        "labels": [
+          "text-pasted",
+          "files-staged",
+          "length-after-oversized-paste-50000",
+          "history-up-newest",
+          "history-up-older",
+          "history-down",
+          "history-down-restores-draft",
+          "focused-through-ref"
+        ]
+      },
+      "webkit-dark-desktop": {
+        "steps": 8,
+        "identical": true,
+        "labels": [
+          "text-pasted",
+          "files-staged",
+          "length-after-oversized-paste-50000",
+          "history-up-newest",
+          "history-up-older",
+          "history-down",
+          "history-down-restores-draft",
+          "focused-through-ref"
+        ]
+      },
+      "webkit-dark-phone": {
+        "steps": 8,
+        "identical": true,
+        "labels": [
+          "text-pasted",
+          "files-staged",
+          "length-after-oversized-paste-50000",
+          "history-up-newest",
+          "history-up-older",
+          "history-down",
+          "history-down-restores-draft",
+          "focused-through-ref"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+head: b0b59fa39c4ab979c01589ec424e113dc6ed5441
+uncommitted:
+?? docs/evidence/base-ui-migration/p4.1/
+?? src/web/ui-migration/p32-reference.config.mjs
+argv: ISO_FORCE=1 npx playwright test --config /var/tmp/p4.1-293463/isolation/isolation.config.mjs --project chromium-light-phone --project webkit-light-phone --project webkit-dark-phone
+P0 expected screenshots: 88 P0.2 originals, 152 main drift references, 12 accepted migration differences.
+
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium-light-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile (1.3s)
+  ✓  2 [webkit-light-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile (1.2s)
+  ✓  3 [webkit-dark-phone] › ../../../../../../var/tmp/p4.1-293463/isolation/isolation.browser.mjs:22:1 › profile (1.2s)
+
+  3 passed (5.9s)
+exit=0

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "valueKind": "example",
+  "authorization": {
+    "reference": "REPLACE_ME",
+    "nonProduction": true,
+    "allowedOperations": []
+  },
+  "kubernetes": {
+    "kubeconfig": "REPLACE_ME",
+    "context": "REPLACE_ME",
+    "apiServer": "https://REPLACE_ME",
+    "namespace": "REPLACE_ME",
+    "namespaceUID": "REPLACE_ME",
+    "nodeA": { "name": "REPLACE_ME", "uid": "REPLACE_ME" },
+    "nodeB": { "name": "REPLACE_ME", "uid": "REPLACE_ME" }
+  },
+  "ceph": {
+    "topology": "pending",
+    "fsid": "REPLACE_ME",
+    "monitors": ["REPLACE_ME"],
+    "pool": "REPLACE_ME",
+    "replicaCount": null,
+    "minSize": null,
+    "crushFailureDomain": "REPLACE_ME",
+    "publicNetworkEvidenceRef": "REPLACE_ME",
+    "osdNetworkEvidenceRef": "REPLACE_ME",
+    "healthEvidenceRef": "REPLACE_ME",
+    "cephXCapabilitiesEvidenceRef": "REPLACE_ME",
+    "cephXKeyCompatibilityEvidenceRef": "REPLACE_ME"
+  },
+  "csi": {
+    "clusterID": "REPLACE_ME",
+    "driver": "REPLACE_ME",
+    "namespace": "REPLACE_ME",
+    "configMapName": "REPLACE_ME",
+    "configurationOwner": "pending",
+    "secretRefs": {
+      "provisioner": { "name": "REPLACE_ME", "namespace": "REPLACE_ME" },
+      "controllerPublish": { "name": "REPLACE_ME", "namespace": "REPLACE_ME" },
+      "controllerExpand": { "name": "REPLACE_ME", "namespace": "REPLACE_ME" },
+      "nodeStage": { "name": "REPLACE_ME", "namespace": "REPLACE_ME" }
+    }
+  },
+  "storage": {
+    "className": "runner-data",
+    "pvcName": "mr-data-REPLACE_ME",
+    "ownerID": "REPLACE_ME",
+    "runnerID": "REPLACE_ME",
+    "capacity": "REPLACE_ME",
+    "accessMode": "ReadWriteOnce",
+    "volumeMode": "Filesystem",
+    "fsType": "ext4",
+    "mounter": "rbd",
+    "imageFeatures": ["layering"],
+    "reclaimPolicy": "Retain",
+    "allowExpansion": false,
+    "bindingMode": "Immediate"
+  },
+  "versions": {
+    "kubernetes": "REPLACE_ME",
+    "ceph": "REPLACE_ME",
+    "cephCSI": "REPLACE_ME",
+    "rook": "pending",
+    "nodeKernelA": "REPLACE_ME",
+    "nodeKernelB": "REPLACE_ME",
+    "compatibilityEvidenceRef": "REPLACE_ME"
+  },
+  "protection": {
+    "admissionReady": false,
+    "admissionEvidenceRef": "REPLACE_ME",
+    "fencingReady": false,
+    "fencingEvidenceRef": "REPLACE_ME",
+    "forcedDetachPolicyEvidenceRef": "REPLACE_ME"
+  },
+  "backup": {
+    "status": "pending",
+    "independentTargetRef": "REPLACE_ME",
+    "restoreEvidenceRef": "REPLACE_ME"
+  },
+  "verification": {
+    "image": "REPLACE_ME@sha256:REPLACE_ME",
+    "podNamePrefix": "mr-storage-test",
+    "serviceAccount": "REPLACE_ME",
+    "reservationAnnotation": "REPLACE_ME",
+    "admissionDeniedMarker": "REPLACE_ME",
+    "timeoutSeconds": 300,
+    "receiptAuthorityRefs": []
+  }
+}

@@ -1,0 +1,14 @@
+probe: probe-plan-edges.browser.mjs tree: del head: e21fad17277ffe30d40e76097191ca77e5b7f884 projects: chromium-light-desktop webkit-light-desktop webkit-dark-desktop started: 2026-10-09T14:08:39Z load: 33.58 16.82 9.77 19/4530 4004430
+PROBE del chromium-light-desktop as-run transform [{"ms":8,"t":"none"}]
+PROBE del chromium-light-desktop as-run {"nodes":[640,640,640],"edges":[{"x":640,"d":"M100 82L100 102L100 90L100 110"},{"x":640,"d":"M100 178L100 198L100 186L100 206"}]}
+PROBE del chromium-light-desktop no-motion transform [{"ms":6,"t":"none"}]
+PROBE del chromium-light-desktop no-motion {"nodes":[640,640,640],"edges":[{"x":640,"d":"M100 82L100 102L100 90L100 110"},{"x":640,"d":"M100 178L100 198L100 186L100 206"}]}
+PROBE del webkit-light-desktop as-run transform [{"ms":48,"t":"none"}]
+PROBE del webkit-light-desktop as-run {"nodes":[636,636,636],"edges":[{"x":636,"d":"M100 82L100 102L100 90L100 110"},{"x":636,"d":"M100 178L100 198L100 186L100 206"}]}
+PROBE del webkit-light-desktop no-motion transform [{"ms":20,"t":"none"}]
+PROBE del webkit-light-desktop no-motion {"nodes":[636,636,636],"edges":[{"x":636,"d":"M100 82L100 102L100 90L100 110"},{"x":636,"d":"M100 178L100 198L100 186L100 206"}]}
+PROBE del webkit-dark-desktop as-run transform [{"ms":70,"t":"none"}]
+PROBE del webkit-dark-desktop as-run {"nodes":[636,636,636],"edges":[{"x":636,"d":"M100 82L100 102L100 90L100 110"},{"x":636,"d":"M100 178L100 198L100 186L100 206"}]}
+PROBE del webkit-dark-desktop no-motion transform [{"ms":17,"t":"none"}]
+PROBE del webkit-dark-desktop no-motion {"nodes":[636,636,636],"edges":[{"x":636,"d":"M100 82L100 102L100 90L100 110"},{"x":636,"d":"M100 178L100 198L100 186L100 206"}]}
+  3 passed (15.7s)

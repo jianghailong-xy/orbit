@@ -1,0 +1,30 @@
+[
+  {
+    "name": "choices-entry",
+    "command": [
+      "node",
+      "node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "src/web/ui-migration/choices.config.mjs",
+      "--grep",
+      "Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits"
+    ],
+    "exitCode": 0,
+    "seconds": 69.6446418762207
+  },
+  {
+    "name": "notification-combinations",
+    "command": [
+      "node",
+      "node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "src/web/ui-migration/toasts.config.mjs",
+      "--grep",
+      "exit keeps its own native progress|clear retains the last shape|keyed transient and pinned|entrance progress survives|existing notifications remain accessible|copyable diagnostics|async confirmation|legacy AntApp"
+    ],
+    "exitCode": 1,
+    "seconds": 150.07616066932678
+  }
+]

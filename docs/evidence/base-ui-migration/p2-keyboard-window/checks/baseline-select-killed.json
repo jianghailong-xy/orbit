@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869 && NO_COLOR=1 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep \" select-\"",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_c7a8c3e0cde6",
+ "cwd": "/root/.orbit/worktrees/b3f83f2e-b106-5b93-aa9e-ebc76aa8e869",
+ "commit": "eebe46a2b98976af45835a497d1aed4e95adcfb9",
+ "webTree": "1780d071a6b402eef7d34ea74185684d73db3a85",
+ "outputLastWritten": "2026-10-06T10:35:00.810006+00:00",
+ "exitCode": null,
+ "outputSha256": "66a114962a2df723f03051bf4dbcd0a6883fb8f54170e287ae6efa6dde8de36b",
+ "outputBytes": 151747,
+ "note": "Killed by the runner (reason drain_cap) after 818 of 1520 tests, when the session was moved to a new engine. The JSON reporter writes only at the end, so no report or sample records exist; this list output is all that is left. 3 tests had failed before the kill: orbit-sample select-down paced 0 and antd-sample select-down-home-enter paced 9 were read from their traces before they were cleared (fixture never mounted: theme marker absent for 15 s, net::ERR_NETWORK_CHANGED); the trace of orbit-sample select-down-pageup-enter burst 19 was removed when the next run cleared the output directory, so its cause is not established (its 21.7 s matches the same 15 s wait plus a worker restart). Not counted as samples: the select baseline was re-run in chunks baseline-select-a..e."
+}

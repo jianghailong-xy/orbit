@@ -34,17 +34,18 @@ func TestTaskAcceptanceCommandEnvironmentContract(t *testing.T) {
 	output, exitCode := runShellTurn(
 		context.Background(),
 		execDir,
-		`printf '%s\n%s\n%s\n%s\n%s' "$PWD" "$N1_RUNNER_VALUE" "$N1_AGENT_VALUE" "$N1_OVERRIDE" "${ORBIT_TASK_ID-unset}"`,
+		`printf '%s\n%s\n%s\n%s\n%s\n%s' "$PWD" "$N1_RUNNER_VALUE" "$N1_AGENT_VALUE" "$N1_OVERRIDE" "${ORBIT_TASK_ID-unset}" "${ORBIT_RUNNER_CHILD-unset}"`,
 		func(string, map[string]interface{}) {},
 		"acceptance-environment",
 		map[string]string{
-			"N1_AGENT_VALUE": "agent",
-			"N1_OVERRIDE":    "agent",
-			"ORBIT_TASK_ID":  "agent-task-context",
+			"N1_AGENT_VALUE":     "agent",
+			"N1_OVERRIDE":        "agent",
+			"ORBIT_TASK_ID":      "agent-task-context",
+			"ORBIT_RUNNER_CHILD": "",
 		},
 		shellTurnTimeout,
 	)
-	want := strings.Join([]string{execDir, "runner", "agent", "agent", "unset"}, "\n")
+	want := strings.Join([]string{execDir, "runner", "agent", "agent", "unset", "1"}, "\n")
 	if exitCode != 0 || output != want {
 		t.Fatalf("shell environment = (%q, %d), want (%q, 0)", output, exitCode, want)
 	}
@@ -54,7 +55,7 @@ func TestTaskAcceptanceCommandEnvironmentContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, contract := range []string{
-		"session execution directory", "runner process environment", "COORDINATOR_PG_URL",
+		"session execution directory", "runner process environment", "COORDINATOR_PG_URL", "`ORBIT_RUNNER_CHILD=1`",
 	} {
 		if !strings.Contains(string(doc), contract) {
 			t.Errorf("executable environment documentation omits %q", contract)

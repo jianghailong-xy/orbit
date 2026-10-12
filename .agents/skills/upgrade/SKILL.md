@@ -5,7 +5,7 @@ description: Upgrade the Orbit Docker Compose deployment by rebuilding the apise
 
 # Upgrade the Orbit stack
 
-Orbit uses `docker-compose.yml` with `postgres`, `apiserver`, `web`, and `gateway`. A routine upgrade rebuilds the locally built `apiserver` and `web` images, then recreates only changed services. The persisted `orbit_pg` volume is preserved.
+Orbit uses `docker-compose.yml` with `postgres`, `apiserver`, `wiki-worker`, `web`, and `gateway`. A routine upgrade rebuilds the locally built `apiserver` and `web` images (`wiki-worker` runs the `apiserver` image), then recreates only changed services. The persisted `orbit_pg` volume is preserved.
 
 Database migrations are not a separate step: the apiserver container runs `prisma migrate deploy` during startup.
 
@@ -39,8 +39,8 @@ On `main` the helper first fast-forwards to origin (`git pull --ff-only`) unless
 
 Without `--pull-base`, the helper:
 
-1. Builds `apiserver` and `web`.
-2. Runs `docker compose up -d --wait apiserver web gateway`.
+1. Builds `apiserver` (whose image `wiki-worker` runs) and `web`.
+2. Runs `docker compose up -d --wait apiserver wiki-worker web gateway`.
 3. Prints `docker compose ps`.
 
 Postgres is omitted from the recreate set. With `--pull-base`, the helper pulls `postgres` and `gateway`, then runs a full `up -d --wait` so changed base images take effect.

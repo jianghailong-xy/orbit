@@ -18,7 +18,11 @@ import { currentWikiRollout, wikiOnFor, type WikiRollout } from './wiki-rollout'
  * The wiki context a session is handed when it starts: `<orbit_wiki_context>` (design §7.1,
  * contract `push`).
  *
- * WHERE IT RIDES. `RunnerApiController.dequeueTurn` appends this to the content it is about to
+ * NOT DELIVERED. The owner turned this feature off on 2026-10-06: `dequeueTurn` no longer calls
+ * `appendWikiContext`, and sessions pull notes with `wiki_search`/`wiki_get` instead. What follows
+ * describes the block as it was delivered; the pushability specs still exercise it directly.
+ *
+ * WHERE IT RODE. `RunnerApiController.dequeueTurn` appended this to the content it was about to
  * deliver, exactly as it appends `#`-reference summaries, a list's condition board, the
  * background work a returning engine is told about and a coordinator's standing role. So it is
  * user-level text the model reads, and `conversation_turn.content` is untouched: the durable

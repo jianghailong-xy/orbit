@@ -1,0 +1,189 @@
+
+Running 5 tests using 1 worker
+
+  ✓  1 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.7s)
+  ✓  2 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.5s)
+  ✓  3 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (4.7s)
+  ✓  4 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (6.8s)
+  ✘  5 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit (12.1s)
+
+
+  1) [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit 
+
+    Error: existing card DOM, opacity and geometry stay stable at every sampled frame
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  -   1
+    + Received  + 146
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "card": Object {
+    +       "bottom": 92,
+    +       "height": 36,
+    +       "left": 64.140625,
+    +       "right": 317.84375,
+    +       "top": 56,
+    +       "width": 253.703125,
+    +       "x": 64.140625,
+    +       "y": 56,
+    +     },
+    +     "opacity": "1",
+    +     "overlays": Array [
+    +       Object {
+    +         "ending": false,
+    +         "opacity": "1",
+    +         "scale": "none",
+    +         "translate": "none",
+    +       },
+    +     ],
+    +     "phase": "close-0",
+    +     "sameNode": false,
+    +     "t": 8602,
+    +   },
+    +   Object {
+    +     "card": Object {
+    +       "bottom": 92,
+    +       "height": 36,
+    +       "left": 64.140625,
+    +       "right": 317.84375,
+    +       "top": 56,
+    +       "width": 253.703125,
+    +       "x": 64.140625,
+    +       "y": 56,
+    +     },
+    +     "opacity": "1",
+    +     "overlays": Array [
+    +       Object {
+    +         "ending": false,
+    +         "opacity": "1",
+    +         "scale": "none",
+    +         "translate": "none",
+    +       },
+    +     ],
+    +     "phase": "close-0",
+    +     "sameNode": false,
+    +     "t": 8741,
+    +   },
+    +   Object {
+    +     "card": Object {
+    +       "bottom": 92,
+    +       "height": 36,
+    +       "left": 64.140625,
+    +       "right": 317.84375,
+    +       "top": 56,
+    +       "width": 253.703125,
+    +       "x": 64.140625,
+    +       "y": 56,
+    +     },
+    +     "opacity": "1",
+    +     "overlays": Array [
+    +       Object {
+    +         "ending": false,
+    +         "opacity": "1",
+    +         "scale": "none",
+    +         "translate": "none",
+    +       },
+    +     ],
+    +     "phase": "close-0",
+    +     "sameNode": false,
+    +     "t": 8748,
+    +   },
+    +   Object {
+    +     "card": Object {
+    +       "bottom": 92,
+    +       "height": 36,
+    +       "left": 64.140625,
+    +       "right": 317.84375,
+    +       "top": 56,
+    +       "width": 253.703125,
+    +       "x": 64.140625,
+    +       "y": 56,
+    +     },
+    +     "opacity": "1",
+    +     "overlays": Array [
+    +       Object {
+    +         "ending": false,
+    +         "opacity": "1",
+    +         "scale": "none",
+    +         "translate": "none",
+    +       },
+    +     ],
+    +     "phase": "close-0",
+    +     "sameNode": false,
+    +     "t": 8764,
+    +   },
+    +   Object {
+    +     "card": Object {
+    +       "bottom": 92,
+    +       "height": 36,
+    +       "left": 64.140625,
+    +       "right": 317.84375,
+    +       "top": 56,
+    +       "width": 253.703125,
+    +       "x": 64.140625,
+    +       "y": 56,
+    +     },
+    +     "opacity": "1",
+    +     "overlays": Array [
+    +       Object {
+    +         "ending": false,
+    +         "opacity": "1",
+    +         "scale": "none",
+    +         "translate": "none",
+    +       },
+    +     ],
+    +     "phase": "close-0",
+    +     "sameNode": false,
+    +     "t": 8783,
+    +   },
+    +   Object {
+    +     "card": Object {
+    +       "bottom": 92,
+    +       "height": 36,
+    +       "left": 64.140625,
+    +       "right": 317.84375,
+    +       "top": 56,
+    +       "width": 253.703125,
+    +       "x": 64.140625,
+    +       "y": 56,
+    +     },
+    +     "opacity": "1",
+    +     "overlays": Array [
+    +       Object {
+    +         "ending": false,
+    +         "opacity": "1",
+    +         "scale": "none",
+    +         "translate": "none",
+    +       },
+    +     ],
+    +     "phase": "close-0",
+    +     "sameNode": false,
+    +     "t": 8797,
+    +   },
+    + ]
+
+      136 |     const shifted = motion.samples.filter((s) => !s.sameNode || !s.card || s.opacity !== '1' ||
+      137 |       ['x', 'y', 'width', 'height'].some((key) => Math.abs(s.card[key] - motion.before[key]) > 0.1));
+    > 138 |     expect(shifted, 'existing card DOM, opacity and geometry stay stable at every sampled frame').toEqual([]);
+          |                                                                                                   ^
+      139 |     // These checks also prove the original popup transitions still run in both directions.
+      140 |     for (const name of ['open', 'nested-1', 'nested-2', 'close-2', 'close-1', 'close-0']) {
+      141 |       expect(motion.samples.some((s) => s.phase === name && s.overlays.some((o) =>
+        at /var/tmp/p32r2-ref/src/web/ui-migration/toasts-lifecycle.browser.mjs:138:99
+
+    Error Context: ../../../p32r2-final/ref-r2b-toasts-drawer-entry-repeat/toasts-lifecycle.browser.m-56d63-ntry-nested-layers-and-exit-webkit-light-phone-repeat4/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/ref-r2b-toasts-drawer-entry-repeat/toasts-lifecycle.browser.m-56d63-ntry-nested-layers-and-exit-webkit-light-phone-repeat4/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/ref-r2b-toasts-drawer-entry-repeat/toasts-lifecycle.browser.m-56d63-ntry-nested-layers-and-exit-webkit-light-phone-repeat4/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:96:3 › notification card stays fixed through Drawer entry, nested layers and exit 
+  4 passed (37.7s)

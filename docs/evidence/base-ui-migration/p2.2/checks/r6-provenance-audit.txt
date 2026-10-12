@@ -1,0 +1,500 @@
+{
+  "refs": {
+    "acceptedP22": "d71afc686760eb4a37c84822bf1ea478dbe8fcf1",
+    "notificationDelivery": "59c439e47515f15f581a76318df0ecad6b23e53e",
+    "notificationRuntime": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "project": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "upstream": "d22b276cccbac66b672e25944be0317d6df420eb",
+    "combined": "f5fc726d43ebf80fe60c04b6508e8de73643cbbd"
+  },
+  "parents": [
+    "d71afc686760eb4a37c84822bf1ea478dbe8fcf1",
+    "59c439e47515f15f581a76318df0ecad6b23e53e"
+  ],
+  "ancestors": {
+    "acceptedP22": true,
+    "notificationDelivery": true,
+    "notificationRuntime": true,
+    "project": true,
+    "upstream": true,
+    "combined": true
+  },
+  "tree": "9cc00f7defdf0a705f74ff14e29e66f0ba8daff7",
+  "webTree": "4b83187770273913b842f365f854bf78de516f37",
+  "conflicts": [],
+  "manualResolutions": [],
+  "parentsAudit": {
+    "acceptedP22": {
+      "historicalFilesUnchanged": 13490,
+      "totalDeltaFiles": 2758,
+      "allChangedBlobsEqualOtherParent": true,
+      "nonEvidenceDelta": [
+        {
+          "path": "src/apiserver/src/common/db-write-inventory.ts",
+          "before": "100644 blob e56ec1fade88824089ad8523c253e87bb1f61877",
+          "after": "100644 blob 2e3042e760d5a3bc676a4e06daaf00287a5dc0f8"
+        },
+        {
+          "path": "src/apiserver/src/projects/dto.ts",
+          "before": "100644 blob 04c9279079f71aa895c7bdd490d7a1896bc3de4a",
+          "after": "100644 blob 1503d09b6943de3283291a1f7098189cf4ead134"
+        },
+        {
+          "path": "src/apiserver/src/projects/owner-decision-signal.ts",
+          "before": "100644 blob 1b9b27289a32db0f3a838d99c87328fe0416a4cf",
+          "after": "100644 blob fc9c7b12d2ca9a12e91ac4fa768f404e944b1812"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-acceptance.service.ts",
+          "before": "100644 blob d95337cd79e0bcdc4ab193e603a401134e1d2f8a",
+          "after": "100644 blob 598eb2285fbfd328b6d0d972ff9fcca26bcc1f82"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-done-request.pg.spec.ts",
+          "before": null,
+          "after": "100644 blob 80894c9461154abccaeeb6719dc91c58dc952b55"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-done-request.ts",
+          "before": "100644 blob 1b84d79890e41a565da52c2277734fc7ea502a0f",
+          "after": "100644 blob e1a1e6504635bcba7dd1bf2147f6930d3ff22341"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-exception-todos.pg.spec.ts",
+          "before": "100644 blob 5cf37f0860032534927c8c420ac3c123de3e4149",
+          "after": "100644 blob a93caa98e34cc363b26570ec1b603bbc835f0206"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-list-attention.spec.ts",
+          "before": "100644 blob 9509fd122b9705afe4fb5ec6958635f547d0cb2b",
+          "after": "100644 blob ced84713001a0f1b98b6ec0e2e136464a4e338ad"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-list-attention.ts",
+          "before": "100644 blob 72f5fca48d046b1ab7d5728adc71b174340fc220",
+          "after": "100644 blob 2d2571f8a790deb09457d7fab45317a158ea841c"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-open-item.service.ts",
+          "before": "100644 blob d565902acf4d4de7386280f6d76ac2bd9bc97a98",
+          "after": "100644 blob cec5fdf3ad400adee596a2806aeedd15f98213d1"
+        },
+        {
+          "path": "src/apiserver/src/projects/project-start-request.pg.spec.ts",
+          "before": "100644 blob a93a0f66b7bce78e029d6fb5e0dd7b7063275536",
+          "after": "100644 blob 09c16848a06df2c0186fd5e20ff4aa70ba2fcaee"
+        },
+        {
+          "path": "src/apiserver/src/projects/projects.service.spec.ts",
+          "before": "100644 blob 3a30e992a39ee24f5d91c31f5a784e066d305a1c",
+          "after": "100644 blob 256ffe977b56e0d30f00fe2587af32459eb7f14c"
+        },
+        {
+          "path": "src/apiserver/src/push/owner-item-push-sites.spec.ts",
+          "before": "100644 blob 73727fa74665e8d2e9586ed311fde50527199435",
+          "after": "100644 blob 3367aa81f7e0d72a4e19d2bfa296595f259f287f"
+        },
+        {
+          "path": "src/apiserver/src/runner-api/runner-projects.controller.spec.ts",
+          "before": "100644 blob 9606109cb074b3787bb04435e23959ec28560f4f",
+          "after": "100644 blob 55f2af0ec8bea619dfc0b7b605ec919ffbc631d7"
+        },
+        {
+          "path": "src/apiserver/src/runner-api/runner-projects.controller.ts",
+          "before": "100644 blob 4f985cabc90f933d9b1202d6d0df07596e88560d",
+          "after": "100644 blob b08ae66f7647384e3ba4ec7a22579795a2a0479c"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift",
+          "before": "100644 blob 43ec99110b7461d363a98079c51e3e0ab78f0a38",
+          "after": "100644 blob fd4c0d1ad3122bb0a1ae2a2969a40dbdc31a9f33"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/ConsoleRegistry.swift",
+          "before": "100644 blob 1084e7326015ceab523bd62694a26164e488aadf",
+          "after": "100644 blob 10a0c86a8f3d8c10c514ca9ce2414e026e787654"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/ProjectsModel.swift",
+          "before": "100644 blob 1ee064dfd504fc1a0d76fbd01d4fb425a4c667ef",
+          "after": "100644 blob 624ec0d71d0d2dbae55eaee2d1de82f658817375"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/Views/ToastHost.swift",
+          "before": "100644 blob e8ed6d5370ea1a099971747bb92e408ef468cc3d",
+          "after": "100644 blob 7dba277008199a4cf5153f8a1a1f6f3a00e5c9fb"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/Views/WikiDocScreens.swift",
+          "before": "100644 blob d4e5dcdf06112210a1725942f430fa0d296b52bd",
+          "after": "100644 blob af23c3150e008f53913a04be97132ad790912673"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/Views/WikiRunView.swift",
+          "before": "100644 blob 911ca14ad7afe05057fa18fba6a99fd9eb41ac7b",
+          "after": "100644 blob 8a13cbb0d82bc71902e7b8f1e0dc21279e9f4751"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/Views/WikiScreens.swift",
+          "before": "100644 blob ff1d298c57be5db3fd5b0bae4ad307db97f3edcc",
+          "after": "100644 blob 84bb7521e915d3bf1d07389adfb4241a1ccfbc2b"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/Views/WikiSettingsView.swift",
+          "before": "100644 blob 083185ff7abd1cb52e1c2b284981484f5e7cbe55",
+          "after": "100644 blob b8050812ef2e5d2e037d55babea88a4f2db790f8"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/WikiModel.swift",
+          "before": "100644 blob 486cec74324f8779b6ece1e29c01318baa2b627e",
+          "after": "100644 blob 4270905e36a5c8cbf6f78aa68ee2a309319fd50d"
+        },
+        {
+          "path": "src/macos/OrbitApp/Sources/OrbitApp/WorktreeModel.swift",
+          "before": "100644 blob badd63a9a75aeedd1b343ec685db8bf6f61bd67d",
+          "after": "100644 blob 6432171dc730effd79cf653b5d429cf2348d1e13"
+        },
+        {
+          "path": "src/macos/OrbitKit/Sources/OrbitKit/App/SessionWorkspaceMove.swift",
+          "before": "100644 blob d8c86f6439bcb0244d51a2662b9cb9378cca4619",
+          "after": "100644 blob 6880b1164a200e2723912968c3fddfbc6ba58b0b"
+        },
+        {
+          "path": "src/macos/OrbitKit/Sources/OrbitKit/App/ToastFeed.swift",
+          "before": "100644 blob 91bb9749f33bb7038074660ca2dcc2fe8c1c5109",
+          "after": "100644 blob 1681a3834b28ffd88bf1ea5ea4009354afcc6fb3"
+        },
+        {
+          "path": "src/macos/OrbitKit/Sources/OrbitKit/App/WikiLogic.swift",
+          "before": "100644 blob f254dd33b87c0e794fc87b19db540988beb15dca",
+          "after": "100644 blob 7f429b037c92c66f34151e66eb496015c8db7e1f"
+        },
+        {
+          "path": "src/macos/OrbitKit/Tests/OrbitKitTests/ProjectsWiringTests.swift",
+          "before": "100644 blob 3ec884e5a0526d7e9c0072c0b8fcdac010042e96",
+          "after": "100644 blob c1c1a0b5e6ebb96118fc3872d8a3be87b3c34744"
+        },
+        {
+          "path": "src/macos/OrbitKit/Tests/OrbitKitTests/SessionWorkspaceMoveTests.swift",
+          "before": "100644 blob 4643e532bf3cdb0e674e2d4ef5a281eec094195c",
+          "after": "100644 blob f279f7501029467b11df1faf3f0226e7fcf4fed2"
+        },
+        {
+          "path": "src/macos/OrbitKit/Tests/OrbitKitTests/ToastHostWiringTests.swift",
+          "before": "100644 blob 6efd0a2008d18ce8a04857e23a1babc59fd7604a",
+          "after": "100644 blob b52759fdd9a0b03e0620126c2b372cd99fd9ab81"
+        },
+        {
+          "path": "src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift",
+          "before": "100644 blob 5feba9b6bbeaf38dd56a5111baea8c20276fbea9",
+          "after": "100644 blob a4c572eeb3c145ca35eab106ce7bde5e052d1e7c"
+        },
+        {
+          "path": "src/macos/OrbitKit/Tests/OrbitKitTests/WikiWiringTests.swift",
+          "before": "100644 blob 6dcc89e492c2ab0c6a206ab0c977fc4dc6735153",
+          "after": "100644 blob 885635304623fba6301b4a0d7bfed5f13e6c4b5c"
+        },
+        {
+          "path": "src/runner-go/agent_instructions.go",
+          "before": "100644 blob e703f37c6a6226053b091e07b82aeb84bd675d30",
+          "after": "100644 blob 12b95915b98fbdc8ae9885db4d0ce2b68bb5a479"
+        },
+        {
+          "path": "src/runner-go/mcp.go",
+          "before": "100644 blob 1786c67e6b037951170121d48bf75d2243164944",
+          "after": "100644 blob 87d736d166157bc57e9a05d3279101693ad2f3d5"
+        },
+        {
+          "path": "src/runner-go/mcp_project_test.go",
+          "before": "100644 blob e3082625a769743f9b42034b093a32718e3573b5",
+          "after": "100644 blob 94e377845037e51cec64ebb8cf33f999804d2493"
+        },
+        {
+          "path": "src/runner-go/project_cli.go",
+          "before": "100644 blob 434da1cf66c9d3a5fa011cce252f847a18259d47",
+          "after": "100644 blob ddc3dfdcd3e6c172a600ef8c883427eb9c62aa1c"
+        },
+        {
+          "path": "src/runner-go/project_cli_test.go",
+          "before": "100644 blob 873effc30db8534e638e2ee0a381fc5df0b84553",
+          "after": "100644 blob e2ece714abc5db07b319b70044172fe28fb31078"
+        },
+        {
+          "path": "src/runner-go/project_done_request.go",
+          "before": null,
+          "after": "100644 blob e3c0b31d49700e4ff346ae8574ae18859222a3fc"
+        },
+        {
+          "path": "src/runner-go/project_done_request_test.go",
+          "before": null,
+          "after": "100644 blob 823855146ec6e47f0dd280a05ad76aa6801ca4e6"
+        },
+        {
+          "path": "src/runner-go/transport.go",
+          "before": "100644 blob ee033d7ec63a695c2029492893c8415d77e0fea4",
+          "after": "100644 blob 0a63072c81c0fa1bd5c3d07ce3a761dcb66ce2ac"
+        },
+        {
+          "path": "src/runner-go/wiki_anchors.go",
+          "before": "100644 blob 15c435e76173ab90e6e929d12c86b30e7e90943e",
+          "after": "100644 blob 5d5dea69df9edb05d9bb0bb417bdf1f38b1cb523"
+        },
+        {
+          "path": "src/runner-go/wiki_anchors_test.go",
+          "before": "100644 blob 84c96c4af2274158d8677ea15c82f3a91080f022",
+          "after": "100644 blob 173761dcfc86d4e633a44bc3a22c66242a0fd347"
+        },
+        {
+          "path": "src/shared/src/project-done.ts",
+          "before": "100644 blob 2d99f2759bf689b53139c788c36e8a97dd02df9c",
+          "after": "100644 blob cd4d1afa3bf22cc7acb06fd4f93175f2755ef477"
+        },
+        {
+          "path": "src/shared/src/project-progress.ts",
+          "before": "100644 blob d887074183accb47ffb4487e1b5939d3ae3a90f0",
+          "after": "100644 blob 521c00707be5dbc2b5d305899edfe9b7f45c01a6"
+        },
+        {
+          "path": "src/web/src/components/ToastViewport.tsx",
+          "before": "100644 blob 08a20af2a1ad3ad21290bd8850bf4a0eeb0382d5",
+          "after": "100644 blob e80950ddb9754fb6550a5fab5253d46da186d4ed"
+        },
+        {
+          "path": "src/web/src/components/WorkspaceView.commitResultMessage.test.tsx",
+          "before": "100644 blob 31f4b722e563da930a83f2c467214e659d60b198",
+          "after": "100644 blob 75019cb9b894a0aae289594f269705ce294f6b42"
+        },
+        {
+          "path": "src/web/src/components/WorkspaceView.tsx",
+          "before": "100644 blob 487e64f4347795dc18e57b3187133a106904f39a",
+          "after": "100644 blob 76b83d53747d6bb8cf4ea250a7bf9377a2aee2fb"
+        },
+        {
+          "path": "src/web/src/index.css",
+          "before": "100755 blob bee5911809d16d5a066ec324c7007b096e99dff7",
+          "after": "100755 blob 3d74945196ca079c1db28340cd3c1fd2c694ac2a"
+        },
+        {
+          "path": "src/web/src/lib/sessionFolders.test.ts",
+          "before": "100644 blob 232635797106bf960546713db46921f96ab29b02",
+          "after": "100644 blob 25745f68e649f1a004c086ccd294463a5599a1ce"
+        },
+        {
+          "path": "src/web/src/lib/sessionFolders.ts",
+          "before": "100644 blob d03007895290f4d32466bffdb65fc7df617da525",
+          "after": "100644 blob d8986688025ba1f11608ac72577a485f960dd492"
+        },
+        {
+          "path": "src/web/src/lib/toast.test.tsx",
+          "before": "100644 blob ad83c1285d3996e562d67b343288702235f91f34",
+          "after": "100644 blob 3a95db3e5b9207609be6698a062d9c96db83e01d"
+        },
+        {
+          "path": "src/web/ui-migration/toasts-checks.mjs",
+          "before": null,
+          "after": "100644 blob cbc695f975aa19a7c8e7b3295238d449dcba9208"
+        },
+        {
+          "path": "src/web/ui-migration/toasts-hover.browser.mjs",
+          "before": "100644 blob 96d08014c7707eccf5fa83210795145a1539bf53",
+          "after": "100644 blob 80549a3579bb682b71d2ed2bf700d5e67eb8f32a"
+        },
+        {
+          "path": "src/web/ui-migration/toasts-lifecycle.browser.mjs",
+          "before": "100644 blob 760754da707c4ac10479d536ac67e7d46105aad6",
+          "after": "100644 blob 89d78ea4f6389ca510bc7bab916598986c190a72"
+        },
+        {
+          "path": "src/web/ui-migration/toasts-promotion.browser.mjs",
+          "before": null,
+          "after": "100644 blob fd7ef082f0720e93b6d2d7804b998c758816d049"
+        },
+        {
+          "path": "src/web/ui-migration/toasts.browser.mjs",
+          "before": "100644 blob 3572c844ee47544287ef704ed61311dfe90931c0",
+          "after": "100644 blob 48d07877da98d8870bc4d116bdcdcb00ead2d458"
+        }
+      ]
+    },
+    "notificationDelivery": {
+      "historicalFilesUnchanged": 10513,
+      "totalDeltaFiles": 5707,
+      "allChangedBlobsEqualOtherParent": true,
+      "nonEvidenceDelta": [
+        {
+          "path": "src/web/.gitignore",
+          "before": "100644 blob 68616cb7b4f4b703f5a0ab7fc91f8c3527b47871",
+          "after": "100644 blob 076ad89aefce6a4b0db5913382aa4c0ff1e93ceb"
+        },
+        {
+          "path": "src/web/package.json",
+          "before": "100644 blob 3a6520577e0d70b3caace81ebdbea48294860ba7",
+          "after": "100644 blob dfdff1c309da2726975b780e3f6542f86eed7f1a"
+        },
+        {
+          "path": "src/web/src/components/ui/Combobox.tsx",
+          "before": null,
+          "after": "100644 blob 0b80560a50cf55ec5ac3ba67662bd2cdcb47d885"
+        },
+        {
+          "path": "src/web/src/components/ui/ComboboxOption.tsx",
+          "before": null,
+          "after": "100644 blob a77a0d35fc8a1d9d8d6bb72f62c14f854241da2c"
+        },
+        {
+          "path": "src/web/src/components/ui/Floating.css",
+          "before": null,
+          "after": "100644 blob e065606fa73a2e008991ae0a9e0b0fce6432d66d"
+        },
+        {
+          "path": "src/web/src/components/ui/Floating.ts",
+          "before": null,
+          "after": "100644 blob f1c80f4243e8d63767e64297143300ac0017103a"
+        },
+        {
+          "path": "src/web/src/components/ui/Menu.tsx",
+          "before": null,
+          "after": "100644 blob 4888f8d8f05de2b463c7c8849ef1ab1adb04ef05"
+        },
+        {
+          "path": "src/web/src/components/ui/MultiSelect.tsx",
+          "before": null,
+          "after": "100644 blob 0a3ce964ce6a89ca38123edb746c1ff5ca1dbda8"
+        },
+        {
+          "path": "src/web/src/components/ui/Popover.tsx",
+          "before": null,
+          "after": "100644 blob b9c5d9bd158824f0d4a65ea891f250dfff715cd5"
+        },
+        {
+          "path": "src/web/src/components/ui/README.md",
+          "before": "100644 blob e36443bdcdece8f646cdd5097fe3e1e52b261f16",
+          "after": "100644 blob 95381429e4e5d66826a0d08567f2d87e4a9630af"
+        },
+        {
+          "path": "src/web/src/components/ui/Select.css",
+          "before": null,
+          "after": "100644 blob 28950e66773d38bee944e9d014058fa97ae815fd"
+        },
+        {
+          "path": "src/web/src/components/ui/Select.tsx",
+          "before": null,
+          "after": "100644 blob 682e8b51f53df098b0608b4e83de28d204dde88b"
+        },
+        {
+          "path": "src/web/src/components/ui/SelectEmpty.tsx",
+          "before": null,
+          "after": "100644 blob d9a7386ba61498198b544b9b1024501126b70465"
+        },
+        {
+          "path": "src/web/src/components/ui/Tooltip.tsx",
+          "before": null,
+          "after": "100644 blob b017a3941cf6d92952007b80353da490f7f05bb9"
+        },
+        {
+          "path": "src/web/src/components/ui/__fixtures__/ChoicesFixture.css",
+          "before": null,
+          "after": "100644 blob 2760962a392c0a32bfed51a8dd04e3531a452010"
+        },
+        {
+          "path": "src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx",
+          "before": null,
+          "after": "100644 blob 4859d156450ce007316f8b5b64e331d0600349cc"
+        },
+        {
+          "path": "src/web/src/components/ui/antd-empty.LICENSE",
+          "before": null,
+          "after": "100644 blob 9b563deb0073e49fbbba1067fb2cbdd5ad3453a4"
+        },
+        {
+          "path": "src/web/src/components/ui/foundation.css",
+          "before": "100644 blob aaa07c070dcaf7124fe4a89a11b8d42a504a4629",
+          "after": "100644 blob b1f97c09f5d01996ac39152df74ca2a6a31f69e6"
+        },
+        {
+          "path": "src/web/ui-migration/choices-lifecycle.browser.mjs",
+          "before": null,
+          "after": "100644 blob 40edbb87d3f7281d9eeb69c17ce5fc61bd77d14d"
+        },
+        {
+          "path": "src/web/ui-migration/choices-motion.browser.mjs",
+          "before": null,
+          "after": "100644 blob aa6fa7c6b730dc467a2062123d8e09359d778097"
+        },
+        {
+          "path": "src/web/ui-migration/choices-open-value.browser.mjs",
+          "before": null,
+          "after": "100644 blob b5a99ff80b5efe1b5171344fdedad30191527085"
+        },
+        {
+          "path": "src/web/ui-migration/choices-scroll-observation.mjs",
+          "before": null,
+          "after": "100644 blob c29e66d40610866855f96bbc9009e86b38b3ee09"
+        },
+        {
+          "path": "src/web/ui-migration/choices.browser.mjs",
+          "before": null,
+          "after": "100644 blob 78a46be509a28eb1b69f8141ddc7d808e1ba43ab"
+        },
+        {
+          "path": "src/web/ui-migration/choices.config.mjs",
+          "before": null,
+          "after": "100644 blob e4a51e487674851b5eaa38cc958ed0d9f789e033"
+        },
+        {
+          "path": "src/web/ui-migration/choices.html",
+          "before": null,
+          "after": "100644 blob 6077e7bde3d81dcc25faaf5a717b3d00327e8417"
+        },
+        {
+          "path": "src/web/ui-migration/choices.tsconfig.json",
+          "before": null,
+          "after": "100644 blob 0087025b28a34b32752b4be2be8a35a649292061"
+        },
+        {
+          "path": "src/web/ui-migration/choices.tsx",
+          "before": null,
+          "after": "100644 blob a980f38632b896510fecee530c6e2b229ef8fd78"
+        },
+        {
+          "path": "src/web/ui-migration/collect-choice-evidence.mjs",
+          "before": null,
+          "after": "100644 blob f5d5f44f06e224425890880161e43078bde832b2"
+        },
+        {
+          "path": "src/web/ui-migration/playwright.config.mjs",
+          "before": "100644 blob cca34b07e3a55d8eb7fe85f3b7822966b8ba4e09",
+          "after": "100644 blob 3af9008fde95b46972fa82738b66af3326ac70de"
+        }
+      ]
+    }
+  },
+  "unchangedP22ComponentAndChoiceFiles": 52,
+  "unchangedNotificationFiles": 13,
+  "notificationArchiveOnlyAddedFiles": 2701,
+  "p22ScriptsDependenciesAndDiscoveryConfigsPreserved": true
+}
+{
+  "before": "f5fc726d43ebf80fe60c04b6508e8de73643cbbd",
+  "previousUpstream": "d22b276cccbac66b672e25944be0317d6df420eb",
+  "upstream": "1970483d2da30c17372c681958a44d1b3da77694",
+  "finalTestedCommit": "baec95275814fdeb6a6530fefeb533338a426787",
+  "parents": [
+    "f5fc726d43ebf80fe60c04b6508e8de73643cbbd",
+    "1970483d2da30c17372c681958a44d1b3da77694"
+  ],
+  "ancestors": {
+    "1970483d2da30c17372c681958a44d1b3da77694": true,
+    "18e75cfe14d0a0858c9a46e514535439c9cdf9d8": true,
+    "d71afc686760eb4a37c84822bf1ea478dbe8fcf1": true,
+    "59c439e47515f15f581a76318df0ecad6b23e53e": true
+  },
+  "tree": "21be9ff8e89d47c952cba734590ae5a987ad2027",
+  "webTree": "1ad9ad5307c82637afb766d939eb50a2e1296d68",
+  "conflicts": [],
+  "manualResolutions": [],
+  "allNonCssDeltaBlobsEqualUpstream": true,
+  "css": "Clean Git merge: only 90 upstream session-project declarations added; notification CSS retained.",
+  "unchangedComponentsFixturesConfigsDependencies": 103,
+  "unchangedHistoricalEvidenceFiles": 16191
+}

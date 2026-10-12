@@ -1,0 +1,91 @@
+[WebServer] (node:4096516) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:4096702) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.9s)
+  ✘  2 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+(node:4097440) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.5s)
+(node:4097794) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+
+
+  1) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ────────────────────────
+
+    Error: A snapshot doesn't exist at /tmp/p31-p0-reference/chromium-dark-desktop/profile-validation.png, writing actual.
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |       ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/tmp/p31-ref/src/web/ui-migration/harness.mjs:38:7)
+        at profileScenario (/tmp/p31-ref/src/web/ui-migration/page-scenarios.mjs:126:3)
+
+    attachment #1: profile-validation (image/png) ──────────────────────────────────────────────────
+    Expected: ../../../p31-p0-reference/chromium-dark-desktop/profile-validation.png
+    Received: ../../../p31-ref-output-2/pages.browser.mjs-profile-chromium-dark-desktop/profile-validation-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p31-ref-output-2/pages.browser.mjs-profile-chromium-dark-desktop/attachments/computed-styles-and-timings-93c9fbf5a1793d4eb8afd0ea551fcf871e0aea28.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p31-ref-output-2/pages.browser.mjs-profile-chromium-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p31-ref-output-2/pages.browser.mjs-profile-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p31-ref-output-2/pages.browser.mjs-profile-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ─────────────────────────
+
+    Error: A snapshot doesn't exist at /tmp/p31-p0-reference/webkit-dark-desktop/settings-saved.png, writing actual.
+
+       at harness.mjs:38
+
+      36 |       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      37 |       // Screenshot assertion waits for two identical frames. No visual masking or custom CSS.
+    > 38 |       await expect(page).toHaveScreenshot(`${name}.png`);
+         |       ^
+      39 |       const styles = await page.evaluate(() => {
+      40 |         const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft', 'borderRadius', 'boxShadow', 'outline', 'outlineOffset', 'padding', 'gap', 'display', 'position', 'zIndex', 'transitionDuration', 'animationDuration'];
+      41 |         const controls = [...document.querySelectorAll('h1,h2,h3,button,input,textarea,[role="button"],[role="combobox"],[role="switch"],[role="dialog"],[role="menu"],.toast-card')].filter((el) => el.getBoundingClientRect().width && el.getBoundingClientRect().height && getComputedStyle(el).visibility !== 'hidden');
+        at capture (/tmp/p31-ref/src/web/ui-migration/harness.mjs:38:7)
+        at settingsScenario (/tmp/p31-ref/src/web/ui-migration/page-scenarios.mjs:103:3)
+
+    attachment #1: settings-saved (image/png) ──────────────────────────────────────────────────────
+    Expected: ../../../p31-p0-reference/webkit-dark-desktop/settings-saved.png
+    Received: ../../../p31-ref-output-2/pages.browser.mjs-settings-webkit-dark-desktop/settings-saved-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p31-ref-output-2/pages.browser.mjs-settings-webkit-dark-desktop/attachments/computed-styles-and-timings-cc180d4f826a1a184abf5c01b8b07f5134004b2a.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p31-ref-output-2/pages.browser.mjs-settings-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p31-ref-output-2/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p31-ref-output-2/pages.browser.mjs-settings-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ─────────────────────────
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings ──────────────────────────
+  2 passed (8.7s)

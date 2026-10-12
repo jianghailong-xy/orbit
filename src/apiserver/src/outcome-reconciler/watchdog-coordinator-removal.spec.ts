@@ -308,15 +308,18 @@ test('(i) this is subtraction: no new service, no new resident process', () => {
   const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
   const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)]
     .map((match) => match[1]);
+  // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
+  // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
+  // test/compose-topology.test.mjs (l) pins its whole definition.
   assert.deepEqual(services.sort(),
-    ['apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web']);
+    ['apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker']);
   assert.equal(/restart:\s*unless-stopped/.test(REMOVAL_SQL), false);
   const apiserver = JSON.parse(read('src/apiserver/package.json')) as {
     scripts: Record<string, string>;
   };
   assert.deepEqual(
     Object.keys(apiserver.scripts).filter((name) => name.startsWith('start:')).sort(),
-    ['start:dev'], 'the removal may not add a long-running entry point');
+    ['start:dev', 'start:wiki-worker'], 'the removal may not add a long-running entry point');
   // Nothing in the migration keeps running after it commits.
   assert.doesNotMatch(REMOVAL_SQL, /pg_cron|CREATE EXTENSION|LISTEN |NOTIFY /);
   // Its whole vocabulary is subtraction plus the three re-homed definitions section 1 and 2 name.

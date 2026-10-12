@@ -10,7 +10,7 @@ import type {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from '../sessions/session-state';
-import { isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
+import { branchNameSql, isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { INTEGRATION_JOB_CLAIM } from './project-integration-job';
 
 /**
@@ -81,6 +81,8 @@ interface TaskIntegrationRow {
   itemCreatedAt: Date | null;
   itemHandlingJobId: string | null;
   landedAt: Date | null;
+  /** The project's main branch by name, which ON_UPSTREAM is on; null with no repository bound. */
+  mainBranch: string | null;
 }
 
 const NOT_APPLICABLE: TaskIntegrationView<Date> = {
@@ -91,6 +93,7 @@ const NOT_APPLICABLE: TaskIntegrationView<Date> = {
   jobId: null,
   checksRunningForMs: null,
   landTask: null,
+  mainBranch: null,
 };
 
 const CHECK_NAMES: Record<string, string> = {
@@ -98,11 +101,15 @@ const CHECK_NAMES: Record<string, string> = {
   MERGE_CHECK: 'the merge check',
 };
 
-const RUNNING_ELSEWHERE: Record<string, string> = {
-  LAND_TASK: 'another landing',
-  CHECK_PROMOTION: 'a check of the merge into main',
-  LAND_PROMOTION: 'the merge into main',
-};
+/** The job running on the branch first, by its kind. A merge into main is into the project's main
+ *  branch by name, which is main with no repository bound. */
+function runningElsewhere(main: string): Record<string, string> {
+  return {
+    LAND_TASK: 'another landing',
+    CHECK_PROMOTION: `a check of the merge into ${main}`,
+    LAND_PROMOTION: `the merge into ${main}`,
+  };
+}
 
 /** The sentence a page prints for a reason, built from the facts the row read. */
 function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow): string {
@@ -119,7 +126,7 @@ function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow
     case 'WAITING_SERIAL_SLOT': {
       const what = row.blockingTaskTitle
         ? `the landing of “${row.blockingTaskTitle}”`
-        : RUNNING_ELSEWHERE[row.blockingJobKind ?? ''] ?? 'another integration job';
+        : runningElsewhere(row.mainBranch ?? 'main')[row.blockingJobKind ?? ''] ?? 'another integration job';
       return `Waiting to land: ${what} is running on this branch first`;
     }
     case 'WAITING_RUNNER':
@@ -221,7 +228,7 @@ function stateForJob(state: string): TaskIntegrationView['state'] | null {
 
 /** One row folded into the view, in the precedence the module comment states. */
 export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskIntegrationView<Date> {
-  const none = { ...NOT_APPLICABLE, landTask: landTaskOf(row, now) };
+  const none = { ...NOT_APPLICABLE, landTask: landTaskOf(row, now), mainBranch: row.mainBranch };
   if (row.landing === 'ON_UPSTREAM') {
     return { ...none, state: 'ON_UPSTREAM', since: row.landedAt, jobId: row.jobId };
   }
@@ -283,6 +290,7 @@ export async function readTaskIntegrationViews(
   const landing = Prisma.raw(taskLandingSql('t'));
   const isCode = Prisma.raw(isCodeTaskSql('t'));
   const lineStarted = Prisma.raw(lineStartedSql('t'));
+  const mainBranch = Prisma.raw(branchNameSql('pc."upstream_ref"'));
   const ids = Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`));
   const rows = await prisma.$queryRaw<TaskIntegrationRow[]>(Prisma.sql`
     WITH scoped AS (
@@ -374,7 +382,10 @@ export async function readTaskIntegrationViews(
            open_item."id" AS "itemId", open_item."kind" AS "itemKind",
            open_item."assignee" AS "itemAssignee", open_item."created_at" AS "itemCreatedAt",
            open_item."handling_job_id" AS "itemHandlingJobId",
-           landed_at."at" AS "landedAt"
+           landed_at."at" AS "landedAt",
+           -- The project's main branch by name, the same for every row: read once, as an InitPlan.
+           (SELECT ${mainBranch} FROM "project_codebase" pc
+             WHERE pc."project_id" = ${projectId}::uuid AND pc."slot" = 'primary') AS "mainBranch"
       FROM scoped
       LEFT JOIN newest_job ON newest_job."task_id" = scoped."taskId"
       LEFT JOIN open_item ON open_item."task_id" = scoped."taskId"

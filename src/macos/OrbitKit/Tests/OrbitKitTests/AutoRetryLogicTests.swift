@@ -15,10 +15,11 @@ final class AutoRetryLogicTests: XCTestCase {
     }
 
     private func state(_ n: AutoRetryNotice, live: Bool = true, retryAt: Date? = nil,
-                       attempts: Int = 0, hasRetryText: Bool = true,
+                       attempts: Int = 0, hasRetryText: Bool = true, nothingToResend: Bool = false,
                        takenOver: TaskRunHandoff.Conflict? = nil) -> AutoRetryLogic.State {
         AutoRetryLogic.state(notice: n, live: live, retryAt: retryAt, attempts: attempts,
                              provider: "deepseek", runnerName: "wikova", hasRetryText: hasRetryText,
+                             nothingToResend: nothingToResend,
                              now: now, takenOver: takenOver, rand: { 0 })
     }
 
@@ -126,6 +127,84 @@ final class AutoRetryLogicTests: XCTestCase {
         XCTAssertTrue(state(notice(.quota, afterUserMsg: false)).quotesRetryText)
         XCTAssertFalse(state(notice(.quota), hasRetryText: false).quotesRetryText,
                        "nothing to re-send — a first-run failure whose prompt never became a bubble")
+    }
+
+    /// A limit that killed a turn nobody sent: nothing of anybody's is waiting to go out — the
+    /// reader's own message was answered long before the turn that failed — and the server said so.
+    /// Every verb on the card is Continue then, and the one promise it can make is which sentence
+    /// the press sends, because that sentence is the platform's and goes out in the reader's name.
+    func testNothingToResendTurnsEveryVerbIntoAContinue() {
+        let s = state(notice(.quota), hasRetryText: false, nothingToResend: true)
+        XCTAssertTrue(s.continues)
+        XCTAssertTrue(s.needsYou, "nothing is going to move this by itself")
+        XCTAssertEqual(s.title, "5-hour limit reached")
+        XCTAssertEqual(s.body, "The 5-hour quota for deepseek on “wikova” is used up. "
+                       + "Nothing to re-send — the limit landed on a turn that wasn’t yours.")
+        XCTAssertFalse(s.body.hasSuffix("Auto-retry is off."),
+                       "a switch position is not why this card has no Retry to offer")
+        XCTAssertEqual(s.retryNowTitle, "Continue")
+        XCTAssertEqual(s.retryNowNote, "Sends “Continue where you left off.”")
+        XCTAssertEqual(s.autoLabel, "Continue when the quota resets")
+        XCTAssertEqual(s.autoDetail, "Off — nothing will continue until you do.")
+        XCTAssertFalse(s.quotesRetryText, "there is nothing of the reader's to quote")
+    }
+
+    /// The provider-error spelling of the same card, and the two places the verb changes: the
+    /// switch's label and the line the card draws while its moment passes.
+    func testAProviderErrorWithNothingToResendAlsoContinues() {
+        let s = state(notice(.apiError), hasRetryText: false, nothingToResend: true)
+        XCTAssertEqual(s.title, "Provider unavailable")
+        XCTAssertEqual(s.body, "The deepseek API could not answer — nothing about your message "
+                       + "caused it. Nothing to re-send — the failure landed on a turn that wasn’t yours.")
+        XCTAssertEqual(s.autoLabel, "Continue — this usually clears")
+        XCTAssertEqual(s.retryNowTitle, "Continue")
+        XCTAssertEqual(state(notice(.apiError), retryAt: now.addingTimeInterval(-1),
+                             hasRetryText: false, nothingToResend: true).firingText,
+                       "Continuing — picking up where it left off…")
+    }
+
+    /// Armed, the card is neutral and counts down to the continue — and the manual one is still
+    /// offered, under its own name and with the caveat that the window has not actually reset.
+    func testArmedContinueCountsDownInItsOwnWords() {
+        let s = state(notice(.quota), retryAt: now.addingTimeInterval(3 * 3600),
+                      hasRetryText: false, nothingToResend: true)
+        XCTAssertTrue(s.armed)
+        XCTAssertFalse(s.needsYou, "handled — the server is going to pick this session back up")
+        XCTAssertTrue(s.continues, "and it is still a continue: nothing is being re-sent")
+        XCTAssertEqual(s.countdown, "in 3 hr")
+        XCTAssertEqual(s.retryNowTitle, "Continue now anyway")
+        XCTAssertEqual(s.retryNowNote, "The quota hasn’t reset yet — this will likely fail again.")
+        XCTAssertEqual(s.autoDetail, "Runs on the server — you don't have to stay here.")
+    }
+
+    /// Its moment has passed: the card stops offering a manual press that would race the server,
+    /// exactly as the re-send card does — and says what is actually happening.
+    func testAFiringContinueDropsTheManualPress() {
+        let s = state(notice(.quota), retryAt: now.addingTimeInterval(-1),
+                      hasRetryText: false, nothingToResend: true)
+        XCTAssertTrue(s.firing)
+        XCTAssertNil(s.retryNowTitle)
+        XCTAssertEqual(s.firingText, "Continuing — picking up where it left off…")
+    }
+
+    /// Five continues that never got through hand the session back the way any spent retry does: no
+    /// switch to re-arm, and the one control left is the continue by hand.
+    func testASpentContinueStillOffersItselfByHand() {
+        let s = state(notice(.quota), attempts: 5, hasRetryText: false, nothingToResend: true)
+        XCTAssertTrue(s.gaveUp)
+        XCTAssertFalse(s.showsAutoRow)
+        XCTAssertEqual(s.title, "Auto-retry gave up")
+        XCTAssertEqual(s.retryNowTitle, "Continue")
+    }
+
+    /// A card the session has moved past is history whatever the server says about re-sending: no
+    /// Continue to press on an outage that is over.
+    func testAStaleCardDoesNotOfferAContinue() {
+        let s = state(notice(.quota, stale: true), live: false, hasRetryText: false,
+                      nothingToResend: true)
+        XCTAssertFalse(s.continues)
+        XCTAssertNil(s.retryNowTitle)
+        XCTAssertNil(s.retryNowNote)
     }
 
     /// Seconds matter: a provider-error retry is 30 seconds out, and rounding that up to "in 1 min"

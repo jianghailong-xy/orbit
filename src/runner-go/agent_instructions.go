@@ -231,10 +231,12 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// project's own wait with the owner's answer on a card in front of them, and merge-evidence
 		// records what a target branch was observed to contain. request-start is the coordinator
 		// asking the owner to start the project, which starts nothing by itself, and request-done the
-		// same coordinator asking the owner to record it done, which records nothing. The two project
-		// verbs NOT here — ensure-coordinator and send — are the deliveries to a coordinator, which
-		// OPEN a conversation and so ride the orchestration gate below.
-		for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done"} {
+		// same coordinator asking the owner to record it done, which records nothing. skip-merge-check
+		// is the fourth of the asks: the coordinator puts a red check it believes is the check's own
+		// fault in front of the owner, and nothing is skipped unless they answer the card.
+		// The two project verbs NOT here — ensure-coordinator and send — are the deliveries to a
+		// coordinator, which OPEN a conversation and so ride the orchestration gate below.
+		for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done", "skip-merge-check"} {
 			rules = append(rules, "Bash("+command+" project "+action+" *)")
 		}
 		// Every watch verb: they wait on Orbit's own work for the session they run in, which is the

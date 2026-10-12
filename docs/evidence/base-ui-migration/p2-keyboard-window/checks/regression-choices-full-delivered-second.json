@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm run test:ui-choices -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_a8e77707d798",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "fe9d464ee9de6f4798a51527add2a5724ac8ce24",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T23:32:54.783294+00:00",
+ "exitCode": 1,
+ "outputSha256": "2c6b58b273d60d3dd00048f6bef982598e32cc2594fb1d665c9f87e34da59142",
+ "outputBytes": 88018,
+ "note": "517 passed / 3 failed on the delivered tree, host load about 23-52 (35.1 min), none of them a failure of the first delivered run. chromium-dark-desktop \"email tags support ...\" never mounted the fixture (choices.browser.mjs:552, the theme expect): 9 module requests aborted with net::ERR_NETWORK_CHANGED before the case body. chromium-light-desktop \"popover end zoom origin matches\" (choices-motion.browser.mjs:141): the old AntD page never showed its sample button (90s click timeout; 2 module requests aborted with net::ERR_NETWORK_CHANGED, 10 module requests in all, 0 motion observations). webkit-light-desktop \"normal flipped ... attachment\" (choices-motion.browser.mjs:104): no network errors; on the Orbit side all 32 observations show the menu shown with its entrance animation name and opacity 1 and document.getAnimations() empty, the entrance-capture timeout of the first run. Traces: regression-choices-full-delivered-second-traces.json."
+}

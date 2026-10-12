@@ -1,0 +1,75 @@
+{
+  "project": "chromium-dark-desktop",
+  "title": "reduce Dialog Popover Select exits restore one layer at a time",
+  "location": {
+    "file": "/tmp/orbit-p22-r3-coordinator-review-htl046lc/src/web/ui-migration/choices-lifecycle.browser.mjs",
+    "column": 149,
+    "line": 94
+  },
+  "trace": "/tmp/orbit-p22-r3-coordinator-review-htl046lc/src/web/.choices-results/choices-lifecycle.browser.-788a9-restore-one-layer-at-a-time-chromium-dark-desktop/trace.zip",
+  "readBefore": {
+    "type": "before",
+    "callId": "call@172",
+    "startTime": 22120.101,
+    "class": "Frame",
+    "method": "evaluateExpression",
+    "params": {
+      "expression": "() => [document.body, document.documentElement].some(node => /hidden|clip/.test(getComputedStyle(node).overflowY))",
+      "isFunction": true,
+      "arg": {
+        "value": {
+          "v": "undefined"
+        },
+        "handles": []
+      }
+    },
+    "stepId": "pw:api@62"
+  },
+  "readAfter": {
+    "type": "after",
+    "callId": "call@172",
+    "endTime": 22121.545,
+    "result": {
+      "value": {
+        "b": true
+      }
+    }
+  },
+  "snapshots": [
+    {
+      "timestamp": 22114.085,
+      "deltaFromReadMs": -6.016,
+      "bodyAttributes": [
+        {
+          "style": "overflow: hidden;"
+        }
+      ]
+    },
+    {
+      "timestamp": 22119.698,
+      "deltaFromReadMs": -0.403,
+      "bodyAttributes": [
+        {
+          "style": "overflow: hidden;"
+        }
+      ]
+    },
+    {
+      "timestamp": 22121.255,
+      "deltaFromReadMs": 1.154,
+      "bodyAttributes": [
+        {
+          "style": "overflow: hidden;"
+        }
+      ]
+    }
+  ],
+  "independentStats": {
+    "startTime": "2026-10-04T11:31:23.060Z",
+    "duration": 66234.449,
+    "expected": 31,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

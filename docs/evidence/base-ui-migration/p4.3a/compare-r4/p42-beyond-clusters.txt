@@ -1,0 +1,4 @@
+chromium-dark-phone    p42-runners-loading.png        all=    65 gt2=    35 max= 20 clusters=  1 [35px x192-207 y144-159 m20]
+chromium-dark-phone    p42-workspace-menu.png         all=    11 gt2=     1 max=  3 clusters=  1 [1px x368-375 y416-423 m3]
+chromium-light-desktop p42-keys-loading.png           all=    62 gt2=    37 max= 20 clusters=  1 [37px x776-791 y744-759 m20]
+chromium-light-desktop p42-runners-loading.png        all=    62 gt2=    37 max= 20 clusters=  1 [37px x776-791 y104-119 m20]

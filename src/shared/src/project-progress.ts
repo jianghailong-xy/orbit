@@ -39,7 +39,20 @@ export interface ProjectIntegrationSettings<Instant = string> {
   lineAbsentReason: 'NOT_DECIDED' | null;
   /** The integration line's branch, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string | null;
+  /** The project's main branch, short (no `refs/heads/`); null while it has no binding. */
   upstreamRef: string | null;
+  /**
+   * When the account owner chose this project's main branch (§1.2 L6) — null while it is still
+   * the default, or the choice a new binding carried over from this account's last one for the
+   * same repository, and for a project with no binding. Absent on servers that predate it.
+   */
+  upstreamChosenAt?: Instant | null;
+  /**
+   * The main branch this account chose last for this project's repository (§1.2 L6), which is what
+   * a new binding of that repository starts from — null when it has never chosen one there, or the
+   * project has no repository. Absent on servers that predate it.
+   */
+  lastMainBranch?: ProjectLastMainBranch<Instant> | null;
   source: IntegrationRefSource | null;
   /** Integration started, so the line can no longer change (§1.2 L4). */
   locked: boolean;
@@ -51,6 +64,28 @@ export interface ProjectIntegrationSettings<Instant = string> {
   escalationSeconds: number;
 }
 
+/** An account's last choice of main branch for one repository (§1.2 L6). */
+export interface ProjectLastMainBranch<Instant = string> {
+  /** The branch, short (no `refs/heads/`). */
+  branch: string;
+  /** The repository, short: the last two segments of its canonical URL, as `repository` gives it. */
+  repository: string;
+  chosenAt: Instant;
+}
+
+/**
+ * The branches a project's main branch can be chosen from (§1.6): the local branches the runner
+ * last reported for a session of the project's coordination workspace (`session.merge_targets`),
+ * without Orbit's own `orbit/*` session branches and without the account's project branches (the
+ * branch each of its projects on a project branch integrates into).
+ */
+export interface ProjectBranchCandidates<Instant = string> {
+  names: string[];
+  /** The coordination workspace they were reported for. */
+  workspaceName: string;
+  reportedAt: Instant;
+}
+
 /**
  * The settings plus what the integration queue has done with them (§1.6): the five facts the
  * project page's line row is drawn from.
@@ -60,6 +95,16 @@ export interface ProjectIntegrationSettings<Instant = string> {
  * that synced at the epoch.
  */
 export interface ProjectIntegrationView<Instant = string> extends ProjectIntegrationSettings<Instant> {
+  /**
+   * The project's repository, short — the last two segments of its canonical URL, as
+   * `acme/payments-api`: its binding's, or before it has one, its coordination workspace's. Null
+   * when neither names one, and then the project has no main branch to choose. Absent on servers
+   * that predate it.
+   */
+  repository?: string | null;
+  /** What its main branch can be chosen from; null when nothing has been reported. Absent on
+   *  servers that predate it. */
+  branches?: ProjectBranchCandidates<Instant> | null;
   /** Distance measured by the last successful `LAND_TASK` that reported it; a historical snapshot. */
   commitsAheadOfUpstream: number | null;
   commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET' | null;
@@ -85,6 +130,13 @@ export interface ProjectIntegrationView<Instant = string> extends ProjectIntegra
    * Within that state the oldest job keeps the clock from resetting when another job starts.
    */
   inFlight: ProjectIntegrationInFlight<Instant> | null;
+  /**
+   * Every job the two counts count, in `inFlight`'s order — running first, then the queue oldest
+   * first — so its first entry is the job `inFlight` describes. What the landing row's job list
+   * draws when "N jobs" is pressed: which task each one lands, how far it got, and whether its
+   * runner stopped reporting. Absent on servers that predate it.
+   */
+  inFlightJobs?: ProjectIntegrationJob<Instant>[];
   /**
    * The project's current `LAND_TASK`s (§2.7a), each through the same read model the task's own
    * page reads: every task's newest generation that is queued or running, every done task whose
@@ -121,6 +173,55 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   startedAt: Instant;
   /** Last report from the runner; absent on older servers and null before a claim. */
   heartbeatAt?: Instant | null;
+  /**
+   * How long the job waited its turn before the claim, in ms — the same measurement the task row's
+   * landing carries (`LandTaskIntegrationView.waitMs`).
+   *
+   * The clock counts from the claim, so the minutes a reader watches are the minutes of WORK, and a
+   * job that sat in the queue for two and a half of them having run for four is a different story
+   * from one that has been running for six and a half. Absent on older servers and on a job still
+   * queued, whose whole elapsed time IS the wait.
+   */
+  waitMs?: number | null;
+}
+
+/**
+ * One RUNNING or QUEUED job on the project's integration view (`inFlightJobs`, §1.6).
+ *
+ * `timedOut` is decided where the job is read, never stored: a running job whose runner has said
+ * nothing for longer than `limitSeconds`. The limit is the claim lease for a git step, and the job's
+ * check budgets plus the lease while it checks — the runner reports only when a step starts, so a
+ * healthy check is silent for as long as it runs. A timed-out job is still RUNNING; only a retry
+ * ends it (§2.2 J-T9).
+ */
+export interface ProjectIntegrationJob<Instant = string> {
+  jobId: string;
+  kind: IntegrationJobKind;
+  state: 'RUNNING' | 'QUEUED';
+  /** The step it last reported, or the one a claim starts at; null before its first claim. */
+  phase: IntegrationJobPhase | null;
+  /** The task it lands; null for a promotion or a merge check, which land no single task. */
+  taskId: string | null;
+  taskTitle: string | null;
+  /** Which landing of its subject this is, counting from 1. */
+  generation: number;
+  /** What "for how long" counts from, as on `inFlight`: the claim, or the enqueue. */
+  startedAt: Instant;
+  /** When it joined the queue — for a retried job, when the retry was asked for. */
+  queuedAt: Instant;
+  /** Its runner's last report; null before its first claim. */
+  heartbeatAt: Instant | null;
+  /** The runner holding the claim; null while queued, or when that runner is gone. */
+  runnerName: string | null;
+  /** Who asked for this run when it reruns a failed or timed-out one; null for an ordinary landing. */
+  retriedBy: 'OWNER' | 'COORDINATOR' | null;
+  timedOut: boolean;
+  /** How long the current step may go without a report; null while queued. */
+  limitSeconds: number | null;
+  /** Whether the owner's Retry (`POST /projects/:id/integration/jobs/:jobId/retry`) takes this job
+   *  now. Clients draw the button from this rather than from `timedOut`, so which timed-out jobs a
+   *  retry can end is the server's to say. */
+  retryable: boolean;
 }
 
 /** The integration claim's existing lease window, also used to stop stale activity indicators. */
@@ -221,6 +322,12 @@ export interface TaskIntegrationView<Instant = string> {
   checksRunningForMs: number | null;
   /** Null when no LAND_TASK exists; absent only on servers predating the unified read model. */
   landTask?: LandTaskIntegrationView<Instant> | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — that
+   * `ON_UPSTREAM` is on. Null when the task is in no project or its project has no repository
+   * bound. Absent from an older server.
+   */
+  mainBranch?: string | null;
 }
 
 /**
@@ -537,10 +644,43 @@ export interface ProjectOpenItemRow<Instant = string> {
   chat?: OpenItemChat | null;
 }
 
+/**
+ * A question the coordinator put to the owner that has ended (§5.2 R10, R12): the owner answered
+ * it, or it was withdrawn. The card the conversation drew for it is drawn as this record — the
+ * question as it was asked, every option, what the owner chose and wrote, and where the answer went —
+ * so it survives a relaunch and reads the same on a device that never saw the question open.
+ */
+export interface ProjectClosedQuestion<Instant = string> {
+  itemId: string;
+  /** The question as it was asked: the same shape as an open row's `question`. */
+  question: CoordinatorQuestion;
+  /** When the coordinator asked it. */
+  askedAt: Instant;
+  resolution: 'ANSWERED' | 'WITHDRAWN';
+  /** Who ended it: the owner (`USER`), or the conversation that asked it (`COORDINATOR`). */
+  resolvedBy: 'USER' | 'COORDINATOR';
+  /** When it was answered or withdrawn — the moment the record is drawn at. */
+  resolvedAt: Instant;
+  /** What the owner answered: an option's index, their own words, or both. Null when withdrawn. */
+  answer: { option: number | null; text: string | null } | null;
+  /** The first coordinator conversation the answer was delivered to, and when. Null while none has
+   *  had it — no conversation was coordinating the project — and for a withdrawn question. */
+  delivery: { sessionId: string; at: Instant } | null;
+  /** The reason it was withdrawn with; null for an answered question. */
+  withdrawReason: string | null;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
   withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+  /**
+   * The coordinator's questions that have ended — answered or withdrawn — newest first, at most 50
+   * (§4.8, §5.2 R10, R12). Kept out of `needsYou`: nobody owes anything about them, and a
+   * conversation draws each at the moment it ended, as the record its card became. Absent from a
+   * server that predates it.
+   */
+  closedQuestions?: Array<ProjectClosedQuestion<Instant>>;
   /**
    * Exceptions the coordinator closed in the last day, newest first (§4.7 H5): handled — its rerun
    * landed or passed, or it closed the item with a reason — or superseded by the new item its failed
@@ -563,6 +703,11 @@ export interface ProjectOpenItemsView<Instant = string> {
    * the reason `startRequest` is. Absent from a server that predates done requests.
    */
   doneRequest?: ProjectOpenItemRow<Instant> | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — which
+   * a row's merge into main is a merge into. Null when the project has no repository bound.
+   */
+  mainBranch?: string | null;
 }
 
 /**
@@ -714,6 +859,13 @@ export type PromotionState =
 /** What is being merged: the project's own branch, or one task's branch on a `MAIN` line (§3.2). */
 export type PromotionSourceKind = 'PROJECT_BRANCH' | 'TASK_BRANCH';
 
+/**
+ * Why a candidate is `BLOCKED`, as the job that blocked it answered (migration 0409): the source was
+ * already on the upstream, so there is nothing to merge; a check on the combined tree failed; the
+ * merge conflicted; or the job stopped before any check could answer.
+ */
+export type PromotionBlockedReason = 'ALREADY_LANDED' | 'CHECK_FAILED' | 'CONFLICT' | 'ERROR';
+
 /** One task a candidate would carry onto the upstream, as the card's Tasks row lists it (§3.6). */
 export interface PromotionTask {
   taskId: string;
@@ -755,6 +907,13 @@ export interface ProjectPromotionView<Instant = string> {
   checks: IntegrationCheckResult[];
   /** The paths the merge could not reconcile, empty unless the candidate is BLOCKED. */
   conflicts: string[];
+  /**
+   * Why a BLOCKED candidate is blocked, stored with the block rather than read off `checks` and
+   * `conflicts`: both are empty when there was nothing to merge, and when the job errored before a
+   * check ran. Null on a candidate blocked before the reason was recorded, and on one that is not
+   * blocked.
+   */
+  blockedReason: PromotionBlockedReason | null;
   /** Null until a check has passed; after that, the upstream tip that check ran against. */
   upstreamShaChecked: string | null;
   /** The tree the checks passed on, which is the tree that lands (M6). Null before they have. */
@@ -883,12 +1042,15 @@ export interface ProjectListCoordinatorItems<Instant = string> {
  * Absent when nobody has decided a line and nothing has integrated yet: a project with no line has
  * no line to draw, and printing the default rule's guess there would state a decision nobody made.
  */
-export interface ProjectListIntegration {
+export interface ProjectListIntegration<Instant = string> {
   line: IntegrationLine;
   /** The branch's name, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string;
   /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity. */
   activeJobCount?: number;
+  /** The job the project page's landing line would describe, chosen by the same rule; absent when
+   *  nothing is in flight and on older servers. The session list's project row states it. */
+  inFlight?: ProjectIntegrationInFlight<Instant>;
 }
 
 /**
@@ -968,6 +1130,12 @@ export interface SessionOwnerItem<Instant = string> {
   since: Instant;
   /** The short reason for an escalated item, derived from its raw kind. */
   need?: string;
+  /**
+   * The item's project's main branch by name — `project_codebase.upstream_ref` without
+   * `refs/heads/` — which a merge approval asks to merge into. Null when the project has no
+   * repository bound.
+   */
+  mainBranch?: string | null;
 }
 
 /**

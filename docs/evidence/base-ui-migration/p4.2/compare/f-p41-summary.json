@@ -1,0 +1,1325 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      718,
+      721
+     ],
+     [
+      151,
+      153
+     ],
+     6,
+     1
+    ],
+    [
+     [
+      734,
+      737
+     ],
+     [
+      151,
+      153
+     ],
+     6,
+     1
+    ],
+    [
+     [
+      606,
+      608
+     ],
+     [
+      152,
+      153
+     ],
+     3,
+     1
+    ],
+    [
+     [
+      526,
+      527
+     ],
+     [
+      155,
+      159
+     ],
+     7,
+     33
+    ],
+    [
+     [
+      526,
+      527
+     ],
+     [
+      174,
+      178
+     ],
+     7,
+     40
+    ],
+    [
+     [
+      605,
+      608
+     ],
+     [
+      179,
+      181
+     ],
+     6,
+     1
+    ]
+   ],
+   "max": 40,
+   "pixels": 36,
+   "shot": "chromium-dark-desktop/p41-profile-photo.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      59,
+      65
+     ],
+     [
+      180,
+      181
+     ],
+     8,
+     16
+    ],
+    [
+     [
+      80,
+      86
+     ],
+     [
+      180,
+      181
+     ],
+     7,
+     16
+    ],
+    [
+     [
+      122,
+      122
+     ],
+     [
+      180,
+      180
+     ],
+     1,
+     1
+    ],
+    [
+     [
+      42,
+      43
+     ],
+     [
+      199,
+      203
+     ],
+     7,
+     33
+    ],
+    [
+     [
+      121,
+      123
+     ],
+     [
+      203,
+      205
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      122,
+      124
+     ],
+     [
+      216,
+      217
+     ],
+     4,
+     1
+    ]
+   ],
+   "max": 33,
+   "pixels": 48,
+   "shot": "chromium-dark-phone/p41-profile-photo.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      16,
+      23
+     ],
+     [
+      95,
+      102
+     ],
+     9,
+     1
+    ],
+    [
+     [
+      59,
+      65
+     ],
+     [
+      180,
+      181
+     ],
+     7,
+     16
+    ],
+    [
+     [
+      80,
+      86
+     ],
+     [
+      180,
+      181
+     ],
+     6,
+     16
+    ],
+    [
+     [
+      121,
+      122
+     ],
+     [
+      180,
+      180
+     ],
+     2,
+     1
+    ],
+    [
+     [
+      42,
+      43
+     ],
+     [
+      199,
+      203
+     ],
+     6,
+     32
+    ],
+    [
+     [
+      42,
+      43
+     ],
+     [
+      218,
+      222
+     ],
+     6,
+     32
+    ]
+   ],
+   "max": 32,
+   "pixels": 41,
+   "shot": "chromium-light-phone/p41-profile-photo.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 28,
+  "beyond": 3,
+  "identical": 241,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "chromium-dark-desktop/p41-admin-tokens": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-dark-phone/p41-admin-tokens": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-desktop/p41-admin-tokens": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "chromium-light-phone/p41-admin-tokens": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/p41-admin-tokens": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-dark-phone/p41-admin-tokens": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(255, 255, 255, 0.016) 0px 6px 16px 0px, rgba(255, 255, 255, 0.024) 0px 3px 6px -4px, rgba(255, 255, 255, 0.01) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-light-desktop/p41-admin-tokens": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  },
+  "webkit-light-phone/p41-admin-tokens": {
+   "dialog": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(255, 255, 255)"
+    ],
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ],
+    "radius": [
+     "0px",
+     "10px"
+    ],
+    "shadow": [
+     "none",
+     "rgba(0, 0, 0, 0.08) 0px 6px 16px 0px, rgba(0, 0, 0, 0.12) 0px 3px 6px -4px, rgba(0, 0, 0, 0.05) 0px 9px 28px 8px"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 96
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "step": "dialog open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "step": "revoked"
+    }
+   ],
+   "chromium-dark-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Manage",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "step": "manage access tokens"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "step": "dialog open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "step": "revoked"
+    }
+   ],
+   "chromium-dark-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Manage",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "step": "manage access tokens"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "step": "dialog open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "step": "revoked"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Manage",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "step": "manage access tokens"
+    }
+   ],
+   "chromium-light-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t\nRevoke",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "step": "dialog open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "DELETE",
+        "path": "/api/admin/users/2zwQZ2hd93IvLb59t6p2P/access-tokens/2zwQZ2hd93IvLb59t6pUH"
+       }
+      ],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\n\tRead & write · everything\tAll workspaces\tRevoked by an administrator Sep 28, 2026\t\n3h ago\n203.0.113.7\n\t\nSep 18, 2026\nin Settings\n\t",
+       "Laptop script\norbit_pat_…h702\n\tTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\n\tNever used\t\nSep 18, 2026\nby orbit login\n\t\nRevoke"
+      ],
+      "step": "revoked",
+      "url": "/admin"
+     },
+     "step": "revoked"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "step": "dialog open"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "step": "dialog open"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": null,
+        "method": "POST",
+        "path": "/api/access-tokens/device/WXYZ4-8K2QP/approve"
+       }
+      ],
+      "step": "approval refused",
+      "url": "/cli-login?code=WXYZ4-8K2QP"
+     },
+     "step": "approval refused"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "step": "dialog open"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "step": "escape closes the dialog"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ],
+   "webkit-light-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Access tokens — dev@example.test",
+       "role": "dialog"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens — dev@example.test"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "rows": [
+       "Name\tAccess\tWorkspaces\tExpires\tLast used\tCreated\t",
+       "CI pipeline\norbit_pat_…h701\nRead & write · everything\tAll workspaces\tNever expires\t\n3h ago\n203.0.113.7\nSep 18, 2026\nin Settings\n\nRevoke",
+       "Laptop script\norbit_pat_…h702\nTasks: read & write · Wiki: read\tOrbit baseline\t\nDec 27, 2026\nin 90 days\nNever used\t\nSep 18, 2026\nby orbit login\n\nRevoke"
+      ],
+      "step": "dialog open",
+      "url": "/admin"
+     },
+     "step": "dialog open"
+    }
+   ],
+   "webkit-light-phone :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ]
+  },
+  "equal": 80,
+  "total": 96
+ }
+}

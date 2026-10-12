@@ -1,0 +1,356 @@
+[
+  {
+    "name": "normal motion is retained for attachment",
+    "project": "chromium-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antSlideUpIn",
+          "duration": 200,
+          "frames": [
+            {
+              "offset": 0,
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "composite": "auto",
+              "transformOrigin": "0% 0%",
+              "opacity": "0",
+              "transform": "scaleY(0.8)",
+              "computedOffset": 0
+            },
+            {
+              "offset": 1,
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "composite": "auto",
+              "transformOrigin": "0% 0%",
+              "opacity": "1",
+              "transform": "scaleY(1)",
+              "computedOffset": 1
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "normal motion is retained for expiry",
+    "project": "chromium-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antSlideUpIn",
+          "duration": 200,
+          "frames": [
+            {
+              "offset": 0,
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "composite": "auto",
+              "transformOrigin": "0% 0%",
+              "opacity": "0",
+              "transform": "scaleY(0.8)",
+              "computedOffset": 0
+            },
+            {
+              "offset": 1,
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "composite": "auto",
+              "transformOrigin": "0% 0%",
+              "opacity": "1",
+              "transform": "scaleY(1)",
+              "computedOffset": 1
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "normal motion is retained for search",
+    "project": "chromium-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antSlideUpIn",
+          "duration": 200,
+          "frames": [
+            {
+              "offset": 0,
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "composite": "auto",
+              "transformOrigin": "0% 0%",
+              "opacity": "0",
+              "transform": "scaleY(0.8)",
+              "computedOffset": 0
+            },
+            {
+              "offset": 1,
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "composite": "auto",
+              "transformOrigin": "0% 0%",
+              "opacity": "1",
+              "transform": "scaleY(1)",
+              "computedOffset": 1
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "normal motion is retained for popover",
+    "project": "chromium-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antZoomBigIn",
+          "duration": 200,
+          "frames": [
+            {
+              "offset": 0,
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+              "composite": "auto",
+              "opacity": "0",
+              "transform": "scale(0.8)",
+              "computedOffset": 0
+            },
+            {
+              "offset": 1,
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+              "composite": "auto",
+              "opacity": "1",
+              "transform": "scale(1)",
+              "computedOffset": 1
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "normal motion is retained for tooltip",
+    "project": "chromium-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antZoomBigIn",
+          "duration": 100,
+          "frames": [
+            {
+              "offset": 0,
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+              "composite": "auto",
+              "opacity": "0",
+              "transform": "scale(0.8)",
+              "computedOffset": 0
+            },
+            {
+              "offset": 1,
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+              "composite": "auto",
+              "opacity": "1",
+              "transform": "scale(1)",
+              "computedOffset": 1
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "Dialog Popover Select escape restores one layer at a time",
+    "project": "chromium-light-desktop",
+    "status": "expected"
+  },
+  {
+    "name": "normal motion is retained for attachment",
+    "project": "webkit-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antSlideUpIn",
+          "duration": 200,
+          "frames": [
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "offset": 0,
+              "computedOffset": 0,
+              "transform": "scaleY(0.8)",
+              "transformOriginY": "0%",
+              "transformOriginX": "0%",
+              "opacity": "0",
+              "transformOriginZ": "0px"
+            },
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "offset": 1,
+              "computedOffset": 1,
+              "transform": "scaleY(1)",
+              "transformOriginY": "0%",
+              "transformOriginX": "0%",
+              "opacity": "1",
+              "transformOriginZ": "0px"
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "normal motion is retained for expiry",
+    "project": "webkit-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antSlideUpIn",
+          "duration": 200,
+          "frames": [
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "offset": 0,
+              "computedOffset": 0,
+              "transform": "scaleY(0.8)",
+              "transformOriginY": "0%",
+              "transformOriginX": "0%",
+              "opacity": "0",
+              "transformOriginZ": "0px"
+            },
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "offset": 1,
+              "computedOffset": 1,
+              "transform": "scaleY(1)",
+              "transformOriginY": "0%",
+              "transformOriginX": "0%",
+              "opacity": "1",
+              "transformOriginZ": "0px"
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "normal motion is retained for search",
+    "project": "webkit-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antSlideUpIn",
+          "duration": 200,
+          "frames": [
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "offset": 0,
+              "computedOffset": 0,
+              "transform": "scaleY(0.8)",
+              "transformOriginY": "0%",
+              "transformOriginX": "0%",
+              "opacity": "0",
+              "transformOriginZ": "0px"
+            },
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.23, 1, 0.32, 1)",
+              "offset": 1,
+              "computedOffset": 1,
+              "transform": "scaleY(1)",
+              "transformOriginY": "0%",
+              "transformOriginX": "0%",
+              "opacity": "1",
+              "transformOriginZ": "0px"
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "normal motion is retained for popover",
+    "project": "webkit-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antZoomBigIn",
+          "duration": 200,
+          "frames": [
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+              "offset": 0,
+              "computedOffset": 0,
+              "opacity": "0",
+              "transform": "scale(0.8)"
+            },
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+              "offset": 1,
+              "computedOffset": 1,
+              "opacity": "1",
+              "transform": "scale(1)"
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "normal motion is retained for tooltip",
+    "project": "webkit-light-desktop",
+    "status": "unexpected",
+    "animations": {
+      "antd": [
+        {
+          "name": "css-dev-only-do-not-override-oc1rc0-antZoomBigIn",
+          "duration": 100,
+          "frames": [
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+              "offset": 0,
+              "computedOffset": 0,
+              "opacity": "0",
+              "transform": "scale(0.8)"
+            },
+            {
+              "composite": "auto",
+              "easing": "cubic-bezier(0.08, 0.82, 0.17, 1)",
+              "offset": 1,
+              "computedOffset": 1,
+              "opacity": "1",
+              "transform": "scale(1)"
+            }
+          ]
+        }
+      ],
+      "orbit": []
+    }
+  },
+  {
+    "name": "Dialog Popover Select escape restores one layer at a time",
+    "project": "webkit-light-desktop",
+    "status": "expected"
+  }
+]

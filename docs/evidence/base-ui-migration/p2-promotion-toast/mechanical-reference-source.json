@@ -1,0 +1,14 @@
+{
+  "sourceCommit": "notification-only mechanical merge of 18e75cfe14d0a0858c9a46e514535439c9cdf9d8 and 58c42783b5439d25a6674463170916f131da28de",
+  "fixtureCommit": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+  "notificationSources": {
+    "src/web/src/components/ToastViewport.tsx": "539bbf9a3a56d3386a715915d2b5ccfb7d1e69b759f6243031f2124a26f3721b",
+    "src/web/src/index.css": "cefcb429f4c6112b6d536c42fc5c19b757dd25a8a73e248d7f382cff4c7ddc98",
+    "src/web/src/lib/toast.tsx": "42fd0a73c62fff0ef04269010bb5b00740639edd64d141e13ebb2d4cc5ca63dc",
+    "src/web/src/lib/toastStore.ts": "937ef73ac118a19e77743d18874f88c9359899dd5d4eb908d03e3f80f970daf0",
+    "src/web/src/lib/toastFeed.ts": "3cdde8889a661bf802c4b5704c7d44577cec182d874562a6e41b86eb3ebaf522"
+  },
+  "fixtureSupplied": "components/ui and toasts fixture; notification production sources untouched",
+  "lockedVersionsMatch": true,
+  "regressionSource": "mechanical-merge/verified-regression.browser.mjs"
+}

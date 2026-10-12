@@ -1,0 +1,7 @@
+{"project":"webkit-light-desktop","label":"max (as P4.2)","before":{"top":72,"scrollHeight":972,"exactContent":923.546875,"scrollbar":8},"visibleTrigger":true,"open":{"top":0,"body":"position: relative; height: 10"}}
+{"project":"webkit-light-desktop","label":"middle","before":{"top":36,"scrollHeight":972,"exactContent":923.546875,"scrollbar":8},"visibleTrigger":true,"open":{"top":0,"body":"position: relative; height: 10"}}
+{"project":"webkit-light-desktop","label":"integer content, max","before":{"top":72,"scrollHeight":972,"exactContent":924,"scrollbar":8},"visibleTrigger":true,"open":{"top":72,"body":"position: relative; height: 10"}}
+{"project":"webkit-light-desktop","label":"integer content, middle","before":{"top":36,"scrollHeight":972,"exactContent":924,"scrollbar":8},"visibleTrigger":true,"open":{"top":36,"body":"position: relative; height: 10"}}
+{"project":"webkit-light-desktop","label":"tall integer content, at 72","before":{"top":72,"scrollHeight":1548,"exactContent":1500,"scrollbar":8},"visibleTrigger":true,"open":{"top":72,"body":"position: relative; height: 10"}}
+{"project":"webkit-light-desktop","label":"tall fractional content, at 72","before":{"top":72,"scrollHeight":1549,"exactContent":1500.546875,"scrollbar":8},"visibleTrigger":true,"open":{"top":72,"body":"position: relative; height: 10"}}
+{"project":"webkit-light-desktop","label":"tall fractional content, max","before":{"top":649,"scrollHeight":1549,"exactContent":1500.546875,"scrollbar":8},"visibleTrigger":false,"open":{"top":649,"body":"position: relative; height: 10"}}

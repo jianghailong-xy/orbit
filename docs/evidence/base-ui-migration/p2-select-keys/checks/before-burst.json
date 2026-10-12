@@ -1,0 +1,12 @@
+{
+ "command": "node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs --project chromium-dark-desktop",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_28870f9e2063",
+ "cwd": "/root/.orbit/worktrees/f9ffd160-2464-5af0-9d66-5af91c8bd5ab",
+ "commit": "8ef6b60d1c18976cfca0c1bd98081bd381703c6e",
+ "webTree": "9aa3a0b96d7c1e3fd473995798774d4f20144885",
+ "outputLastWritten": "2026-10-06T07:30:00.948045+00:00",
+ "exitCode": 0,
+ "outputSha256": "a4cbf85f2f8fcbf9b22ffdb7f0043a906990a0d8d38f2a6ab9e041173e7dc603",
+ "outputBytes": 48730
+}

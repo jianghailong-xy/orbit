@@ -1,0 +1,42 @@
+[
+  {
+    "label": "final-unchanged-repeat",
+    "sourceDirectory": "/tmp/orbit-p22-r6-coordinator-review-5a2c769m/source",
+    "command": [
+      "node",
+      "node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "src/web/ui-migration/toasts.config.mjs",
+      "toasts.browser.mjs",
+      "--grep",
+      "legacy AntApp confirmation",
+      "--project=webkit-dark-desktop",
+      "--repeat-each=5",
+      "--reporter=json",
+      "--output=/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/final-unchanged-repeat-artifacts"
+    ],
+    "exitCode": 0,
+    "seconds": 9.672869682312012
+  },
+  {
+    "label": "accepted-notification-control",
+    "sourceDirectory": "/tmp/orbit-toast-promotion-r1-review-h1tnfc9v/source",
+    "command": [
+      "node",
+      "node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "src/web/ui-migration/toasts.config.mjs",
+      "toasts.browser.mjs",
+      "--grep",
+      "legacy AntApp confirmation",
+      "--project=webkit-dark-desktop",
+      "--repeat-each=5",
+      "--reporter=json",
+      "--output=/tmp/orbit-p22-r6-coordinator-review-5a2c769m/diagnostics/accepted-notification-control-artifacts"
+    ],
+    "exitCode": 0,
+    "seconds": 10.113086462020874
+  }
+]

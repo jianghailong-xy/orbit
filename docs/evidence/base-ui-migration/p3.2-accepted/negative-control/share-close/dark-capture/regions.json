@@ -1,0 +1,50 @@
+{
+ "chromium-dark-desktop/task-share-dialog.png": {
+  "differentPixels": 364,
+  "maxChannelDelta": 36,
+  "pixelsBeyond2": 350,
+  "pixelsAtMost2": 14,
+  "allDifferencesBox": {
+   "x": 851,
+   "y": 107,
+   "width": 42,
+   "height": 42
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 851,
+     "y": 107,
+     "width": 42,
+     "height": 42
+    },
+    "pixels": 350,
+    "maxChannelDelta": 36
+   }
+  ]
+ },
+ "webkit-dark-desktop/task-share-dialog.png": {
+  "differentPixels": 364,
+  "maxChannelDelta": 36,
+  "pixelsBeyond2": 350,
+  "pixelsAtMost2": 14,
+  "allDifferencesBox": {
+   "x": 851,
+   "y": 107,
+   "width": 42,
+   "height": 42
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 851,
+     "y": 107,
+     "width": 42,
+     "height": 42
+    },
+    "pixels": 350,
+    "maxChannelDelta": 36
+   }
+  ]
+ }
+}

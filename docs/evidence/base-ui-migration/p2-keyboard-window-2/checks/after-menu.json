@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep '\"'\"' (orbit-menu|orbit-menu-sample) (menu-[a-z-]+) (burst|paced) sample'\"'\"''",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "069601b675c735a69263f4a75f8d4349c0877c77",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "dirtyWeb": "?? src/web/src/components/kw2scratch/\n?? src/web/ui-migration/zz-debug.html\n?? src/web/ui-migration/zz-debug.tsx\n?? src/web/zz-vite.config.ts",
+ "startedAt": "2026-10-07T15:00:18.255788+00:00",
+ "endedAt": "2026-10-07T15:55:54.447160+00:00",
+ "loadAverage": {
+  "start": [
+   14.6826171875,
+   15.107421875,
+   13.00048828125
+  ],
+  "end": [
+   26.9912109375,
+   38.5751953125,
+   45.154296875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "0ef03702013b9253ecdb31dcb98d7b43ec1aa9410713b865e7167d3d9d19fb8e",
+ "outputBytes": 256676,
+ "raw": "/var/tmp/kw2-246921c8/runs/after-menu",
+ "stats": {
+  "expected": 1360,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 3335617.25,
+  "samples": 1360
+ }
+}

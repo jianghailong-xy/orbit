@@ -1,0 +1,124 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.3/revision-3/hover-diagnostic/<name>",
+ "files": [
+  {
+   "name": "chromium-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "e5e6f5e22ddbc763f1ebab8f6976729b41c4315bb91985601992f7c2d3d59ff0",
+   "fields": {
+    "elapsedMs": 6503,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "7d5dde5208df2b3e62b998d553a418574d820d4daab895ececfe9e02e75a68b0",
+   "fields": {
+    "elapsedMs": 6308,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "chromium-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-desktop--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "1273ab1bfee4d5ba81078241121de9eb002de56ed49cc5cc1a25001b5a0afa26",
+   "fields": {
+    "elapsedMs": 6505,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "f9a75e2688875e7b3564c8ced86d3eeaac80243dd651eb01895ff0d6fc562e92",
+   "fields": {
+    "elapsedMs": 6313,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-phone--layout-moving-a-result-under-and-away-from-a-stationary-pointer-pauses-and-resumes-dwell--stationary-layout.json",
+   "bytes": 597,
+   "sha256": "5ae65d5e6e005160a9243007ddcac7a0650cbcc38dbce85df2841e6786cdb069",
+   "fields": {
+    "releaseAt": 1791072007600,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  },
+  {
+   "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-arrival.json",
+   "bytes": 291,
+   "sha256": "bcc6b5139844b3b9c237365fe707f102249ab4b4b97298bcf39ff1bc6333cac8",
+   "fields": {
+    "elapsedMs": 6505,
+    "remaining": 1
+   }
+  },
+  {
+   "name": "webkit-light-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--native-stationary-release.json",
+   "bytes": 41,
+   "sha256": "7d5dde5208df2b3e62b998d553a418574d820d4daab895ececfe9e02e75a68b0",
+   "fields": {
+    "elapsedMs": 6308,
+    "remaining": 0
+   }
+  },
+  {
+   "name": "webkit-light-phone--stationary-arrival-stays-paused-across-modal-owners-and-clearing-then-replacing-the-feed--stationary-replacement.json",
+   "bytes": 141,
+   "sha256": "4d8ad094019724d6277e399ff3cdc9f2e9a5896fca6608ef2433fc3b16417d2c",
+   "fields": {
+    "pausedAcrossFourTransfersMs": 40800,
+    "replacedFeedPausedMs": 10000,
+    "visibleAfterReleaseMs": 5999,
+    "expiredAfterReleaseMs": 6000
+   }
+  }
+ ]
+}

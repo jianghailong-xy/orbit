@@ -1,0 +1,111 @@
+
+> @orbit/web@0.1.0 pretest:ui-controls
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-controls
+> playwright test --config ui-migration/controls.config.mjs -g focused field under the pointer --project=chromium-light-desktop --project=webkit-light-phone
+
+[WebServer] (node:3993608) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:3993683) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/controls.browser.mjs:263:1 › a focused field under the pointer and the 601–960px font size match AntD (1.5s)
+(node:3993930) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [webkit-light-phone] › ui-migration/controls.browser.mjs:263:1 › a focused field under the pointer and the 601–960px font size match AntD (1.3s)
+
+
+  1) [chromium-light-desktop] › ui-migration/controls.browser.mjs:263:1 › a focused field under the pointer and the 601–960px font size match AntD 
+
+    Error: input-middle focused under the pointer
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,7 +1,7 @@
+      Object {
+    -   "borderColor": "rgb(51, 112, 255)",
+    +   "borderColor": "rgb(92, 146, 255)",
+        "boxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px",
+        "focused": true,
+        "fontSize": "14px",
+        "height": 32,
+        "hovered": true,
+
+      281 |     }
+      282 |     expect(measured[`${name} orbit`]).toMatchObject({ hovered: true, focused: true });
+    > 283 |     expect(measured[`${name} orbit`], `${name} focused under the pointer`).toEqual(measured[`${name} ant`]);
+          |                                                                            ^
+      284 |   }
+      285 |   if (!info.project.use.isMobile) {
+      286 |     await page.mouse.move(0, 0);
+        at /root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/controls.browser.mjs:283:76
+
+    Error Context: .controls-results/controls.browser.mjs-a-foc-7c0c3-–960px-font-size-match-AntD-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .controls-results/controls.browser.mjs-a-foc-7c0c3-–960px-font-size-match-AntD-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .controls-results/controls.browser.mjs-a-foc-7c0c3-–960px-font-size-match-AntD-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-light-phone] › ui-migration/controls.browser.mjs:263:1 › a focused field under the pointer and the 601–960px font size match AntD 
+
+    Error: input-middle focused under the pointer
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,7 +1,7 @@
+      Object {
+    -   "borderColor": "rgb(51, 112, 255)",
+    +   "borderColor": "rgb(92, 146, 255)",
+        "boxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px",
+        "focused": true,
+        "fontSize": "16px",
+        "height": 35.140625,
+        "hovered": true,
+
+      281 |     }
+      282 |     expect(measured[`${name} orbit`]).toMatchObject({ hovered: true, focused: true });
+    > 283 |     expect(measured[`${name} orbit`], `${name} focused under the pointer`).toEqual(measured[`${name} ant`]);
+          |                                                                            ^
+      284 |   }
+      285 |   if (!info.project.use.isMobile) {
+      286 |     await page.mouse.move(0, 0);
+        at /root/.orbit/worktrees/e1d571d3-78b4-577d-83d4-8e7c667fe3ef/src/web/ui-migration/controls.browser.mjs:283:76
+
+    Error Context: .controls-results/controls.browser.mjs-a-foc-7c0c3-–960px-font-size-match-AntD-webkit-light-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .controls-results/controls.browser.mjs-a-foc-7c0c3-–960px-font-size-match-AntD-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .controls-results/controls.browser.mjs-a-foc-7c0c3-–960px-font-size-match-AntD-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-desktop] › ui-migration/controls.browser.mjs:263:1 › a focused field under the pointer and the 601–960px font size match AntD 
+    [webkit-light-phone] › ui-migration/controls.browser.mjs:263:1 › a focused field under the pointer and the 601–960px font size match AntD 
+npm error Lifecycle script `test:ui-controls` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/controls.config.mjs -g 'focused field under the pointer' --project=chromium-light-desktop --project=webkit-light-phone

@@ -74,8 +74,8 @@ struct BackgroundWakeCardView: View {
                     .padding(.leading, 20)
             }
             if let steerState {
-                // Keep the delivery state; localize only this card's confirmed receipt.
-                Text(steerState == "Sent into this turn" ? "已送达当前轮次" : steerState)
+                // A steer's progress, in the words and tone its bubble uses (`UserBubbleView`).
+                Text(steerState)
                     .font(.orbitMeta).foregroundStyle(.secondary)
                     .padding(.leading, 20)
             }
@@ -161,7 +161,7 @@ struct BackgroundWakeCardView: View {
         if let ts, let when = RelativeTime.format(ts) {
             Text(when).font(.orbitMeta).foregroundStyle(Color.secondary).fixedSize()
         }
-        Text(wake.jobs.isEmpty ? "详情" : "任务详情")
+        Text(wake.jobs.isEmpty ? "Details" : "Job details")
             .font(.orbitMeta).foregroundStyle(Color.secondary).fixedSize()
         // One glyph turned, never two swapped (`ToolCardView`'s chevron, for the same reason).
         Image(systemName: "chevron.right")
@@ -290,7 +290,7 @@ private struct BackgroundWakeFailedOutput: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("输出末尾")
+            Text("Output tail")
                 .font(.orbitMeta).foregroundStyle(.secondary)
             Text(text)
                 .font(.orbitMono)
@@ -300,7 +300,7 @@ private struct BackgroundWakeFailedOutput: View {
                 .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button(open ? "收起输出" : "展开输出") { open.toggle() }
+            Button(open ? "Show less" : "Show full output") { open.toggle() }
                 .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
         }
         .padding(.horizontal, 10).padding(.vertical, 8)

@@ -1,0 +1,77 @@
+{
+  "decisionRecommended": "SEND_BACK",
+  "source": "ea9191d8165f827c83584087a59f4dfd0cfc2bcd",
+  "finding": "Independent notification combination matrix 87 passed / 1 failed; WebKit dark desktop legacy AntApp confirmation remained visible after OK click for 15s.",
+  "failureLocation": "src/web/ui-migration/toasts.browser.mjs:247",
+  "originalFailurePreserved": true,
+  "unchangedCaseRepeat": {
+    "final-unchanged-repeat": {
+      "startTime": "2026-10-04T13:27:32.359Z",
+      "duration": 9409.6,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "accepted-notification-control": {
+      "startTime": "2026-10-04T13:27:42.079Z",
+      "duration": 9804.173999999999,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "observations": {
+    "clickActionStart": 120327.933,
+    "clickActionEnd": 120337.755,
+    "frameBeforeVisibleDialog": 120335.058,
+    "frameShowingDialogInEntrance": 120393.604,
+    "scope": "Trace timestamps from same browser run, not product performance SLA. Frames show entry overlap; cause is an inference requiring confirmation, not established by later passing repeats."
+  },
+  "nextEvidence": "Classify the failed interaction using directly observable readiness/hit/confirmation behavior; fix only necessary synchronization if appropriate while retaining actual click, close and success feedback assertions. Keep original failure and source identities; no skipped cases/retries/timeout relaxation or repeated full migration implementation.",
+  "scroll": {
+    "no-preference": {
+      "unlockSamples": 8,
+      "closedAfterMs": [
+        233,
+        268.69999998807907
+      ],
+      "readyAfterCloseMs": [
+        0,
+        0
+      ],
+      "firstReadLocked": 0,
+      "trustedScrollSamples": 8,
+      "movedAfterMs": [
+        5,
+        30
+      ]
+    },
+    "reduce": {
+      "unlockSamples": 8,
+      "closedAfterMs": [
+        30,
+        58.20000001788139
+      ],
+      "readyAfterCloseMs": [
+        0,
+        19
+      ],
+      "firstReadLocked": 0,
+      "trustedScrollSamples": 8,
+      "movedAfterMs": [
+        6,
+        33.79999998211861
+      ]
+    }
+  },
+  "visualReview": {
+    "method": "view_image of three original archived PNGs",
+    "observations": [
+      "Dark desktop nested Select/Popover/Dialog retains distinct surfaces and focus outline.",
+      "Light WebKit phone popup remains inside viewport with visible options over nested layers.",
+      "Dark WebKit production notification remains legible and correctly placed above the session."
+    ]
+  }
+}

@@ -688,6 +688,9 @@ test('(3) every reader leaves out an item nobody owes, and counts the owed one b
           APNS_KEY_ID: 'key-id',
           APNS_TEAM_ID: 'team-id',
           APNS_KEY: Buffer.from('test-key').toString('base64'),
+          // The app the device below registered for: a push goes only to the registrations of the
+          // app this server is configured for (`targets`, docs/android-push-contract.md).
+          APNS_BUNDLE_ID: 'app.orbit.test',
         } as Record<string, string>)[key],
       } as never);
       // A device for the owner, and the APNs round trip replaced by a record of what was sent.

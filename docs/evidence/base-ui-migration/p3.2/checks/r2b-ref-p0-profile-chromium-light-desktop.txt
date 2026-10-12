@@ -1,0 +1,48 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (11.3s)
+
+
+  1) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ───────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Name saved', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Name saved', { exact: true }) resolved to 2 elements:
+        1) <span class="toast-head">Name saved</span> aka getByRole('region', { name: 'Notifications' }).getByText('Name saved')
+        2) <div class="sr-only" aria-atomic="true" aria-live="polite">Name saved</div> aka getByText('Name saved').nth(1)
+
+    Call log:
+      - Expect "toBeVisible" getByText('Name saved', { exact: true }) with timeout 15000ms
+      - waiting for getByText('Name saved', { exact: true })
+
+
+       at page-scenarios.mjs:120
+
+      118 |   });
+      119 |   await save.click();
+    > 120 |   await expect(page.getByText('Name saved', { exact: true })).toBeVisible();
+          |                                                               ^
+      121 |   await expect(name).toHaveValue('Baseline Reviewer Updated');
+      122 |   await expect(save).toBeDisabled();
+      123 |   await page.getByRole('button', { name: 'Change password', exact: true }).click();
+        at profileScenario (/var/tmp/p32r2-ref/src/web/ui-migration/page-scenarios.mjs:120:63)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0-profile-chromium-light-desktop/pages.browser.mjs-profile-chromium-light-desktop/attachments/computed-styles-and-timings-4d0ed0fed4be925690ee4438a9331e1012152358.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../p32r2-final/r2b-ref-p0-profile-chromium-light-desktop/pages.browser.mjs-profile-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../p32r2-final/r2b-ref-p0-profile-chromium-light-desktop/pages.browser.mjs-profile-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../p32r2-final/r2b-ref-p0-profile-chromium-light-desktop/pages.browser.mjs-profile-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile ────────────────────────

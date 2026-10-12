@@ -1,0 +1,581 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-10). The agent's question (AskUserQuestion) once it has been answered, in the
+     iPhone transcript. The owner's 10:14 screenshot: one answered question fills two thirds of the screen;
+     the question is 17pt bold (ToolBodyView .markdown → MarkdownView base .body, the card's .orbitProseAside
+     is ignored on iOS), the options are bare bullets with nothing marking the pick, and OUTPUT restates the
+     whole question in monospace with the answer at its very end, under the composer.
+     This board: today, the card as "what was asked + how you answered" (unfolding to the question and every
+     option as asked), the other ways a question ends, the two open choices, and what landing costs.
+     Data: the question, header, options and descriptions are the real call from the screenshot's session;
+     the second question is a real call from another session about the same iPad work. Typed answers, the
+     chat reply and the multi-select question are made up.
+     Geometry: the screenshot (1179×2556 @3x → 393×852 pt): nav to 113, "Your question" strip 113–145,
+     composer from 707. Card: rail 3pt, padding 11/10/6, row 22pt, open box radius 8 (ToolCards.swift).
+     Type: orbitProse 17, orbitProseAside 16, orbitLabel 13, orbitMono 13 (Typography.swift, iOS default size).
+     Render: node /mnt/data/tmp/ask-question-card/render.mjs <this file> <outdir>. -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>Agent 提问卡（AskUserQuestion）：答完以后，卡上写「问了什么 + 你怎么答的」 — iPhone 设计图</title>
+<style>
+  :root {
+    --blue: #007AFF; --purple: #AF52DE; --green: #34C759; --red: #FF3B30;
+    --accent: #3E69F6;
+    --label: #000; --label2: rgba(60,60,67,.6); --label3: rgba(60,60,67,.36);
+    --sep: rgba(60,60,67,.29);
+    --mk: #E5484D; --mkfill: #F08A24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px; background: #e9e9ee; color: #16161a; width: 2010px;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .part { background: #f7f7f9; border-radius: 26px; padding: 30px 34px 34px; }
+  .part + .part { margin-top: 30px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 21px; margin: 0 0 6px; }
+  .lede { color: #4d4d56; font-size: 15.5px; max-width: 1840px; margin: 0 0 6px; }
+  .lede b, .cap b, .cols b, .steps b, .note b { color: #16161a; }
+  code, .mono { font-family: "DejaVu Sans Mono", monospace; }
+  code { font-size: 12.5px; background: #e4e4ea; border-radius: 4px; padding: 1px 5px; }
+  .tag { display: inline-block; font: 600 12.5px/1 "Inter", "Noto Sans SC", sans-serif; padding: 5px 9px; border-radius: 7px; margin-bottom: 12px; }
+  .tag.now { background: #ffe1dc; color: #b3261e; }
+  .tag.new { background: #dfe8ff; color: #2346c4; }
+  .tag.alt { background: #efe3ff; color: #6a2bb8; }
+  .tag.open { background: #fff0d1; color: #8a5300; }
+  .row { display: flex; gap: 38px; align-items: flex-start; margin-top: 22px; }
+  figure { margin: 0; flex: none; width: 393px; }
+  .cap { margin-top: 16px; font-size: 14px; line-height: 1.68; color: #4d4d56; }
+  .cap > b:first-child { display: block; font-size: 15px; margin-bottom: 4px; }
+  .cap ol { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  .cap li { margin-top: 6px; padding-left: 28px; position: relative; }
+  .cap li .n { position: absolute; left: 0; top: 2px; }
+  .n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--mkfill);
+       color: #fff; font: 700 12px/1 "Inter", sans-serif; }
+  .n.g { background: #8e8e96; }
+  .note { font-size: 14px; line-height: 1.75; color: #4d4d56; }
+  .note p { margin: 0 0 10px; } .note p:last-child { margin-bottom: 0; }
+  .note ul { margin: 6px 0 10px; padding-left: 18px; } .note li { margin-top: 3px; }
+  .card { background: #fff; border-radius: 22px; padding: 18px 22px; box-shadow: 0 8px 26px rgba(0,0,0,.08); }
+  pre.res { margin: 8px 0 0; padding: 10px 12px; background: #f1f1f4; border-radius: 10px; font: 12px/1.55 "DejaVu Sans Mono", monospace;
+            white-space: pre-wrap; word-break: break-word; color: #3a3a42; }
+  pre.res b { color: #b3261e; font-weight: 700; }
+  pre.res i { color: #2346c4; font-style: normal; font-weight: 700; }
+
+  /* ── the phone, 393 × 852 pt ── */
+  .phone { width: 393px; height: 852px; border-radius: 54px; overflow: hidden; position: relative; background: #fff; color: var(--label);
+           box-shadow: 0 14px 44px rgba(0,0,0,.16); border: 1px solid rgba(0,0,0,.08);
+           font-family: "Inter", "Noto Sans SC", sans-serif; line-height: 1.3; }
+  .phone > img.shot { position: absolute; inset: 0; width: 393px; height: 852px; }
+  .sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; justify-content: space-between; align-items: center;
+        padding: 6px 30px 0 46px; z-index: 3; }
+  .sb .time { font-size: 17px; font-weight: 700; }
+  .sb .sys { display: flex; gap: 6px; align-items: center; font-size: 15px; font-weight: 600; }
+  .sb .bat { background: #000; color: #fff; border-radius: 6px; font: 700 12.5px/1 "Inter", sans-serif; padding: 3px 5px; position: relative; }
+  .sb .bat::after { content: ""; position: absolute; right: -4px; top: 6px; width: 2.5px; height: 5px; border-radius: 0 2px 2px 0; background: #b9b9be; }
+  .chat .sb, .chat .nav, .chat .yq { background: #F7F7F7; }
+  .nav { position: absolute; top: 54px; left: 0; right: 0; height: 59px; z-index: 2; }
+  .circ { position: absolute; top: 5px; width: 46px; height: 46px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,.07);
+          box-shadow: 0 2px 10px rgba(0,0,0,.09); display: grid; place-items: center; }
+  .circ.back { left: 16px; } .circ.more { right: 16px; }
+  .ttl { position: absolute; left: 72px; right: 72px; top: 9px; text-align: center; }
+  .t1 { font-size: 17px; font-weight: 600; line-height: 22px; white-space: nowrap; }
+  .t2 { font-size: 12.5px; line-height: 16px; color: var(--label2); margin-top: 3px; white-space: nowrap; }
+  .yq { position: absolute; top: 113px; left: 0; right: 0; height: 32px; display: flex; align-items: center; gap: 7px; padding: 0 16px;
+        font-size: 14.5px; white-space: nowrap; overflow: hidden; z-index: 2; }
+  .yq span { color: var(--label2); } .yq b { font-weight: 400; }
+  .yq::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; transform: scaleY(.5); background: var(--sep); }
+  .tx { position: absolute; left: 0; right: 0; top: 145px; bottom: 145px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+  .tx.top { justify-content: flex-start; }
+  .tx > * { flex: none; }
+  .msg { padding: 0 18px; font-size: 17px; line-height: 1.5; margin-top: 12px; }
+  .msg p { margin: 0 0 10px; }
+  .down { position: absolute; left: 177px; width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.14);
+          display: grid; place-items: center; z-index: 2; }
+  .band { position: absolute; left: 0; right: 0; bottom: 0; height: 145px; background: #fff; z-index: 2; }
+  .band::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; transform: scaleY(.5); transform-origin: top; background: var(--sep); }
+  .cmp { position: absolute; left: 16px; right: 16px; top: 12px; height: 88px; border: 1px solid #E3E3E6; background: #FAFAFA; border-radius: 26px; padding: 13px 16px; }
+  .cmp .ph { font-size: 17px; color: rgba(60,60,67,.3); }
+  .cmp .tb { position: absolute; left: 14px; right: 9px; bottom: 9px; display: flex; align-items: center; gap: 14px; font-size: 16px; color: #55555e; }
+  .cmp .tb .md { margin-left: auto; color: #000; font-weight: 600; } .cmp .tb .md span { color: var(--label2); font-weight: 400; }
+  .cmp .tb .bar { width: 20px; height: 3.5px; border-radius: 2px; background: #3E69F6; }
+  .cmp .tb .stop { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; z-index: 4; }
+
+  /* ── a transcript tool card (ToolCards.swift ToolCardView) ── */
+  .tc { position: relative; margin: 10px 16px 0; padding: 6px 10px 6px 11px; }
+  .tc::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--tone, var(--purple)); }
+  .tc.open { background: rgba(142,142,147,.06); border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); overflow: hidden; }
+  .tc.read { --tone: var(--blue); } .tc.write { --tone: #FF9500; } .tc.exec { --tone: #30B0C7; }
+  .tc.bad { --tone: var(--red); }
+  .tr { display: flex; align-items: center; gap: 7px; height: 22px; white-space: nowrap; }
+  .tr .cv { width: 8px; flex: none; display: grid; place-items: center; }
+  .tr .ch { width: 20px; height: 20px; border-radius: 5px; background: color-mix(in srgb, var(--tone, var(--purple)) 14%, transparent);
+            display: grid; place-items: center; flex: none; }
+  .tr .lb { font: 600 13px/1 "DejaVu Sans Mono", monospace; flex: none; }
+  .tr .sm { font-size: 13px; color: var(--label2); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .tr .sm.mono { font: 13px/1 "DejaVu Sans Mono", monospace; }
+  .tr .sm b { color: var(--label); font-weight: 600; }
+  .tr .st { flex: none; display: grid; place-items: center; }
+  /* folded: what was asked + how you answered */
+  .tq { margin-top: 5px; font-size: 13px; line-height: 18px; color: var(--label2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tq.one { -webkit-line-clamp: 1; margin-top: 7px; }
+  .ta { margin-top: 3px; display: flex; gap: 6px; align-items: flex-start; font-size: 16px; line-height: 21px; }
+  .ta .ic { flex: none; margin-top: 3px; }
+  .ta .w { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ta.reply .w { color: var(--label); }
+  .tsub { margin: 1px 0 0 21px; font-size: 13px; line-height: 18px; color: var(--label2); }
+  /* unfolded: the question and every option, as asked */
+  .qh2 { margin-top: 10px; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--label2);
+         display: flex; align-items: center; gap: 6px; }
+  .qh2 .mc { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11px; background: rgba(120,120,128,.12); border-radius: 8px; padding: 1px 6px; }
+  .qfull { margin-top: 6px; font-size: 16px; line-height: 1.45; }
+  .op { display: flex; gap: 9px; align-items: flex-start; padding: 8px 10px; margin: 4px 0 0; border-radius: 10px; }
+  .op:first-of-type { margin-top: 8px; }
+  .op.on { background: rgba(0,122,255,.08); }
+  .op .rd { flex: none; margin-top: 2px; }
+  .op .ol { font-size: 16px; line-height: 21px; }
+  .op .ow { font-size: 13px; line-height: 18px; color: var(--label2); margin-top: 2px; }
+  .op:not(.on) .ol { color: var(--label2); }
+  .op:not(.on) .ow { color: var(--label3); }
+  .yours { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(0,122,255,.08); font-size: 16px; line-height: 21px; }
+  .yours .k { display: block; font-size: 12px; line-height: 16px; color: var(--label2); margin-bottom: 2px; }
+  .qsep { height: 1px; transform: scaleY(.5); background: var(--sep); margin: 12px 0 0; }
+  /* today's body: markdown, bold question, bullets, OUTPUT */
+  .md0 { margin-top: 8px; font-size: 17px; line-height: 1.6; }
+  .md0 b { font-weight: 700; }
+  .md0 ul { margin: 6px 0 0; padding-left: 22px; }
+  .outp { margin-top: 8px; padding: 6px 9px; border-radius: 6px; background: rgba(142,142,147,.12); }
+  .outp.err { background: rgba(255,59,48,.10); }
+  .outp .k { font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--label2); }
+  .outp.err .k { color: var(--red); }
+  .outp .v { font: 13px/1.5 "DejaVu Sans Mono", monospace; color: var(--label2); }
+
+  /* ── the record card and its sheet (option B: the coordinator-question look) ── */
+  .qc { margin: 12px 16px 0; border-radius: 14px; padding: 14px; background: rgba(0,122,255,.07); border: 1px solid rgba(0,122,255,.28); opacity: .72; }
+  .qch { display: flex; align-items: center; gap: 8px; height: 22px; }
+  .chipq { width: 22px; height: 22px; border-radius: 6px; background: rgba(0,122,255,.16); display: grid; place-items: center; flex: none; }
+  .qch .t { font-size: 17px; font-weight: 700; } .qch .tm { margin-left: auto; font-size: 13px; color: var(--label2); }
+  .qc .tq { margin-top: 10px; }
+  .qc .ta { margin-top: 6px; font-size: 17px; line-height: 22px; }
+  .qd { height: 1px; transform: scaleY(.5); background: var(--sep); margin: 12px 0; }
+  .qm { display: flex; align-items: center; font-size: 13px; font-weight: 600; color: var(--accent); height: 18px; } .qm svg { margin-left: auto; }
+  .phone.sheetp { background: #C7C7C7; }
+  .sheet { position: absolute; top: 60px; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 30px 30px 54px 54px; overflow: hidden; }
+  .grab { position: absolute; top: 7px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: #D4D4D8; }
+  .shn { position: absolute; top: 12px; left: 0; right: 0; height: 63px; padding-top: 3px; text-align: center; font-size: 17px; font-weight: 600; line-height: 44px; background: #fff; z-index: 2; }
+  .x { z-index: 3; position: absolute; right: 16px; top: 15px; width: 44px; height: 44px; border-radius: 50%; background: #fff; border: 1px solid rgba(0,0,0,.08);
+       box-shadow: 0 2px 10px rgba(0,0,0,.08); display: grid; place-items: center; }
+  .shb { position: absolute; top: 75px; left: 0; right: 0; bottom: 0; padding: 16px 16px 0; overflow: hidden; }
+  .shb .qfull { font-size: 17px; }
+  .shb .op .ol { font-size: 17px; line-height: 22px; }
+  .prov { display: flex; justify-content: space-between; font-size: 13px; line-height: 18px; color: var(--label2); }
+  .shbar { position: absolute; left: 0; right: 0; bottom: 0; background: #F7F7F7; padding: 12px 16px 30px; }
+  .shbar::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; transform: scaleY(.5); transform-origin: top; background: var(--sep); }
+  .shbar .r1 { display: flex; gap: 7px; align-items: center; font-size: 15px; line-height: 20px; font-weight: 600; }
+
+  /* ── marks: dashed outline + numbered dot, placed after layout ── */
+  .ol-mk { position: absolute; border: 2px dashed var(--mk); border-radius: 12px; z-index: 6; pointer-events: none; }
+  .dot-mk { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: var(--mkfill); color: #fff; z-index: 7;
+            font: 700 12.5px/22px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+  .hot { position: absolute; left: 18px; right: 16px; }
+
+  /* ── snippets: a card at phone width, out of its phone ── */
+  .snip { width: 393px; background: #fff; border-radius: 24px; padding: 4px 0 16px; box-shadow: 0 8px 26px rgba(0,0,0,.10); position: relative; }
+  .snip .sl { font: 600 11.5px/1 "DejaVu Sans Mono", monospace; color: #8a8a93; letter-spacing: .04em; padding: 14px 18px 2px; text-transform: uppercase; }
+  .snip .sl + .tc { margin-top: 8px; }
+  .snip .meas { position: absolute; right: -58px; top: 0; bottom: 0; width: 46px; border-left: 2px solid #b8b8c2; }
+  .snip .meas span { position: absolute; top: 50%; left: 8px; transform: translateY(-50%); font: 600 12.5px/1.2 "Inter", sans-serif; color: #6b6b75; white-space: nowrap; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 393px); gap: 30px 38px; margin-top: 22px; align-items: start; }
+  .pick { border: 2px solid #3E69F6; border-radius: 18px; padding: 14px 18px; background: #fff; }
+  .pick.no { border-color: #d9d9e0; }
+  .pick ul { margin: 8px 0 0; padding-left: 18px; font-size: 14.5px; line-height: 1.72; color: #4d4d56; }
+  .steps { margin-top: 16px; font-size: 15px; line-height: 1.72; color: #4d4d56; max-width: 1300px; }
+  .steps ol { margin: 0; padding-left: 0; list-style: none; counter-reset: s; }
+  .steps li { position: relative; padding: 12px 0 12px 44px; border-top: 1px solid #e0e0e6; }
+  .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 13px; width: 28px; height: 28px; border-radius: 8px;
+                      background: #2346c4; color: #fff; font: 700 14px/28px "Inter", sans-serif; text-align: center; }
+  .steps li.opt::before { background: #9a9aa4; }
+  .steps .cost { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 7px; margin-left: 8px; background: #e7ecff; color: #2346c4; vertical-align: 1px; }
+  .steps li.opt .cost { background: #ececf0; color: #66666f; }
+</style>
+
+<body>
+<!-- ═══════════════ 1 · today ═══════════════ -->
+<section class="part" id="part-1">
+  <h1>Agent 提问卡（AskUserQuestion）：答完以后，卡上写「问了什么 + 你怎么答的」</h1>
+  <p class="lede">截图那一屏：agent 问了一个问题，你选了第一项。答完后对话里留下的这张卡占了三分之二屏：<b>问题被排成 17pt 粗体，选项是一串圆点，哪项是你选的看不出来；底下 OUTPUT 又把整个问题用等宽字抄一遍，你的答案在它最后一句，被输入框挡住了。</b>这张卡上最该看到的那一句，这一屏上恰好没有。</p>
+  <div class="row">
+    <figure>
+      <span class="tag now">现状 · 10:14 截图</span>
+      <div class="phone" id="p-today"></div>
+      <div class="cap"><b>对话里，答完之后</b><ol>
+        <li><span class="n">1</span>问题按 Markdown 加粗、正文字号排，12 行。卡片本来要用小一号的 aside 字号（16pt），可 iOS 上工具卡里的 Markdown 不认这个设置，退回了 17pt 正文。</li>
+        <li><span class="n">2</span>三个选项只剩选项名，每项一个圆点：你选了哪项，没有任何标记；每项的说明也没画。</li>
+        <li><span class="n">3</span>OUTPUT 是 agent 收到的原话：<code>The user answered: "&lt;整个问题&gt;"="&lt;你的选择&gt;". Read the answers…</code>。等宽字把整个问题再排约 15 行，你的选择在问题后面，要滚过这一大段才看得到。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag now">现状 · 点 Chat about this 回了一句话</span>
+      <div class="snip" id="today-chat"><div class="sl">In the conversation</div></div>
+      <div class="cap"><ol>
+        <li><span class="n">4</span>不选选项、在输入框里回一句话，这句话会变成这次调用的「错误」结果：行尾红叉，卡里一块红底 ERROR，内容是你自己说的话。读起来像出错了。对话里别处也没有这句话。</li>
+      </ol></div>
+    </figure>
+    <figure style="width:560px">
+      <span class="tag open">卡片手里有什么</span>
+      <div class="card note">
+        <p><b>调用的输入</b>：每个问题的原文、短标题（header，如 <code>Swipe right</code>）、选项名和说明、能不能多选。有的选项还带 agent 画的小样（<code>preview</code>），今天哪一端都不显示，提问时也看不到，见「落地」第 5 步。</p>
+        <p><b>调用的结果</b>：只有一段给 agent 看的文字，选择不单独存。Claude 现在写的是：</p>
+        <pre class="res">The user answered: "On iPad, what should a swipe right from the left edge do? Today there are two places … goes back on a pushed page."=<i>"Both, like the iPhone (Recommended)"</i>. Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.</pre>
+        <ul>
+          <li>几个问题用 <code>, </code> 接着写；多选的几项在同一对引号里用逗号连起来；自己打的字照原样放在引号里。</li>
+          <li>点 Chat about this 回的话，结果是<b>错误</b>，内容就是你那句话：</li>
+        </ul>
+        <pre class="res"><b>is_error</b>  Before I pick: does the left swipe still close the sidebar once it's open?</pre>
+        <p style="margin-top:10px">Web 已经在用这段文字给选中的选项打勾，只是 OUTPUT 照样跟在下面，回话也是红色。按问题原文切开这段文字，每个问题选了哪几项、写了什么字都拿得到。不用改服务端。</p>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════ 2 · proposal ═══════════════ -->
+<section class="part" id="part-2">
+  <h2>建议：卡上写「问了什么 + 你怎么答的」，点开原样回放问题和每个选项</h2>
+  <p class="lede">和昨天定的协调者提问卡同一个写法：卡上写问题开头两行，再写你的回答；点开看全文和全部选项，你选的那项打勾。仍然是对话里的一张工具卡（紫色竖条、<code>Question</code>），只换卡里画什么。</p>
+  <div class="row">
+    <figure>
+      <span class="tag new">建议 · 对话里（不点开）</span>
+      <div class="phone chat" id="p-new"></div>
+      <div class="cap"><b>收起时就是一条记录</b><ol>
+        <li><span class="n">1</span>问题的开头两行，13pt 灰字。几个问题挨着时，看得出各问的是哪件事。</li>
+        <li><span class="n">2</span>你的回答：蓝勾，16pt 黑字，最多两行。截图那一问，整张卡从 550pt 降到约 90pt。</li>
+        <li><span class="n g">3</span>OUTPUT 不再显示：它只是把上面两样再说一遍。只有切不开的时候（结果的格式变了），才照旧显示原文，什么都不会丢。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">建议 · 点一下卡片</span>
+      <div class="phone chat" id="p-open"></div>
+      <div class="cap"><b>点开：原样回放</b><ol>
+        <li><span class="n">1</span>问题全文，16pt 常规字重，保留 agent 写的换行。不再加粗。</li>
+        <li><span class="n">2</span>每个选项都在，说明也在。你选的那项蓝勾加淡蓝底；没选的变灰，但读得清。和协调者提问卡的详情是同一套选项行。</li>
+        <li><span class="n">3</span>再点一下标题行收回去。和其它工具卡一样，在原地展开，不跳页。</li>
+      </ol></div>
+    </figure>
+    <figure style="width:auto">
+      <span class="tag open">同一张卡，三端</span>
+      <div class="card note" style="width:600px">
+        <p><b>iOS 和 macOS</b> 是同一份 SwiftUI 代码，一起改。Mac 上字号小一档，排法相同。</p>
+        <p><b>Web</b> 今天这张卡：问题、选项和说明都画了，选中的打勾，默认展开；OUTPUT 照样跟在下面，回话是红色。改成什么样见「待定 ②」。</p>
+        <p><b>Android</b> 对话里没有逐个工具画的卡：每次调用都是一行 <code>AskUserQuestion · Complete · Show input and output</code>，点开是输入和输出的原始 JSON。要画这张卡，得先有工具卡这一层，单独做（见「落地」第 6 步）。</p>
+        <p><b>还没答的时候</b>不变：仍然是蓝色的 <code>A question for you</code> 卡，点开答题。这张工具卡在答完之后才出现，今天就是这样。</p>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════ 3 · the other endings ═══════════════ -->
+<section class="part" id="part-3">
+  <h2>其余几种答法</h2>
+  <p class="lede">同一张卡，只有回答那一行和点开后的选项区不同。上面一张是收起时，下面一张是点开后（节选）。</p>
+  <div class="grid4" id="states"></div>
+</section>
+
+<!-- ═══════════════ 4 · the open choices ═══════════════ -->
+<section class="part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+  <p class="lede"><b>① 点开以后，全文在哪看。</b>左边是建议：在原地展开（上面画的）。右边是协调者提问卡的做法：对话里放一张蓝色的 Answered 卡，点 View details 弹出详情页。</p>
+  <div class="row" style="gap:34px">
+    <figure>
+      <span class="tag new">方案 A（推荐）· 原地展开</span>
+      <div class="phone chat" id="p-a"></div>
+    </figure>
+    <figure>
+      <span class="tag alt">方案 B · 蓝色 Answered 卡</span>
+      <div class="phone chat" id="p-b"></div>
+    </figure>
+    <figure>
+      <span class="tag alt">方案 B · 点 View details</span>
+      <div class="phone sheetp" id="p-b-sheet"></div>
+    </figure>
+    <div style="width:520px;margin-top:38px">
+      <div class="pick">
+        <b style="font-size:16px;color:#2346c4">推荐 A</b>
+        <ul>
+          <li>这是 agent 对话里的一次调用，和 Plan、Bash、Edit 是一家：它们都在原地展开，问题卡也这样，不多一种操作。</li>
+          <li>B 让对话里出现两种「问答记录」：协调者问的是蓝卡，agent 问的也是蓝卡，但前者是项目里的待办，后者只是这次对话的一步，混在一起反而难分。</li>
+          <li>A 只改卡里画什么；B 还要给工具卡加一个能弹详情页的入口，Mac 和 Web 也要各配一个。</li>
+        </ul>
+      </div>
+      <div class="pick no" style="margin-top:14px">
+        <b style="font-size:16px;color:#6a2bb8">B 的好处</b>
+        <ul>
+          <li>问题长、选项多时，整页详情比在对话里展开好读，展开也不会把对话往下推。</li>
+          <li>和提问时的那张卡（也是点开一页）前后一致。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:34px"><b>② Web 怎么跟。</b></p>
+  <div class="row" style="gap:26px;margin-top:10px">
+    <div class="pick" style="width:620px">
+      <b style="font-size:16px;color:#2346c4">推荐 A · Web 也换成同一张卡</b>
+      <ul>
+        <li>收起时同样是问题开头 + 你的回答，点开是全文和选项；OUTPUT 不显示；回话不再是红色。三端字句一致（有测试盯着不许走样），回看时在手机和电脑上看到的是同一种卡。</li>
+        <li>Web 本来就在用同一段结果文字打勾，只是改成按问题切开，顺便把自己打的字和回话也认出来。</li>
+      </ul>
+    </div>
+    <div class="pick no" style="width:620px">
+      <b style="font-size:16px;color:#6a2bb8">B · Web 只修两处</b>
+      <ul>
+        <li>Web 的对话栏宽，问题和选项默认全展开也放得下，所以只去掉重复的 OUTPUT、把回话改成不是红色，其余照旧。</li>
+        <li>代价：同一个问题，手机上是两行记录，网页上是一整张卡，两边看起来不是同一个东西。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 5 · landing ═══════════════ -->
+<section class="part" id="part-5">
+  <h2>落地（按代价排）</h2>
+  <div class="steps">
+    <ol>
+      <li><b>OrbitKit：把结果文字按问题切开</b><span class="cost">只改客户端</span><br>
+        拿问题原文去结果里找 <code>"&lt;问题&gt;"="…"</code>，得到每个问题选中的选项和自己打的字；多选按逗号认选项名（选项名里本身带逗号也认得出）。错误结果里，<code>&lt;tool_use_error&gt;</code> 开头的、runner 自己写的几句（<code>approval poll failed</code>、<code>denied by the user</code>）是真失败，照旧红色；其余的是你在对话里回的话。格式认不出时一律退回今天的样子。Linux 上就能跑单测。</li>
+      <li><b>iOS / macOS：卡片按第 2、3 部分改</b><span class="cost">只改客户端</span><br>
+        收起时问题开头 + 回答；点开问题全文 + 选项行（沿用协调者提问卡详情页的选项行）；OUTPUT 只在切不开时显示；回话的行尾不再是红叉。用 macOS 26 的 CI 模拟器出改前、改后截图，各种答法都拍到。</li>
+      <li><b>Web：同一张卡</b><span class="cost">Web</span>（按「待定 ②」，选 B 就只去 OUTPUT、改回话颜色）<br>
+        现有的 <code>Questions</code> 组件改成同样两种状态；用同一套切法。新加的几句英文（<code>Replied in chat</code>、<code>Your answer</code>）两端共用，各有测试对着对方的源码。</li>
+      <li class="opt"><b>顺带 · iOS 上 Plan 卡、Agent 卡里的 Markdown 也是 17pt</b><span class="cost">一行</span><br>
+        和第 1 处是同一个原因：工具卡里的 Markdown 没按 16pt aside 排。要不要一起改小一号，你定；不改也不影响这张问题卡。</li>
+      <li class="opt"><b>另起一件事 · 选项的小样（preview）</b><span class="cost">另起任务</span><br>
+        agent 可以给每个选项附一段小样（文字画的界面、代码片段），本意是让你对照着选。今天三端提问时都不显示，答完也看不到。这比答完后的记录更影响你做决定，建议单独排。</li>
+      <li class="opt"><b>以后 · Android</b><span class="cost">另起任务</span><br>
+        Android 对话里还没有逐个工具画的卡，先要有这一层，问题卡才能接上。</li>
+    </ol>
+    <p style="margin:14px 0 0;font-size:14.5px;color:#4d4d56">建议 1–3 一起做，一个任务、一次落地；4 你说要就带上；5、6 另起。</p>
+  </div>
+</section>
+
+<script>
+/* ── glyphs ── */
+const IC = {
+  signal: '<svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="8" width="3.2" height="4" rx="1"/><rect x="5.1" y="5.4" width="3.2" height="6.6" rx="1"/><rect x="10.2" y="2.7" width="3.2" height="9.3" rx="1"/><rect x="15.3" y="0" width="3.2" height="12" rx="1"/></svg>',
+  back: '<svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2 2.5 10 10 18" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  more: '<svg width="22" height="6" viewBox="0 0 22 6"><circle cx="3" cy="3" r="2.4"/><circle cx="11" cy="3" r="2.4"/><circle cx="19" cy="3" r="2.4"/></svg>',
+  chevR: (c = '#B8B8BE', h = 13) => `<svg width="${h * 0.6}" height="${h}" viewBox="0 0 8 13"><path d="M1.6 1.5 6.4 6.5 1.6 11.5" fill="none" stroke="${c}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  up: '<svg width="12" height="14" viewBox="0 0 12 14"><path d="M6 13V2M1.5 6.2 6 1.6l4.5 4.6" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  down: '<svg width="16" height="18" viewBox="0 0 16 18"><path d="M8 2v13M2.5 9.6 8 15.2l5.5-5.6" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  ring: '<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke-width="2.6"><circle cx="11" cy="11" r="8.2" stroke="#D9E2FD"/><path d="M11 2.8a8.2 8.2 0 1 1-8 10.2" stroke="#3E69F6" stroke-linecap="round"/></svg>',
+  stop: '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="0" y="0" width="12" height="12" rx="2.4" fill="#fff"/></svg>',
+  xmark: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M2.5 2.5l11 11M13.5 2.5l-11 11" stroke="#000" stroke-width="2" stroke-linecap="round"/></svg>',
+  /* the tool row's chevron, turned when open */
+  cv: (open) => `<svg width="7" height="11" viewBox="0 0 8 13" style="transform:rotate(${open ? 90 : 0}deg)"><path d="M1.8 1.5 6.4 6.5 1.8 11.5" fill="none" stroke="rgba(60,60,67,.3)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* SF questionmark.circle, doc.text, pencil */
+  q: (c = '#AF52DE') => `<svg width="12" height="12" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.8" fill="none" stroke="${c}" stroke-width="1.5"/><path d="M6.1 6.2c.1-1.1 .9-1.8 1.9-1.8s1.9.7 1.9 1.7c0 .8-.5 1.2-1.1 1.6-.5.3-.8.7-.8 1.2v.3" fill="none" stroke="${c}" stroke-width="1.45" stroke-linecap="round"/><circle cx="8" cy="11.5" r=".95" fill="${c}"/></svg>`,
+  doc: '<svg width="11" height="12" viewBox="0 0 14 16" fill="none" stroke="#007AFF" stroke-width="1.5"><path d="M3 1.5h5.5L12 5v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M5 8h5M5 11h5" stroke-linecap="round"/></svg>',
+  pencil: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#FF9500" stroke-width="1.6" stroke-linejoin="round"><path d="M10.8 2.2 13.8 5.2 5.6 13.4 2 14l.6-3.6z"/></svg>',
+  okc: (s = 13) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.6" fill="#34C759"/><path d="M4.6 8.2 7 10.5l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  errc: (s = 13) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.6" fill="#FF3B30"/><path d="M5.3 5.3l5.4 5.4M10.7 5.3l-5.4 5.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  ckc: (c = '#007AFF', s = 15) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.6" fill="${c}"/><path d="M4.6 8.2 7 10.5l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  cks: (s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><rect x=".6" y=".6" width="14.8" height="14.8" rx="3.4" fill="#007AFF"/><path d="M4.4 8.2 6.9 10.6l4.7-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  sq0: (s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><rect x="1.2" y="1.2" width="13.6" height="13.6" rx="3" fill="none" stroke="rgba(60,60,67,.3)" stroke-width="1.4"/></svg>`,
+  ring0: (s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8.6" fill="none" stroke="rgba(60,60,67,.3)" stroke-width="1.5"/></svg>`,
+  /* SF bubble.left.fill */
+  bub: (c = '#007AFF', s = 15) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><path d="M8 1.8c3.8 0 6.8 2.5 6.8 5.6S11.8 13 8 13c-.7 0-1.4-.1-2-.2l-3.1 1.6c-.5.2-.9-.2-.8-.6l.5-2.2C1.6 10.5 1.2 9 1.2 7.4 1.2 4.3 4.2 1.8 8 1.8z" fill="${c}"/></svg>`,
+  qb: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1.3c3.9 0 7 2.6 7 5.8s-3.1 5.8-7 5.8c-.6 0-1.2-.1-1.8-.2L3 14.4c-.5.3-1-.1-.9-.6l.5-2.3C1.6 10.4 1 8.8 1 7.1 1 3.9 4.1 1.3 8 1.3z" fill="#007AFF"/><path d="M6.2 5.7c.1-1 .9-1.7 1.9-1.7s1.9.7 1.9 1.7c0 .7-.4 1.1-1 1.5-.5.3-.8.6-.8 1.1v.2" fill="none" stroke="#fff" stroke-width="1.35" stroke-linecap="round"/><circle cx="8.1" cy="10.4" r=".85" fill="#fff"/></svg>',
+};
+
+/* ── data: the screenshot's question, word for word; a real second one from the same iPad work ── */
+const SWIPE = {
+  header: 'Swipe right', multi: false,
+  question: "On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.",
+  options: [
+    { label: 'Both, like the iPhone (Recommended)', why: "On a list page, swiping right from the screen's left edge opens the sidebar (swiping left on it closes it). On an in-column page with a Back button, swiping right from that column's left edge goes back one page." },
+    { label: 'Open the sidebar only', why: "Swiping right from the screen's left edge opens the sidebar; going back still uses only the Back button." },
+    { label: 'Swipe back only', why: 'On an in-column page with a Back button, swiping right goes back; the sidebar still opens only from the toolbar button.' },
+  ],
+};
+const TOPLEFT = {
+  header: 'Top-left', multi: false,
+  question: 'When a project page is opened from the session list (or from a folder), swiping from the left edge will go back to that list. What should the top-left button be on that page? Opened from the drawer, a notification or the merge banner, it keeps ☰ and the edge swipe still opens the drawer.',
+  options: [
+    { label: '‹ Back (Recommended)', why: "Standard iOS: the button and the swipe both go back to the list. This brings ‹ back only on this entry point; yesterday's ☰ stays for the drawer." },
+    { label: 'Keep ☰', why: 'As you asked yesterday: ☰ opens the drawer and the edge swipe goes back. iOS turns swipe-back off when the back button is hidden, so this needs a UIKit workaround.' },
+  ],
+};
+const CLIENTS = {
+  header: 'Clients', multi: true,
+  question: 'Which clients should get the new card in this change?',
+  options: [
+    { label: 'iOS and macOS', why: 'One SwiftUI view serves both.' },
+    { label: 'Web', why: 'The same words, in its own component.' },
+    { label: 'Android', why: 'No per-tool cards there yet; this would be the first.' },
+  ],
+};
+const TYPED = "Only on list pages for now; leave going back to the button.";
+const REPLY = "Before I pick: does the left swipe still close the sidebar once it's open?";
+
+/* ── phone chrome ── */
+const statusBar = (time, bat = 70) =>
+  `<div class="sb"><span class="time">${time}</span><span class="sys">${IC.signal}<span class="bat">${bat}</span></span></div>`;
+function chatChrome(time) {
+  return statusBar(time) +
+    `<div class="nav"><div class="circ back">${IC.back}</div>
+       <div class="ttl"><div class="t1">iPad 侧边右滑失效</div><div class="t2">Running · Open · just now</div></div>
+       <div class="circ more">${IC.more}</div></div>` +
+    `<div class="yq">${IC.up}<span>Your question</span><b>iPad不支持侧边右滑</b></div>`;
+}
+const band = () => `<div class="band"><div class="cmp"><div class="ph">Message...</div><div class="tb"><span style="font-size:28px;font-weight:300;line-height:1;color:#55555e">+</span><span>Auto</span><span class="md">Opus 5.5 <span>Max</span></span><span class="bar"></span>${IC.ring}<span class="stop">${IC.stop}</span></div></div></div><div class="home"></div>`;
+
+const EARLIER = `<div class="msg"><p>On the iPhone both come for free: the drawer takes the edge swipe on a list page, and the navigation stack takes it on a pushed page. The iPad's split view has neither, so nothing answers the swipe there.</p></div>
+  <div class="tc read"><div class="tr"><span class="cv">${IC.cv(false)}</span><span class="ch">${IC.doc}</span><span class="lb">Read × 4</span><span class="sm">4 succeeded</span><span class="st">${IC.okc()}</span></div></div>`;
+const BEFORE = `<div class="msg"><p>Two places on the iPad ignore the swipe today, and on a list page they want different things from the same gesture — so I'm asking before I change either.</p></div>`;
+const AFTER = `<div class="msg"><p>Both, then. The sidebar first: on a list page an edge swipe opens it, and a left swipe on it closes it.</p></div>`;
+const ROWS = `
+  <div class="tc read"><div class="tr"><span class="cv"></span><span class="ch">${IC.doc}</span><span class="lb">Read</span><span class="sm mono"><b>SidebarSplit.swift</b> …/Views/</span><span class="st">${IC.okc()}</span></div></div>
+  <div class="tc write"><div class="tr"><span class="cv"></span><span class="ch">${IC.pencil}</span><span class="lb">Edit</span><span class="sm mono"><b>CompactShell.swift</b> …/Views/</span><span class="st">${IC.okc()}</span></div></div>`;
+
+/* ── the question card ──
+   v: { qs: [question…], picks: [[index…]…], typed: [text|null…], reply, open, fail, mk: {…} } */
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+function row(v) {
+  const status = v.fail ? IC.errc() : v.reply ? IC.bub('rgba(60,60,67,.45)', 14) : IC.okc();
+  const summary = v.qs.map((q) => q.header).join('  ·  ');
+  return `<div class="tr"><span class="cv">${IC.cv(v.open)}</span><span class="ch">${IC.q()}</span><span class="lb">Question</span><span class="sm">${summary}</span><span class="st">${status}</span></div>`;
+}
+const at = (mk, k) => (mk && mk[k] ? ` data-mk="${mk[k]}"` : '');
+function answerLine(q, picks, typed, mkAttr) {
+  if (typed != null && !picks.length) {
+    return `<div class="ta"${mkAttr}><span class="ic">${IC.ckc()}</span><span class="w">“${esc(typed)}”</span></div>`;
+  }
+  const words = picks.map((i) => esc(q.options[i].label)).join('  ·  ');
+  return `<div class="ta"${mkAttr}><span class="ic">${IC.ckc()}</span><span class="w">${words}</span></div>`;
+}
+function folded(v) {
+  const mk = v.mk || {};
+  const one = v.qs.length > 1;
+  let body = '';
+  v.qs.forEach((q, k) => {
+    body += `<div class="tq${one ? ' one' : ''}"${k === 0 ? at(mk, 'q') : ''}>${esc(q.question)}</div>`;
+    if (v.reply) {
+      body += `<div class="ta reply"${at(mk, 'answer')}><span class="ic">${IC.bub()}</span><span class="w">“${esc(v.reply)}”</span></div><div class="tsub">Replied in chat</div>`;
+    } else if (v.fail) {
+      body += '';
+    } else {
+      body += answerLine(q, v.picks[k] || [], v.typed ? v.typed[k] : null, k === 0 ? at(mk, 'answer') : '');
+    }
+  });
+  return `<div class="tc"${at(mk, 'card')}>${row(v)}${body}</div>`;
+}
+function optionRows(q, picks, mkAttr) {
+  return `<div${mkAttr}>` + q.options.map((o, i) => {
+    const on = picks.includes(i);
+    const glyph = q.multi ? (on ? IC.cks() : IC.sq0()) : (on ? IC.ckc('#007AFF', 18) : IC.ring0(18));
+    return `<div class="op${on ? ' on' : ''}"><span class="rd">${glyph}</span><div><div class="ol">${esc(o.label)}</div><div class="ow">${esc(o.why)}</div></div></div>`;
+  }).join('') + `</div>`;
+}
+function unfolded(v) {
+  const mk = v.mk || {};
+  let body = '';
+  v.qs.forEach((q, k) => {
+    if (k > 0) body += '<div class="qsep"></div>';
+    if (v.qs.length > 1 || q.multi) {
+      body += `<div class="qh2">${esc(q.header)}${q.multi ? '<span class="mc">Multiple choice</span>' : ''}</div>`;
+    }
+    body += `<div class="qfull"${k === 0 ? at(mk, 'full') : ''}>${esc(q.question)}</div>`;
+    const picks = v.picks ? v.picks[k] || [] : [];
+    body += optionRows(q, picks, k === 0 ? at(mk, 'options') : '');
+    const typed = v.typed ? v.typed[k] : null;
+    if (typed != null) body += `<div class="yours"${at(mk, 'typed')}><span class="k">Your answer</span>${esc(typed)}</div>`;
+    if (v.reply) body += `<div class="yours"${at(mk, 'typed')}><span class="k">Replied in chat</span>${esc(v.reply)}</div>`;
+  });
+  return `<div class="tc open"${at(mk, 'card')}>${row({ ...v, open: true })}${body}</div>`;
+}
+
+/* today's card, as ToolCardView draws it now */
+function todayCard(q, result, err) {
+  const md = `<div class="md0"><b>${esc(q.question)}</b><ul>${q.options.map((o) => `<li>${esc(o.label)}</li>`).join('')}</ul></div>`;
+  return `<div class="tc open"><div class="tr"><span class="cv">${IC.cv(true)}</span><span class="ch">${IC.q()}</span><span class="lb">Question</span><span class="sm">${q.header}</span><span class="st">${err ? IC.errc() : IC.okc()}</span></div>
+    ${md}<div class="outp${err ? ' err' : ''}" data-mk="4"><div class="k">${err ? 'ERROR' : 'OUTPUT'}</div><div class="v">${esc(result)}</div></div></div>`;
+}
+
+/* ── 1 · today ── */
+document.getElementById('p-today').innerHTML =
+  `<img class="shot" src="today-1014.png" alt="">` + statusBar('10:14') +
+  `<div class="hot" style="top:176px;height:326px" data-mk="1"></div>` +
+  `<div class="hot" style="top:512px;height:92px" data-mk="2"></div>` +
+  `<div class="hot" style="top:612px;height:88px" data-mk="3"></div>`;
+const SHORTQ = { ...TOPLEFT, question: 'What should the top-left button be on a project page opened from the session list?' };
+document.getElementById('today-chat').insertAdjacentHTML('beforeend', todayCard(SHORTQ, REPLY, true));
+
+/* ── 2 · proposal ── */
+document.getElementById('p-new').innerHTML = chatChrome('10:14') +
+  `<div class="tx">${EARLIER}${BEFORE}${folded({ qs: [SWIPE], picks: [[0]], mk: { q: 1, answer: 2 } })}${AFTER}${ROWS}<div style="height:12px"></div></div>` +
+  band();
+document.getElementById('p-open').innerHTML = chatChrome('10:14') +
+  `<div class="tx top"><div style="height:2px"></div>${unfolded({ qs: [SWIPE], picks: [[0]], mk: { full: 1, options: 2, card: 3 } })}${AFTER}</div>` +
+  band();
+/* the unfolded card's own mark 3 covers the whole card: move it onto the row */
+document.querySelector('#p-open .tc.open').removeAttribute('data-mk');
+document.querySelector('#p-open .tc.open .tr .cv').setAttribute('data-mk', '3');
+
+/* ── 3 · the other endings ── */
+const S = [
+  { label: '一次问了两个问题', v: { qs: [SWIPE, TOPLEFT], picks: [[0], [0]] },
+    text: '标题行列出两个短标题。收起时每个问题一行开头、一行回答；点开时每个问题前面一个小标题，问题之间一条细线。' },
+  { label: '没选选项，自己打了字', v: { qs: [SWIPE], picks: [[]], typed: [TYPED] },
+    text: '回答就是你打的字，加引号，看得出不是哪个选项。点开时三个选项都灰着，下面一个只读的 Your answer 框。' },
+  { label: '多选', v: { qs: [CLIENTS], picks: [[0, 1]] },
+    text: '选中的几项用 · 连在一行。点开时是方框勾选，小标题旁边写 Multiple choice，和提问时那张卡一样。' },
+  { label: '点 Chat about this，回了一句话', v: { qs: [SWIPE], picks: [[]], reply: REPLY },
+    text: '不再是红叉和红底 ERROR：蓝色气泡加你的原话，下面一行 Replied in chat。行尾是灰色气泡。点开时选项都灰着，原话在最下面。' },
+];
+document.getElementById('states').innerHTML = S.map((s, i) => `<figure><span class="tag new">${String.fromCharCode(9312 + i)} ${s.label}</span>
+    <div class="snip"><div class="sl">Folded</div>${folded(s.v)}<div class="sl" style="margin-top:10px">Tapped</div>${unfolded(s.v)}</div>
+    <div class="cap">${s.text}</div></figure>`).join('');
+
+/* ── 4 · A / B ── */
+document.getElementById('p-a').innerHTML = chatChrome('10:14') +
+  `<div class="tx">${EARLIER}${BEFORE}${folded({ qs: [SWIPE], picks: [[0]] })}${AFTER}${ROWS}<div style="height:12px"></div></div>` + band();
+const recordCard = `<div class="qc"><div class="qch"><span class="chipq">${IC.qb}</span><span class="t">Answered</span><span class="tm">10:14</span></div>
+    <div class="tq">${esc(SWIPE.question)}</div>
+    <div class="ta"><span class="ic">${IC.ckc('#007AFF', 16)}</span><span class="w">${esc(SWIPE.options[0].label)}</span></div>
+    <div class="qd"></div><div class="qm">View details${IC.chevR('#3E69F6', 13)}</div></div>`;
+document.getElementById('p-b').innerHTML = chatChrome('10:14') +
+  `<div class="tx">${EARLIER}${BEFORE}${recordCard}${AFTER}${ROWS}<div style="height:12px"></div></div>` + band();
+document.getElementById('p-b-sheet').innerHTML = statusBar('10:15') +
+  `<div class="sheet"><div class="grab"></div><div class="shn">Answered</div><div class="x">${IC.xmark}</div>
+    <div class="shb"><div class="prov"><span>FROM CLAUDE</span><span>asked 10:13</span></div>
+      <div class="qfull">${esc(SWIPE.question)}</div>${optionRows(SWIPE, [0], '')}</div>
+    <div class="shbar"><div class="r1">${IC.ckc('#34C759', 16)}Answered · 10:14</div></div></div><div class="home"></div>`;
+
+/* ── marks: a dashed outline around every [data-mk], its number at the top right ── */
+function drawMarks() {
+  document.querySelectorAll('.ol-mk, .dot-mk').forEach((e) => e.remove());
+  const place = (host, el, clip) => {
+    const hr = host.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    let top = r.top, bottom = r.bottom;
+    if (clip) { top = Math.max(top, clip.top + 6); bottom = Math.min(bottom, clip.bottom - 6); }
+    const pad = 4, maxW = hr.width;
+    const L = Math.max(4, r.left - hr.left - pad), R = Math.min(maxW - 4, r.right - hr.left + pad);
+    const T = top - hr.top - pad, B = bottom - hr.top + pad;
+    const box = document.createElement('div');
+    box.className = 'ol-mk';
+    box.style.cssText = `left:${L}px;top:${T}px;width:${R - L}px;height:${B - T}px`;
+    host.appendChild(box);
+    const dot = document.createElement('div');
+    dot.className = 'dot-mk';
+    dot.textContent = el.dataset.mk;
+    dot.style.cssText = `left:${Math.min(R - 16, maxW - 30)}px;top:${T - 13}px`;
+    host.appendChild(dot);
+  };
+  document.querySelectorAll('.phone').forEach((ph) => {
+    const tx = ph.querySelector('.tx');
+    ph.querySelectorAll('[data-mk]').forEach((el) => place(ph, el, tx && tx.contains(el) ? tx.getBoundingClientRect() : null));
+  });
+  document.querySelectorAll('.snip').forEach((sn) => sn.querySelectorAll('[data-mk]').forEach((el) => place(sn, el, null)));
+}
+window.drawMarks = drawMarks;
+document.fonts.ready.then(() => requestAnimationFrame(drawMarks));
+</script>
+</body>
+</html>

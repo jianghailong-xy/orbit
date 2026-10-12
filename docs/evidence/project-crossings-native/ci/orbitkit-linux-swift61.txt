@@ -1,0 +1,124 @@
+OrbitKit on Linux, swift:6.1 docker:
+  docker run --rm -v <tree>:/src:ro -v <scratch>:/build -w /src/src/macos/OrbitKit swift:6.1 swift test --scratch-path /build
+
+== task commit 4dddff557 (same tree as the run)
+	 Executed 3228 tests, with 5 tests skipped and 5 failures (0 unexpected) in 21.785 (21.785) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-06 17:36:54.835
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.01 (0.01) seconds
+Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-06 17:36:54.836
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsTests' passed at 2026-10-06 17:36:54.837
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-06 17:36:54.862
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.025 (0.025) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
+
+== clean main 51f0cdfee (git worktree add --detach, same command)
+	 Executed 3196 tests, with 5 tests skipped and 5 failures (0 unexpected) in 13.616 (13.616) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
+
+== after merging the newer main be0f8c22a: branch 7e8bad80c
+	 Executed 3228 tests, with 5 tests skipped and 12 failures (0 unexpected) in 30.563 (30.563) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-06 18:32:52.267
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.014 (0.014) seconds
+Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-06 18:32:52.369
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'ProjectCrossingsTests' passed at 2026-10-06 18:32:52.471
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.102 (0.102) seconds
+Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-06 18:32:52.610
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.14 (0.14) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:77: error: WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:369: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:371: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiEntriesOfKind(decisionRead.data ?? [], 'decision')
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:372: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:349: error: WikiCopyParityTests.testTheHomeRowsAreTheWebsRows : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiPlanCopyParityTests.swift:834: error: WikiPlanCopyParityTests.testThePlanBannerIsTheHomesSecond : XCTAssertFalse failed - the web home: lost ["{wikiProposalsToReview(pending.length)}", "<WikiPlanBanner space={space} />", "<div className=\"wk-cols\">", "<WikiPlanCard space={space} />", "<ReviewCard"]
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiReviewModeCopyParityTests.swift:727: error: WikiReviewModeCopyParityTests.testTheRunPagesDrawTheSameBlocksInTheSameOrder : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says row.kind === 'run' ? ( <WikiRunTimelineRow
+
+== clean main be0f8c22a (same command)
+	 Executed 3196 tests, with 5 tests skipped and 12 failures (0 unexpected) in 29.738 (29.738) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:77: error: WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:369: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:371: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiEntriesOfKind(decisionRead.data ?? [], 'decision')
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:372: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:349: error: WikiCopyParityTests.testTheHomeRowsAreTheWebsRows : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiPlanCopyParityTests.swift:834: error: WikiPlanCopyParityTests.testThePlanBannerIsTheHomesSecond : XCTAssertFalse failed - the web home: lost ["{wikiProposalsToReview(pending.length)}", "<WikiPlanBanner space={space} />", "<div className=\"wk-cols\">", "<WikiPlanCard space={space} />", "<ReviewCard"]
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiReviewModeCopyParityTests.swift:727: error: WikiReviewModeCopyParityTests.testTheRunPagesDrawTheSameBlocksInTheSameOrder : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says row.kind === 'run' ? ( <WikiRunTimelineRow
+
+== final: 2d746caee (main 30cf89786 merged; the card reads TaskDetailCopy.moveTaskStateMeaning) — run on that tree before the commit
+	 Executed 3230 tests, with 5 tests skipped and 12 failures (0 unexpected) in 17.037 (17.037) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-06 19:09:44.657
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.01 (0.01) seconds
+Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-06 19:09:44.660
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'ProjectCrossingsTests' passed at 2026-10-06 19:09:44.661
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-06 19:09:44.686
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.025 (0.025) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:77: error: WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:369: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:371: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiEntriesOfKind(decisionRead.data ?? [], 'decision')
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:372: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:349: error: WikiCopyParityTests.testTheHomeRowsAreTheWebsRows : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiPlanCopyParityTests.swift:834: error: WikiPlanCopyParityTests.testThePlanBannerIsTheHomesSecond : XCTAssertFalse failed - the web home: lost ["{wikiProposalsToReview(pending.length)}", "<WikiPlanBanner space={space} />", "<div className=\"wk-cols\">", "<WikiPlanCard space={space} />", "<ReviewCard"]
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiReviewModeCopyParityTests.swift:727: error: WikiReviewModeCopyParityTests.testTheRunPagesDrawTheSameBlocksInTheSameOrder : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says row.kind === 'run' ? ( <WikiRunTimelineRow
+
+== clean main 30cf89786 (same command)
+	 Executed 3198 tests, with 5 tests skipped and 12 failures (0 unexpected) in 17.38 (17.38) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:282: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:284: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says t.key === 'wiki' && wikiPending > 0
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:285: error: WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts : XCTAssertTrue failed - src/web/src/components/TasksSidePanel.tsx no longer says aria-label={wikiProposalsToReview(wikiPending)}
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:77: error: WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:369: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says useQuery(wikiEntriesOfKindQuery(space.id, 'decision', RECENT_DECISIONS))
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:371: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiEntriesOfKind(decisionRead.data ?? [], 'decision')
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:372: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:349: error: WikiCopyParityTests.testTheHomeRowsAreTheWebsRows : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says wikiRecentRows(timeline.data?.items ?? []).slice(0, 5).map((row) =>
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiPlanCopyParityTests.swift:834: error: WikiPlanCopyParityTests.testThePlanBannerIsTheHomesSecond : XCTAssertFalse failed - the web home: lost ["{wikiProposalsToReview(pending.length)}", "<WikiPlanBanner space={space} />", "<div className=\"wk-cols\">", "<WikiPlanCard space={space} />", "<ReviewCard"]
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiReviewModeCopyParityTests.swift:727: error: WikiReviewModeCopyParityTests.testTheRunPagesDrawTheSameBlocksInTheSameOrder : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says row.kind === 'run' ? ( <WikiRunTimelineRow
+
+== dad660a46 (main f33589b4c merged — main's wiki fixes leave 4 failures in 2 tests)
+	 Executed 3250 tests, with 5 tests skipped and 4 failures (0 unexpected) in 24.835 (24.835) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-06 19:35:47.239
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.113 (0.113) seconds
+Test Suite 'ProjectCrossingsDoorTests' passed at 2026-10-06 19:35:47.240
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsTests' passed at 2026-10-06 19:35:47.241
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ProjectCrossingsWiringTests' passed at 2026-10-06 19:35:47.381
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.139 (0.139) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:82: error: WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:501: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
+
+== clean main f33589b4c (same command)
+	 Executed 3218 tests, with 5 tests skipped and 4 failures (0 unexpected) in 23.699 (23.699) seconds
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsAdminView.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/ConfirmationStyleWiringTests.swift:53: error: ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle : XCTAssertFalse failed - /src/src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift names a confirmationDialog itself — the phone would get the tablet's anchored panel. Use `.orbitConfirmation`.
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:82: error: WikiCopyParityTests.testTheHomeBandsAreTheWebPhonesInItsOrder : XCTUnwrap failed: expected non-nil value of type "Range<Index>" - no `<div className="wk-cols">`
+src/macos/OrbitKit/Tests/OrbitKitTests/WikiCopyParityTests.swift:501: error: WikiCopyParityTests.testTheHomeReadsItsBandsByKind : XCTAssertTrue failed - src/web/src/components/WikiHome.tsx no longer says <WikiEmpty>{WIKI_NO_PRINCIPLES}</WikiEmpty>
