@@ -4117,6 +4117,11 @@ private struct OwnerItemCardView: View {
                 }.reduce(Text("")) { $0 + $1 }
                     .lineLimit((fact.value.count > 120 || fact.value.contains("\n"))
                                && !expandedFacts.contains(fact.label) ? 3 : nil)
+                    // The wrapped prose is the row's whole point — a sentence that ran off the
+                    // right edge and ended in "…" says less than the row it replaced did. Without
+                    // this the HStack lays the value out at its ideal (single-line) width and
+                    // truncates it, which is what the Check row did on the probe's own capture.
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                 if fact.value.count > 120 || fact.value.contains("\n") {
@@ -4139,6 +4144,8 @@ private struct OwnerItemCardView: View {
                 .font(.orbitMono)
                 .lineLimit((tail.more != nil || tail.shown.joined(separator: "\n").count > 120)
                            && !expandedTail ? 6 : nil)
+                // A tail is lines: clipped to one, the fold told the reader nothing.
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8).padding(.vertical, 6)
