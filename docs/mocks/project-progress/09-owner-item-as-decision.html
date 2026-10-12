@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>09 owner item as decision</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="mock.css">
+<style>
+  /* 这一张只画三处展示位，web 侧全部用真实的类名与 token（index.css 在前），
+     它们的排布就是组件自己的排布；iOS 侧按真机截图的排版画，字与 web 逐字相同。 */
+  .stage-phone { width: 392px; margin: 0 auto; background: var(--bg-base); border: 1px solid #dde0e6;
+                 border-radius: 26px; padding: 12px 0 16px; }
+  .stage-phone .nav { display: flex; align-items: center; gap: 10px; padding: 4px 16px 10px; }
+  .stage-phone .nav .back { width: 30px; height: 30px; display: grid; place-items: center;
+                            color: var(--text-2); font-size: 15px; }
+  .stage-phone .nav .titles { flex: 1; text-align: center; line-height: 1.25; min-width: 0; }
+  .stage-phone .nav .t { font-size: 15px; font-weight: 600; color: var(--text-1);
+                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stage-phone .nav .s { font-size: 11.5px; color: var(--text-3);
+                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stage-phone .nextbar { display: flex; align-items: center; gap: 8px; margin: 0 12px 10px;
+                          padding: 11px 12px; border-radius: 10px; background: var(--warning-bg);
+                          color: var(--warning); font-size: 14px; font-weight: 600; }
+  .stage-phone .nextbar .grow { flex: 1; }
+  .stage-phone .body { padding: 0 12px; display: flex; flex-direction: column; gap: 12px; }
+  .i-card { border: 1px solid var(--warning-border); background: var(--warning-bg); border-radius: 12px;
+            padding: 12px 13px; }
+  .i-card .head { font-size: 15px; font-weight: 650; color: var(--text-1); line-height: 1.3; }
+  .i-card .why { font-size: 15px; color: var(--text-1); line-height: 1.35; margin-top: 6px; }
+  .i-card .fixing { font-size: 13px; color: var(--brand); margin-top: 6px; }
+  .i-door { margin-top: 10px; }
+  .i-door .btn { display: block; text-align: center; padding: 10px; border-radius: 10px; font-size: 15px; }
+  .i-door .btn.primary { background: var(--brand); color: #fff; }
+  .i-door .btn.secondary { background: var(--fill-muted); color: var(--brand); }
+  .i-door .consequence { font-size: 12.5px; color: var(--text-3); margin-top: 4px; }
+  .i-facts { margin-top: 10px; }
+  .i-foot { font-size: 12px; color: var(--text-3); margin-top: 8px;
+            border-top: 1px solid var(--warning-border); padding-top: 7px; }
+  .row-sm { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+            border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-base); }
+  .row-sm .ini { width: 22px; height: 22px; border-radius: 6px; background: var(--fill-muted);
+                 display: grid; place-items: center; font-size: 11px; color: var(--text-3); flex: none; }
+  .row-sm .main { min-width: 0; }
+  .row-sm .t { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+  .row-sm .s { font-size: 12.5px; color: var(--text-3); }
+  .strip-wrap { border: 1px solid var(--border-subtle); border-radius: 10px; overflow: hidden;
+                background: var(--bg-base); }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">9 · 待办即决定：会话行、置顶条、卡片三处都先说要你做什么</h1>
+  <p class="m-sub zh">一条异常待办走到你面前时，三处展示位都由服务端的同一份读模型驱动：<b>会话行</b>、<b>置顶条</b>、<b>卡片</b>。卡片第一行是服务端给的 <span class="a-mono">requiredAction</span>（要谁做什么），门由服务端的 <span class="a-mono">primaryAction</span> 领头、每一扇下面一行说它的后果（<span class="a-mono">ACTION_CONSEQUENCES</span>），会话行与置顶条上是服务端算的短句 <span class="a-mono">need</span>（<span class="a-mono">Escalated to you · Checks failed</span>）。三端只渲染，不翻译、不自己拼（契约 §4.8、§7.5、§7.6）。<b>英文是上线文案，中文是说明</b>；web 侧用的是真实的类名与 token，文字取自 T10 的真实组件截图，iOS 侧的字取自 T11 的真机截图。</p>
+
+  <div class="m-grid2">
+    <!-- ── web ─────────────────────────────────────────────────────────────── -->
+    <div class="m-col">
+      <div class="m-stage-l"><span class="m-k">web</span>会话行 · 置顶条 · 卡片</div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">① 会话行（会话列表里这一行）</div>
+        <div class="strip-wrap">
+          <div class="session-row session-project-row">
+            <span class="session-icon session-project-icon">
+              <span class="session-project-status needs-you" data-state="needs-you" aria-label="Waiting for you"></span>
+            </span>
+            <div class="session-main">
+              <div class="session-title-row">
+                <div class="session-title">Ship a decision</div>
+                <span class="session-time">3h ago</span>
+              </div>
+              <div class="session-sub">
+                <span class="session-project-progress">12/34</span>
+                <div class="session-preview tone-approval">Escalated to you · Checks failed</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="a-hint zh" style="margin-top:8px">行里那句就是服务端给的 <span class="a-mono">need</span>；点开定位到下面那张卡（不是会话底部）。工单类的 <span class="a-mono">need</span>：<span class="a-mono">Checks failed</span> / <span class="a-mono">Merge conflict</span> / <span class="a-mono">Integration error</span> / <span class="a-mono">Task failed</span>。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">② 置顶条（会话里，钉在头部下面的一行）</div>
+        <div class="strip-wrap">
+          <div class="decision-strip" aria-label="Decisions">
+            <button class="decision-strip-line" type="button" aria-label="1 waiting: Escalated to you · Checks failed">
+              <span class="decision-strip-dot" aria-hidden="true"></span>
+              <span class="decision-strip-title">Escalated to you · Checks failed</span>
+              <span class="decision-strip-quiet">58m</span>
+              <span class="decision-strip-caret" aria-hidden="true">↓</span>
+            </button>
+          </div>
+        </div>
+        <div class="a-hint zh" style="margin-top:8px">归你的异常也在这条线上（以前只有提问与裁决）；它只负责带你到卡上，按下不回答任何东西。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">③ 卡片（升级给你的那一张）</div>
+        <div class="approval-card project-open-item-card is-owner" data-kind="INTEGRATION_CHECK_FAILED">
+          <div class="approval-head project-open-item-head">
+            <span class="project-open-item-heading">Now yours — no one acted on this for 2h 3m</span>
+            <span class="criteria-provenance">FROM ORBIT</span>
+          </div>
+          <div class="approval-body is-plan project-open-item-body">
+            <div class="project-open-item-next">
+              <p class="project-open-item-required-action">Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.</p>
+              <div class="project-open-item-actions">
+                <div class="project-open-item-door">
+                  <button class="project-open-item-action is-primary" type="button">Ask the coordinator again</button>
+                  <span class="project-open-item-consequence">It goes back to the coordinator with a fresh escalation clock.</span>
+                </div>
+                <div class="project-open-item-door">
+                  <button class="project-open-item-action" type="button">Re-run the check</button>
+                  <span class="project-open-item-consequence">The current candidate is checked again with your reason.</span>
+                </div>
+                <div class="project-open-item-door">
+                  <a class="project-open-item-quiet" href="#">Review</a>
+                  <span class="project-open-item-consequence">Open the current merge card.</span>
+                </div>
+                <div class="project-open-item-door">
+                  <a class="project-open-item-quiet" href="#">Mark as handled</a>
+                  <span class="project-open-item-consequence">Only if you dealt with it yourself. Your reason goes on the record.</span>
+                </div>
+              </div>
+            </div>
+            <div class="kv" style="margin-top:12px">
+              <span class="k">Check</span><span class="v"><span class="a-mono">npm test &amp;&amp; go test ./...</span> · <span class="bad">exit 1</span> after 26m 49s</span>
+              <span class="k">Branch</span><span class="v">unchanged — the task passed on its own branch; it fails only on the combined tree</span>
+            </div>
+          </div>
+          <div class="project-open-item-foot">Owner: you · waiting 2h 25m · came to the owner at 2h 3m</div>
+        </div>
+        <div class="a-hint zh" style="margin-top:8px">第一行是 <span class="a-mono">requiredAction</span>；<b>Re-run the check</b> 的标签与那句后果都是「这一行带着候选」时的写法（带 <span class="a-mono">taskId</span> 的行是 <span class="a-mono">Retry</span> + 「A new integration attempt is queued with your reason.」）。标题按归你的方式变：<span class="a-mono">COORDINATOR_ENDED</span> / <span class="a-mono">CHAIN_LIMIT</span> / <span class="a-mono">HANDED_OVER</span> / <span class="a-mono">NO_COORDINATOR</span> 各一句。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">④ 同一张卡，重跑在途时改口（H1）</div>
+        <div class="approval-card project-open-item-card is-owner" data-kind="INTEGRATION_CHECK_FAILED" data-handling="handling">
+          <div class="approval-head project-open-item-head">
+            <span class="project-open-item-heading">Now yours — no one acted on this for 2h 1m</span>
+            <span class="project-open-item-state is-handling">Handling</span>
+            <span class="criteria-provenance">FROM ORBIT</span>
+          </div>
+          <div class="approval-body is-plan project-open-item-body">
+            <div class="project-open-item-next">
+              <p class="project-open-item-required-action">A repair task is already handling this item — let it finish or open the task to see what it needs.</p>
+              <p class="project-open-item-handled-by">The coordinator is fixing this in Repair the combined-tree baseline.</p>
+            </div>
+            <div class="kv" style="margin-top:12px">
+              <span class="k">Handling</span><span class="v">the re-check of the merge into main — generation 2 is running · asked 7m ago</span>
+              <span class="k">Reason</span><span class="v">The merge-check baseline was repaired; rerun the candidate.</span>
+            </div>
+          </div>
+          <div class="project-open-item-foot">Owner: you · waiting 2h 1m · came to the owner at 2h 1m</div>
+        </div>
+        <div class="a-hint zh" style="margin-top:8px">挂上修复任务、或按了重跑之后，第一行换成这两句之一（<span class="a-mono">handledBy</span> 与 <span class="a-mono">handling</span> 都来自读模型）——同一张卡、同一批门，只是先说「有人在办」。</div>
+      </div>
+    </div>
+
+    <!-- ── iOS ─────────────────────────────────────────────────────────────── -->
+    <div class="m-col">
+      <div class="m-stage-l"><span class="m-k">iOS</span>会话行 · 置顶条 · 卡片（字与 web 逐字相同）</div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">① 会话行与头部（同一串字）</div>
+        <div class="stage-phone">
+          <div class="nav">
+            <div class="back">‹</div>
+            <div class="titles">
+              <div class="t">Ship a decision… <span class="a-tag def" style="font-size:10px">Coordinator</span></div>
+              <div class="s">Escalated to you · Checks failed · Open · 5m…</div>
+            </div>
+            <div class="back">⋯</div>
+          </div>
+        </div>
+        <div class="row-sm" style="margin-top:10px">
+          <span class="ini">S</span>
+          <div class="main">
+            <div class="t">Ship a decision · Coordinator</div>
+            <div class="s">Escalated to you · Checks failed · 3h ago</div>
+          </div>
+        </div>
+        <div class="a-hint zh" style="margin-top:8px">列表行与头部副标题写的是同一句：<span class="a-mono">NeedsYouLogic.oldestItemWord(s.ownerItems)</span> 取最旧那一件的 <span class="a-mono">need</span>——行与它上面那条 bar 不会把同一件事说成两个词。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">② 置顶条（N waiting below）</div>
+        <div class="stage-phone">
+          <div class="nextbar">
+            <span class="a-dot" style="background:var(--warning-solid)"></span>
+            <span class="grow">4 waiting below</span>
+            <span style="color:var(--text-3)">⌄</span>
+          </div>
+        </div>
+        <div class="a-hint zh" style="margin-top:8px">全是问题时写 <span class="a-mono">N open questions</span>；有一件是按门回答的（升级给你的异常、只有你能解除的暂停）就写 <span class="a-mono">N waiting</span>——一个 4 的计数下面压着「Escalated to you」的卡，说成 question 就是同一句假话。卡片在读者上方时说 <span class="a-mono">above</span>，说不准就不说方向词。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">③ 卡片（升级给你的那一张）</div>
+        <div class="stage-phone">
+          <div class="body">
+            <div class="i-card">
+              <div class="head">Now yours — no one acted on this for 2h 3m</div>
+              <div class="why">Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.</div>
+              <div class="i-door">
+                <div class="btn primary">Ask the coordinator again</div>
+                <div class="consequence">It goes back to the coordinator with a fresh escalation clock.</div>
+              </div>
+              <div class="i-door">
+                <div class="btn secondary">Re-run the check</div>
+                <div class="consequence">The current candidate is checked again with your reason.</div>
+              </div>
+              <div class="i-door">
+                <div class="consequence" style="margin-top:0;font-size:13px">Review</div>
+                <div class="consequence">Open the current merge card.</div>
+              </div>
+              <div class="i-door">
+                <div class="btn secondary">Chat about this</div>
+              </div>
+              <div class="i-door">
+                <div class="consequence" style="margin-top:0;font-size:13px">Mark as handled</div>
+                <div class="consequence">Only if you dealt with it yourself. Your reason goes on the record.</div>
+              </div>
+              <div class="kv i-facts">
+                <span class="k">Check</span><span class="v"><span class="a-mono">npm test &amp;&amp; go test ./...</span> · <span class="bad">exit 1</span> after 26m 49s</span>
+                <span class="k">Branch</span><span class="v">unchanged — the task passed on its own branch; it fails only on the combined tree</span>
+              </div>
+              <div class="i-foot">Owner: you · waiting 2h 25m · came to the owner at 2h 3m</div>
+            </div>
+          </div>
+        </div>
+        <div class="a-hint zh" style="margin-top:8px">同一张卡的 iOS 排版：同一句 <span class="a-mono">requiredAction</span>、同一批门的名字与后果、同一行 <span class="a-mono">Owner: you · waiting … · came to the owner at …</span>。T11 同时修好了它与 web 的四处差异（日志位置、Check 行样式、Review、Owner 行）。</div>
+      </div>
+
+      <div class="m-stage">
+        <div class="m-stage-l zh">④ 同一张卡，协调会话交出来时改口（open_item_hand_over）</div>
+        <div class="stage-phone">
+          <div class="body">
+            <div class="i-card">
+              <div class="head">Now yours — the coordinator handed it over</div>
+              <div class="why">The coordinator handed this item over with this note: “The coordinator cannot safely rerun this candidate until the baseline is repaired.” — follow it, then use the available door.</div>
+              <div class="i-door">
+                <div class="btn primary">Ask the coordinator again</div>
+                <div class="consequence">It goes back to the coordinator with a fresh escalation clock.</div>
+              </div>
+              <div class="kv i-facts">
+                <span class="k">Check</span><span class="v"><span class="a-mono">npm test &amp;&amp; go test ./...</span> · <span class="bad">exit 1</span> after 26m 49s</span>
+                <span class="k">Branch</span><span class="v">unchanged — the task passed on its own branch; it fails only on the combined tree</span>
+              </div>
+              <div class="i-foot">Owner: you · waiting 12m</div>
+            </div>
+          </div>
+        </div>
+        <div class="a-hint zh" style="margin-top:8px">交出时必须写一句话（空说明、超 2000 字各自 400），它留在行上，第一行就引用它；推送标题是 <span class="a-mono">Now yours — the coordinator handed it over</span>。协调会话处理中要你拍板的事不用这扇门——它用 <span class="a-mono">ask_owner</span> 问，待办仍留着。</div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="m-notes zh" style="margin-top:22px">
+    <li><span class="m-n">1</span><span><b>三处一个来源</b>：<span class="a-mono">requiredAction</span> / <span class="a-mono">primaryAction</span> / <span class="a-mono">need</span> 都在服务端算（<span class="a-mono">project-open-item.ts</span>，维度按门表读），三端只渲染。会话行、置顶条、卡片因此不会对同一件事说两句不同的话——这正是 2026-10-02 那次「Escalated to you / Waiting for approval / 卡上写着别的」的修法。</span></li>
+    <li><span class="m-n">2</span><span><b>门一定领得动</b>：卡上的门来自门表（<span class="a-mono">open-item-doors.ts</span>）里这一格真正持有的那些，<span class="a-mono">primaryAction</span> 是其中第一个能按的；每一扇下面那句后果与它同源（<span class="a-mono">ACTION_CONSEQUENCES</span>，web 与 OrbitKit 由 parity 测试对住）。<span class="a-mono">Review</span> 只在目标候选真的在时出现。</span></li>
+    <li><span class="m-n">3</span><span><b>「有人在办」也要先说</b>：挂着修复任务、或已经按了重跑的待办，第一行换成 <span class="a-mono">A repair task is already handling this item …</span>，旁边一枚 <span class="a-mono">Handling</span>——处理中就是处理中，不显示成 HANDLED（H1–H5）。</span></li>
+    <li><span class="m-n">4</span><span><b>这张图与代码一个字都不差</b>：英文取自 T10（web 真实组件，<span class="a-mono">t10-real-components-1440.png</span>）与 T11（真机 iOS）的实拍；改文案时两侧一起改，契约 §7.5 / §7.6 的表同一步更新。</span></li>
+  </ul>
+</div>
+</body>
+</html>
