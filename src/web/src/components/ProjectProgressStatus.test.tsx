@@ -16,6 +16,8 @@ import {
   CoordinatorProgressRows,
   ItemAsCard,
   ACTION_CONSEQUENCES,
+  PROMOTION_RETRY_CONSEQUENCE,
+  RERUN_CHECK_ACTION_LABEL,
   retryPromotionMutationOptions,
   retryTaskMutationOptions,
   ProjectOpenItems,
@@ -1148,6 +1150,34 @@ describe('T10 required actions and current-candidate doors', () => {
       `/projects/${PROJECT_ID}/promotions/34Y7UuNN81bhgBOdQTtcp/integration/retry`,
       { method: 'POST', body: { reason: 're-check it' } },
     ]);
+  });
+
+  it('draws the owner’s re-check on a candidate with no task to run', () => {
+    // The shape the incident opened: the combined-tree check failed on a merge, so the item carries
+    // a candidate and no task at all (promotion_id 有、task_id 空). The server still lists RETRY —
+    // the owner's promotion door (`open-item-doors.ts` integration-retry-promotion) — and the card
+    // must draw it rather than a press that needs a task the row does not have.
+    const row = item({
+      assignee: 'OWNER',
+      assigneeReason: 'ESCALATED',
+      taskId: null,
+      sessionId: null,
+      promotionId: '34Y7UuNN81bhgBOdQTtcp',
+      actions: ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'],
+      requiredAction: 'Nothing on the project branch reaches main until this check passes.',
+    });
+    const html = paint(
+      { needsYou: [row], withCoordinator: [] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+    expect(actionRow(html)).toEqual([
+      { label: 'Ask the coordinator again', weight: 'primary' },
+      { label: RERUN_CHECK_ACTION_LABEL, weight: 'secondary' },
+      { label: 'Review', weight: 'link' },
+      { label: 'Mark as handled', weight: 'link' },
+    ]);
+    // The re-check states its own consequence, not the landing rerun's.
+    expect(html).toContain(PROMOTION_RETRY_CONSEQUENCE);
   });
 });
 

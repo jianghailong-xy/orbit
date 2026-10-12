@@ -280,10 +280,14 @@ const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
 ]);
 
 /** Whether this row carries what a writing press would need, in the same shape `actionHref` answers
- *  for the links: the two task presses act on the task the item is about, and the third is about
- *  the item itself, which every row carries. */
+ *  for the links: the third is about the item itself, which every row carries. RETRY is two doors
+ *  under one name (§4.8, `open-item-doors.ts` integration-retry-task / -promotion) — the landing
+ *  rerun a TASK answers and the re-check of the merge a CANDIDATE answers — so it is drawn when the
+ *  row carries either address; `RetryPress` sends it through the route its `promotionId` decides. */
 function writeTarget(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
-  return action === 'ASK_COORDINATOR_AGAIN' ? row.itemId : row.taskId;
+  if (action === 'ASK_COORDINATOR_AGAIN') return row.itemId;
+  if (action === 'RETRY') return row.taskId ?? row.promotionId ?? null;
+  return row.taskId;
 }
 
 /** Where a press goes, or null when this row does not carry the address it would need. */
