@@ -15,6 +15,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CoordinatorProgressRows,
   ItemAsCard,
+  ACTION_CONSEQUENCES,
+  retryPromotionMutationOptions,
+  retryTaskMutationOptions,
   ProjectOpenItems,
   exceptionCardRows,
   isOwnerExceptionCard,
@@ -917,18 +920,20 @@ function actionRow(html: string): { label: string; weight: Weight }[] {
     .parseFromString(html, 'text/html')
     .querySelector('.project-open-item-actions');
   expect(row, 'the card draws an action row').not.toBeNull();
-  return Array.from(row!.children).map((press) => {
-    const variant = press.className.match(/ant-btn-(primary|default|link)\b/)?.[1];
+  return Array.from(row!.querySelectorAll(':scope > .project-open-item-door')).map((door) => {
+    const press = door.querySelector<HTMLElement>('button, a');
+    expect(press, `a door has a press: ${door.outerHTML}`).not.toBeNull();
+    const variant = press!.className.match(/ant-btn-(primary|default|link)\b/)?.[1];
     const weight: Weight | null =
-      press.tagName === 'A' || variant === 'link'
+      press!.tagName === 'A' || variant === 'link'
         ? 'link'
         : variant === 'primary'
           ? 'primary'
           : variant === 'default'
             ? 'secondary'
             : null;
-    expect(weight, `a press in one of the three weights: ${press.outerHTML}`).not.toBeNull();
-    return { label: press.textContent?.trim() ?? '', weight: weight as Weight };
+    expect(weight, `a press in one of the three weights: ${door.outerHTML}`).not.toBeNull();
+    return { label: press!.textContent?.trim() ?? '', weight: weight as Weight };
   });
 }
 
@@ -1060,6 +1065,61 @@ describe('the exception card’s action row', () => {
     // And it is the ASSIGNEE that withholds it, not the kind: the same item once it is the owner's
     // carries the ending, which is what makes the absence above about who has it.
     expect(card({ ...error, assignee: 'OWNER' })).toContain('Mark as handled');
+  });
+});
+
+describe('T10 required actions and current-candidate doors', () => {
+  it('puts requiredAction first, follows primaryAction, and explains every door', () => {
+    const row = item({
+      assignee: 'OWNER',
+      assigneeReason: 'ESCALATED',
+      requiredAction: 'Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.',
+      primaryAction: 'ASK_COORDINATOR_AGAIN',
+      actions: ['OPEN_TASK_SESSION', 'ASK_COORDINATOR_AGAIN'],
+      handledBy: [{ taskId: '34Y7Utvsd47A14DjMzIzD', title: 'repair the combined tree', state: 'OPEN' }],
+    });
+    const html = paint(
+      { needsYou: [row], withCoordinator: [] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const body = parsed.querySelector('.project-open-item-body')!;
+    expect(body.querySelector('.project-open-item-required-action')?.textContent).toContain('Nothing on the project branch');
+    expect(body.querySelector('.project-open-item-handled-by')?.textContent).toContain('repair the combined tree');
+    expect(body.querySelector('.project-open-item-actions .ant-btn-primary')?.textContent).toContain('Ask the coordinator again');
+    expect(body.querySelectorAll('.project-open-item-consequence').length).toBeGreaterThanOrEqual(2);
+    expect(ACTION_CONSEQUENCES.MARK_HANDLED).toContain('reason');
+  });
+
+  it('only draws Review for the candidate mounted beside the row', () => {
+    const row = item({
+      kind: 'DELIVERY_REVIEW',
+      promotionId: '34Y7UuNN81bhgBOdQTtcp',
+      actions: ['REVIEW'],
+      requiredAction: 'Review the delivery before it is accepted.',
+    });
+    const render = (currentPromotionId: string | null) => renderToStaticMarkup(
+      <MemoryRouter>
+        <ItemAsCard projectId={PROJECT_ID} row={row} now={NOW} currentPromotionId={currentPromotionId} />
+      </MemoryRouter>,
+    );
+    expect(render('34Y7UuNN81bhgBOdQTtcp')).toContain('Review');
+    expect(render('34ZK1ab2Cd3Ef4Gh5Ij6Kl')).not.toContain('href="#promotion-34Y7UuNN81bhgBOdQTtcp"');
+  });
+
+  it('uses the two owner integration retry routes', async () => {
+    apiMock.mockResolvedValue({});
+    const qc = client({ needsYou: [], withCoordinator: [] });
+    await retryTaskMutationOptions(qc, PROJECT_ID, item().taskId!).mutationFn({ reason: 'fix it' });
+    await retryPromotionMutationOptions(qc, PROJECT_ID, '34Y7UuNN81bhgBOdQTtcp').mutationFn({ reason: 're-check it' });
+    expect(apiMock.mock.calls).toContainEqual([
+      `/projects/${PROJECT_ID}/tasks/${item().taskId}/integration/retry`,
+      { method: 'POST', body: { reason: 'fix it' } },
+    ]);
+    expect(apiMock.mock.calls).toContainEqual([
+      `/projects/${PROJECT_ID}/promotions/34Y7UuNN81bhgBOdQTtcp/integration/retry`,
+      { method: 'POST', body: { reason: 're-check it' } },
+    ]);
   });
 });
 
@@ -1267,14 +1327,13 @@ describe('the exception cards’ presses, through their doors', () => {
     await settle();
   }
 
-  it('retries the task through the run door every other Run press uses', async () => {
+  it('retries the task through the owner integration door with a reason', async () => {
     await press({ needsYou: [], withCoordinator: [item()] }, 'Retry');
 
-    // One press, one `triggerId`, drawn where the press happened — the same request the task list
-    // and the detail panel send, so a resend of it is one run rather than a second.
+    // The owner door is project-scoped and carries the required reason.
     expect(apiMock).toHaveBeenCalledWith(
-      `/tasks/${item().taskId}/execute`,
-      { method: 'POST', body: { triggerId: expect.any(String) } },
+      `/projects/${PROJECT_ID}/tasks/${item().taskId}/integration/retry`,
+      { method: 'POST', body: { reason: expect.any(String) } },
     );
   });
 

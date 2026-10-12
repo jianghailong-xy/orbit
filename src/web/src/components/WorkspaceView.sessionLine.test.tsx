@@ -77,6 +77,22 @@ describe('sessionLine', () => {
     });
   });
 
+  it('writes the server need after the escalation marker', () => {
+    expect(sessionLine({
+      status: 'AWAITING_INPUT',
+      engineTurnActive: false,
+      waitingKind: 'OWNER_ITEM',
+      pendingApprovals: 1,
+      ownerItems: [{
+        itemId: 'i1',
+        kind: 'ESCALATED',
+        title: 'Checks failed on the combined tree',
+        need: 'Checks failed',
+        since: '2026-09-22T00:19:41Z',
+      }],
+    }, true)).toEqual({ text: 'Escalated to you · Checks failed', tone: 'approval' });
+  });
+
   it('surfaces live state before any reply preview', () => {
     expect(sessionLine({ status: 'RUNNING', pendingApprovals: 2 }, true)).toEqual({
       text: 'Waiting for approval',
