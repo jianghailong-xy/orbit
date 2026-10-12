@@ -41,11 +41,15 @@
   .i-facts { margin-top: 10px; }
   .i-foot { font-size: 12px; color: var(--text-3); margin-top: 8px;
             border-top: 1px solid var(--warning-border); padding-top: 7px; }
+  /* The compact row (AgentsView.compactRow): line 1 is the title with the live cue and the
+     relative time right-aligned; line 2 leads with the tags, then the preview line. */
   .row-sm { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
             border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-base); }
-  .row-sm .ini { width: 22px; height: 22px; border-radius: 6px; background: var(--fill-muted);
-                 display: grid; place-items: center; font-size: 11px; color: var(--text-3); flex: none; }
   .row-sm .main { min-width: 0; }
+  .row-sm .r1 { display: flex; align-items: center; gap: 8px; }
+  .row-sm .r1 .grow { flex: 1; }
+  .row-sm .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning-solid); flex: none; }
+  .row-sm .when { font-size: 12px; color: var(--text-3); }
   .row-sm .t { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
   .row-sm .s { font-size: 12.5px; color: var(--text-3); margin-top: 1px; }
   .row-sm .coord { font-size: 10.5px; border: 1px solid var(--border); border-radius: 4px;
@@ -203,13 +207,13 @@
           </div>
         </div>
         <div class="row-sm" style="margin-top:10px">
-          <span class="ini">S</span>
-          <div class="main">
-            <div class="t">Ship a decision · Coordinator · 3h ago</div>
+          <div class="main" style="flex:1">
+            <div class="r1"><span class="t">Ship a decision</span><span class="grow"></span>
+              <span class="dot"></span><span class="when">3h ago</span></div>
             <div class="s"><span class="coord">Coordinator</span> <span class="approval">Escalated to you · Checks failed</span></div>
           </div>
         </div>
-        <div class="a-hint zh" style="margin-top:8px">行的排版是 AgentsView 的紧凑行：标题与相对时间同一行，第二行先挂标签（这里是 <span class="a-mono">Coordinator</span>），再跟那句 <span class="a-mono">need</span>。<b>页头副标题</b>是 <span class="a-mono">&lt;need&gt; · Open · &lt;相对时间&gt;</span>（<span class="a-mono">SessionHeader.subtitle</span>），与行里那句同源（<span class="a-mono">NeedsYouLogic.oldestItemWord</span>）。</div>
+        <div class="a-hint zh" style="margin-top:8px">行的排版是 AgentsView 的紧凑行（<span class="a-mono">compactRow</span>）：第一行是标题，右侧是相对时间，时间前面那枚琥珀色的点就是「要你看」的 live 提示（行首没有图标、没有首字母方块，也没有 <span class="a-mono">· Coordinator</span>）；第二行先挂标签（这里是 <span class="a-mono">Coordinator</span> 徽章），再跟那句 <span class="a-mono">need</span>，整句按 <span class="a-mono">tone-approval</span> 上琥珀色。<b>页头副标题</b>是 <span class="a-mono">&lt;need&gt; · Open · &lt;相对时间&gt;</span>（<span class="a-mono">SessionHeader.subtitle</span>），与行里那句同源（<span class="a-mono">NeedsYouLogic.oldestItemWord</span>）。</div>
       </div>
 
       <div class="m-stage">

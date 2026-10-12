@@ -1090,7 +1090,7 @@ CHECK：`(state = 'OPEN') = (resolved_at IS NULL)`；`kind ∈ {PROMOTION_APPROV
 
 **一拍里有几步，按这个顺序**（每一步都只写这一拍该写的、别的一概不写）：
 
-1. **`reconcile()`——对账兜底，排在最前**（T2，2026-10-03 落地）：把 `state = 'OPEN'` 且 `NOT openItemOwed(item)` 的每一行关掉，写出它那条边本该写的结局（§4.2「关闭边与对账兜底」），`resolution_note` 以 `backstop:` 开头，被关掉 item 的 owner 各记一次角标重算；剩下的集成待办只有「工作落在别的分支上」那一类，**只记日志、不关**。它排在最前，这样随后交给人的只是还有人欠着的。它的失败不连累第 2 步（`sweep` 自己问同一个谓词）。
+1. **`reconcile()`——对账兜底，排在最前**（T2，2026-10-03 落地）：把 `state = 'OPEN'` 且 `NOT openItemOwed(item)` 的每一行关掉，写出它**能写的两种结局之一**（`PROMOTION_MOVED_ON` 或 `TASK_CLOSED`，未必是漏掉的那条边会写的那个——§4.2「关闭边与对账兜底」有对照表），`resolution_note` 以 `backstop:` 开头，被关掉 item 的 owner 各记一次角标重算；剩下的集成待办只有「工作落在别的分支上」那一类，**只记日志、不关**。它排在最前，这样随后交给人的只是还有人欠着的。它的失败不连累第 2 步（`sweep` 自己问同一个谓词）。
 2. **`sweep()`——升级**：把「已到期且仍欠着」的协调会话待办交给 owner：
 
     ```sql
@@ -1642,11 +1642,11 @@ interface ProjectListAttention {
 | `ProjectBlockers` | blocker | 效果图 6 ②：每行 tag + 标题 + 说明 + 路径 + `since <age>` + `Resolve…`；底部 `▸ <n> resolved · latest: <reason>`；弹窗 `Resolve this blocker` / `Why is it no longer blocking?` / `Recorded with your name and this reason` |
 | 决定卡回执行 | 提案回复 | R6 |
 
-**三端同一张卡：先说做什么，再给门（T9–T11，2026-10-05 起落地）**。会话行、置顶条、卡片三处都先说**要你做什么**，说同一串字（效果图 `docs/project-progress/09-owner-item-as-decision.png`）：
+**三端同一张卡：先说做什么，再给门（T9–T11，2026-10-05 起落地）**。会话行、置顶条、卡片三处都先说**要你做什么**，说同一串字（效果图 `docs/mocks/project-progress/09-owner-item-as-decision.png`）：
 
 | 处 | 说什么 |
 |---|---|
-| 会话行 | `Escalated to you · <need>`（`need` 由服务端给，§4.8；工单类待办是 `Checks failed`、`Merge conflict`…）。`waitingKind = OWNER_ITEM` 的行写的正是这串字，行上不带按钮。点这一行只打开那个会话本身；项目分组行打开的是项目 sessions 页（web `enterProjectSessions`，iOS `AgentsView` 的同一行为）。把读者带到**卡**上的是会话里的置顶条那一按（web `revealOpenItemCard`）与带 `item=` 打开会话时的定位（web `revealOwnerItemCard`，OrbitKit `DeliveryAnchor.exception`） |
+| 会话行 | `Escalated to you · <need>`（`need` 由服务端给，§4.8；工单类待办是 `Checks failed`、`Merge conflict`…）。`waitingKind = OWNER_ITEM` 的行写的正是这串字，行上不带按钮。点这一行只打开那个会话本身；项目分组行打开的是项目 sessions 页（web `enterProjectSessions`，iOS `AgentsView` 的同一行为）。把读者带到**卡**上的是会话里的置顶条：归你的异常那一行按下去调 `revealOwnerItemCard`（web `DecisionRail.tsx:912`），带 `item=` 打开会话时的定位也用它（`WorkspaceView.tsx:5603`）；`revealOpenItemCard` 是另外两处（`ProjectPromotionCard.tsx:874` 的 Review、`WorkspaceView.tsx:5711` 的 Chat 落位） |
 | 置顶条（web 的 `DecisionRail`） | 每一行指向一张卡，归你的异常也在其中：`Escalated to you · <need>` + 等了多久。条自身的 `aria-label` 是 `Open questions`（`STRIP_LABEL`）；那一行按钮的 `aria-label` 前缀，有归你的异常时是 `N waiting:`，没有时是 `<n> needs your decision:`（`needsDecisionCount`）——后面接的就是这句。press 只滚动不回答 |
 | 置顶条（iOS/macOS 的 needs-you bar） | 全是问题时 `N open questions below`，否则 `N waiting below`——卡片还可以在读者上方，这一版按读者位置说 above / below（`NeedsYouLogic.belowText`） |
 | 卡片 | **第一行是 `requiredAction`**（服务端那句「下一步做谁做什么」，§4.8）；随后门由 `primaryAction` 领头，每一扇门下一行说它的后果（web `ACTION_CONSEQUENCES` / OrbitKit 的同一张表）；底部 `Owner: you · waiting <age> · came to the owner at <escalation>`（协调会话一侧是 `goes to the owner in <剩余>`）。`Review` 只在目标候选真的在时出现（`open_item_id` / 读回来的候选），不再指一张已被取代的卡 |
@@ -1659,7 +1659,7 @@ interface ProjectListAttention {
 |---|---|---|---|
 | `approve-merge-to-main` | M-T2 | `Merge <ref> into main?` | `<n> tasks passed checks on the combined tree · <project>` |
 | `coordinator-question` | R9 | `The coordinator has a question` | `<question> · <project>` |
-| `escalated-to-you` | X-E1、X-C3、X-D5、X-D6、交给 owner | `Now yours — no one acted on this for <duration>`（`assignee_reason = ESCALATED`）；`COORDINATOR_ENDED` → `Now yours — the coordinator conversation ended`；`CHAIN_LIMIT` → `Now yours — the 3rd failure in this chain`；`HANDED_OVER` → `Now yours — the coordinator handed it over`；`NO_COORDINATOR` → `Now yours — this project has no coordinator (waiting <age>)`（卡上的标题带那个括号，推送标题不带——`owner-item-alert.ts#escalationTitle` 与 `ProjectProgressStatus.tsx#escalationHeading`，前者是 §7.5 卡上标题的推送版本） | `<item title> · <project>` |
+| `escalated-to-you` | X-E1、X-C3、X-D5、X-D6、交给 owner | `Now yours — no one acted on this for <duration>`（`assignee_reason = ESCALATED`）；`COORDINATOR_ENDED` → `Now yours — the coordinator conversation ended`；`CHAIN_LIMIT` → `Now yours — the 3rd failure in this chain`；`HANDED_OVER` → `Now yours — the coordinator handed it over`；`NO_COORDINATOR` → `Now yours — this project has no coordinator`（推送标题，`owner-item-alert.ts#escalationTitle`）。**卡上那句多一段**：`escalationHeading`（`ProjectProgressStatus.tsx:161`）写 `Now yours — this project has no coordinator (waiting <age>)` | `<item title> · <project>` |
 | `fuse-paused` | F-T1 | `The coordinator paused itself` | `<why> · <project>` |
 
 载荷：`category: 'ORBIT_OWNER_ITEM'`、`kind`、`sessionID`（项目协调会话，客户端据此打开会话里的同一张卡）、`projectID`、`openItemID`、`thread-id: projectID`、`apns-collapse-id: owner-item-<itemId>`。`approve-merge-to-main` 的点按在 iOS 打开项目 sessions 页（卡在那里，`AppIntent.openProjectMerge`），应用内横幅同样；其余三类照旧打开协调会话（修订 10）。协调会话自己能处理的例外（负责人仍是 COORDINATOR）不推送（owner 决定 7）。
