@@ -36,16 +36,20 @@ The one clock added by the integration-line contract does two things, **in one t
 still one clock, and it is still not a scheduler
 (`docs/project-integration-line-contract.md` §4.6, `projects/open-item-escalation.service.ts`):
 
-1. It **reconciles** first: an exception item nobody owes any more — its candidate left the live
-   states, its task was cancelled or replaced — is closed in that same tick, with the ending the
-   missed edge would have written and a `resolution_note` that starts `backstop:` (contract §4.2).
-   That is not a second clock either: it is one statement with its selection in it, it writes an
-   item's ending and nothing an agent would run, and every reader already asks the same `owed`
-   predicate — the tick only makes the `state` agree within the minute.
-2. It **escalates** what somebody still owes: an unhandled open item becomes the account owner's,
-   which is the item's assignee column and nothing else. The owner then reads it under "needs you"
-   in that project's open items, and the push that tells them so is §7.6's, sent from the rows this
-   sweep returns.
+1. It **reconciles** first: an exception item nobody owes any more is closed in that same tick with
+   a `resolution_note` that starts `backstop:` (contract §4.2). What it covers is the `owed`
+   predicate's false answers — a merge card whose candidate is no longer READY, an integration
+   item whose candidate left the live states or whose task was cancelled or replaced, a delivery
+   review whose task left its DONE delivery — and the ending it writes is one of two
+   (`PROMOTION_MOVED_ON`, or `TASK_CLOSED`), which need not be the one the missed edge would have
+   written. The kinds the predicate always says are owed (a task failure, a question, a pause, a
+   request) are never touched. That is not a second clock either: it is one statement with its
+   selection in it, it writes an item's ending and nothing an agent would run, and every reader
+   already asks the same predicate — the tick only makes the `state` agree within the minute.
+2. It **escalates** what somebody still owes: an unhandled open item becomes the account owner's.
+   That is the item's assignment columns — `assignee`, `assignee_reason`, `assigned_at`,
+   `escalated_at` — and nothing else. The owner then reads it under "needs you" in that project's
+   open items, and the push that tells them so is §7.6's, sent from the rows this sweep returns.
 
 Neither step creates a wake, a turn or a session. The reconcile rides the escalation tick rather
 than a schedule of its own, so this path still adds no `setInterval`, no startup sweep and no
@@ -56,7 +60,7 @@ may not start agent work: an agent woken by a timer is working on nothing that h
 the loop this document's routing removed. But an item assigned to a coordinator conversation that
 has stopped reading waits forever, and the person the platform could have asked never learns there
 was anything to ask. So the clock is allowed exactly where its output is a human's inbox and its
-write is one column — and nowhere else. `exception-escalation.pg.spec.ts` holds it to that by
+write is the item's own assignment — and nowhere else. `exception-escalation.pg.spec.ts` holds it to that by
 counting `conversation_turn`, `session`, `project_coordinator_wake` and delivery rows across the
 whole database either side of a sweep; `open-item-owed.pg.spec.ts` holds the reconcile half to the
 same, beside the readers that must not count an item nobody owes (contract §8.3).
