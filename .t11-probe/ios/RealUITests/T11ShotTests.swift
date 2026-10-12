@@ -294,10 +294,16 @@ final class T11ShotTests: XCTestCase {
         guard openSession(app, project) else { return }
         Thread.sleep(forTimeInterval: 4.0)
 
-        // Read back up until a MESSAGE is at the top of the viewport and the cards are under it:
-        // the direction word is the reader's own place, which only the transcript can report.
-        for _ in 0..<3 { drag(app, by: 300) }
+        // Read back up in small steps until the bar's line carries a direction word: it is the
+        // reader's own place — reported by the transcript once a MESSAGE sits at the top of the
+        // viewport with the cards under it — and it says nothing until then.
+        let bar = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "waiting")).firstMatch
+        for _ in 0..<8 {
+            if bar.exists, bar.label.contains("below") || bar.label.contains("above") { break }
+            drag(app, by: 200)
+        }
         Thread.sleep(forTimeInterval: 1.5)
+        note("bar: \(bar.exists ? bar.label : "(none)")")
         texts("waiting-below", app)
         shoot("08-waiting-below", settle: 1.5)
     }
