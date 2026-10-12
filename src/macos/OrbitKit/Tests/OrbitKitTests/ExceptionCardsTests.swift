@@ -911,6 +911,9 @@ final class ExceptionCardsTests: XCTestCase {
                        try declaration(web, "MARK_HANDLED_MODAL_BODY"))
         try require(web, "Why is it no longer open?")
         try require(web, "headline=\"The item was not closed\"")
+        // It is a door of the map like any other, with the same one line under it saying what it
+        // ends — the line the card draws from the model, not from a constant in the view.
+        try require(web, "MARK_HANDLED: '\(ExceptionCards.markHandledConsequence)'")
         // And the same four kinds the browser closes by hand, in the same set the server's own door
         // names.
         for kind in ["INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR",
