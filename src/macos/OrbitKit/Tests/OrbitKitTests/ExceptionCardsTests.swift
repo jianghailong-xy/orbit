@@ -764,9 +764,15 @@ final class ExceptionCardsTests: XCTestCase {
                               (.openTaskSession, "OPEN_TASK_SESSION"), (.retry, "RETRY"),
                               (.cancelTask, "CANCEL_TASK"),
                               (.askCoordinatorAgain, "ASK_COORDINATOR_AGAIN")] {
-            let label = try XCTUnwrap(ExceptionCards.actionLabel(row(), action), "\(key) has a label")
+            // A RETRY wears three sets of words and the map holds the landing-retry ones; the
+            // sample below is an integration row, which is the row that wears them. The other two
+            // — the candidate's re-check and the failed task's run-again — are asserted where
+            // their doors are (`testARerunOfACheckIsSaidSoAndCarriesAReason`,
+            // `testARunAgainOnAFailedTaskIsSaidSo`).
+            let sample = action == .retry ? row { $0.kind = .integrationError } : row()
+            let label = try XCTUnwrap(ExceptionCards.actionLabel(sample, action), "\(key) has a label")
             try require(web, "\(key): '\(label)'")
-            try require(web, "\(key): '\(ExceptionCards.actionConsequence(row(), action))'")
+            try require(web, "\(key): '\(ExceptionCards.actionConsequence(sample, action))'")
         }
         // A door the browser's map has no label for is not drawn at all — and an action this build
         // has never heard of is not a door.
@@ -843,6 +849,28 @@ final class ExceptionCardsTests: XCTestCase {
         try require(web, "const reason = row.requiredAction?.trim() || RETRY_REASON_FALLBACK;")
         // The route the re-run travels: the candidate's, on the row that names one (T5's owner door).
         try require(web, "/integration/retry")
+    }
+
+    /// A RETRY on a FAILED task is the run-again door (`taskFailureDoors`, §4.7): the task starts a
+    /// new run through the owner's own route — the very one Run now presses — and the item closes
+    /// with that fact. It wears the run-again consequence rather than the landing-retry one, and
+    /// both words are the browser's.
+    func testARunAgainOnAFailedTaskIsSaidSo() throws {
+        let failed = row { $0.kind = .taskFailed
+                           $0.actions = [.askCoordinatorAgain, .openTaskSession, .retry] }
+        let press = try XCTUnwrap(ExceptionCards.presses(failed).first { $0.action == .retry })
+        XCTAssertEqual(press.consequence, ExceptionCards.taskRunAgainConsequence)
+        // The landing-retry line belongs to the integration rows: those have a landing to queue
+        // again, and a failed task has no finished delivery to deliver.
+        XCTAssertEqual(ExceptionCards.actionConsequence(row { $0.kind = .integrationError }, .retry),
+                       "A new integration attempt is queued with your reason.")
+
+        let web = try webSource()
+        XCTAssertEqual(ExceptionCards.taskRunAgainConsequence,
+                       try declaration(web, "TASK_RUN_AGAIN_CONSEQUENCE"))
+        XCTAssertEqual(ExceptionCards.notRunAgain, try declaration(web, "TASK_RUN_AGAIN_ERROR"))
+        // The route the press travels: the owner's own execute door (the one Run now presses).
+        try require(web, "`/tasks/${encodeURIComponent(taskId)}/execute`")
     }
 
     /// `Review` is a way to the merge card and nothing else: it is drawn only where THAT card is on

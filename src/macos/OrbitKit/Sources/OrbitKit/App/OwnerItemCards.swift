@@ -1332,6 +1332,10 @@ public enum ExceptionCards {
     /// the reason the reader gives — the browser's `PROMOTION_RETRY_CONSEQUENCE`.
     public static let promotionRetryConsequence =
         "The current candidate is checked again with your reason."
+    /// What a RETRY on a failed task does — the run-again door, not an integration rerun: the task
+    /// starts a new run and the item closes with that fact (`taskFailureDoors`, §4.7) — the
+    /// browser's `TASK_RUN_AGAIN_CONSEQUENCE`.
+    public static let taskRunAgainConsequence = "The task runs again and this item closes with it."
     /// What a RETRY press carries as its reason when the row has no `requiredAction` of its own —
     /// the browser's `RETRY_REASON_FALLBACK`. The door requires a reason (`RetryIntegrationDto`), so
     /// a press never travels empty.
@@ -1350,12 +1354,16 @@ public enum ExceptionCards {
         return actionLabels[action]
     }
 
-    /// What that door's one line under it says: the map above, and the candidate wording for a
-    /// RETRY that names one (the browser's `actionConsequence`). Empty for a door with no label,
-    /// which is never drawn with a line either.
+    /// What that door's one line under it says: the map above, the candidate wording for a RETRY
+    /// that names one, and the run-again wording on a failed task — the browser's own reading
+    /// (`actionConsequence`). One word covers three doors; the line is what says which step the
+    /// press is. Empty for a door with no label, which is never drawn with a line either.
     public static func actionConsequence(_ row: ProjectOpenItemRow,
                                          _ action: ProjectOpenItemAction) -> String {
-        if action == .retry, row.promotionId != nil { return promotionRetryConsequence }
+        if action == .retry {
+            if row.promotionId != nil { return promotionRetryConsequence }
+            if row.kind == .taskFailed { return taskRunAgainConsequence }
+        }
         return actionConsequences[action] ?? ""
     }
 
@@ -1398,9 +1406,10 @@ public enum ExceptionCards {
                                  mergeCard: String? = nil) -> Bool {
         switch action {
         case .askCoordinatorAgain, .answer: return true
-        // A RETRY is two doors under one name (§4.8, `open-item-doors.ts` integration-retry-task
-        // and -promotion): a landing retry needs the task, a check re-run needs the candidate, and
-        // the row carries whichever it is about.
+        // A RETRY is three doors under one name (§4.7, `open-item-doors.ts` integration-retry-task /
+        // -promotion / task-start): a landing retry needs the task, a check re-run needs the
+        // candidate, the run again a FAILED task answers needs the task too, and the row carries
+        // whichever it is about.
         case .retry: return row.taskId != nil || row.promotionId != nil
         case .cancelTask: return row.taskId != nil
         case .review: return row.promotionId != nil && row.promotionId == mergeCard
@@ -1476,10 +1485,12 @@ public enum ExceptionCards {
     public static let markHandledReason = "Why is it no longer open?"
     /// What a refused ending says, in the browser's own headline.
     public static let notMarkedHandled = "The item was not closed"
-    /// What a refused rerun says, in the browser's own headline — two of them, because the two
-    /// routes are two different things to have failed to do.
+    /// What a refused rerun says, in the browser's own headline — three of them, because the three
+    /// routes are three different things to have failed to do.
     public static let notRerunCheck = "The check was not re-run"
     public static let notRetriedLanding = "The task integration was not retried"
+    /// The third: the run-again press on a failed task (the browser's `TASK_RUN_AGAIN_ERROR`).
+    public static let notRunAgain = "The task was not run again"
     /// What the receipt says, for a press made on this screen. Native-only, like the hand-back's:
     /// the browser re-derives its cards from the read and the card simply goes.
     public static let handled = "Marked as handled"

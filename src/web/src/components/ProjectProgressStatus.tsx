@@ -28,6 +28,7 @@ import {
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
+import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
   DEFAULT_MAIN_BRANCH,
   START_PROJECT_TITLE,
@@ -233,6 +234,12 @@ export const RERUN_CHECK_ACTION_LABEL = 'Re-run the check';
 export const REQUIRED_ACTION_FALLBACK = 'Review what needs to happen next.';
 export const RETRY_REASON_FALLBACK = 'Retry the integration after the failed check.';
 export const PROMOTION_RETRY_CONSEQUENCE = 'The current candidate is checked again with your reason.';
+/** What a RETRY on a `TASK_FAILED` row does — the run-again door, not an integration rerun: the
+ *  task starts a new run and the item closes with that fact (`taskFailureDoors`, §4.7). */
+export const TASK_RUN_AGAIN_CONSEQUENCE = 'The task runs again and this item closes with it.';
+/** What the card says when that press was refused — the browser's spelling of the console's own
+ *  headline for the same door (`OwnerItemCards.notRunAgain`). */
+export const TASK_RUN_AGAIN_ERROR = 'The task was not run again';
 
 /** Shared action copy. Swift parity tests read this source, so keep every user-facing action
  * consequence in one exported map rather than scattering variants through card branches. */
@@ -258,11 +265,15 @@ function actionLabel(row: Pick<ProjectOpenItemRow, 'promotionId'>, action: OpenI
 }
 
 function actionConsequence(
-  row: Pick<ProjectOpenItemRow, 'promotionId'>,
+  row: Pick<ProjectOpenItemRow, 'promotionId' | 'kind'>,
   action: OpenItemAction,
 ): string {
-  if (action === 'RETRY' && row.promotionId != null) {
-    return PROMOTION_RETRY_CONSEQUENCE;
+  if (action === 'RETRY') {
+    // Three doors under one name, each wearing the words for what it actually re-runs: a
+    // candidate's check, a task's landing, or — on a failed task — the task itself
+    // (`taskFailureDoors`).
+    if (row.promotionId != null) return PROMOTION_RETRY_CONSEQUENCE;
+    if (row.kind === 'TASK_FAILED') return TASK_RUN_AGAIN_CONSEQUENCE;
   }
   return ACTION_CONSEQUENCES[action] ?? '';
 }
@@ -280,10 +291,11 @@ const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
 ]);
 
 /** Whether this row carries what a writing press would need, in the same shape `actionHref` answers
- *  for the links: the third is about the item itself, which every row carries. RETRY is two doors
- *  under one name (§4.8, `open-item-doors.ts` integration-retry-task / -promotion) — the landing
- *  rerun a TASK answers and the re-check of the merge a CANDIDATE answers — so it is drawn when the
- *  row carries either address; `RetryPress` sends it through the route its `promotionId` decides. */
+ *  for the links: the third is about the item itself, which every row carries. RETRY is three doors
+ *  under one name (§4.7, `open-item-doors.ts` integration-retry-task / -promotion / task-start) —
+ *  the landing rerun a TASK answers, the re-check of the merge a CANDIDATE answers, and the run
+ *  again a FAILED task answers — so it is drawn when the row carries either address, and `RetryPress`
+ *  sends it through the door its kind and its `promotionId` decide. */
 function writeTarget(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
   if (action === 'ASK_COORDINATOR_AGAIN') return row.itemId;
   if (action === 'RETRY') return row.taskId ?? row.promotionId ?? null;
@@ -548,6 +560,28 @@ export function retryPromotionMutationOptions(
 }
 
 /**
+ * Run a failed task again through the owner's own door — the press its `TASK_FAILED` card's Retry
+ * makes (`taskFailureDoors` names this route, §4.7): `POST /tasks/:id/execute`, the very route Run
+ * now presses, which clears the failure and starts a new run.
+ *
+ * An integration retry cannot stand in for it: a landing delivers a finished task's work, and this
+ * task is the one that failed, so that door answers 409 by design (J-T1b). The token names the
+ * press exactly as every other Run press names its own (`newRunRequestToken`), so a lost answer is
+ * resent as the same request rather than as a second run.
+ */
+export function runTaskAgainMutationOptions(qc: QueryClient, projectId: string, taskId: string) {
+  return {
+    ...runRequestResend,
+    mutationFn: ({ triggerId }: { triggerId: string }) =>
+      api(`/tasks/${encodeURIComponent(taskId)}/execute`, {
+        method: 'POST',
+        body: { triggerId },
+      }),
+    onSuccess: () => refreshItemWriteViews(qc, projectId, taskId),
+  };
+}
+
+/**
  * Cancel task: the attempt stops here and the exceptions it opened close with it (§4.2:
  * `TASK_CLOSED`). No run is stopped by it — a task with a live run is a task that is not FAILED —
  * so the press is about the record, and its confirm says exactly that.
@@ -715,12 +749,19 @@ function RetryPress({
   tier: PressTier;
 }): JSX.Element {
   const qc = useQueryClient();
-  const retry = useMutation(
+  // A failed task's Retry is the run-again door the row's holder owns (`taskFailureDoors`, §4.7):
+  // the task starts a new run through the owner's own route, never the integration retry, which
+  // refuses every task that is not DONE. Everything else keeps the two integration reruns, chosen
+  // by the candidate the row names.
+  const runAgain = row.kind === 'TASK_FAILED';
+  const integration = useMutation(
     row.promotionId != null
       ? retryPromotionMutationOptions(qc, projectId, row.promotionId)
       : retryTaskMutationOptions(qc, projectId, row.taskId ?? ''),
   );
-  const error = retry.error instanceof Error ? retry.error : null;
+  const runTask = useMutation(runTaskAgainMutationOptions(qc, projectId, row.taskId ?? ''));
+  const failure = runAgain ? runTask : integration;
+  const error = failure.error instanceof Error ? failure.error : null;
   const conflict = error ? readTaskRunConflict(error) : null;
   const label = actionLabel(row, 'RETRY');
   const reason = row.requiredAction?.trim() || RETRY_REASON_FALLBACK;
@@ -729,14 +770,24 @@ function RetryPress({
       <PressButton
         label={label}
         tier={tier}
-        pending={retry.isPending}
-        onClick={() => retry.mutate({ reason })}
+        pending={runAgain ? runTask.isPending : integration.isPending}
+        onClick={() =>
+          runAgain
+            ? runTask.mutate({ triggerId: newRunRequestToken() })
+            : integration.mutate({ reason })
+        }
       />
       {conflict?.sessionId ? (
         <TaskRunHandoffNotice conflict={conflict} className="project-open-item-error" />
       ) : error ? (
         <PressError
-          headline={row.promotionId != null ? 'The check was not re-run' : 'The task integration was not retried'}
+          headline={
+            runAgain
+              ? TASK_RUN_AGAIN_ERROR
+              : row.promotionId != null
+                ? 'The check was not re-run'
+                : 'The task integration was not retried'
+          }
           error={error}
         />
       ) : null}
