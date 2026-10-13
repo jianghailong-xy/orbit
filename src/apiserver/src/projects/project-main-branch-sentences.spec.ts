@@ -111,6 +111,7 @@ function waiting(blockingJobKind: string, mainBranch: string | null): Integratio
     jobErrorCode: null, jobConflictCount: 0, jobFailedCheck: null,
     queueBlockCode: 'WAITING_SERIAL_SLOT', runnerWait: null, runnerName: null,
     blockingJobId: 'busy', blockingJobKind, blockingTaskTitle: null, blockingOpenItemId: null,
+    syncHandlingGeneration: null,
     itemId: null, itemKind: null, itemAssignee: null, itemCreatedAt: null, itemHandlingJobId: null,
     landedAt: null, mainBranch,
   };

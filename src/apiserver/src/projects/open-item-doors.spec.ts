@@ -9,10 +9,12 @@ import {
   OPEN_ITEM_DIRECT_DOOR_TABLE,
   OPEN_ITEM_DOOR_TABLE,
   cellForOpenItem,
+  doorsForOpenItem,
   knownGapsForCell,
   openItemActionsFromDoors,
+  type OpenItemDoorCell,
 } from './open-item-doors';
-import { OPEN_ITEM_KINDS } from './project-open-item';
+import { OPEN_ITEM_KINDS, openItemMessage, type OpenItemMessageSource } from './project-open-item';
 
 /**
  * A capability census, rather than a test of one particular open item.
@@ -152,6 +154,125 @@ test('conflicts name their branch-changing repair doors, and owner landings have
   assert.ok(handover.length > 0, 'the implemented handover capability must remain named in the table');
   assert.ok(handover.every((door) => door.implemented && !door.resolving));
   assert.equal((KNOWN_GAPS as readonly string[]).includes('HANDOVER_DOOR'), false);
+});
+
+const TASK_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a6d';
+const PROMOTION_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a6e';
+const PROJECT_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a6f';
+const ITEM_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a70';
+const EPISODE_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a71';
+const FIX_TASK_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a72';
+const FIX_JOB_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a73';
+
+/** A row that lands on exactly this cell, for both projections the table feeds. */
+function sampleFor(cell: OpenItemDoorCell) {
+  const promotionSource = cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION';
+  const task = cell.todoType.startsWith('INTEGRATION_') || cell.todoType === 'TASK_FAILED'
+    || cell.todoType === 'DELIVERY_REVIEW';
+  return {
+    kind: cell.todoType,
+    assignee: cell.assignee,
+    taskId: task ? TASK_ID : null,
+    promotionId: promotionSource || cell.todoType === 'PROMOTION_APPROVAL' ? PROMOTION_ID : null,
+    fuseEpisodeId: cell.todoType === 'FUSE_PAUSED' ? EPISODE_ID : null,
+    askable: true,
+    sourceJob: cell.sourceJob,
+    failureClass: cell.failureClass,
+    phase: cell.sourceJob === 'MAIN_SYNC' ? 'MAIN_SYNC' : null,
+    jobKind: cell.sourceJob === 'MAIN_SYNC' ? 'LAND_TASK' : cell.sourceJob,
+    payload: {
+      jobKind: cell.sourceJob === 'MAIN_SYNC' ? 'LAND_TASK' : cell.sourceJob,
+      phase: cell.sourceJob === 'MAIN_SYNC' ? 'MAIN_SYNC' : undefined,
+      failureClass: cell.failureClass,
+      files: cell.failureClass === 'CONFLICT' ? ['src/conflicted.ts'] : undefined,
+      reason: cell.todoType === 'DELIVERY_REVIEW' ? 'OUTSIDE_DECLARED_SCOPE' : undefined,
+      paths: cell.todoType === 'DELIVERY_REVIEW' ? ['src/undeclared.ts'] : undefined,
+      declaredPaths: cell.todoType === 'DELIVERY_REVIEW' ? ['src/declared'] : undefined,
+    },
+  };
+}
+
+/** Every executable name the table knows.  A message is checked against the names in here. */
+function tableToolNames(): string[] {
+  const doors = [
+    ...OPEN_ITEM_DOOR_TABLE.flatMap((cell) => cell.doors),
+    ...OPEN_ITEM_DIRECT_DOOR_TABLE.flatMap((cell) => cell.doors),
+  ];
+  return [...new Set(doors.filter((door) => door.implemented && door.mcp).map((door) => door.mcp!))];
+}
+
+test('no conflict cell holds the rerun its own decision refuses, and none projects RETRY', () => {
+  // The integration kinds only: a TASK_FAILED cell's failureClass is a sentinel, and its RETRY is
+  // `task_start` — a task that failed really can be run again, which no conflict's cell holds.
+  const conflicts = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
+    cell.todoType.startsWith('INTEGRATION_') && cell.failureClass === 'CONFLICT');
+  assert.ok(conflicts.length > 0);
+  // Both kinds of conflict are in the census — a task landing's, and a promotion's — with both
+  // assignees of each.
+  for (const agree of [
+    () => conflicts.some((cell) => cell.sourceJob === 'LAND_TASK' || cell.sourceJob === 'MAIN_SYNC'),
+    () => conflicts.some((cell) => cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION'),
+    () => conflicts.some((cell) => cell.assignee === 'COORDINATOR'),
+    () => conflicts.some((cell) => cell.assignee === 'OWNER'),
+  ]) assert.ok(agree(), 'the conflict census lost a source or an assignee');
+
+  for (const cell of conflicts) {
+    const where = `${cell.todoType}/${cell.sourceJob}/CONFLICT/${cell.assignee}`;
+    // `decideIntegrationRetry` and `decidePromotionRetry` answer a conflict with 409
+    // INTEGRATION_RETRY_NOT_APPLICABLE: the door is not in the cell at all.
+    assert.equal(cell.doors.some((door) => door.mcp === 'integration_retry'), false,
+      `${where} holds the rerun door a conflict is refused`);
+    assert.equal(openItemActionsFromDoors(sampleFor(cell)).includes('RETRY'), false,
+      `${where} projects a RETRY press the rerun door would refuse`);
+  }
+});
+
+test('every cell’s coordinator message names only the doors that cell holds', () => {
+  const names = tableToolNames();
+  assert.ok(names.length >= 8, `the census found too few executable names: ${names.join(', ')}`);
+  let named = 0;
+  for (const cell of OPEN_ITEM_DOOR_TABLE) {
+    const row = sampleFor(cell);
+    // The messages are written for the coordinator whatever the row's own assignee, so the doors
+    // they may name are the coordinator cell's.
+    const doors = doorsForOpenItem({ ...row, assignee: 'COORDINATOR' }).filter((door) => door.implemented);
+    // A fix task is only ever attached to an integration item or a failed task (§4.7), so the
+    // re-keyed preface is rendered for those cells.
+    const fixable = cell.todoType.startsWith('INTEGRATION_') || cell.todoType === 'TASK_FAILED';
+    const item: OpenItemMessageSource = {
+      id: ITEM_ID,
+      kind: cell.todoType,
+      title: `${cell.todoType} ${cell.sourceJob} ${cell.failureClass}`,
+      projectId: PROJECT_ID,
+      taskId: row.taskId,
+      promotionId: row.promotionId,
+      payload: row.payload,
+      ...(fixable
+        ? {
+            landedFixes: [{
+              taskId: FIX_TASK_ID,
+              jobId: FIX_JOB_ID,
+              state: 'LANDED',
+              targetRef: 'refs/heads/project/34YhlsSkybFDaTXbOfcxM',
+              landedSha: 'a'.repeat(40),
+            }],
+            failedSourceSha: 'b'.repeat(40),
+          }
+        : {}),
+    };
+    const message = openItemMessage(item);
+    const where = `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}/${cell.assignee}`;
+    for (const name of names) {
+      if (!new RegExp(`\\b${name}\\b`).test(message)) continue;
+      named += 1;
+      assert.ok(doors.some((door) => door.mcp === name),
+        `${where} names ${name}, which its coordinator cell does not hold:\n${message}`);
+    }
+    if (cell.failureClass === 'CONFLICT') {
+      assert.doesNotMatch(message, /\bintegration_retry\b/, `${where} offers the refused rerun in words`);
+    }
+  }
+  assert.ok(named > 10, 'the message census named almost nothing — it is not reading the messages');
 });
 
 test('every named implemented MCP door exists in runner-go/mcp.go', () => {

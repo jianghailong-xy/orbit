@@ -16,6 +16,7 @@ function row(changes: Partial<Row> = {}): Row {
     jobErrorCode: null, jobConflictCount: 0, jobFailedCheck: null,
     queueBlockCode: null, runnerWait: null, runnerName: null,
     blockingJobId: null, blockingJobKind: null, blockingTaskTitle: null, blockingOpenItemId: null,
+    syncHandlingGeneration: null,
     itemId: 'failure', itemKind: 'INTEGRATION_CHECK_FAILED', itemAssignee: 'COORDINATOR',
     itemCreatedAt: new Date('2026-10-04T11:59:00Z'), itemHandlingJobId: 'retry',
     landedAt: null, mainBranch: 'main', ...changes,
@@ -141,6 +142,10 @@ test('every queue reason says why in its own words and links only its own blocke
     [{ queueBlockCode: 'WAITING_RUNNER', runnerWait: 'OUTDATED', runnerName: 'hpc' }, 'WAITING_RUNNER', /does not take integration jobs/],
     [{ queueBlockCode: 'WAITING_RUNNER', runnerWait: 'NO_RUNNER' }, 'WAITING_RUNNER', /workspace has no runner/],
     [{ queueBlockCode: 'CANCELLING' }, 'CANCELLING', /cancel was asked for/],
+    // The item a new generation is handling still holds the queue, so the reason names that
+    // generation rather than promising a claim the next heartbeat will not make.
+    [{ queueBlockCode: 'WAITING_MAIN_SYNC', blockingTaskTitle: 'Earlier', syncHandlingGeneration: 3 },
+      'WAITING_MAIN_SYNC', /and its conflict is still open — a new landing \(generation 3\) is resolving it$/],
   ];
   for (const [changes, code, summary] of cases) {
     const reason = taskIntegrationOf(landing(changes), now).landTask?.blockingReason;

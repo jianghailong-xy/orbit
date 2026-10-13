@@ -116,6 +116,9 @@ const CONFLICT = item({
   detailLine: '3 files conflict with project/bg-jobs · nothing landed',
   waitingSince: at(18 * MINUTE),
   escalateAt: inFuture(102 * MINUTE),
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none: the card leads with the way onto the branch and draws no `Retry` at all.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   facts: facts({
     task: { id: '34OEE9DwfWYjo3aRFuBgo', title: 'runner 托管作业支持「事件发生时叫醒会话」' },
     targetRef: 'project/bg-jobs',
@@ -1009,18 +1012,27 @@ describe('the exception card’s action row', () => {
     ]);
   });
 
-  it('leads a conflict and a failed check with the way onto the branch, Retry as the alternative', () => {
-    // Rule 1 of the mock: a conflict and a failed combined-tree check both want the branch fixed, so
-    // the way onto it leads and Retry — the heavier step, a whole new run — is the way to take the
-    // same step differently. Neither of these is the server's first door: `Open coordinator` is.
-    const expected = [
+  it('leads a conflict with the way onto the branch, and draws no Retry under it', () => {
+    // Rule 1 of the mock: a conflict wants the branch fixed, so the way onto it leads. The heavier
+    // step behind it is not drawn: the server refuses a rerun for a conflict, so a conflict's cell
+    // lists none and the card cannot come to offer a press no door answers.
+    expect(actionRow(card(CONFLICT))).toEqual([
+      { label: 'Open task session', weight: 'primary' },
+      { label: 'Open coordinator', weight: 'link' },
+      { label: 'Cancel task', weight: 'link' },
+    ]);
+  });
+
+  it('leads a failed check with the way onto the branch, Retry as the alternative', () => {
+    // A failed combined-tree check is the same step, but its cell does hold the rerun door: the
+    // way onto the branch leads and Retry — the heavier step, a whole new run — is the way to take
+    // the same step differently. Neither of these is the server's first door: `Open coordinator` is.
+    expect(actionRow(card(CHECK_FAILED))).toEqual([
       { label: 'Open task session', weight: 'primary' },
       { label: 'Retry', weight: 'secondary' },
       { label: 'Open coordinator', weight: 'link' },
       { label: 'Cancel task', weight: 'link' },
-    ];
-    expect(actionRow(card(CONFLICT))).toEqual(expected);
-    expect(actionRow(card(CHECK_FAILED))).toEqual(expected);
+    ]);
   });
 
   it('leads a failed task with Retry, and the run as the alternative', () => {

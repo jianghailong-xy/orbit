@@ -359,10 +359,12 @@ const LEADING_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
 /** What the next step is for a kind of exception, where the design names one (mock 7 ①②③).
  *
  *  A conflict and a failed combined-tree check both want the branch fixed, so the way onto that
- *  branch leads and a whole new run is the way to take the same step differently. A task that failed
- *  wants another run, so `Retry` leads and the run is the alternative. A kind this map has no answer
- *  for — an integration error, which the mock does not draw — keeps the server's own order rather
- *  than being handed a step nobody asked for. */
+ *  branch leads. A whole new run is the way to take the same step differently where the server
+ *  offers one — a failed check's cell does, a conflict's does not (the rerun is refused for a
+ *  conflict), and the card draws what the server listed rather than inventing the pair. A task that
+ *  failed wants another run, so `Retry` leads and the run is the alternative. A kind this map has no
+ *  answer for — an integration error, which the mock does not draw — keeps the server's own order
+ *  rather than being handed a step nobody asked for. */
 const KIND_NEXT_STEP: Partial<Record<OpenItemKind, OpenItemAction>> = {
   INTEGRATION_CONFLICT: 'OPEN_TASK_SESSION',
   INTEGRATION_CHECK_FAILED: 'OPEN_TASK_SESSION',
