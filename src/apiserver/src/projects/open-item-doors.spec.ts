@@ -11,6 +11,9 @@ import {
   cellForOpenItem,
   knownGapsForCell,
   openItemActionsFromDoors,
+  type OpenItemDoor,
+  type OpenItemDoorCell,
+  type OpenItemDoorInput,
 } from './open-item-doors';
 import { OPEN_ITEM_KINDS } from './project-open-item';
 
@@ -31,6 +34,10 @@ const CONTROLLER_FILES = [
   'projects/projects.controller.ts',
   'projects/project-promotion.controller.ts',
   'projects/project-integration-retry.controller.ts',
+  // The owner's own task doors — `POST /tasks/:id/execute` is the owner's run-again door the
+  // TASK_FAILED cell names (§4.7), so the controllers that dispatch the matrix's owner routes are
+  // part of what the route census has to see.
+  'tasks/tasks.controller.ts',
 ].map((file) => path.join(SRC, file));
 
 const EXPECTED_GAPS = [] as const;
@@ -243,4 +250,94 @@ test('open-item assignment paths never offer a door to somebody who does not hol
         `${action} was projected without a door held by ${sample.assignee}`);
     }
   }
+});
+
+/**
+ * A row standing for one matrix cell, in the shape the readers receive: every dimension the matrix
+ * keys on, and the id the cell's kind carries. It reads back as the cell it was built from, which
+ * the census checks rather than assumes (`cellForOpenItem(rowForCell(cell)) === cell`).
+ */
+function rowForCell(cell: OpenItemDoorCell): OpenItemDoorInput {
+  const promotionSource = cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION';
+  const taskKind = cell.todoType === 'TASK_FAILED' || cell.todoType === 'DELIVERY_REVIEW'
+    || cell.todoType.startsWith('INTEGRATION_');
+  return {
+    kind: cell.todoType,
+    assignee: cell.assignee,
+    taskId: taskKind ? 'task' : null,
+    promotionId: promotionSource || cell.todoType === 'PROMOTION_APPROVAL' ? 'promotion' : null,
+    fuseEpisodeId: cell.todoType === 'FUSE_PAUSED' ? 'episode' : null,
+    askable: true,
+    sourceJob: cell.sourceJob,
+    failureClass: cell.failureClass,
+    payload: { jobKind: cell.sourceJob, failureClass: cell.failureClass },
+  };
+}
+
+/** Whether the registry that dispatches a door knows it: a ROUTE by a controller's metadata, an
+ * MCP door by runner-go's tool table. This is what "the holder can really call it" reduces to for
+ * a door the matrix names. */
+function executableByRegistry(routes: Set<string>, names: Set<string>) {
+  return (door: OpenItemDoor): boolean => door.kind === 'ROUTE'
+    ? door.route != null
+      && routeChoices(door.route).some((choice) => routes.has(canonicalRoute(choice)))
+    : door.mcp != null && names.has(door.mcp);
+}
+
+test('every action a cell projects is a door its holder can really call', () => {
+  const routes = allRouteMetadata();
+  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const canExecute = executableByRegistry(routes, names);
+  for (const cell of OPEN_ITEM_DOOR_TABLE) {
+    const input = rowForCell(cell);
+    assert.equal(cellForOpenItem(input), cell,
+      'the row a reader builds for a cell must read back as that cell');
+    const where = `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}/${cell.assignee}`;
+    for (const action of openItemActionsFromDoors(input)) {
+      const backing = cell.doors.filter((door) =>
+        door.implemented && door.action === action && door.holder === cell.assignee);
+      assert.ok(backing.length > 0,
+        `${where}: ${action} has no implemented door held by the cell's assignee`);
+      assert.ok(backing.some(canExecute),
+        `${where}: ${action} is only backed by doors whose name no registry dispatches`);
+    }
+  }
+});
+
+/**
+ * The cell this census was widened for. A failed task's RETRY is the run-again step, and each
+ * holder's run-again door is their own: the coordinator calls `task_start`, and the owner presses
+ * their own route — the one Run now presses — because an agent's tool is not a door a person
+ * holds. Both clients send this cell's RETRY through that door; before this, both sent it to the
+ * integration retry, which refuses every task that is not DONE (J-T1b, by design), so the press
+ * failed every time it was made.
+ */
+test('a failed task’s RETRY is the run-again door its holder owns', () => {
+  const routes = allRouteMetadata();
+  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const canExecute = executableByRegistry(routes, names);
+  const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => cell.todoType === 'TASK_FAILED');
+  assert.ok(cells.length > 0);
+  for (const cell of cells) {
+    const where = `TASK_FAILED/${cell.sourceJob}/${cell.failureClass}/${cell.assignee}`;
+    const retries = cell.doors.filter((door) =>
+      door.implemented && door.action === 'RETRY' && door.holder === cell.assignee);
+    assert.ok(retries.some(canExecute),
+      `${where}: no door this holder can call carries RETRY — the lead press would be refused`);
+  }
+
+  const ownerRetries = OPEN_ITEM_DOOR_TABLE
+    .filter((cell) => cell.todoType === 'TASK_FAILED' && cell.assignee === 'OWNER')
+    .flatMap((cell) => cell.doors)
+    .filter((door) => door.action === 'RETRY' && door.kind === 'ROUTE');
+  assert.ok(ownerRetries.length > 0, 'the owner holds a ROUTE door for this cell’s RETRY');
+  assert.ok(ownerRetries.every((door) => door.route === '/tasks/:id/execute'),
+    'the owner’s run-again door is their own route, not a runner one');
+
+  const coordinatorRetries = OPEN_ITEM_DOOR_TABLE
+    .filter((cell) => cell.todoType === 'TASK_FAILED' && cell.assignee === 'COORDINATOR')
+    .flatMap((cell) => cell.doors)
+    .filter((door) => door.action === 'RETRY' && door.kind === 'MCP');
+  assert.ok(coordinatorRetries.some((door) => door.mcp === 'task_start' && canExecute(door)),
+    'the coordinator’s run-again door is the task_start tool, and runner-go dispatches it');
 });

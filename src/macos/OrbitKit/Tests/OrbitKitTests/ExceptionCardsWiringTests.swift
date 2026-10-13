@@ -288,12 +288,19 @@ final class ExceptionCardsWiringTests: XCTestCase {
         XCTAssertTrue(doors.contains("api.retryTaskIntegration("),
                       "and one naming a task retries its landing: "
                           + "`POST /projects/:id/tasks/:taskId/integration/retry`")
+        XCTAssertTrue(doors.contains("if row.kind == .taskFailed {")
+                      && doors.contains("try await api.executeTask(taskID, triggerId: PublicID.newToken())"),
+                      "and a FAILED task runs again through the owner's own route "
+                          + "(`POST /tasks/:id/execute`) — the integration retry would refuse it "
+                          + "(J-T1b), so it is never the press a failed task's Retry makes")
         XCTAssertTrue(doors.contains("let reason = ExceptionCards.retryReason(row)"),
                       "the reason the door requires is the item's own sentence, from the model")
         XCTAssertTrue(doors.contains("await refreshRulerQuestions(force: true)"),
                       "and the press re-reads the item list, where the rerun shows itself")
         XCTAssertTrue(doors.contains("statusMessage = \"\\(headline) — "),
                       "a refusal says so, in the browser's own headline for whichever door failed")
+        XCTAssertTrue(doors.contains("ExceptionCards.notRunAgain"),
+                      "the run-again refusal wears its own headline, which is the third door")
     }
 
     /// The action row is the model's presses in the model's order, and the tier picks the style —

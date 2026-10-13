@@ -304,11 +304,17 @@ function taskRepair(holder: OpenItemDoorAssignee, action?: OpenItemAction): Open
 }
 
 function taskFailureDoors(holder: OpenItemDoorAssignee): OpenItemDoor[] {
+  const owner = holder === 'OWNER';
   return [
-    door(holder, 'task-start', 'task_start', 'MCP', 'RERUN', ['RETRIED'], {
+    // Run the task again — the step this cell's RETRY is. The coordinator's door is the
+    // `task_start` tool; the owner's is their own route, the same press Run now makes, because an
+    // agent's tool is not a door the owner holds and a card must not lead with a press its holder
+    // cannot make (§4.7). Both clients send this cell's RETRY through whichever of the two the
+    // row's holder owns; every other cell keeps the integration reruns.
+    door(holder, 'task-start', 'task_start', owner ? 'ROUTE' : 'MCP', 'RERUN', ['RETRIED'], {
       action: 'RETRY',
-      mcp: 'task_start',
-      route: '/runner/tasks/:id/execute',
+      mcp: owner ? undefined : 'task_start',
+      route: owner ? '/tasks/:id/execute' : '/runner/tasks/:id/execute',
     }),
     door(holder, 'task-create', 'task_create', 'MCP', 'RERUN', ['SUCCESSOR_FILED'], {
       action: 'RETRY',

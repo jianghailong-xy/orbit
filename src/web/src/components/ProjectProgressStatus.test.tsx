@@ -18,6 +18,7 @@ import {
   ACTION_CONSEQUENCES,
   PROMOTION_RETRY_CONSEQUENCE,
   RERUN_CHECK_ACTION_LABEL,
+  TASK_RUN_AGAIN_CONSEQUENCE,
   retryPromotionMutationOptions,
   retryTaskMutationOptions,
   ProjectOpenItems,
@@ -1034,6 +1035,26 @@ describe('the exception card’s action row', () => {
     ]);
   });
 
+  it('says what Retry re-runs: the task itself on a failed task, the landing otherwise', () => {
+    // Three doors wear the one word: the consequence line under it is what tells a reader which
+    // step they are taking, so a failed task's press may not say an integration attempt is queued
+    // when what it does is run the task again (`taskFailureDoors`).
+    const runAgain = card(item());
+    expect(runAgain).toContain(TASK_RUN_AGAIN_CONSEQUENCE);
+    expect(runAgain).not.toContain(ACTION_CONSEQUENCES.RETRY);
+
+    const landing = card(CHECK_FAILED);
+    expect(landing).toContain(ACTION_CONSEQUENCES.RETRY);
+    expect(landing).not.toContain(TASK_RUN_AGAIN_CONSEQUENCE);
+
+    const check = card(item({
+      kind: 'INTEGRATION_CHECK_FAILED',
+      promotionId: '34Y7UuNN81bhgBOdQTtcp',
+      actions: ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'],
+    }));
+    expect(check).toContain(PROMOTION_RETRY_CONSEQUENCE);
+  });
+
   it('asks for the reason from the row’s link, and sends nothing without one', async () => {
     // The ending 方案 B demotes is still the press: a quiet link nobody could press would be an
     // ending nobody could make, which is the one thing this door exists for. Mounted rather than
@@ -1385,12 +1406,27 @@ describe('the exception cards’ presses, through their doors', () => {
     await settle();
   }
 
-  it('retries the task through the owner integration door with a reason', async () => {
+  it('runs a failed task again through the owner’s own door, and sends no integration retry', async () => {
     await press({ needsYou: [], withCoordinator: [item()] }, 'Retry');
 
-    // The owner door is project-scoped and carries the required reason.
+    // A failed task's Retry is the run-again door (`taskFailureDoors`): the owner's own route —
+    // the one Run now presses — named by this press's own token. The integration retry would be
+    // refused by design (the task is not DONE), which is the press this test replaced.
     expect(apiMock).toHaveBeenCalledWith(
-      `/projects/${PROJECT_ID}/tasks/${item().taskId}/integration/retry`,
+      `/tasks/${item().taskId}/execute`,
+      { method: 'POST', body: { triggerId: expect.any(String) } },
+    );
+    expect(apiMock.mock.calls.filter(([path]) => String(path).endsWith('/integration/retry')))
+      .toEqual([]);
+  });
+
+  it('retries the landing of a failed integration through the owner integration door with a reason', async () => {
+    await press({ needsYou: [], withCoordinator: [CHECK_FAILED] }, 'Retry');
+
+    // An integration row is unchanged: its task is the one that failed to LAND, and the door that
+    // queues another landing is the integration retry, carrying the required reason.
+    expect(apiMock).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/tasks/${CHECK_FAILED.taskId}/integration/retry`,
       { method: 'POST', body: { reason: expect.any(String) } },
     );
   });
