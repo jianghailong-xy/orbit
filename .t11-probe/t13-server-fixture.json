@@ -1,35 +1,42 @@
 {
-  "generatedAt": "2026-10-13T10:53:40.300Z",
+  "generatedAt": "2026-10-13T11:13:41.256Z",
   "projection": "src/apiserver/src/projects/project-open-item.ts (from live project_open_item rows)",
   "projectUuid": "01a13493-24d0-7750-a420-2d72230d5c7b",
   "states": [
     {
-      "id": "01a134d3-1b73-7189-95e2-227758f8aa13",
-      "label": "TASK_FAILED · OWNER (HANDED_OVER)",
-      "itemId": "01a134d3-1b73-7189-95e2-227758f8aa13",
-      "title": "Task failed: 走查夹具④：故意失败的任务（制造 TASK_FAILED 卡）",
-      "kind": "TASK_FAILED",
+      "id": "01a134e7-e7fe-7095-a55e-ae270fe301ee",
+      "label": "INTEGRATION_CHECK_FAILED · OWNER (HANDED_OVER)",
+      "itemId": "01a134e7-e7fe-7095-a55e-ae270fe301ee",
+      "title": "Checks failed on the combined tree: merging the project branch into main",
+      "kind": "INTEGRATION_CHECK_FAILED",
       "assignee": "OWNER",
       "assigneeReason": "HANDED_OVER",
-      "waitingSince": "2026-10-13T10:33:32.785Z",
+      "waitingSince": "2026-10-13T10:56:15.868Z",
       "escalateAt": null,
       "escalatedAt": null,
-      "taskId": "01a13494-c2bc-7219-86da-82c0b529b71e",
-      "sessionId": "1718aa06-938e-5558-b8ed-0dfab139056f",
-      "promotionId": null,
+      "taskId": null,
+      "sessionId": "1def806f-d9f0-5069-b083-2164e31245f0",
+      "promotionId": "095edccf-5afb-4d83-9271-e179fc7f7a93",
       "fuseEpisodeId": null,
+      "sourceJob": "CHECK_PROMOTION",
+      "failureClass": "CHECK_TIMED_OUT",
       "askable": true,
       "handledBy": [],
-      "handoverNote": "Walkthrough fixture: this failed task is the target for the TASK_FAILED card's Retry. Pressing Retry should start a new run of the task (that is the door under test — it used to answer 409), and the item closes with that run.",
+      "handoverNote": "Walkthrough fixture (closing out): this is the candidate-B check item the coordinator has been handling, kept as the last owner-facing card before the fixture project is deleted.",
       "payload": {
-        "how": "ACCEPTANCE_EXIT_MISMATCH",
-        "chain": {
-          "limit": 3,
-          "rootTaskId": "01a13494-c2bc-7219-86da-82c0b529b71e",
-          "failuresInChain": 1
+        "check": {
+          "name": "MERGE_CHECK",
+          "command": "if [ -f /var/tmp/t13-walk-ticket ]; then rm -f /var/tmp/t13-walk-ticket; echo \"T13 walkthrough: ticket consumed - gate open\"; exit 0; fi; for i in $(seq 1 45); do if [ -f /var/tmp/t13-walk-ticket ]; then rm -f /var/tmp/t13-walk-ticket; echo \"T13 walkthrough: ticket arrived - gate open\"; exit 0; fi; sleep 1; done; echo \"T13 walkthrough: no ticket - the check runs out its budget\"; sleep 3600",
+          "exitCode": null,
+          "timedOut": true,
+          "durationMs": 60002,
+          "outputTail": "T13 walkthrough: no ticket - the check runs out its budget\n",
+          "expectedExitCode": 0
         },
-        "exitCode": 1,
-        "expectedExitCode": 0
+        "jobKind": "CHECK_PROMOTION",
+        "generation": 1,
+        "failureClass": "CHECK_TIMED_OUT",
+        "branchUnchanged": true
       },
       "delivery": {
         "state": "NOT_REQUIRED",
@@ -38,36 +45,35 @@
       },
       "question": null,
       "facts": {
-        "task": {
-          "id": "01a13494-c2bc-7219-86da-82c0b529b71e",
-          "title": "走查夹具④：故意失败的任务（制造 TASK_FAILED 卡）"
-        },
+        "task": null,
         "targetRef": null,
         "targetSha": null,
         "files": [],
         "nothingLanded": false,
-        "check": null,
-        "branchUnchanged": false,
-        "errorCode": null,
-        "failure": {
-          "how": "ACCEPTANCE_EXIT_MISMATCH",
-          "exitCode": 1,
+        "check": {
+          "name": "MERGE_CHECK",
+          "command": "if [ -f /var/tmp/t13-walk-ticket ]; then rm -f /var/tmp/t13-walk-ticket; echo \"T13 walkthrough: ticket consumed - gate open\"; exit 0; fi; for i in $(seq 1 45); do if [ -f /var/tmp/t13-walk-ticket ]; then rm -f /var/tmp/t13-walk-ticket; echo \"T13 walkthrough: ticket arrived - gate open\"; exit 0; fi; sleep 1; done; echo \"T13 walkthrough: no ticket - the check runs out its budget\"; sleep 3600",
           "expectedExitCode": 0,
-          "attempt": 1,
-          "limit": 3
+          "exitCode": null,
+          "timedOut": true,
+          "durationMs": 60002,
+          "outputTail": "T13 walkthrough: no ticket - the check runs out its budget\n"
         },
+        "branchUnchanged": true,
+        "errorCode": null,
+        "failure": null,
         "review": null
       },
       "outcome": null,
       "chat": null,
-      "requiredAction": "This item is already settled — no action is required.",
+      "requiredAction": "The coordinator handed this item over with this note: “Walkthrough fixture (closing out): this is the candidate-B check item the coordinator has been handling, kept as the last owner-facing card before the fixture project is deleted.” — follow it, then use the available door.",
+      "primaryAction": "ASK_COORDINATOR_AGAIN",
       "actions": [
         "ASK_COORDINATOR_AGAIN",
-        "OPEN_TASK_SESSION",
         "RETRY",
-        "CANCEL_TASK"
+        "REVIEW"
       ],
-      "need": "Task failed"
+      "need": "Checks failed"
     },
     {
       "id": "01a134d9-8b6f-7228-b6ef-7724473a7f61",
@@ -146,46 +152,32 @@
       "need": "Checks failed"
     },
     {
-      "id": "01a134dc-e010-754f-a522-e9f355edfe94",
-      "label": "INTEGRATION_CHECK_FAILED · OWNER (ESCALATED)",
-      "itemId": "01a134dc-e010-754f-a522-e9f355edfe94",
-      "title": "Checks failed on the combined tree: merging the project branch into main",
-      "kind": "INTEGRATION_CHECK_FAILED",
+      "id": "01a134d3-1b73-7189-95e2-227758f8aa13",
+      "label": "TASK_FAILED · OWNER (HANDED_OVER)",
+      "itemId": "01a134d3-1b73-7189-95e2-227758f8aa13",
+      "title": "Task failed: 走查夹具④：故意失败的任务（制造 TASK_FAILED 卡）",
+      "kind": "TASK_FAILED",
       "assignee": "OWNER",
-      "assigneeReason": "ESCALATED",
-      "waitingSince": "2026-10-13T10:46:55.914Z",
-      "escalateAt": "2026-10-13T10:51:55.914Z",
-      "escalatedAt": "2026-10-13T10:52:20.331Z",
-      "taskId": null,
-      "sessionId": "80294aea-cfa1-5474-a3ab-28ebda3b20cd",
-      "promotionId": "1dc80398-f7a4-436d-9d8c-da3bc458531a",
+      "assigneeReason": "HANDED_OVER",
+      "waitingSince": "2026-10-13T10:33:32.785Z",
+      "escalateAt": null,
+      "escalatedAt": null,
+      "taskId": "01a13494-c2bc-7219-86da-82c0b529b71e",
+      "sessionId": "1718aa06-938e-5558-b8ed-0dfab139056f",
+      "promotionId": null,
       "fuseEpisodeId": null,
-      "sourceJob": "CHECK_PROMOTION",
-      "failureClass": "CHECK_TIMED_OUT",
       "askable": true,
       "handledBy": [],
-      "handoverNote": "The walkthrough fixture's merge check only passes while a release ticket sits on the runner host (`/var/tmp/t13-walk-ticket`), and this candidate's check already ran out its 60-second budget twice. Placing the ticket is the owner's step here: re-run the check with it in place to let the candidate move, or mark the item handled if the walkthrough is done with it.",
+      "handoverNote": "Walkthrough fixture: this failed task is the target for the TASK_FAILED card's Retry. Pressing Retry should start a new run of the task (that is the door under test — it used to answer 409), and the item closes with that run.",
       "payload": {
-        "check": {
-          "name": "MERGE_CHECK",
-          "command": "if [ -f /var/tmp/t13-walk-ticket ]; then rm -f /var/tmp/t13-walk-ticket; echo \"T13 walkthrough: ticket consumed - gate open\"; exit 0; fi; for i in $(seq 1 45); do if [ -f /var/tmp/t13-walk-ticket ]; then rm -f /var/tmp/t13-walk-ticket; echo \"T13 walkthrough: ticket arrived - gate open\"; exit 0; fi; sleep 1; done; echo \"T13 walkthrough: no ticket - the check runs out its budget\"; sleep 3600",
-          "exitCode": null,
-          "timedOut": true,
-          "durationMs": 60002,
-          "outputTail": "T13 walkthrough: no ticket - the check runs out its budget\n",
-          "expectedExitCode": 0
+        "how": "ACCEPTANCE_EXIT_MISMATCH",
+        "chain": {
+          "limit": 3,
+          "rootTaskId": "01a13494-c2bc-7219-86da-82c0b529b71e",
+          "failuresInChain": 1
         },
-        "retry": {
-          "reason": "走查：T13 演示协调者的重查门——第一次检查在没有放行票据时失败了（CHECK_FAILED），现在按门重跑这条候选的检查：这次合并检查的超时预算（60 秒）已落到 codebase 上，重跑会走真正的预算超时路径。",
-          "failureClass": "CHECK_FAILED",
-          "retryOfJobId": "b3f0219f-667e-45ce-a2eb-8bbc8ba06d42",
-          "requestedByUserId": null,
-          "requestedBySessionId": "6328c894-c1bc-57b5-b104-d1d97f028a4e"
-        },
-        "jobKind": "CHECK_PROMOTION",
-        "generation": 2,
-        "failureClass": "CHECK_TIMED_OUT",
-        "branchUnchanged": true
+        "exitCode": 1,
+        "expectedExitCode": 0
       },
       "delivery": {
         "state": "NOT_REQUIRED",
@@ -194,35 +186,36 @@
       },
       "question": null,
       "facts": {
-        "task": null,
+        "task": {
+          "id": "01a13494-c2bc-7219-86da-82c0b529b71e",
+          "title": "走查夹具④：故意失败的任务（制造 TASK_FAILED 卡）"
+        },
         "targetRef": null,
         "targetSha": null,
         "files": [],
         "nothingLanded": false,
-        "check": {
-          "name": "MERGE_CHECK",
-          "command": "if [ -f /var/tmp/t13-walk-ticket ]; then rm -f /var/tmp/t13-walk-ticket; echo \"T13 walkthrough: ticket consumed - gate open\"; exit 0; fi; for i in $(seq 1 45); do if [ -f /var/tmp/t13-walk-ticket ]; then rm -f /var/tmp/t13-walk-ticket; echo \"T13 walkthrough: ticket arrived - gate open\"; exit 0; fi; sleep 1; done; echo \"T13 walkthrough: no ticket - the check runs out its budget\"; sleep 3600",
-          "expectedExitCode": 0,
-          "exitCode": null,
-          "timedOut": true,
-          "durationMs": 60002,
-          "outputTail": "T13 walkthrough: no ticket - the check runs out its budget\n"
-        },
-        "branchUnchanged": true,
+        "check": null,
+        "branchUnchanged": false,
         "errorCode": null,
-        "failure": null,
+        "failure": {
+          "how": "ACCEPTANCE_EXIT_MISMATCH",
+          "exitCode": 1,
+          "expectedExitCode": 0,
+          "attempt": 1,
+          "limit": 3
+        },
         "review": null
       },
       "outcome": null,
       "chat": null,
-      "requiredAction": "The coordinator handed this item over with this note: “The walkthrough fixture's merge check only passes while a release ticket sits on the runner host (`/var/tmp/t13-walk-ticket`), and this candidate's check already ran out its 60-second budget twice. Placing the ticket is the owner's step here: re-run the check with it in place to let the candidate move, or mark the item handled if the walkthrough is done with it.” — follow it, then use the available door.",
-      "primaryAction": "ASK_COORDINATOR_AGAIN",
+      "requiredAction": "This item is already settled — no action is required.",
       "actions": [
         "ASK_COORDINATOR_AGAIN",
+        "OPEN_TASK_SESSION",
         "RETRY",
-        "REVIEW"
+        "CANCEL_TASK"
       ],
-      "need": "Checks failed"
+      "need": "Task failed"
     }
   ]
 }
