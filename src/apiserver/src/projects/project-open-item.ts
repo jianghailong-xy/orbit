@@ -16,6 +16,7 @@ import {
 } from '@orbit/shared';
 
 import { landingBranchesFor, mainBranchOf, taskLanding } from './project-criterion-landing';
+import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
   doorsForOpenItem,
@@ -744,8 +745,13 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  *    `handling_job_id` does not change this answer while H1 is in flight. H2/H3 are the terminal
  *    edges for a handled item; until one commits, M-T11 and the readers that use this predicate
  *    still count the OPEN item, including an owner-held item under H4;
- *  - anything else — a task's failure, a question, a pause, a request — while it is open: what
- *    answers those is a person, or a fact this predicate has no row for.
+ *  - a task's failure, while the task still stands where the failure left it: not DONE, not
+ *    cancelled, not replaced, and no attempt at it in flight. That is the exact complement of the
+ *    four facts `resolveByFact`'s first statement answers a failure with — `TASK_DONE`,
+ *    `SUCCESSOR_FILED`, `TASK_CLOSED`, `RETRIED` — read off the same rows, so a failure whose task
+ *    moved on is owed by nobody and an edge that missed it leaves nothing in front of anybody;
+ *  - anything else — a question, a pause, a request — while it is open: what answers those is a
+ *    person, or a fact this predicate has no row for.
  *
  * Parameter-free, like `escalatesAt`: it splices into a statement without moving that statement's
  * placeholders, and its text is the text `scripts/project-liveness-audit.sql` spells, which has no
@@ -755,6 +761,7 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
   const integration = Prisma.raw(INTEGRATION_ITEM_KINDS.map((kind) => `'${kind}'`).join(', '));
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
+  const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   return Prisma.sql`(CASE
       WHEN ${item}."promotion_id" IS NOT NULL AND ${item}."kind" = 'PROMOTION_APPROVAL' THEN EXISTS (
         SELECT 1 FROM "project_promotion" owed_promotion
@@ -774,6 +781,17 @@ export function openItemOwed(alias: string): Prisma.Sql {
          WHERE owed_task."id" = ${item}."task_id"
            AND owed_task."status" = 'DONE'
            AND owed_task."superseded_by_task_id" IS NULL)
+      WHEN ${item}."task_id" IS NOT NULL AND ${item}."kind" = 'TASK_FAILED' THEN EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = ${item}."task_id"
+           AND owed_task."status" NOT IN ('DONE', 'CANCELLED')
+           AND owed_task."superseded_by_task_id" IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM "session" owed_session
+              WHERE owed_session."task_id" = owed_task."id"
+                AND owed_session."starts_task_work"
+                AND owed_session."status" IN (${liveSessions})
+                AND owed_session."id" IS DISTINCT FROM ${item}."session_id"))
       ELSE true
     END)`;
 }
