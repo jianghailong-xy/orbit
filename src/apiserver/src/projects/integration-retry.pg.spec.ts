@@ -808,7 +808,7 @@ test('failing again: the next red opens a classified item for the coordinator, n
       assert.ok(told.includes(REASON), `the message does not carry the rerun's reason — ${told}`);
       assert.match(told, /do not rerun it as it stands/);
       assert.match(told, /integration_retry/);
-      assert.match(told, /task_start only runs the task again on a new branch; it does not queue this landing again/);
+      assert.match(told, /starting the task again runs it on a new branch and does not queue this landing again/);
 
       // And it can decide again: a third generation, rerunning the second.
       const third = await retry(stack, w, task.taskId, 'the runner was overloaded; the check now has the machine to itself');

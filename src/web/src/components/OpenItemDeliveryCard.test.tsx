@@ -74,7 +74,9 @@ const CARD: Delivery = {
   check: null,
   errorCode: null,
   failure: null,
-  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none here: the card is what the server sends, and `Retry the task` is not in it.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
 };
 
@@ -118,9 +120,10 @@ describe('an exception item delivered to the coordinator', () => {
     // The change that made this worth a card: the platform's own reading of the landing, which
     // otherwise costs the coordinator a re-check of the merge receipts every time.
     expect(el!.querySelector('.oic-facts')?.textContent).toContain('No merge receipt');
-    // The doors are the server's list, and the ones a reader can walk are links.
+    // The doors are the server's list, and the ones a reader can walk are links. A conflict offers
+    // no rerun (the server refuses one for it), so the only chip left is the quiet one that stops.
     const chips = [...el!.querySelectorAll('.oic-chip')].map((c) => c.textContent);
-    expect(chips).toEqual(['Retry the task', 'Cancel the task']);
+    expect(chips).toEqual(['Cancel the task']);
     const links = [...el!.querySelectorAll('.oic-links a')].map((a) => a.textContent);
     expect(links).toEqual(['Open the task ↗', 'Open the failed session ↗']);
     // The paragraph the agent read is still one disclosure away, verbatim.
