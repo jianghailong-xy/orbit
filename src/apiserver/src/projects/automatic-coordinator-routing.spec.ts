@@ -100,7 +100,7 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
     'mechanical scope warning', 'src/runner-go/worktree.go', 'src/shared/src/project-done.ts',
     'src/apiserver/src/projects/project-owner-done.pg.spec.ts', 'Accept the scope', 'open_item_resolve',
     'Send it back', 'task_reopen', 'Supersede it', 'supersedesTaskId', 'Rerun the landing', 'integration_retry',
-    'once you take it up it stays yours', 'do not ask_owner about it', 'Automatic',
+    'once you take it up it stays yours', 'do not put it to the account owner as one', 'Automatic',
   ]) {
     assert.ok(message.includes(want), `the review message does not say ${JSON.stringify(want)}`);
   }

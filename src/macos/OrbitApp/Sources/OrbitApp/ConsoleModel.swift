@@ -5052,9 +5052,9 @@ final class ConsoleModel {
         }
     }
 
-    /// Run the work the item is about again (§4.7 H1, T5): the owner's own route through the pair
-    /// of doors the browser's RETRY sends through — a candidate's failed check for a row that names
-    /// one, a failed task landing otherwise.
+    /// Run the work the item is about again (§4.7 H1, T5): the owner's own route through the doors
+    /// the browser's RETRY sends through — a candidate's failed check for a row that names one, a
+    /// failed task landing otherwise, and on a FAILED task (`taskFailureDoors`) the task itself.
     ///
     /// The reason the door requires is the item's own sentence about what failed
     /// (`ExceptionCards.retryReason`), so a press never travels empty and the rerun's record says
@@ -5064,6 +5064,21 @@ final class ConsoleModel {
     @discardableResult
     func retryIntegration(_ row: ProjectOpenItemRow) async -> IntegrationRetryReceipt? {
         guard let projectID, ExceptionCards.addressed(row, .retry) else { return nil }
+        // A failed task's Retry is the run-again door, and the owner's own route for it is Run
+        // now's (`POST /tasks/:id/execute`): it starts a new run and clears the failure. The
+        // integration retry cannot stand in — a landing delivers a finished task's work, so that
+        // door answers 409 for every task that is not DONE, by design (J-T1b).
+        if row.kind == .taskFailed {
+            guard let taskID = row.taskId else { return nil }
+            do {
+                try await api.executeTask(taskID, triggerId: PublicID.newToken())
+                await refreshRulerQuestions(force: true)
+                return nil
+            } catch {
+                statusMessage = "\(ExceptionCards.notRunAgain) — \(APIClient.failureReason(error))."
+                return nil
+            }
+        }
         let reason = ExceptionCards.retryReason(row)
         let headline = row.promotionId != nil ? ExceptionCards.notRerunCheck
                                               : ExceptionCards.notRetriedLanding

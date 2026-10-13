@@ -18,6 +18,7 @@ import {
   ACTION_CONSEQUENCES,
   PROMOTION_RETRY_CONSEQUENCE,
   RERUN_CHECK_ACTION_LABEL,
+  TASK_RUN_AGAIN_CONSEQUENCE,
   retryPromotionMutationOptions,
   retryTaskMutationOptions,
   ProjectOpenItems,
@@ -116,6 +117,9 @@ const CONFLICT = item({
   detailLine: '3 files conflict with project/bg-jobs · nothing landed',
   waitingSince: at(18 * MINUTE),
   escalateAt: inFuture(102 * MINUTE),
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none: the card leads with the way onto the branch and draws no `Retry` at all.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   facts: facts({
     task: { id: '34OEE9DwfWYjo3aRFuBgo', title: 'runner 托管作业支持「事件发生时叫醒会话」' },
     targetRef: 'project/bg-jobs',
@@ -1009,18 +1013,27 @@ describe('the exception card’s action row', () => {
     ]);
   });
 
-  it('leads a conflict and a failed check with the way onto the branch, Retry as the alternative', () => {
-    // Rule 1 of the mock: a conflict and a failed combined-tree check both want the branch fixed, so
-    // the way onto it leads and Retry — the heavier step, a whole new run — is the way to take the
-    // same step differently. Neither of these is the server's first door: `Open coordinator` is.
-    const expected = [
+  it('leads a conflict with the way onto the branch, and draws no Retry under it', () => {
+    // Rule 1 of the mock: a conflict wants the branch fixed, so the way onto it leads. The heavier
+    // step behind it is not drawn: the server refuses a rerun for a conflict, so a conflict's cell
+    // lists none and the card cannot come to offer a press no door answers.
+    expect(actionRow(card(CONFLICT))).toEqual([
+      { label: 'Open task session', weight: 'primary' },
+      { label: 'Open coordinator', weight: 'link' },
+      { label: 'Cancel task', weight: 'link' },
+    ]);
+  });
+
+  it('leads a failed check with the way onto the branch, Retry as the alternative', () => {
+    // A failed combined-tree check is the same step, but its cell does hold the rerun door: the
+    // way onto the branch leads and Retry — the heavier step, a whole new run — is the way to take
+    // the same step differently. Neither of these is the server's first door: `Open coordinator` is.
+    expect(actionRow(card(CHECK_FAILED))).toEqual([
       { label: 'Open task session', weight: 'primary' },
       { label: 'Retry', weight: 'secondary' },
       { label: 'Open coordinator', weight: 'link' },
       { label: 'Cancel task', weight: 'link' },
-    ];
-    expect(actionRow(card(CONFLICT))).toEqual(expected);
-    expect(actionRow(card(CHECK_FAILED))).toEqual(expected);
+    ]);
   });
 
   it('leads a failed task with Retry, and the run as the alternative', () => {
@@ -1032,6 +1045,26 @@ describe('the exception card’s action row', () => {
       { label: 'Open coordinator', weight: 'link' },
       { label: 'Cancel task', weight: 'link' },
     ]);
+  });
+
+  it('says what Retry re-runs: the task itself on a failed task, the landing otherwise', () => {
+    // Three doors wear the one word: the consequence line under it is what tells a reader which
+    // step they are taking, so a failed task's press may not say an integration attempt is queued
+    // when what it does is run the task again (`taskFailureDoors`).
+    const runAgain = card(item());
+    expect(runAgain).toContain(TASK_RUN_AGAIN_CONSEQUENCE);
+    expect(runAgain).not.toContain(ACTION_CONSEQUENCES.RETRY);
+
+    const landing = card(CHECK_FAILED);
+    expect(landing).toContain(ACTION_CONSEQUENCES.RETRY);
+    expect(landing).not.toContain(TASK_RUN_AGAIN_CONSEQUENCE);
+
+    const check = card(item({
+      kind: 'INTEGRATION_CHECK_FAILED',
+      promotionId: '34Y7UuNN81bhgBOdQTtcp',
+      actions: ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'],
+    }));
+    expect(check).toContain(PROMOTION_RETRY_CONSEQUENCE);
   });
 
   it('asks for the reason from the row’s link, and sends nothing without one', async () => {
@@ -1385,12 +1418,27 @@ describe('the exception cards’ presses, through their doors', () => {
     await settle();
   }
 
-  it('retries the task through the owner integration door with a reason', async () => {
+  it('runs a failed task again through the owner’s own door, and sends no integration retry', async () => {
     await press({ needsYou: [], withCoordinator: [item()] }, 'Retry');
 
-    // The owner door is project-scoped and carries the required reason.
+    // A failed task's Retry is the run-again door (`taskFailureDoors`): the owner's own route —
+    // the one Run now presses — named by this press's own token. The integration retry would be
+    // refused by design (the task is not DONE), which is the press this test replaced.
     expect(apiMock).toHaveBeenCalledWith(
-      `/projects/${PROJECT_ID}/tasks/${item().taskId}/integration/retry`,
+      `/tasks/${item().taskId}/execute`,
+      { method: 'POST', body: { triggerId: expect.any(String) } },
+    );
+    expect(apiMock.mock.calls.filter(([path]) => String(path).endsWith('/integration/retry')))
+      .toEqual([]);
+  });
+
+  it('retries the landing of a failed integration through the owner integration door with a reason', async () => {
+    await press({ needsYou: [], withCoordinator: [CHECK_FAILED] }, 'Retry');
+
+    // An integration row is unchanged: its task is the one that failed to LAND, and the door that
+    // queues another landing is the integration retry, carrying the required reason.
+    expect(apiMock).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/tasks/${CHECK_FAILED.taskId}/integration/retry`,
       { method: 'POST', body: { reason: expect.any(String) } },
     );
   });
