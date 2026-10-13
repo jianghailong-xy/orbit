@@ -59,7 +59,7 @@ final class OpenItemDeliveryTests: XCTestCase {
                    "src/web/src/index.css"],
          "targetRef": "refs/heads/project/34ODoUKJGEsfbgcJDGS4q",
          "check": null, "errorCode": null, "failure": null,
-         "actions": ["OPEN_COORDINATOR", "OPEN_TASK_SESSION", "RETRY", "CANCEL_TASK"],
+         "actions": ["OPEN_COORDINATOR", "OPEN_TASK_SESSION", "CANCEL_TASK"],
          "landing": {"receipts": 0, "state": "NOT_KNOWN", "upstream": "main", "integration": "main"}}
         """
 
@@ -88,7 +88,7 @@ final class OpenItemDeliveryTests: XCTestCase {
         // The doors arrive as the server's own values, unlabelled: which ones are drawn is the
         // card's business (`actionLabels`), and one this build has never heard of is dropped there
         // rather than here — the reader keeps the payload whole.
-        XCTAssertEqual(card.actions, ["OPEN_COORDINATOR", "OPEN_TASK_SESSION", "RETRY", "CANCEL_TASK"])
+        XCTAssertEqual(card.actions, ["OPEN_COORDINATOR", "OPEN_TASK_SESSION", "CANCEL_TASK"])
         XCTAssertEqual(card.landing, OpenItemDeliveryLandingFacts(
             receipts: 0, state: .notKnown, upstream: "main", integration: "main"))
     }
@@ -319,8 +319,10 @@ final class OpenItemDeliveryTests: XCTestCase {
     /// way), and a value this build does not know has no label to draw.
     func testDrawsTheDoorsTheServerOfferedAndNoOthers() throws {
         let card = try XCTUnwrap(OpenItemDelivery.parse(try delivered(conflictCard).payload))
+        // A conflict's cell holds no rerun door — the server refuses one for it — so the server
+        // lists none, and the only chip left is the quiet one that stops the task.
         XCTAssertEqual(OpenItemDeliveryCard.actionLabels(card.actions),
-                       ["Retry the task", "Cancel the task"])
+                       ["Cancel the task"])
 
         XCTAssertEqual(OpenItemDeliveryCard.actionLabels(
             ["ASK_COORDINATOR_AGAIN", "REVIEW", "ANSWER", "RESUME", "SOMETHING_NEW"]),

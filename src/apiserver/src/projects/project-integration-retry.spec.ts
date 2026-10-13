@@ -208,7 +208,7 @@ test('a RUNNING landing whose runner stopped reporting is retried as the ERROR i
 const PROJECT = '01a0f53a-99c8-7488-82b1-b4b2d95ecbe1';
 const TASK = '01a0f53f-5fa0-70e8-80c5-c9582a60ec33';
 
-test('a failed landing\'s item tells the coordinator its class, and that task_start does not land it again', () => {
+test('a failed landing\'s item tells the coordinator its class, and that running the task again does not land it', () => {
   const told = openItemMessage({
     id: '01a0f5c9-0000-7000-8000-000000000001',
     kind: 'INTEGRATION_CHECK_FAILED',
@@ -219,10 +219,13 @@ test('a failed landing\'s item tells the coordinator its class, and that task_st
   });
   assert.match(told, /Check MERGE_CHECK exited with code 1/);
   assert.match(told, /Failure class: CHECK_FAILED \(the check ran to the end, and its exit code disagrees with its declaration\)/);
-  assert.match(told, /task_start only runs the task again on a new branch; it does not queue this landing again/);
+  assert.match(told, /starting the task again runs it on a new branch and does not queue this landing again/);
   assert.match(told, /integration_retry \(projectId: 34Y7My8sqhKLWtmCQYv1l, taskId: 34Y7Utvsd47A14DjMzIzD/);
   assert.match(told, /Whether such a landing goes ahead is yours to judge, not a question for the account owner/);
   assert.doesNotMatch(told, /then decide whether to run it again \(task_start\)/, 'the old advice sent DONE tasks to task_start');
+  // The lesson is said without pointing at an executable: this cell holds no task_start door, and
+  // the message names only doors the cell really has (`openItemDoorMessageNames`).
+  assert.doesNotMatch(told, /task_start/, 'a door this cell does not hold is not named at all');
   assert.doesNotMatch(told, /This is generation/, 'a first generation is not a rerun');
 });
 
@@ -253,7 +256,7 @@ test('a rerun that failed again says what it reran and why, and not to rerun it 
   assert.match(told, /do not rerun it as it stands/);
 });
 
-test('a conflict\'s item sends the task back rather than to integration_retry', () => {
+test('a conflict\'s item sends the task back and names no rerun at all', () => {
   const told = openItemMessage({
     id: '01a0f5c9-0000-7000-8000-000000000004',
     kind: 'INTEGRATION_CONFLICT',
@@ -270,9 +273,12 @@ test('a conflict\'s item sends the task back rather than to integration_retry', 
       generation: 1,
     },
   });
-  assert.match(told, /integration_retry does not accept a conflict either/);
+  assert.match(told, /Only a branch that changed can resolve a conflict: rerunning the landing as it stands would conflict again/);
   assert.match(told, /send the task back for rework with task_reopen/);
   assert.doesNotMatch(told, /reason: why this time will be different/);
+  // The rerun door is not in a conflict's cell — `decideIntegrationRetry` refuses one — so the
+  // message does not name it, not even to say it would not help.
+  assert.doesNotMatch(told, /integration_retry/, 'the refused rerun is not named either way');
 });
 
 test('a MAIN_SYNC conflict\'s item says to absorb the upstream on the project line first, then land by MERGE', () => {
@@ -298,17 +304,20 @@ test('a MAIN_SYNC conflict\'s item says to absorb the upstream on the project li
   assert.match(told, /Merge conflict \(MAIN_SYNC\)/);
   assert.match(told, /The conflict is between the project line and the upstream, not in this task’s work/);
   assert.match(told, /merely having the task redo its own work does not resolve it/);
-  assert.match(told, /integration_retry does not accept a conflict either/);
   assert.match(told, /Absorb the upstream on the project line and resolve the conflict first, then land/);
   assert.match(told,
     /On this task’s source branch, merge in the tip of the project branch refs\/heads\/project\/34Y7My8sqhKLWtmCQYv1l and the tip of the upstream/);
   assert.match(told, /commit that merge commit\. The task’s original work stays; it does not need redoing/);
   assert.match(told, /lands in J-S4’s MERGE mode, and the tree that goes into the project branch is the source branch’s tree/);
-  assert.match(told, /the landing stops at MAIN_SYNC as before: then merge once more/);
+  // §3.1 M3 / T16: which tip moved decides what happens next — the project branch's tip has to be
+  // merged in again, while a moved upstream is absorbed into the very branch that carries the fix.
+  assert.match(told, /if the PROJECT BRANCH tip moves, the source branch lacks its new tip, the landing stops at MAIN_SYNC as before, and that tip has to be merged in once more/);
+  assert.match(told, /if only the UPSTREAM moves, the landing merges the new upstream into this very source branch and, when that merge is clean, lands by MERGE with nothing more to do/);
   assert.match(told, /first write on the task with task_comment that this round does step 1 only, then send it back with task_reopen/);
   assert.match(told, /only this task’s own next landing does not wait/);
   assert.doesNotMatch(told, /send the task back for rework with task_reopen/, 'a MAIN_SYNC conflict is not the task\'s work to redo');
   assert.doesNotMatch(told, /reason: why this time will be different/);
+  assert.doesNotMatch(told, /integration_retry/, 'this cell holds no rerun door, so the message names none');
 });
 
 test('integration_retry still refuses a MAIN_SYNC conflict, and says to absorb the upstream on the project line', () => {
@@ -560,10 +569,13 @@ test('a blocked candidate\'s item names the door that checks it again, and that 
     promotionId: CANDIDATE,
     payload: { jobKind: 'CHECK_PROMOTION', phase: 'MERGE', files: ['src/web/src/pages/ProjectsPage.tsx'], failureClass: 'CONFLICT', generation: 1 },
   });
-  assert.match(conflicted, /integration_retry does not accept a conflict either/);
+  assert.match(conflicted, /Only a project branch that changed can resolve a conflict: rerunning the check as it stands would conflict again/);
   assert.match(conflicted, /File a sync task with task_create that starts from the project branch tip and merges the upstream tip into its source branch/);
   assert.match(conflicted, /resolving the conflict and committing it/);
   assert.doesNotMatch(conflicted, /promotionId: /);
+  // `decidePromotionRetry` answers a conflict with 409, so a conflict's cell holds no re-check door
+  // and the message names none — the sync task is the whole of the recipe here.
+  assert.doesNotMatch(conflicted, /integration_retry/);
 });
 
 test('a task landing\'s item says the rerun leaves it open and handled, and how it ends either way', () => {
