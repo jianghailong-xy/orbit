@@ -102,6 +102,37 @@ REQUIRED_HANDED_OVER = ("The coordinator handed this item over with this note: �
 TITLE_ITEM = "Checks failed on the combined tree: merging the project branch into main"
 DETAIL = "The combined-tree check returned a failure."
 
+# T13 walkthrough: when a fixture generated from LIVE production rows sits beside this file, the
+# three states are those rows — their requiredAction / primaryAction / actions / facts come from the
+# compiled apiserver projection applied to the live item, not from the authored constants below.
+# Nothing here re-words what the server said.
+FIXTURE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "t13-server-fixture.json")
+FIXTURE_STATES = []
+if os.path.exists(FIXTURE_PATH):
+    with open(FIXTURE_PATH) as fh:
+        FIXTURE_STATES = json.load(fh).get("states", [])
+
+
+def fixture_item(state, **extra):
+    row = {
+        "itemId": state["itemId"], "kind": state["kind"], "title": state["title"],
+        "detailLine": "", "assignee": state["assignee"],
+        "assigneeReason": state["assigneeReason"],
+        "waitingSince": state.get("waitingSince"), "escalateAt": state.get("escalateAt"),
+        "escalatedAt": state.get("escalatedAt"), "taskId": state.get("taskId"),
+        "sessionId": state.get("sessionId") or COORD, "promotionId": state.get("promotionId"),
+        "fuseEpisodeId": None,
+        "delivery": state.get("delivery") or {"state": "NOT_REQUIRED", "sessionId": None, "at": None},
+        "question": state.get("question"),
+        "facts": state.get("facts"),
+        "actions": state.get("actions") or [],
+        "requiredAction": state["requiredAction"],
+        "primaryAction": state.get("primaryAction"),
+        "need": state.get("need"),
+    }
+    row.update(extra)
+    return row
+
 
 def item(item_id, escalated_at, required, **extra):
     row = {
@@ -129,7 +160,18 @@ def build():
     cards at the TAIL — where the reader opens, and where the bar over the transcript can point DOWN
     at them once they scroll back up ("the reader is above the cards" is the state the bar's
     direction word exists for). The wait itself is two hours, so the footer's two clauses differ.
+
+    With a live fixture beside this file (T13), the three slots are its first three states.
     """
+    if len(FIXTURE_STATES) >= 3:
+        escalated, handling, handed_over = FIXTURE_STATES[:3]
+        return {
+            "escalated": fixture_item(escalated),
+            "handling": fixture_item(handling, handledBy=handling.get("handledBy") or []),
+            "handedOver": fixture_item(handed_over,
+                                       assigneeReason=handed_over.get("assigneeReason"),
+                                       handoverNote=handed_over.get("handoverNote")),
+        }
     s = {}
     s["escalated"] = item("t11-escalated-item", iso(3.5), REQUIRED_ESCALATED)
     s["handling"] = item("t11-handling-item", iso(2.5), REQUIRED_HANDLING, handledBy=[
@@ -212,7 +254,8 @@ def coordinator_session():
                               "projectStatus": "OPEN", "role": "COORDINATOR"},
         "taskId": None, "pendingApprovals": 1, "waitingKind": "OWNER_ITEM",
         "ownerItems": [{"itemId": STATE["escalated"]["itemId"], "kind": "ESCALATED",
-                        "title": TITLE_ITEM, "since": iso(125), "need": "Checks failed",
+                        "title": STATE["escalated"]["title"], "since": iso(125),
+                        "need": STATE["escalated"].get("need") or "Checks failed",
                         "mainBranch": "main"}],
         "lastAssistantText": "The combined-tree check is red. I can’t rerun it until the baseline "
                              "is repaired, so it is the owner’s now.",
