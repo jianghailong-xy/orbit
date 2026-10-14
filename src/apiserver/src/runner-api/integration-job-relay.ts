@@ -636,7 +636,6 @@ export async function applyIntegrationJobResult(
         // check that failed.
         skipMergeCheck: true, skipReason: true, skipApprovedByUserId: true, skipApprovalId: true,
         session: { select: { baseSha: true } },
-        task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
     });
     if (!job) throw new IntegrationJobRefused('NOT_FOUND');
@@ -655,6 +654,17 @@ export async function applyIntegrationJobResult(
     ) {
       throw new IntegrationJobRefused('STALE_CLAIM');
     }
+
+    // The task this job is about, read BESIDE the job rather than below it: `task_id` is a history
+    // reference with no foreign key (0423), so it may name a task that is no longer there — the
+    // trace a deleted task leaves behind — and a job of a deleted task still has a result to record.
+    // A read that may find nothing, where a relation could only ever be null for a promotion.
+    const task = job.taskId
+      ? await tx.task.findFirst({
+        where: { id: job.taskId },
+        select: { title: true, assigneeId: true, creatorType: true, creatorId: true },
+      })
+      : null;
 
     // §2.6 J-T1a: the task's own work, as the two rules below read it. A landing whose subject is one
     // task is judged against that task's sessions — which is the whole of "can this branch still
@@ -815,12 +825,12 @@ export async function applyIntegrationJobResult(
       : [];
     // The visible signal J-T5 owes a person when the line says it was handed a branch carrying
     // nothing: the job row is not somewhere anybody looks, and the answer is silent otherwise.
-    if (wroteNothingOfItsOwn && job.taskId && job.task) {
+    if (wroteNothingOfItsOwn && job.taskId && task) {
       await tx.taskComment.create({
         data: {
           taskId: job.taskId,
-          authorType: job.task.assigneeId ? CreatorType.AGENT : job.task.creatorType,
-          authorId: job.task.assigneeId ?? job.task.creatorId,
+          authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
+          authorId: task.assigneeId ?? task.creatorId,
           body: fullyApplied
             ? fullyAppliedComment({
               branch: shortBranchName(job.sourceRef),
@@ -981,7 +991,7 @@ export async function applyIntegrationJobResult(
         sessionId: job.sessionId,
         promotionId: job.promotionId,
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
-        title: integrationItemTitle(state, job.kind, job.task?.title ?? 'a task', mainBranch),
+        title: integrationItemTitle(state, job.kind, task?.title ?? 'a task', mainBranch),
         dedupeKey: integrationDedupeKey(state, job.id),
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.

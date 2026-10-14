@@ -327,7 +327,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `codebase_id` | uuid NOT NULL | FK `project_codebase` |
 | `kind` | text | CHECK ∈ {`LAND_TASK`, `CHECK_PROMOTION`, `LAND_PROMOTION`} |
 | `generation` | int NOT NULL | `LAND_TASK`：同一任务的第几条（在任务行锁下取 max+1）；另两种：同一晋升的第几条 |
-| `task_id` | uuid NULL | `LAND_TASK` 必填（`project_integration_job_land_task_chk`）；晋升作业（`CHECK_PROMOTION` / `LAND_PROMOTION`）不带（0293），晋升的任务记在 `project_promotion` 行上。现状是 FK `task` ON DELETE SET NULL（0281）；修订 12 对实现的要求：改为**不带外键的历史引用**（同 0344:7-10），理由见下方 `session_id` 一行 |
+| `task_id` | uuid NULL | `LAND_TASK` 必填（`project_integration_job_land_task_chk`）；晋升作业（`CHECK_PROMOTION` / `LAND_PROMOTION`）不带（0293），晋升的任务记在 `project_promotion` 行上。现状（0423 起，2026-10-14）是**不带外键的历史引用**（同 0344:7-10），修订 12 对实现的要求的这一半已落实，删任务不再改写作业行、作业行仍指名那个任务；0423 之前是 FK `task` ON DELETE SET NULL（0281），理由见下方 `session_id` 一行 |
 | `session_id` | uuid NULL | 源分支所在的工作会话（线上别名 `sourceSessionId`）。现状是 FK `session` ON DELETE SET NULL（0281）；修订 12 对实现的要求：与 `task_id` 一起改为不带外键的历史引用。理由：外键的置空是一次 UPDATE，终态行被 J4 守卫拒绝；`LAND_TASK` 行的 `task_id` 置空还违反 `land_task_chk`（0281:117-119），任何一代 `LAND_TASK` 都会挡住删任务——删会话、回收 Trash、删任务因此整批回滚，「让守卫放行」的办法不可行（`docs/landing-session-design.md` §9 第 2 条、§0.1 第 18 条） |
 | `landing_id` | uuid NULL | 修订 12 新增（要求）；所属 `project_landing` 的历史引用，不加外键，只在 INSERT 时写。`session_id` 仍是源工作会话，不改路由、base_sha、领取守卫与回执的含义 |
 | `promotion_id` | uuid NULL | FK `project_promotion`（0273 补外键） |
