@@ -35,7 +35,9 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { criteriaFromDefinitions, criterionKeyOf } from './project-acceptance';
-import { LANDING_SERVING_WORK_SELECT, criterionLanding, landingBranchesFor } from './project-criterion-landing';
+import {
+  LANDING_SERVING_WORK_SELECT, criterionLanding, landingBranchesFor, readLandingJobsByTask,
+} from './project-criterion-landing';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import {
   ProjectTasksSettledProducer,
@@ -500,8 +502,20 @@ async function expectedTurnId(db: PrismaClient, projectId: string): Promise<stri
     },
     orderBy: { ordinal: 'asc' },
   });
+  // The line's answers about these branches, beside the tasks rather than below them (0423 made
+  // `task_id` a history reference, so there is no relation to nest) — attached here so this mirror
+  // is folded from the same facts the product's own reader carries.
+  const jobs = await readLandingJobsByTask(
+    db, definitions.flatMap((definition) => definition.servingTasks.map((task) => task.id)),
+  );
+  const served = definitions.map((definition) => ({
+    ...definition,
+    servingTasks: definition.servingTasks.map((task) => ({
+      ...task, integrationJobs: jobs.get(task.id) ?? [],
+    })),
+  }));
   const landed = new Map(
-    criterionLanding(definitions, landingBranchesFor(await db.projectCodebase.findFirst({
+    criterionLanding(served, landingBranchesFor(await db.projectCodebase.findFirst({
       where: { projectId, slot: 'primary' },
       select: { upstreamRef: true, integrationRef: true },
     }))).map((answer) => [answer.definitionId, answer.landing]),

@@ -2250,7 +2250,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // function, trigger, type or constraint is created, replaced or dropped, and `task`,
       // `session`, `project`, every `project_acceptance_*` object and the six preserved
       // triggers/functions are named nowhere, so it is not another writer of the DONE fence.
-      '0422_project_codebase_upstream_ref_chosen_at'],
+      '0422_project_codebase_upstream_ref_chosen_at',
+      // A landing's task id stops being a foreign key (0423, contract §2.1 revision 12;
+      // `docs/landing-session-design.md` §9 item 2): one `DROP CONSTRAINT IF EXISTS
+      // "project_integration_job_task_fkey"`, catalog-only. The column, the table, its indexes,
+      // its CHECKs and `project_integration_job_terminal_guard` are all left as they are, so the
+      // guard that keeps the six preserved objects' DONE fence — and this table's own — is not
+      // named. No row is read, written or backfilled: dropping a foreign key removes a rule rather
+      // than adding one, and every stored row already satisfies the schema it leaves behind. It
+      // names no `task`, `project`, `session` or `project_acceptance_*` object, no function,
+      // trigger or type, and no half of the 0177 pair, so nothing this file preserves can move.
+      // The task-delete and project-delete paths it unblocks are asserted in
+      // `task-delete-integration-job.pg.spec.ts`.
+      '0423_project_integration_job_task_history_ref'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
