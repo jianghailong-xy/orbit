@@ -494,6 +494,11 @@ export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
  * `POST /projects/:id/start` (`@orbit/shared` `StartProjectRequestBody`): the version of the
  * criteria the owner read, and every setting the project is to run with — each one required,
  * because a start writes the whole set and a field left out would be a setting nobody chose.
+ *
+ * `mergeCheckTimeoutSeconds` is the exception, and deliberately: a client that predates it sends
+ * no such field, and reading that as "no budget" would clear a setting its owner never saw. Left
+ * out it is not named and the binding keeps the budget it has; `null` is the naming that says the
+ * check runs on its default.
  */
 export class StartProjectDto implements StartProjectRequestBody {
   @Matches(SHA256_DIGEST_PATTERN, {
@@ -521,6 +526,9 @@ export class StartProjectDto implements StartProjectRequestBody {
   @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
   /** The check run on the combined tree before anything lands; null for none. Sent either way. */
   @ValidateIf((_object, value) => value !== null) @IsString() mergeCheckCommand!: string | null;
+  /** That check's budget in seconds; null runs it on the one-hour default. Left out, the setting is
+   *  not named and the binding keeps the budget it has. */
+  @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
   /** The coordinator's start request this start answers, when the card was drawn from one. */
   @IsOptional() @IsPublicId() requestId?: string | null;
 }
@@ -550,6 +558,9 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
   @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
   @IsOptional() @ValidateIf((_object, value) => value !== null) @IsString()
   mergeCheckCommand?: string | null;
+  /** That check's budget in seconds, suggested; null suggests the one-hour default. Left out it is
+   *  not named, and the owner's card opens on an empty box — which is that same default. */
+  @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
   /** Shown to the owner on the card, as written. */
   @IsString() @MinLength(1) @MaxLength(MAX_START_REQUEST_WHY) why!: string;
 }

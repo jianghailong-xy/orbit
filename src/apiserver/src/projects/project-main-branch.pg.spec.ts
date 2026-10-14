@@ -392,6 +392,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     assert.equal(sent!.status, 201, sent!.body);
     const settings = {
       line: 'MAIN', upstreamRef: 'refs/heads/master', automatic: false, maxConcurrentTasks: 2, mergeCheckCommand: null,
+      mergeCheckTimeoutSeconds: null,
     };
     assert.deepEqual(sent!.json.settings, settings);
     assert.deepEqual(sent!.json.differsFromRequest, []);
@@ -464,7 +465,8 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     });
     assert.equal(pressed.status, 201, pressed.body);
     assert.deepEqual(pressed.json.settings,
-      { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null },
+      { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null,
+        mergeCheckTimeoutSeconds: null },
       'a start that named no main branch records none');
     const startedRow = await bindingOf(started);
     assert.equal(startedRow?.upstream_ref, 'refs/heads/master');
@@ -600,6 +602,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     assert.equal(started.json.lineLocked, true);
     assert.deepEqual(started.json.settings, {
       line: 'MAIN', upstreamRef: 'refs/heads/develop', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null,
+      mergeCheckTimeoutSeconds: null,
     });
     assert.deepEqual(started.json.differsFromRequest, ['line']);
     assert.deepEqual(await bindingOf(f), before);

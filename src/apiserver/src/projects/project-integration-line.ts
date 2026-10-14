@@ -933,6 +933,12 @@ export interface StartLineSettings {
    */
   upstreamRef?: string;
   mergeCheckCommand: string | null;
+  /**
+   * The check's budget in seconds. Asked for, it is written — null once more running the check on
+   * its one-hour default; left out, the binding keeps the budget it has. In the answer, the budget
+   * the project's check stands on once the start is done.
+   */
+  mergeCheckTimeoutSeconds?: number | null;
 }
 
 /**
@@ -940,7 +946,7 @@ export interface StartLineSettings {
  * /projects/:id/acceptance/confirmation` on a project not yet started): the line it is already on
  * or the owner already chose, if either; else the default rule over its tasks as they stand — and
  * `MAIN` for a project with no repository, where no project branch can exist. The merge check it
- * already has, if any.
+ * already has, if any, and the budget that check runs on.
  */
 export async function defaultStartLine(
   tx: Prisma.TransactionClient,
@@ -949,16 +955,17 @@ export async function defaultStartLine(
 ): Promise<StartLineSettings> {
   const row = await readProjectCodebase(tx, projectId);
   const mergeCheckCommand = row?.mergeCheckCommand ?? null;
+  const mergeCheckTimeoutSeconds = row?.mergeCheckTimeoutSeconds ?? null;
   const decided = row ? decidedLine(row) : null;
   if (row && decided) {
     return decided === 'PROJECT_BRANCH'
-      ? { line: decided, projectBranchName: row.integrationRef, mergeCheckCommand }
-      : { line: decided, mergeCheckCommand };
+      ? { line: decided, projectBranchName: row.integrationRef, mergeCheckCommand, mergeCheckTimeoutSeconds }
+      : { line: decided, mergeCheckCommand, mergeCheckTimeoutSeconds };
   }
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
-    return { line: 'MAIN', mergeCheckCommand };
+    return { line: 'MAIN', mergeCheckCommand, mergeCheckTimeoutSeconds };
   }
-  return { line: await projectDefaultLine(tx, projectId), mergeCheckCommand };
+  return { line: await projectDefaultLine(tx, projectId), mergeCheckCommand, mergeCheckTimeoutSeconds };
 }
 
 /**
@@ -968,14 +975,15 @@ export async function defaultStartLine(
  * transaction and holds the project row. Three ways it goes:
  *
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
- *     merge check, and says so — `locked`, with the line the project is actually on. A main branch
- *     the start asked for is not written either, and not recorded as a choice.
+ *     merge check — its command and the budget that check runs on — and says so — `locked`, with the
+ *     line the project is actually on. A main branch the start asked for is not written either, and
+ *     not recorded as a choice.
  *   * THERE IS NO REPOSITORY. A project with no binding whose coordination workspace names no remote
  *     has nothing a line or a check could be recorded on, and nothing ever lands on a branch of it.
  *     A start that asks for `MAIN` and no check asks nothing of it and writes nothing; one asking for
- *     a project branch, a main branch or a merge check is refused, 409
- *     `INTEGRATION_REPOSITORY_UNKNOWN`, because writing the rest of the start without them would
- *     drop what the owner chose.
+ *     a project branch, a main branch or a merge check — a budget with no command among them — is
+ *     refused, 409 `INTEGRATION_REPOSITORY_UNKNOWN`, because writing the rest of the start without
+ *     them would drop what the owner chose.
  *   * OTHERWISE the line is written `EXPLICIT` — binding the project first when it has no binding,
  *     on the owner's last main branch for the repository — together with the merge check, and the
  *     main branch when the start names one, which records it as the owner's choice (L6).
@@ -988,24 +996,30 @@ export async function startProjectLine(
 ): Promise<StartLineSettings & { locked: boolean }> {
   const { ownerId, projectId, settings } = input;
   const mergeCheckCommand = settings.mergeCheckCommand?.trim() || null;
+  // Only when the start NAMED a budget: absent is a client that does not know the field, and
+  // reading that as "no budget" would clear one its owner never saw (`StartProjectDto`). `null` is
+  // the naming that says "back to the default", and it is written like any other value.
+  const namedTimeout = settings.mergeCheckTimeoutSeconds !== undefined
+    ? { mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds }
+    : {};
   const row = await lockCodebase(tx, projectId);
   const locked = !!row?.integrationStartedAt;
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
     if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null
-      || settings.upstreamRef !== undefined) {
+      || settings.mergeCheckTimeoutSeconds != null || settings.upstreamRef !== undefined) {
       throw repositoryUnknown('this project has no repository to integrate into, so it can have '
         + 'no project branch, main branch or merge check: its coordination workspace has no '
         + 'recorded remote. Wait for the runner to detect origin, or set Repository URL in the '
         + 'workspace settings. A project without a repository can start on main with no merge '
         + 'check.');
     }
-    return { line: 'MAIN', mergeCheckCommand: null, locked: false };
+    return { line: 'MAIN', mergeCheckCommand: null, mergeCheckTimeoutSeconds: null, locked: false };
   }
   await configureProjectIntegration(tx, {
     ownerId,
     projectId,
     settings: locked
-      ? { mergeCheckCommand }
+      ? { mergeCheckCommand, ...namedTimeout }
       : {
         line: settings.line,
         ...(settings.line === 'PROJECT_BRANCH' && settings.projectBranchName !== undefined
@@ -1013,6 +1027,7 @@ export async function startProjectLine(
           : {}),
         ...(settings.upstreamRef !== undefined ? { upstreamRef: settings.upstreamRef } : {}),
         mergeCheckCommand,
+        ...namedTimeout,
       },
   });
   const written = (await readProjectCodebase(tx, projectId))!;
@@ -1020,6 +1035,7 @@ export async function startProjectLine(
   const stands = {
     upstreamRef: written.upstreamRef,
     mergeCheckCommand: written.mergeCheckCommand,
+    mergeCheckTimeoutSeconds: written.mergeCheckTimeoutSeconds,
     locked,
   };
   return line === 'PROJECT_BRANCH'

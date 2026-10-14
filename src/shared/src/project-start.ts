@@ -28,6 +28,10 @@ import type { IntegrationLine } from './project-progress';
  * - `automatic` — `project.coordinator_enabled`: the coordinator runs the project for the owner.
  * - `maxConcurrentTasks` — how many of its tasks may be in flight at once.
  * - `mergeCheckCommand` — the check run on the combined tree before anything lands; null for none.
+ * - `mergeCheckTimeoutSeconds` — that check's budget in seconds; null runs it on the one-hour
+ *   default. Absent on a start's own body means the setting is not named and is left as it stands,
+ *   which is what a client that does not know the field sends — `mergeCheckCommand` by contrast is
+ *   sent either way, because a card that cannot say "no check" cannot be drawn.
  */
 export interface ProjectStartSettings {
   line: IntegrationLine;
@@ -36,6 +40,7 @@ export interface ProjectStartSettings {
   automatic: boolean;
   maxConcurrentTasks: number;
   mergeCheckCommand: string | null;
+  mergeCheckTimeoutSeconds?: number | null;
 }
 
 /** One of the settings above, as a difference names it. `line` covers the branch name and the
@@ -101,13 +106,17 @@ export interface StartProjectResponse extends ProjectStartRecord {
 
 /**
  * What `project_request_start` sends (`POST /runner/projects/:id/start-requests`): the settings the
- * coordinator suggests the project start with, and one sentence on why. The merge check may be left
- * out, which suggests none; Automatic may be left out, which is on — the owner's card opens with it
- * on either way (the owner, 2026-10-07).
+ * coordinator suggests the project start with, and one sentence on why. The merge check — its
+ * command and its budget — may be left out, which suggests none; Automatic may be left out, which is
+ * on — the owner's card opens with it on either way (the owner, 2026-10-07).
  */
-export type ProjectStartRequestBody = Omit<ProjectStartSettings, 'mergeCheckCommand' | 'automatic'> & {
+export type ProjectStartRequestBody = Omit<
+  ProjectStartSettings,
+  'mergeCheckCommand' | 'automatic' | 'mergeCheckTimeoutSeconds'
+> & {
   automatic?: boolean;
   mergeCheckCommand?: string | null;
+  mergeCheckTimeoutSeconds?: number | null;
   why: string;
 };
 

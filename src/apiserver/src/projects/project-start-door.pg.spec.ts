@@ -518,6 +518,7 @@ test('the owner starts a project in one write, once', {
       automatic: true,
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'npm test',
+      mergeCheckTimeoutSeconds: null,
     };
     assert.equal(sent.json.projectId, uuidToBase62(started.id));
     assert.equal(sent.json.lineLocked, false);
@@ -640,6 +641,7 @@ test('the owner starts a project in one write, once', {
       automatic: false,
       maxConcurrentTasks: 2,
       mergeCheckCommand: 'make check',
+      mergeCheckTimeoutSeconds: null,
     }, 'and gives the line the project is on, not the one asked for');
     assert.deepEqual(sent.json.differsFromRequest, ['line']);
 
@@ -678,7 +680,10 @@ test('the owner starts a project in one write, once', {
       criteriaCount: 2,
       held: [{ id: locked.heldId, title: HELD }],
       heldCount: 1,
-      settings: { line: 'MAIN', automatic: false, maxConcurrentTasks: 2, mergeCheckCommand: 'make check' },
+      settings: {
+        line: 'MAIN', automatic: false, maxConcurrentTasks: 2, mergeCheckCommand: 'make check',
+        mergeCheckTimeoutSeconds: null,
+      },
       differsFromRequest: ['line'],
     };
     assert.deepEqual(await queuedCard(locked.sessionId), card,
@@ -707,6 +712,7 @@ test('the owner starts a project in one write, once', {
       automatic: true,
       maxConcurrentTasks: 7,
       mergeCheckCommand: null,
+      mergeCheckTimeoutSeconds: null,
     };
     const after = await world(byRule.id, byRule.sessionId);
     assert.ok(after.project.started_at, 'the older press started the project');
@@ -738,6 +744,7 @@ test('the owner starts a project in one write, once', {
       automatic: true,
       maxConcurrentTasks: 3,
       mergeCheckCommand: null,
+      mergeCheckTimeoutSeconds: null,
     });
   });
 
@@ -910,6 +917,7 @@ test('the owner starts a project in one write, once', {
     assert.equal(onMain.status, 201, JSON.stringify(onMain.json));
     assert.deepEqual(onMain.json.settings, {
       line: 'MAIN', automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null,
+      mergeCheckTimeoutSeconds: null,
     });
     const after = await world(bare.id, bare.sessionId);
     assert.ok(after.project.started_at);
