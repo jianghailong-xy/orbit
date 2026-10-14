@@ -714,7 +714,7 @@ export async function readLandingBranches(
  * serving tasks (`project-get-query-count.pg.spec.ts` carries the number and the argument).
  */
 export async function readCriterionLandingFacts(
-  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectIntegrationJob'>,
+  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectIntegrationJob' | 'session'>,
   ownerId: string,
   projectId: string,
 ): Promise<CriterionWithLandingFacts[]> {
@@ -765,7 +765,7 @@ export const LANDING_SERVING_WORK_SELECT = {
  *
  * Kept beside `LANDING_SERVING_WORK_SELECT` because the two are one input, split only by 0423: the
  * jobs stopped being a relation on `task`, so the reader names their columns here and fetches them
- * by `task_id`.
+ * by `task_id`. The session stopped being one in 0424, so it is fetched by `session_id` beside them.
  */
 const LANDING_JOB_SELECT = {
   state: true,
@@ -777,18 +777,22 @@ const LANDING_JOB_SELECT = {
   receiptIds: true,
   sourceRef: true,
   startedAt: true,
-  session: { select: { finishedAt: true, worktreeBranch: true, worktreeDirty: true } },
+  sessionId: true,
 } as const;
 
 /**
- * Each named task's integration jobs, keyed by the task — ONE statement for the page.
+ * Each named task's integration jobs, keyed by the task — ONE statement for the page, and one more
+ * for the sessions those jobs were queued for.
  *
  * `task_id` is a history reference with no foreign key (0423): it may name a task that was deleted
  * (that is the trace the column exists for) and a promotion job has none, so this reads a keyed map
  * rather than a relation, and every caller attaches the result to the tasks it already has.
+ * `session_id` is one too (0424), so the sessions are read by id rather than nested: a session
+ * purged from Trash is not found, and its job's `session` reads null — what the key's SET NULL used
+ * to leave there.
  */
 export async function readLandingJobsByTask(
-  prisma: Pick<PrismaService, 'projectIntegrationJob'>,
+  prisma: Pick<PrismaService, 'projectIntegrationJob' | 'session'>,
   taskIds: readonly string[],
 ): Promise<Map<string, LandingJobFacts[]>> {
   if (taskIds.length === 0) return new Map();
@@ -796,12 +800,18 @@ export async function readLandingJobsByTask(
     where: { taskId: { in: [...taskIds] } },
     select: { taskId: true, ...LANDING_JOB_SELECT },
   });
+  const sessionIds = [...new Set(jobs.flatMap((job) => (job.sessionId ? [job.sessionId] : [])))];
+  const sessions = new Map((sessionIds.length === 0 ? [] : await prisma.session.findMany({
+    where: { id: { in: sessionIds } },
+    select: { id: true, finishedAt: true, worktreeBranch: true, worktreeDirty: true },
+  })).map(({ id, ...facts }) => [id, facts]));
   const byTask = new Map<string, LandingJobFacts[]>();
-  for (const job of jobs) {
+  for (const { sessionId, ...job } of jobs) {
     // Not every job names a task: `promotion_id` is what a promotion's job carries, and 0293 gives
     // those no task at all. They are not this fold's input — nothing here is about a promotion.
     if (!job.taskId) continue;
-    byTask.set(job.taskId, [...(byTask.get(job.taskId) ?? []), job]);
+    const session = (sessionId && sessions.get(sessionId)) || null;
+    byTask.set(job.taskId, [...(byTask.get(job.taskId) ?? []), { ...job, session }]);
   }
   return byTask;
 }
@@ -809,7 +819,7 @@ export async function readLandingJobsByTask(
 /** Every criterion this project states, and where the work filed under each has landed. */
 export async function readCriterionLanding(
   prisma: Pick<PrismaService,
-    'projectAcceptanceCriterionDefinition' | 'projectCodebase' | 'projectIntegrationJob'>,
+    'projectAcceptanceCriterionDefinition' | 'projectCodebase' | 'projectIntegrationJob' | 'session'>,
   ownerId: string,
   projectId: string,
 ): Promise<CriterionLandingAnswer[]> {
