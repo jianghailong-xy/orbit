@@ -152,7 +152,7 @@ export function readProjectCodebase(
  * that has not decided is not one that decided main (§7.1 V1).
  */
 export async function readProjectIntegrationLines(
-  prisma: Pick<PrismaService, 'projectCodebase'>,
+  prisma: Pick<PrismaService, 'projectCodebase' | 'task'>,
   projectIds: readonly string[],
 ): Promise<Map<string, ProjectListIntegration<Date>>> {
   const lines = new Map<string, ProjectListIntegration<Date>>();
@@ -175,7 +175,7 @@ export interface ProjectListBinding {
  * binding is absent: it has no repository, and its row's words say main.
  */
 export async function readProjectListBindings(
-  prisma: Pick<PrismaService, 'projectCodebase'>,
+  prisma: Pick<PrismaService, 'projectCodebase' | 'task'>,
   projectIds: readonly string[],
 ): Promise<Map<string, ProjectListBinding>> {
   if (projectIds.length === 0) return new Map();
@@ -189,11 +189,20 @@ export async function readProjectListBindings(
         where: { state: { in: ['QUEUED', 'RUNNING'] } },
         select: {
           id: true, state: true, kind: true, phase: true, createdAt: true, claimedAt: true, heartbeatAt: true,
-          task: { select: { title: true } },
+          taskId: true,
         },
       },
     },
   });
+  // The title the line names, read beside the jobs rather than joined to them: `task_id` is a
+  // history reference with no foreign key (0423), so a job still in flight may name a task that was
+  // deleted under it — and its line then says "a landing" rather than refusing to be drawn.
+  const taskIds = [...new Set(rows.flatMap((row) => (row.integrationJobs ?? [])
+    .map((job) => job.taskId).filter((id): id is string => !!id)))];
+  const titles = new Map((taskIds.length === 0 ? [] : await prisma.task.findMany({
+    where: { id: { in: taskIds } },
+    select: { id: true, title: true },
+  })).map((task) => [task.id, task.title]));
   const bindings = new Map<string, ProjectListBinding>();
   for (const row of rows) {
     const binding: ProjectListBinding = { integration: null, mainBranch: branchName(row.upstreamRef) };
@@ -207,7 +216,7 @@ export async function readProjectListBindings(
       activeJobCount: row._count.integrationJobs,
       ...(lead ? {
         inFlight: {
-          taskTitle: lead.task?.title ?? null,
+          taskTitle: (lead.taskId && titles.get(lead.taskId)) || null,
           kind: lead.kind as IntegrationJobKind,
           phase: lead.phase as IntegrationJobPhase | null,
           state: lead.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',

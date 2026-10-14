@@ -2900,9 +2900,15 @@ model ProjectIntegrationJob {
   /// second generation exists because somebody asked for one, or because the task branch moved.
   generation Int @default(1)
 
-  /// SET NULL, not CASCADE: the audit of what the platform pushed outlives the row that asked for it.
+  /// The task this job is about. A HISTORY REFERENCE WITH NO RELATION (0423), as `retryOfJobId` below
+  /// is: a finished job is never rewritten (`project_integration_job_terminal_guard`, J4), so 0281's
+  /// `ON DELETE SET NULL` here was an UPDATE the guard refused — deleting a task that had landed
+  /// anything rolled back whole and answered 500 — and on a queued job it was one
+  /// `project_integration_job_land_task_chk` refused instead. The audit of what the platform pushed
+  /// outlives the row that asked for it, so the id stays, naming a task that may be gone. Read it as
+  /// "which task this was about", never as a row that is there; `project_integration_job_task_idx`
+  /// is the way in.
   taskId      String?  @map("task_id") @db.Uuid
-  task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
   /// The source work session — never the landing session contract revision 12 adds (§2.9);
   /// routing, base SHA, the claim guard and receipts read it.
   sessionId   String?  @map("session_id") @db.Uuid
@@ -4927,8 +4933,9 @@ model Task {
   @@index([runAt], map: "task_run_at_idx")
   /// The exception items about this task (migration 0278).
   openItems ProjectOpenItem[]
-  /// Every attempt the platform made to land this task's branch (migration 0281).
-  integrationJobs ProjectIntegrationJob[]
+  /// Every attempt the platform made to land this task's branch (migration 0281) is found by
+  /// `project_integration_job.task_id`, which is a history reference with no foreign key and so has
+  /// no relation to declare here (0423). `readLandingJobsByTask` is the read.
 
   @@index([creatorType, creatorId])
   /// Both dispatcher questions about a verification — "is one already in flight for this
