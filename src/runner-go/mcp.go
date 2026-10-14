@@ -3573,6 +3573,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"project branch and again before main. Leave it out for none; with Automatic on a " +
 						"project branch that is a warning, since the branch would merge into main untested.",
 				},
+				"mergeCheckTimeoutSeconds": map[string]interface{}{
+					"type":    "integer",
+					"minimum": 1,
+					"description": "That check's budget in seconds — how long it may run on the combined " +
+						"tree before the landing is stopped. Leave it out for the one-hour default. A " +
+						"suggestion like the command: the owner's card opens with what you send and may " +
+						"change it before pressing Start.",
+				},
 				"why": map[string]interface{}{
 					"type": "string",
 					"description": "One sentence on why the plan is ready and why these settings, shown " +
