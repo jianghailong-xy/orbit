@@ -166,7 +166,7 @@ export const LANDING_REASON_SERVING_WORK_SELECT = {
  *  the landing lane's read, with the newest work session one relation below each task, and then the
  *  tasks' integration jobs beside them — a history reference has no relation to nest (0423). */
 export async function readCriterionLandingReasonFacts(
-  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectIntegrationJob'>,
+  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectIntegrationJob' | 'session'>,
   ownerId: string,
   projectId: string,
 ): Promise<Array<{ id: string; servingTasks: LandingReasonServingTask[] }>> {

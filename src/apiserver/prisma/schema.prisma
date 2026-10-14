@@ -1864,8 +1864,9 @@ model Session {
   mergeReceipts         SessionMergeReceipt[]
   /// Exception items queued on this conversation (migration 0278).
   openItemDeliveries    ProjectOpenItemDelivery[]
-  /// Integration jobs whose source branch is this session's (migration 0281).
-  integrationJobs       ProjectIntegrationJob[]
+  /// Integration jobs whose source branch is this session's (migration 0281) are found by
+  /// `project_integration_job.session_id`, which is a history reference with no foreign key and so
+  /// has no relation to declare here (0424).
   /// `[K3]`: the attempt this session IS, if it is one (migration 0139). At most one — a session is
   /// one attempt or none, never a second try at the same thing.
   attempt               TaskAttempt?
@@ -2910,9 +2911,13 @@ model ProjectIntegrationJob {
   /// is the way in.
   taskId      String?  @map("task_id") @db.Uuid
   /// The source work session — never the landing session contract revision 12 adds (§2.9);
-  /// routing, base SHA, the claim guard and receipts read it.
+  /// routing, base SHA, the claim guard and receipts read it. A HISTORY REFERENCE WITH NO RELATION
+  /// (0424), for `taskId`'s reason: 0281's `ON DELETE SET NULL` here was an UPDATE J4 refused, so
+  /// purging a session a finished job was about rolled back whole — and with it the whole hourly
+  /// Trash purge. The id stays, naming a session that may be gone: a reader looks the session up and
+  /// reads "not found" as the NULL the key used to write, and never copies a gone one into a column
+  /// that is a foreign key (`session_merge_receipt.session_id`).
   sessionId   String?  @map("session_id") @db.Uuid
-  session     Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   promotionId String?  @map("promotion_id") @db.Uuid
 
   /// J1's key: the canonical repository URL and the target ref, so two PROJECTS landing into one
@@ -3027,7 +3032,8 @@ model ProjectIntegrationJob {
 /// No Prisma relations, deliberately. Everything this table is read with is addressed by its own
 /// scalars, and a relation field would put a back-reference on five models — `Project`, `Task`,
 /// `Session`, `User`, `ProjectCodebase` — that nothing traverses. The foreign keys are in the
-/// migration, where the database enforces them.
+/// migration, where the database enforces them — except `taskId` and `sessionId`, which are history
+/// references with no foreign key since 0424 (below).
 model ProjectPromotion {
   id         String @id @default(uuid(7)) @db.Uuid
   projectId  String @map("project_id") @db.Uuid
@@ -3037,6 +3043,12 @@ model ProjectPromotion {
   /// PROJECT_BRANCH is the ordinary source; TASK_BRANCH is what a MAIN-line project promotes,
   /// because it has no branch of its own to accumulate on (appendix A-Q7).
   sourceKind String  @map("source_kind")
+  /// The task and the work session this candidate is about. HISTORY REFERENCES (0424), as on
+  /// `ProjectIntegrationJob`: a terminal promotion is never rewritten
+  /// (`project_promotion_terminal_guard`), so 0286's `ON DELETE SET NULL` was an UPDATE the guard
+  /// refused — deleting the task or purging the session rolled back whole — and on a live
+  /// `TASK_BRANCH` candidate it was one `project_promotion_task_branch_chk` refused instead. Either
+  /// may name a row that is gone; look it up, and read "not found" as the NULL the key used to write.
   taskId     String? @map("task_id") @db.Uuid
   sessionId  String? @map("session_id") @db.Uuid
 
