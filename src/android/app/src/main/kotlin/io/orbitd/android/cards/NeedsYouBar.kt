@@ -25,6 +25,7 @@ import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
+import io.orbitd.android.directory.TrashingSessions
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
@@ -52,7 +53,11 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         app.realtime.state.map { live -> if (live.handle === handle) live.directory?.sessions?.get("open").orEmpty() else emptyList() }
             .distinctUntilChanged()
     }.collectAsState(emptyList())
-    val banner = if (below != null) null else remember(openRows, sessionId) { NeedsYouLogic.banner(openRows, sessionId) }
+    // A session on its way to Trash is waiting on nobody (A05-9), as it is in none of the lists.
+    val trashing by app.trashing.ids.collectAsState()
+    val banner = if (below != null) null else remember(openRows, sessionId, trashing) {
+        NeedsYouLogic.banner(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
+    }
     val shift = remember(list) { BarShift() }
     val shown = !hidden && (below != null || banner != null)
     LaunchedEffect(shift, shown) {

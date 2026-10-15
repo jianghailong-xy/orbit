@@ -132,6 +132,17 @@ object ProjectAttention {
         else -> null
     }
 
+    /** How many things wait on the reader in this project — a merge to approve, a question, an escalation, a pause, and a coordinator
+     * asking to start it or to record it done — together: the drawer row's amber count (`ProjectAttention.needsYouItemCount`, web's
+     * `projectNeedsYouCount`). An owner item of a kind this build does not name counts nothing, and a closed project asks nothing,
+     * whatever it still carries. */
+    fun needsYouItemCount(project: JsonObject): Int {
+        if (!open(project)) return 0
+        val items = project.obj("attention")?.objects("ownerItems").orEmpty().filter { it.text("kind") in ownerItemOrder }
+        return items.sumOf { maxOf(0, it.number("count") ?: 0) } + (if (startRequest(project) != null) 1 else 0) +
+            (if (doneRequest(project) != null) 1 else 0)
+    }
+
     /** Why an OPEN project needs a visible signal (`ProjectAttention.reason(of:now:)`). */
     fun reason(project: JsonObject, now: Instant): AttentionReason? {
         if (!open(project)) return null

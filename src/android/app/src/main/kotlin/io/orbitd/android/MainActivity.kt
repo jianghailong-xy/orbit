@@ -304,7 +304,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                     ToastHost(open = { toast -> OrbitToasts.dismiss(toast.id); toast.sessionId?.let(::openSession) },
                         undo = { toast ->
                             OrbitToasts.dismiss(toast.id)
-                            toast.sessionId?.let { SessionActions(api, app.processScope) { app.realtime.refreshDirectory(); app.realtime.refreshSession() }.restore(it, toast.subtitle) }
+                            toast.sessionId?.let { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() }.restore(it, toast.subtitle) }
                         },
                         resolve = { toast ->
                             val session = toast.sessionId; val conflict = toast.mergeConflict

@@ -135,13 +135,13 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
         }
     }
     action?.let { DirectoryActionDialog(it, api, data, setDialog = { action = it }, onChanged = refresh) }
-    val processScope = (LocalContext.current.applicationContext as OrbitApplication).processScope
+    val app = LocalContext.current.applicationContext as OrbitApplication
     projectMenu?.let { row ->
         ProjectRowMenu(row, data.fresh, close = { projectMenu = null },
             openSession = { id -> open(OrbitRoute(Destination.SESSION, id, workspace, if (isFolder) route.id else null)) },
             openSessions = { open(OrbitRoute(Destination.PROJECT_SESSIONS, row.projectId, workspace, origin = Origin.LIST)) },
             openProject = { open(OrbitRoute(Destination.PROJECT, row.projectId)) },
-            pin = { coordinator -> SessionActions(api, processScope) { refresh() }.pin(coordinator.id, coordinator.pinnedAt == null) },
+            pin = { coordinator -> SessionActions(api, app) { refresh() }.pin(coordinator.id, coordinator.pinnedAt == null) },
             move = { coordinator -> action = DirectoryDialog.Move(coordinator) })
     }
 }
