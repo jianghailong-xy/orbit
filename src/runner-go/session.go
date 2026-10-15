@@ -304,21 +304,28 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 }
 
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaWithCodexState(scratch, job, execDir, "", "", "")
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false)
+}
+
+// writeClaudeSessionMeta records the account a Claude engine has actually started on. A generic
+// write before that start keeps the previous account so removing it cannot strand the conversation;
+// once the new engine is running, moving to Default must clear that old account from the record.
+func writeClaudeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true, false)
 }
 
 // writeKimiSessionMeta is writeSessionMeta from a Kimi engine that has started in the KIMI_CODE_HOME
 // its claim names, the session's conversation carried there first (carryKimiConversation): the one
 // write that moves KimiCodeHome to another account.
 func writeKimiSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true)
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, true)
 }
 
 func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string) {
-	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false)
+	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false, false)
 }
 
-func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, kimiStarted bool) {
+func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, claudeStarted, kimiStarted bool) {
 	// Generic writes happen before the provider starts and on cold claims. Preserve
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
@@ -333,19 +340,17 @@ func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout
 		runtimeProvider(job) == providerKimi {
 		kimiHome = existing.KimiCodeHome
 	}
-	if layout == "" || claudeDir == "" {
-		if existing != nil {
-			if layout == "" {
-				layout = existing.CodexStateLayout
-				partition = existing.CodexStatePartition
-				codexHome = existing.CodexStateHome
-			}
-			// Same reason as the Codex scope above: a write that happens where the account is not
-			// in hand — a generic one, or a claim that names no account — must not erase which
-			// directory this session's conversation is in.
-			if claudeDir == "" {
-				claudeDir = existing.ClaudeConfigDir
-			}
+	if existing != nil {
+		if layout == "" {
+			layout = existing.CodexStateLayout
+			partition = existing.CodexStatePartition
+			codexHome = existing.CodexStateHome
+		}
+		// Before a Claude engine starts, a claim that names Default must not erase the account
+		// holding its conversation. The successful spawn below is the point that moves this
+		// record; on Default its empty directory deliberately clears the old added account.
+		if !claudeStarted && claudeDir == "" {
+			claudeDir = existing.ClaudeConfigDir
 		}
 	}
 	// The directory the session ran in before this one is kept until the session moves again.
@@ -1736,6 +1741,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		emit(evError, map[string]interface{}{"message": "failed to spawn claude: " + err.Error()})
 		return stFailed, true, false // a spawn failure won't be fixed by respawning
 	}
+	writeClaudeSessionMeta(scratchDir, job, execDir)
 	// The resident runtime for this session: the child, its generation and phase, and the
 	// bounded single-writer queue every frame to its stdin goes through (claude_runtime.go).
 	rt := newClaudeRuntime(proc)
