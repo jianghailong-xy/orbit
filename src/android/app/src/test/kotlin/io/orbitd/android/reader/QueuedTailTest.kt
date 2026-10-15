@@ -136,6 +136,29 @@ class QueuedTailTest {
         assertTrue(queuedTail(listed, emptyList()).isEmpty())
     }
 
+    /** A07-14 with A08-14: one watch's wake, one row in two states. Queued, it is the tail's — its line, withdrawable — and no head;
+     * once the runner has it, it is no row of the queue's (no Withdraw, not counted) but the accepted head, drawn as its echo will be:
+     * the same line. Its echo ends both. */
+    @Test fun aWatchWakeIsTheQueuesUntilTheRunnerTakesItThenTheAcceptedHead() {
+        val wake = "Orbit Watch w1 matched at generation 1: ALL TASK_DONE 1/1\nThis turn was queued by the watch, not typed by a person.\n" +
+            "```json\n{\"watchId\":\"w1\",\"changedTargets\":[{\"kind\":\"TASK\",\"id\":\"t-1\",\"observed\":{\"status\":\"DONE\"}}]}\n```"
+        fun listed(placement: String) = rows("""[{"turnId":"t9","kind":"message","placement":"$placement","content":${JsonPrimitive(wake)},
+            "attachments":[],"createdAt":"2026-10-15T02:00:00.000Z"}]""")
+        val queued = queuedTail(listed("queued"), emptyList()).single()
+        assertEquals("w1", queued.watch?.text("watchId"))
+        assertTrue(queued.cancelable)
+        assertTrue("queued, it is no head", acceptedHeads(listed("queued"), emptyList()).isEmpty())
+
+        assertTrue("taken, it is no row of the queue's", queuedTail(listed("accepted"), emptyList()).isEmpty())
+        val head = acceptedHeads(listed("accepted"), emptyList()).single()
+        assertEquals("t9", head.turnId)
+        assertEquals("the head is drawn as the same line", queued.watch, transcriptCards(head).single { it.key.endsWith(":watch") }.source)
+
+        val echo = RunEvent("user", 4, buildJsonObject { put("text", wake) }, "t9")
+        assertTrue(queuedTail(listed("queued"), listOf(echo)).isEmpty())
+        assertTrue(acceptedHeads(listed("accepted"), listOf(echo)).isEmpty())
+    }
+
     @Test fun aQueuedWakeIsTheLineItWillBe() {
         val blocks = "<scheduled-wakeup>\n  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:\n" +
             "    2026-09-15T18:00:00.000Z scheduled 600 seconds out, due 2026-09-15T18:10:00.000Z\n    reason: waiting for CI run 4242\n" +
