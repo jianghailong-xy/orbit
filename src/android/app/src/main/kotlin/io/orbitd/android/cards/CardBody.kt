@@ -128,13 +128,8 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             CardFields(row, listOf("detailLine", "waitingSince"), open)
             row.obj("question")?.let { CardFields(it, listOf("blocksTaskIds", "ifUnanswered"), open) }
         }
-        CardFamily.EXCEPTION -> {
-            CardFields(row, listOf("detailLine", "assigneeReason", "waitingSince", "escalatedAt", "facts"), open)
-            val offered = row.strings("actions")
-            if ("OPEN_TASK_SESSION" in offered) row.text("sessionId")?.let { LinkButton("Open task session", "orbit-session:$it", open) }
-            if ("OPEN_COORDINATOR" in offered) row.obj("delivery")?.text("sessionId")?.let { LinkButton("Open coordinator", "orbit-session:$it", open) }
-            if (row.text("sessionId") == null && "OPEN_TASK_SESSION" in offered) Text("Task details are not connected yet.", style = MaterialTheme.typography.bodySmall)
-        }
+        CardFamily.EXCEPTION -> Unit // Drawn whole by the exception card (`ExceptionCard`, A08-17).
+        CardFamily.QUESTION_RECORD -> Unit // Drawn whole by the record card and its replay (`QuestionRecordCard`, A08-13).
         CardFamily.PROMOTION -> CardFields(row, listOf("state", "sourceRef", "sourceSha", "upstreamRef", "commitsAhead", "filesChanged", "tasks", "checks", "conflicts", "recheck", "execution", "merged"), open)
         CardFamily.WIKI -> CardFields(row, listOf("op", "entryId", "baseRevision", "payload", "similar", "tainted", "decision", "reason", "change", "facts", "version", "categories", "docs", "gate", "sources", "summary", "fields", "trust", "revert"), open)
         CardFamily.BACKGROUND -> CardFields(row, listOf("state", "predicate", "targets", "matches", "expiryDeliveries", "expiresAt"), open)

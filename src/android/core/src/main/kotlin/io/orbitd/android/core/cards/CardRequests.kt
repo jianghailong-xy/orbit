@@ -79,9 +79,16 @@ object CardRequests {
             CardVerb.RETURN_COORDINATOR -> request(projectPath("open-items", card.objectId, "return-to-coordinator"))
             CardVerb.RESUME -> request(projectPath("fuse", required("fuseEpisodeId"), "resume"))
             CardVerb.MARK_HANDLED -> request(projectPath("open-items", card.objectId, "resolve"), buildJsonObject { put("note", note(2000)) })
+            // RETRY's three doors (A08-17, `open-item-doors.ts`): a failed task runs again through Run now's door; an integration
+            // item queues its task's landing again, and one that names a merge candidate re-runs that candidate's check — both with
+            // the item's own sentence as the reason the door requires.
             CardVerb.RETRY_TASK -> request(listOf("tasks", required("taskId"), "execute"), buildJsonObject {
                 put("triggerId", requireNotNull(input.triggerId).also { require(it.isNotBlank()) })
             })
+            CardVerb.RETRY_INTEGRATION -> request(projectPath("tasks", required("taskId"), "integration", "retry"),
+                buildJsonObject { put("reason", ExceptionCards.retryReason(row)) })
+            CardVerb.RERUN_CHECK -> request(projectPath("promotions", required("promotionId"), "integration", "retry"),
+                buildJsonObject { put("reason", ExceptionCards.retryReason(row)) })
             CardVerb.CANCEL_TASK -> request(listOf("tasks", required("taskId")), buildJsonObject { put("status", "CANCELLED") }, HttpMethod.PATCH)
             // The task panel's own Reopen task (`TaskReopen`): back to Open, both retirement fields cleared in the one request.
             CardVerb.REOPEN_TASK -> request(listOf("tasks", card.objectId), buildJsonObject {
