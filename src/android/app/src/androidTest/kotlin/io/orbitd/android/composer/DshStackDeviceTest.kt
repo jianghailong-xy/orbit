@@ -232,7 +232,7 @@ class DshStackDeviceTest {
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         appClick("Settings"); awaitText("Default permission")
-        appClick("Runners"); awaitText(name)
+        appClick("Infrastructure"); awaitText(name)
         appClick(name); awaitText("DeepSeek Harness")
         scrollTo(hasText("DeepSeek Harness") and hasClickAction())
         capture("a07d-stack-runner-page")
