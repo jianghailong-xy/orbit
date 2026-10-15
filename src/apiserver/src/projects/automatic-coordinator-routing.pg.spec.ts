@@ -472,7 +472,7 @@ test('an Automatic project hands a path warning to its coordinator as a delivery
         const text = turns[0]!.content;
         for (const want of [
           'Changed files it didn’t declare', STRAY, DECLARED_DIR, 'mechanical scope warning', 'open_item_resolve',
-          'task_reopen', 'supersedesTaskId', 'integration_retry', 'do not ask_owner about it',
+          'task_reopen', 'supersedesTaskId', 'integration_retry', 'do not put it to the account owner as one',
           'once you take it up it stays yours',
         ]) {
           assert.ok(text.includes(want), `the review message does not say ${JSON.stringify(want)}`);

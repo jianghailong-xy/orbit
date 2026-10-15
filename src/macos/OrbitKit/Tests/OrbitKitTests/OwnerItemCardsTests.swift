@@ -117,6 +117,17 @@ final class OwnerItemCardsTests: XCTestCase {
             XCTAssertEqual(try declaration(web, name), NeedsYouLogic.kindWord(kind),
                            "\(name) drifted — first is the browser's, second is this client's.")
         }
+        // An escalated item says its short reason after the word, and the row composes it the way
+        // the browser's `ownerItemWord` does — the same two pieces, the same separator between them.
+        XCTAssertEqual(NeedsYouLogic.needSeparator, try declaration(web, "OWNER_ITEM_NEED_SEPARATOR"))
+        XCTAssertTrue(web.contains("`${OWNER_ITEM_ESCALATED}${OWNER_ITEM_NEED_SEPARATOR}${item.need}`"),
+                      "the browser builds the escalated row's words out of these two constants; this "
+                          + "client must join the same two the same way")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([SessionOwnerItem(
+            itemId: "i", kind: .escalated, title: "t", since: "2026-09-13T10:00:00Z",
+            need: "the check failed")]),
+                       "\(NeedsYouLogic.kindWord(.escalated)!)"
+                       + "\(NeedsYouLogic.needSeparator)the check failed")
         // A kind neither end can name is named by neither: the row falls back to its generic words
         // rather than trailing an empty separator, which is the choice the bar already makes.
         XCTAssertNil(NeedsYouLogic.kindWord(.unknown))

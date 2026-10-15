@@ -35,8 +35,9 @@ const fakeClaudeTimeout = 10 * time.Second
 // TestMain doubles as the fake CLI's entry point. The shim sets fakeClaudeDirEnv, so the
 // dispatch happens before the testing flags are parsed — claude's own argv (`-p`,
 // `--input-format`…) never reaches the test framework. fakeCodexDirEnv does the same for the
-// fake `codex app-server` in codex_rate_limit_reset_read_test.go, and fakeCodexResetProviderEnv for
-// the programmable one in codex_rate_limit_reset_consume_test.go.
+// fake `codex app-server` in codex_rate_limit_reset_read_test.go, fakeCodexResetProviderEnv for
+// the programmable one in codex_rate_limit_reset_consume_test.go, and fakeKimiACPDirEnv for the
+// scripted `kimi acp` in fake_kimi_acp_test.go.
 func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeClaudeDirEnv); dir != "" {
 		os.Exit(runFakeClaude(dir))
@@ -46,6 +47,10 @@ func TestMain(m *testing.M) {
 	}
 	if dir := os.Getenv(fakeCodexResetProviderEnv); dir != "" {
 		os.Exit(runFakeCodexResetProvider(dir))
+	}
+	// The scripted `kimi acp` (fake_kimi_acp_test.go).
+	if dir := os.Getenv(fakeKimiACPDirEnv); dir != "" {
+		os.Exit(runFakeKimiACP(dir))
 	}
 	// The one-shot `claude -p` that `orbit wiki verify` runs (wiki_verify_test.go).
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {

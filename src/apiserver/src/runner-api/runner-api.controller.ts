@@ -179,6 +179,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { type CreateTaskBatchItemDto } from '../tasks/dto';
 import { enqueueRecap, recapDue } from '../sessions/recap';
+import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
@@ -4489,6 +4490,46 @@ export class RunnerApiController {
     await this.assertSessionOwnership(sessionId, runner.id);
     if (!this.sessions) throw new Error('SessionsService is unavailable');
     return { applied: await this.sessions.applyEngineTitle(sessionId, stripNul(dto.replaces), stripNul(dto.title)) };
+  }
+
+  /**
+   * The server's guess at the person's next message after a turn ended, for an engine without one
+   * of its own (docs/prompt-suggestions-design.md §8 P2): the runner asks here once per finished
+   * turn, on the turn's own text and the last thing the agent said, and files what comes back as
+   * the turn's prompt_suggestion. A miss is `{}`, never an error — the guess is cosmetic, and the
+   * runner asks again after the next turn.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/turns/:turnId/suggestion')
+  @HttpCode(200)
+  async turnSuggestion(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ): Promise<{ suggestion?: string }> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    const turn = await this.prisma.conversationTurn.findUnique({ where: { id: turnId } });
+    // The turn is the source of truth for the person's text (the runner's `user` echo carries
+    // generated context beside it). No turn of this session, or one opened with attachments and
+    // no words, has nothing to predict from.
+    const userText = turn?.sessionId === sessionId ? turn.content?.trim() : undefined;
+    if (!userText) return {};
+    // The last thing the agent said in this turn: the highest-seq assistant event with text, the
+    // workspace's own — a sub-agent's (parentToolUseId) is the report it hands its caller. The
+    // runner asks before /turn-complete lands, so the turn may still read IN_FLIGHT; the events
+    // of the finished reply are what is read, and no status is filtered on.
+    const assistantEvents = await this.prisma.runEvent.findMany({
+      where: { sessionId, turnId, type: RunEventType.ASSISTANT },
+      orderBy: { seq: 'desc' },
+      take: 5,
+      select: { payload: true },
+    });
+    const assistantText = assistantEvents
+      .filter((e) => !(e.payload as { parentToolUseId?: string } | null)?.parentToolUseId)
+      .map((e) => (e.payload as { text?: string } | null)?.text?.trim() ?? '')
+      .find((text) => text);
+    const suggestion = await enqueueTurnSuggestion({ userText, assistantText });
+    return suggestion ? { suggestion } : {};
   }
 
   /** A single interactive turn finished; retain or release its active-turn slot. */

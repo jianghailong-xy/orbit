@@ -3532,6 +3532,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           </>
         )}
       </div>
+      {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
       {questions.length > 0 && !(hasDetail && open) && (
         <QuestionFolded
           questions={questions}
@@ -3734,6 +3735,27 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
       )}
     </>
   );
+}
+
+/** A running background task's folded card: what its sub-agent is on right now — the last thing
+    its relayed transcript did. Native parity: ToolCards.swift's `liveActivity`. */
+function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
+  const lookup = useContext(TaskLookupCtx);
+  if (!lookup.running(node.id) && !(live && !node.result)) return null;
+  for (let i = node.children.length - 1; i >= 0; i--) {
+    const child = node.children[i];
+    let text: string | undefined;
+    if (child.kind === 'tool') {
+      const d = describeTool(child.name, child.input);
+      text = d.path ? `${d.label} ${splitPath(d.path).base}` : d.summary ? `${d.label} ${d.summary}` : d.label;
+    } else if (child.kind === 'thinking') {
+      text = 'Thinking…';
+    } else if (child.kind === 'assistant') {
+      text = child.text.split('\n').find((line) => line.trim());
+    }
+    if (text) return <div className="chat-tool-live">{text}</div>;
+  }
+  return null;
 }
 
 /** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */

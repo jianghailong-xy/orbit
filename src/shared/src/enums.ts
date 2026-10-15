@@ -304,11 +304,12 @@ export enum RunEventType {
   // `acknowledged` — the engine echoing it back — means it entered the conversation.
   USER_DELIVERY = 'user_delivery',
   TURN_END = 'turn_end', // one turn finished; session parks for the next input
-  // What the person will probably type next, predicted by the engine after a turn ended (Claude
-  // Code's `--prompt-suggestions`; docs/prompt-suggestions-design.md). Durable and filed against
+  // What the person will probably type next, predicted after a turn ended (Claude
+  // Code's `--prompt-suggestions`; the server's DeepSeek guess for every other engine,
+  // docs/prompt-suggestions-design.md §8 P2). Durable and filed against
   // the turn it follows, so a reload replays it, and it is never drawn as a transcript row: a
   // client offers it in the empty composer while it is still the newest of user / turn_end /
-  // prompt_suggestion. Payload: { text, source: 'engine' }.
+  // prompt_suggestion. Payload: { text, source: 'engine' | 'orbit' }.
   PROMPT_SUGGESTION = 'prompt_suggestion',
   INTERRUPT = 'interrupt', // a turn was interrupted by the user
   // Tool-permission approvals (live-only SSE nudges; the durable record is the

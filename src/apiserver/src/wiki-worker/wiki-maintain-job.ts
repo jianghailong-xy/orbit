@@ -721,10 +721,25 @@ class WikiMaintainRun {
 
   /**
    * The pages from the cursor up to the position the run expects — or, for a run no task expects anything of,
-   * as many sessions as the run may cover — and the dossiers not processed yet.
+   * as many sessions as the run may cover — and the dossiers not processed yet, one a session.
+   *
+   * A PAGE HANDS A SESSION OUT MORE THAN ONCE (2026-10-11, P10 round 93). A page covers facts until it holds
+   * `pageSessions` sessions, and stops at the last fact it covered: a session whose own facts sit either side of
+   * that stop is handed out on this page and again on the next. Asking about it twice asks under the same unit
+   * with the same prompt, which the queue answers from the row the first ask made — no second call reached the
+   * model, and the run's tokens are the run's calls — but the run counted the session, its dossier and its
+   * entries twice: 31 dossiers for 18 sessions in the canary's run 6e6feff0, 30 sessions for 20 in 7cf172e3. And
+   * a record that arrives between the two reads makes the two prompts differ, which the queue refuses as
+   * `already exists with a different call` and fails the whole run.
+   *
+   * What is kept is the newest read of that session, and the page it is taken as read on is the last one it was
+   * handed out on — the rule the breaker already goes by (§19.4 step 6). Nothing is lost by keeping only it: a
+   * page hands out facts past the settle grace alone, so every fact of this run's window was committed before
+   * the first read of the session, and the dossier is built from the records as they stand when it is read.
    */
   private async dossiers(): Promise<WikiDossier[]> {
-    const out: WikiDossier[] = [];
+    /** What this run reads of each session — its newest page's copy, and the page that copy came from. */
+    const read = new Map<string, { dossier: WikiDossier; page: number }>();
     let after = '';
     let sessions = 0;
     for (let pages = 0; ; pages += 1) {
@@ -739,21 +754,27 @@ class WikiMaintainRun {
       this.pages.push({ from: page.from || after, cursor: page.cursor });
       for (const batch of page.batches ?? []) sessions += batch.sessions;
       for (const dossier of page.dossiers) {
-        sessions += 1;
-        this.pageOf.set(dossier.sessionId, this.pages.length - 1);
-        if (dossier.unchanged) {
-          this.report.unchanged += 1;
-          continue;
-        }
-        out.push(dossier);
+        if (!read.has(dossier.sessionId)) sessions += 1;
+        read.set(dossier.sessionId, { dossier, page: this.pages.length - 1 });
       }
       if (!page.more || (page.cursor === after && pages > 0)) break;
       after = page.cursor;
     }
+    const out: WikiDossier[] = [];
+    let unchanged = 0;
+    for (const [sessionId, { dossier, page }] of read) {
+      this.pageOf.set(sessionId, page);
+      if (dossier.unchanged) {
+        unchanged += 1;
+        continue;
+      }
+      out.push(dossier);
+    }
     this.report.sessions = sessions;
+    this.report.unchanged = unchanged;
     this.report.dossiers = out.length;
     this.jobContext.log(`read ${sessions} session(s) after the space's cursor: ${out.length} dossier(s) to extract from, `
-      + `${this.report.unchanged} already processed`);
+      + `${unchanged} already processed`);
     return out;
   }
 

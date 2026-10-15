@@ -157,10 +157,30 @@ public enum ProjectPage {
             self.wait = wait
             self.timedOut = timedOut
         }
+
+        /// The head's two slots (`landingHead`), from this line's own facts.
+        public var head: LandingHead {
+            ProjectPage.landingHead(state: state, timedOut: timedOut, clockLabel: clockLabel,
+                                    clock: clock, wait: wait, updated: updated)
+        }
     }
 
-    /// One job of the list the landing row opens (docs/mocks/landing-jobs-sheet), drawn as the row
-    /// itself.
+    /// The two slots under a card's head title, as the merge check card and the landing card draw
+    /// them (owner decision 2026-10-11, board docs/mocks/project-merge-check-row): the row that
+    /// becomes the timeline's "Merged into main" line, so the same object keeps its shape from the
+    /// check to the merge. `right` is the live number the row is watched by — the elapsed clock —
+    /// and `detail` is the one line under the title, which is where the state word went: it used to
+    /// sit in the head's far corner, where the clock now is.
+    public struct LandingHead: Equatable, Sendable {
+        /// The title row's right slot: the job's clock, or the state word for a job that has no
+        /// clock left that moves (the server judged its runner silent).
+        public let right: String
+        /// Whether that slot is a clock — drawn in tabular digits, in the live ink.
+        public let isClock: Bool
+        /// The line under the title: the state, what the job waited for a runner before its clock
+        /// began, and where the reports stand — "checking · waited 1m 20s · updated just now".
+        public let detail: String
+    }
     public struct LandingJobLine: Equatable, Sendable, Identifiable {
         public let jobId: String
         /// The task a press on the row opens; nil for a promotion or a merge check, whose row opens
@@ -184,6 +204,15 @@ public enum ProjectPage {
     public static let landingMayHaveBeenPushed = "may have been pushed"
     public static let landingRetriedByOwner = "retried by you"
     public static let landingRetriedByCoordinator = "retried by the coordinator"
+    /// The card's own three: the branch the work lands on ("onto project/…"), the sentence that
+    /// takes the reader off the hook while it lands, and the way into the jobs from the card that
+    /// also offers Retry.
+    public static let landingOnto = "onto"
+    public static let landingNothingToDo = "Nothing to do — it lands on its own."
+    public static let landingAllJobs = "All jobs"
+    /// "waited 1m 20s" — the wait as a clause of the head's one line rather than a field label: the
+    /// row's old `Waited` was a column heading, and this is a sentence.
+    public static let landingWaited = "waited"
 
     public static let integrationJobWords = [
         "LAND_TASK": "Landing", "CHECK_PROMOTION": "Merge check", "LAND_PROMOTION": "Merge to main",
@@ -212,9 +241,6 @@ public enum ProjectPage {
     public static func landingNoReportFor(_ minutes: Int) -> String { "No report for \(minutes)m" }
     /// And for a job claimed whose runner has never reported at all.
     public static let landingNoReportYet = "No report yet"
-    /// The landing row's label for what a claimed job waited before its clock began — web's
-    /// `LandingRow`, `landingLine`'s own `wait`.
-    public static let landingWaitLabel = "Waited"
 
     /// "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
     ///
@@ -297,6 +323,37 @@ public enum ProjectPage {
                         startedAt: inFlight.startedAt, heartbeatAt: inFlight.heartbeatAt, now: now,
                         updatedAt: updatedAt, unavailable: unavailable, main: main, silent: silent,
                         wait: wait)
+    }
+
+    /// The head's two slots, composed from the facts the landing line already counted — the same
+    /// words in the same order on both clients (`landingWaited` is the only new word).
+    ///
+    /// A timed-out job has no clock that moves, so its right slot says so instead, and its line is
+    /// the silence measured against the limit it went past: "No report for 110m · limit 10m". An
+    /// older server's "No report" is that same fact said once, so the line is its own "No report for
+    /// 5m" and never "No report · No report for 5m". Everything else is the state word, the wait
+    /// when there was one, and the freshness — "checking · waited 1m 20s · updated just now" — with
+    /// the freshness's own capital folded away, because the line reads as one sentence.
+    public static func landingHead(state: String, timedOut: Bool, clockLabel: String, clock: String,
+                                   wait: String?, updated: String?) -> LandingHead {
+        if timedOut {
+            let silence = "\(clockLabel) \(clock)"  // "No report for 110m"
+            return LandingHead(right: state, isClock: false,
+                               detail: [silence, updated].compactMap { $0 }.joined(separator: " · "))
+        }
+        if state == landingNoReport {
+            return LandingHead(right: clock, isClock: true, detail: updated ?? state)
+        }
+        var parts = [state]
+        if let wait { parts.append("\(landingWaited) \(wait)") }
+        if let updated { parts.append(lowercasingFirst(updated)) }
+        return LandingHead(right: clock, isClock: true, detail: parts.joined(separator: " · "))
+    }
+
+    /// "Updated 2m ago" as the clause it is mid-line: "updated 2m ago".
+    private static func lowercasingFirst(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.lowercased() + text.dropFirst()
     }
 
     /// What a job waited for a runner before its clock began, from the server's own measurement:
@@ -393,6 +450,115 @@ public enum ProjectPage {
         guard let retriedBy = job.retriedBy else { return nil }
         let who = retriedBy == "OWNER" ? landingRetriedByOwner : landingRetriedByCoordinator
         return "Generation \(job.generation) · \(who) at \(time(job.queuedAt))"
+    }
+
+    // MARK: - The landing as a card of its own
+
+    /// The landing in flight as the card the project's sessions page draws under its progress card
+    /// (owner decision 2026-10-11, mocks in docs/mocks/project-landing-card): the merge card's
+    /// shape and language, for the job that lands a task on the project branch.
+    ///
+    /// It says what the row could not: which branch the work goes onto, who the several jobs are
+    /// when there are several, and — when the server judged the runner silent — where it stopped
+    /// and whether a Retry takes it. Nothing is added to the read: every field is the landing line's
+    /// own, the job list's own, or the project's own `landTask.targetRef`. Web: `landingCard`,
+    /// `ProjectLandingCard`.
+    public struct LandingCard: Equatable, Sendable {
+        /// One job in flight, as the card's body draws it.
+        public struct Job: Equatable, Sendable, Identifiable {
+            public let jobId: String
+            /// The task the job lands, which its row opens; nil for a promotion or a merge check.
+            public let taskId: String?
+            /// The task's title — or nil for a job that lands no single task.
+            public let title: String?
+            /// The job's own state word: its phase, "queued", or "Timed out".
+            public let state: String
+            public let running: Bool
+            public let timedOut: Bool
+            /// Whether the server offers Retry for this one, never inferred from `timedOut`.
+            public let retryable: Bool
+            /// What a timed-out runner did before it stopped; the job list's own sentence.
+            public let detail: String?
+            public var id: String { jobId }
+        }
+
+        /// What is in flight, in the landing row's own word: "Landing", "Merge check".
+        public let word: String
+        /// The head's title: the word alone, or the word and the count while several jobs are in
+        /// flight — "Landing 2 jobs", the row's name slot with the word in front of it.
+        public let title: String
+        /// The lead job's state word, or the app failing to read the server.
+        public let state: String
+        public let running: Bool
+        /// The server judged the lead job's runner silent past its limit: the card draws in the
+        /// warning ink, with a triangle where the ring was, and nothing spins.
+        public let timedOut: Bool
+        /// One job's task title, or nil while several are in flight — the count is the head's, and
+        /// the bodies are `jobs`.
+        public let what: String?
+        /// Every job in flight, in the server's order (running first, then the queue oldest first);
+        /// empty from a server that does not list them.
+        public let jobs: [Job]
+        /// The branch the lead job lands on, short — the task page's own Target field. Nil when the
+        /// job is not among the project's landings: a promotion, a merge check, or a server that
+        /// does not list its jobs.
+        public let target: String?
+        public let clock: String
+        public let clockLabel: String
+        public let wait: String?
+        public let updated: String?
+        /// What the timed-out lead job's runner did before it stopped, or nil.
+        public let detail: String?
+        /// The job Retry takes, when the server says a retry takes one.
+        public let retryJobId: String?
+
+        /// The head's two slots (`landingHead`) — the card's head is the landing row's: the same
+        /// word, the same clock, the same state and freshness, in the merged row's anatomy.
+        public var head: LandingHead {
+            ProjectPage.landingHead(state: state, timedOut: timedOut, clockLabel: clockLabel,
+                                    clock: clock, wait: wait, updated: updated)
+        }
+    }
+
+    /// The card, or nil when nothing is landing — which is what removes it from the page.
+    ///
+    /// The head is the landing row's: the same word, the same state, the same clock, the same
+    /// `wait` and freshness. What the card adds is the branch (`target`), the several jobs, and the
+    /// detail under a timed-out one — all of them read from what the same integration read already
+    /// carries, so the card can never be asked for something the row could not say.
+    public static func landingCard(_ view: ProjectIntegrationView, now: Date = Date(),
+                                   updatedAt: Date? = nil, refreshFailed: Bool = false) -> LandingCard? {
+        guard let line = landingLine(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed) else {
+            return nil
+        }
+        let jobs = landingJobLines(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+            .map { job in
+                LandingCard.Job(jobId: job.jobId, taskId: job.taskId, title: job.line.what, state: job.line.state,
+                                running: job.line.running, timedOut: job.line.timedOut,
+                                retryable: job.retryable, detail: job.detail)
+            }
+        // The row's own rule for the name slot, one row down: several jobs are a count in the head
+        // and a row each in the body; one job is its title in the body.
+        let several = view.integratingCount + view.queuedCount > 1
+        let lead = jobs.first
+        return LandingCard(
+            word: line.word,
+            title: several ? [line.word, line.what].compactMap { $0 }.joined(separator: " ") : line.word,
+            state: line.state, running: line.running, timedOut: line.timedOut,
+            what: several ? nil : line.what,
+            jobs: jobs,
+            target: lead.flatMap { landingTarget(view, jobId: $0.jobId) },
+            clock: line.clock, clockLabel: line.clockLabel, wait: line.wait, updated: line.updated,
+            detail: line.timedOut ? lead?.detail : nil,
+            retryJobId: lead?.retryable == true ? lead?.jobId : nil)
+    }
+
+    /// The branch a job lands on, short, from the project's own landings — the field the task page's
+    /// Target row prints. Nil when the job is not one of them, or names no branch at all.
+    private static func landingTarget(_ view: ProjectIntegrationView, jobId: String) -> String? {
+        let landing = view.landTasks.first { $0.landTask?.jobId == jobId }?.landTask
+        guard let ref = landing?.targetRef, !ref.isEmpty else { return nil }
+        return PromotionCards.shortRef(ref)
     }
 
     /// One formatter for every clock time, built once: the job list redraws each second, and an ICU

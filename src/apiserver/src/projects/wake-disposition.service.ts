@@ -51,6 +51,7 @@ import {
   criterionLanding,
   landingBranchesFor,
   readLandingBranches,
+  readLandingJobsByTask,
   receiptIsLandingEvidence,
 } from './project-criterion-landing';
 import { CriterionState, criterionCoverage, wakeDisposition } from './wake-disposition';
@@ -283,8 +284,11 @@ export class WakeDispositionService {
         readLandingBranches(this.prisma, fact.projectId),
       ]);
       if (!served) return [];
+      const jobs = await readLandingJobsByTask(this.prisma, served.servingTasks.map((task) => task.id));
       return [state(
-        served,
+        { ...served, servingTasks: served.servingTasks.map((task) => ({
+          ...task, integrationJobs: jobs.get(task.id) ?? [],
+        })) },
         criterionCoverage(settlements(served.servingTasks), fact.subjectId),
         branches,
       )];
@@ -298,12 +302,23 @@ export class WakeDispositionService {
         }),
         readLandingBranches(this.prisma, fact.projectId),
       ]);
+      // The line's answers about these branches, beside the tasks rather than below them: 0423 made
+      // `task_id` a history reference, so there is no relation for Prisma to nest.
+      const jobs = await readLandingJobsByTask(
+        this.prisma, stated.flatMap((row) => row.servingTasks.map((task) => task.id)),
+      );
+      const withJobs = (row: (typeof stated)[number]) => ({
+        ...row,
+        servingTasks: row.servingTasks.map((task) => ({
+          ...task, integrationJobs: jobs.get(task.id) ?? [],
+        })),
+      });
       // Matched by re-deriving the subject rather than by parsing it: the spelling of a criterion's
       // wake subject belongs to the function that writes it, and a second parser of it here would
       // be a second definition of what a criterion is called.
       return stated
         .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
-        .map((row) => state(row, criterionCoverage(settlements(row.servingTasks)), branches));
+        .map((row) => state(withJobs(row), criterionCoverage(settlements(row.servingTasks)), branches));
     }
 
     return [];
