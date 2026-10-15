@@ -36,9 +36,10 @@ internal class RealtimeRest(private val api: OrbitApi) {
         DirectorySnapshot(workspaces.await(), views.awaitAll().toMap(), folders.await(), tags.await(), runners.await())
     }
 
+    /** `after=` pages are 200 events, as on iOS and web: five of them are the server's SSE_GAP_CAP. */
     suspend fun page(handle: SessionHandle, id: String, after: Long? = null): EventPage {
         val query = listOf("maxPayload" to "2048") + if (after == null) listOf("tail" to "200")
-            else listOf("after" to "$after", "limit" to "500")
+            else listOf("after" to "$after", "limit" to "200")
         return Wire.decode(api.request(handle, ApiRequest(listOf("sessions", id, "events", "page"), query = query)).body,
             EventPage.serializer())
     }
@@ -46,7 +47,9 @@ internal class RealtimeRest(private val api: OrbitApi) {
     suspend fun session(handle: SessionHandle, id: String): SessionSnapshot = coroutineScope {
         val base = listOf("sessions", id)
         val approvals = async { objects(handle, base + "approvals", listOf("status" to "PENDING")) }
-        val queue = async { objects(handle, base + "turns") }
+        // The active view (A07-14; iOS 0588fe262, web `listQueuedTurns`): the bare one is the queue alone and leaves out the head a
+        // runner has taken but not echoed yet, so that turn vanished from the reader until its echo.
+        val queue = async { objects(handle, base + "turns", listOf("view" to "active")) }
         val background = async { objects(handle, base + "background") }
         val evidence = async { get(handle, listOf("tasks", "evidence-decisions", "pending"), listOf("decidingSessionId" to id)) }
         val detail = get(handle, base) as? JsonObject ?: throw ProtocolException()

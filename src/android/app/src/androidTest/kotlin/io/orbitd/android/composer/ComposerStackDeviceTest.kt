@@ -285,7 +285,8 @@ class ComposerStackDeviceTest {
         openModelMenu()
         compose.onNodeWithTag("composer-engine-title").assertTextEquals("Claude Code")
         appClick("DeepSeek")
-        awaitText("Applies when this session resumes.")
+        // What the pick will do, and when (A07-19 (a)): the session has ended, so its next message.
+        awaitText("Your next message uses DeepSeek.")
         capture("a07c-stack-retry-pick")
         if (has(hasText("Close") and hasClickAction())) appClick("Close")
         compose.onNodeWithText("+").performClick(); awaitText("Retry last failed message"); appClick("Retry last failed message")

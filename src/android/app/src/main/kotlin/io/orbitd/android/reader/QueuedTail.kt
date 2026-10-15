@@ -40,24 +40,46 @@ private val cardKeys = listOf("openItemDelivery", "taskStart", "projectStarted",
 internal fun queuedTail(rows: List<JsonObject>, events: List<RunEvent>): List<QueuedTurn> {
     val delivered = events.filter { it.type == "user" }.mapNotNull { it.turnId }
     return rows.mapNotNull { row ->
-        if (row["delivery"] != null && row["delivery"] != JsonNull || row.text("placement") == "accepted") return@mapNotNull null
+        if (row.isReceipt() || row.text("placement") == "accepted") return@mapNotNull null
         val turnId = row.text("turnId")
         if (turnId != null && delivered.any { ObjectId.same(it, turnId) }) return@mapNotNull null
         val content = row.text("content").orEmpty()
-        val payload = buildJsonObject {
-            put("text", content)
-            putJsonArray("attachments") {
-                row.objects("attachments").forEach { attachment -> addJsonObject {
-                    attachment.text("id")?.let { put("id", it) }; attachment.text("mimeType")?.let { put("mime", it) }
-                    attachment.text("name")?.let { put("name", it) }
-                } }
-            }
-            cardKeys.forEach { key -> row[key]?.takeIf { it != JsonNull }?.let { put(key, it) } }
-            if (row.text("kind") == "steer") put("steer", true)
-        }
-        val event = RunEvent("user", 0, payload, turnId)
+        val event = RunEvent("user", 0, echoPayload(row), turnId)
         QueuedTurn(turnId, row.text("kind") == "steer", event, transcriptCards(event), io.orbitd.android.core.cards.queuedWake(content))
     }
+}
+
+/**
+ * The accepted head (A07-14; iOS 0588fe262 `TranscriptState.accepted`): the turn a runner has taken, or is about to, whose echo has
+ * not arrived — the listing's `placement` "accepted". Nothing withdraws it any more, so it is no row of the queue's: it is drawn where
+ * its echo will land, as the echo will be drawn — the person's words, or the card it carries — stamped with when it was filed. Once
+ * the window holds its echo, that is what is drawn, and its own turn_end ends it; a `!` command, which has no echo (the runner runs
+ * it as a Bash card), and a delivery receipt are never one.
+ */
+internal fun acceptedHeads(rows: List<JsonObject>, events: List<RunEvent>): List<RunEvent> {
+    val done = events.filter { it.type == "user" || it.type == "turn_end" }.mapNotNull { it.turnId }
+    return rows.mapNotNull { row ->
+        if (row.text("placement") != "accepted" || row.text("kind") == "shell" || row.isReceipt()) return@mapNotNull null
+        val turnId = row.text("turnId") ?: return@mapNotNull null
+        if (done.any { ObjectId.same(it, turnId) }) return@mapNotNull null
+        RunEvent("user", 0, echoPayload(row), turnId, row.text("createdAt"))
+    }
+}
+
+/** A steer's receipt that it never made it (`failed`, `unconfirmed`): over, and no turn of the tail's. */
+private fun JsonObject.isReceipt() = this["delivery"] != null && this["delivery"] != JsonNull
+
+/** The `user` event a listed turn will be delivered as: the listing's `content` as its text, its files, and every card it carries. */
+private fun echoPayload(row: JsonObject) = buildJsonObject {
+    put("text", row.text("content").orEmpty())
+    putJsonArray("attachments") {
+        row.objects("attachments").forEach { attachment -> addJsonObject {
+            attachment.text("id")?.let { put("id", it) }; attachment.text("mimeType")?.let { put("mime", it) }
+            attachment.text("name")?.let { put("name", it) }
+        } }
+    }
+    cardKeys.forEach { key -> row[key]?.takeIf { it != JsonNull }?.let { put(key, it) } }
+    if (row.text("kind") == "steer") put("steer", true)
 }
 
 /** One queued turn at the transcript's end: its card (dashed while it can still be withdrawn), its reply cards, its wake's line, or its

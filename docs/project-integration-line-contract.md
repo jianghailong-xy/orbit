@@ -327,8 +327,8 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `codebase_id` | uuid NOT NULL | FK `project_codebase` |
 | `kind` | text | CHECK ∈ {`LAND_TASK`, `CHECK_PROMOTION`, `LAND_PROMOTION`} |
 | `generation` | int NOT NULL | `LAND_TASK`：同一任务的第几条（在任务行锁下取 max+1）；另两种：同一晋升的第几条 |
-| `task_id` | uuid NULL | `LAND_TASK` 必填（`project_integration_job_land_task_chk`）；晋升作业（`CHECK_PROMOTION` / `LAND_PROMOTION`）不带（0293），晋升的任务记在 `project_promotion` 行上。现状是 FK `task` ON DELETE SET NULL（0281）；修订 12 对实现的要求：改为**不带外键的历史引用**（同 0344:7-10），理由见下方 `session_id` 一行 |
-| `session_id` | uuid NULL | 源分支所在的工作会话（线上别名 `sourceSessionId`）。现状是 FK `session` ON DELETE SET NULL（0281）；修订 12 对实现的要求：与 `task_id` 一起改为不带外键的历史引用。理由：外键的置空是一次 UPDATE，终态行被 J4 守卫拒绝；`LAND_TASK` 行的 `task_id` 置空还违反 `land_task_chk`（0281:117-119），任何一代 `LAND_TASK` 都会挡住删任务——删会话、回收 Trash、删任务因此整批回滚，「让守卫放行」的办法不可行（`docs/landing-session-design.md` §9 第 2 条、§0.1 第 18 条） |
+| `task_id` | uuid NULL | `LAND_TASK` 必填（`project_integration_job_land_task_chk`）；晋升作业（`CHECK_PROMOTION` / `LAND_PROMOTION`）不带（0293），晋升的任务记在 `project_promotion` 行上。现状（0423 起，2026-10-14）是**不带外键的历史引用**（同 0344:7-10），修订 12 对实现的要求的这一半已落实，删任务不再改写作业行、作业行仍指名那个任务；0423 之前是 FK `task` ON DELETE SET NULL（0281），理由见下方 `session_id` 一行 |
+| `session_id` | uuid NULL | 源分支所在的工作会话（线上别名 `sourceSessionId`）。现状（0424 起，2026-10-14）是**不带外键的历史引用**，修订 12 对实现的要求连同 `task_id`（0423）已全部落实：删会话、回收 Trash 不再改写作业行，作业行仍指名那个会话；读它的地方按 id 查回会话，查不到就当作外键原来写的 NULL（回执的 `session_merge_receipt.session_id` 是外键，所以只写给还在的会话）。0424 之前是 FK `session` ON DELETE SET NULL（0281）。理由：外键的置空是一次 UPDATE，终态行被 J4 守卫拒绝；`LAND_TASK` 行的 `task_id` 置空还违反 `land_task_chk`（0281:117-119），任何一代 `LAND_TASK` 都会挡住删任务——删会话、回收 Trash、删任务因此整批回滚，「让守卫放行」的办法不可行（`docs/landing-session-design.md` §9 第 2 条、§0.1 第 18 条） |
 | `landing_id` | uuid NULL | 修订 12 新增（要求）；所属 `project_landing` 的历史引用，不加外键，只在 INSERT 时写。`session_id` 仍是源工作会话，不改路由、base_sha、领取守卫与回执的含义 |
 | `promotion_id` | uuid NULL | FK `project_promotion`（0273 补外键） |
 | `serial_key` | text NOT NULL | 串行键，见 J1 |
@@ -780,7 +780,7 @@ prompt **永不投递**：没有 initial 轮、不做准入与 sign-in 预检、
 | `id` | uuid(7) PK | |
 | `project_id` / `owner_id` / `codebase_id` | uuid | |
 | `source_kind` | text | CHECK ∈ {`PROJECT_BRANCH`, `TASK_BRANCH`}；后者只用于 `MAIN` 线项目 |
-| `task_id` / `session_id` | uuid NULL | `TASK_BRANCH` 必填；实际上两种源都有值：`PROJECT_BRANCH` 候选写最后落地的那个任务及其会话（`considerCandidate`），只为让队列找到一个可借的工作目录，所以落地主体不读 `task_id`（§2.9）。现状是 FK `task` / `session` ON DELETE SET NULL（0286:90-93）；修订 12 对实现的要求：改为**不带外键的历史引用**——置空是一次 UPDATE，终态行被 `project_promotion_terminal_guard`（0286）拒绝，删任务、删会话因此整批回滚，「让守卫放行」的办法不可行（同 §2.1） |
+| `task_id` / `session_id` | uuid NULL | `TASK_BRANCH` 必填；实际上两种源都有值：`PROJECT_BRANCH` 候选写最后落地的那个任务及其会话（`considerCandidate`），只为让队列找到一个可借的工作目录，所以落地主体不读 `task_id`（§2.9）。现状（0424 起，2026-10-14）是**不带外键的历史引用**，修订 12 对实现的要求已落实：删任务、删会话不再改写晋升行，晋升行仍指名那个任务和会话；合入 main 写回执时按 id 查回，查不到的会话不写回执、查不到的任务写成 NULL。0424 之前是 FK `task` / `session` ON DELETE SET NULL（0286:90-93），理由：置空是一次 UPDATE，终态行被 `project_promotion_terminal_guard`（0286）拒绝，删任务、删会话因此整批回滚，「让守卫放行」的办法不可行（同 §2.1） |
 | `source_ref` / `source_sha` | text / char(40) NULL | 候选的源：项目分支 tip，或任务分支 tip。`TASK_BRANCH` 的 tip 只有仓库知道（会话记的是分支名和分叉点），所以候选先以 NULL 写下，由 `CHECK_PROMOTION` 解析后回写（迁移 0293）；凡检查产出的状态都带值 |
 | `upstream_ref` | text | 冻结自代码库行 |
 | `upstream_sha_checked` / `merge_tree_sha` | char(40) NULL | 最近一次通过的检查所基于的 upstream tip 与组合树 |

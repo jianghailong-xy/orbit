@@ -8,7 +8,9 @@ import org.junit.Test
 /** A07-10 (iOS 9ee358083) on the provider/engine split: the engine's own sign-in in the Provider list is its accounts, Automatic
  * first with what it does — "Switches to soonest reset", said aloud as "Automatic: starts on the <engine> account whose quota resets
  * soonest, and switches when it hits its limit" — then every account with its own quota, the one the draft or session is on ticked.
- * Only the picked engine's accounts are there: another engine's are under that engine, picked first in the Engine list. */
+ * Only the picked engine's accounts are there: another engine's are under that engine, picked first in the Engine list.
+ * A07-19 (d) (iOS f93f3fe5e `providerValue`, ConsoleModel `sessionAutomatic`): the Provider row names the account in use, and says
+ * Automatic — ticked so — while Orbit picks it: the workspace leaves it to Orbit and nobody picked one by hand. */
 class AutomaticAccountTest : ComposerShellTest() {
     private fun twoAccountRunner(capabilities: String = "") {
         ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"Fixture runner","online":true,"status":"ONLINE",
@@ -27,8 +29,9 @@ class AutomaticAccountTest : ComposerShellTest() {
     @Test fun aNewSessionListsItsEnginesAccountsAutomaticFirst() {
         twoAccountRunner()
         signIn(); openDraft(); openModelMenu()
-        assertEquals("Claude Code's: nothing named, the draft starts on Default", listOf("Signed in on Fixture runner",
-            "Automatic\nSwitches to soonest reset", "✓ Default", "Work"), providerRows())
+        assertEquals("Claude Code's: nothing named, the draft starts on Automatic's pick", listOf("Signed in on Fixture runner",
+            "✓ Automatic\nSwitches to soonest reset", "Default", "Work"), providerRows())
+        compose.onNodeWithTag("composer-provider-value").assertTextEquals("Automatic")
         compose.onNodeWithContentDescription("Automatic: starts on the Claude Code account whose quota resets soonest, and switches when it hits its limit")
             .assertExists()
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
@@ -38,12 +41,13 @@ class AutomaticAccountTest : ComposerShellTest() {
         compose.onNodeWithTag("engine:codex").performClick()
         await { has(hasText("Codex ⌄")) }
         openModelMenu()
-        assertEquals(listOf("Signed in on Fixture runner", "Automatic\nSwitches to soonest reset", "✓ Default\n5h 23%", "Second account\n5h 95%",
+        assertEquals(listOf("Signed in on Fixture runner", "✓ Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%",
             "Expired account\nNot signed in, sign in →"), providerRows())
         compose.onNodeWithContentDescription("Automatic: starts on the Codex account whose quota resets soonest, and switches when it hits its limit")
             .assertExists()
         compose.onNode(hasText("Second account", substring = true) and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         await { providerRows().any { it.startsWith("✓ Second account") } }
+        compose.onNodeWithTag("composer-provider-value").assertTextEquals("Second account")
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
         compose.onNodeWithTag("composer-input").performTextInput("Start on the second account")
         compose.onNodeWithTag("composer-send").performClick()
@@ -58,11 +62,23 @@ class AutomaticAccountTest : ComposerShellTest() {
         twoAccountRunner(capabilities = "\"codex-account-move/v1\"")
         ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"))
         signIn(); openSession(); openModelMenu()
-        assertEquals(listOf("Signed in on Fixture runner", "Automatic\nSwitches to soonest reset", "✓ Default\n5h 23%", "Second account\n5h 95%",
+        assertEquals(listOf("Signed in on Fixture runner", "✓ Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%",
             "Expired account\nNot signed in, sign in →"), providerRows())
-        compose.onNode(hasText("Automatic") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+        compose.onNodeWithTag("composer-provider-value").assertTextEquals("Automatic")
+        compose.onNode(hasText("✓ Automatic") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/account") != null }
         assertEquals(buildJsonObject { put("account", "automatic") }, ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/account"))
+    }
+
+    /** A session whose account was picked by hand stays there: the row names it and ticks it, not Automatic. */
+    @Test fun aSessionPickedOntoAnAccountByHandNamesIt() {
+        twoAccountRunner(capabilities = "\"codex-account-move/v1\"")
+        ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"),
+            "codexAccount" to JsonPrimitive("1a2b3c4d"), "codexAccountPinned" to JsonPrimitive(true))
+        signIn(); openSession(); openModelMenu()
+        compose.onNodeWithTag("composer-provider-value").assertTextEquals("Second account")
+        assertEquals(listOf("Signed in on Fixture runner", "Automatic\nSwitches to soonest reset", "Default\n5h 23%", "✓ Second account\n5h 95%",
+            "Expired account\nNot signed in, sign in →"), providerRows())
     }
 
     @Test fun withoutTheRunnersMoveASessionsEngineIsOneRow() {

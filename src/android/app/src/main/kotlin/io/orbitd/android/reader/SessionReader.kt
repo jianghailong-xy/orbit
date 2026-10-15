@@ -152,6 +152,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
         queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
     }
+    // A07-14: the turn the runner has taken, until its echo or its end — drawn where the echo will land, as the echo will be.
+    val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+        acceptedHeads(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
+    }
     val queuedShown = if (transcript != null && state.window.newerAfter == null) queued.size else 0
     val readerSide by remember(list) { derivedStateOf {
         when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
@@ -179,6 +183,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val engineFromKeys = snapshotDetail?.let(ProviderChoices::engineFromKeys) == true
     LaunchedEffect(dshFailure || engineFromKeys, console.runnerId) { if (dshFailure || engineFromKeys) console.reload() }
+    // A07-18: what this page reads off the runner — the composer's catalogue, the cards' runner — again on every reconnect, and
+    // once a minute while the session streams, so a read that failed as the page opened, or a quota read before the phone slept,
+    // does not stay that way.
+    LaunchedEffect(console, model) {
+        refreshWhileStreaming(model.state.map { it.session?.connection == ConnectionState.CONNECTED }, console::refreshRunner)
+    }
     LaunchedEffect(worktree, state.denied) {
         if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
             setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
@@ -303,13 +313,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     items(displayedRows, key = { it.key }, contentType = { it.event.type }) { row ->
                         TranscriptRowView(row, model, live, openLink, row.contains(targetSeq ?: -1))
                     }
-                    if (displayedWindow.seeded && displayedRows.isEmpty()) item(key = "empty") { Text("No messages yet") }
+                    if (displayedWindow.seeded && displayedRows.isEmpty() && (live == null || accepted.isEmpty())) item(key = "empty") { Text("No messages yet") }
                     if (live != null) {
                         items(live.thinkingDrafts.entries.toList(), key = { "thinking:${it.key}" }) { entry ->
                             LiveMessage("Thinking", entry.key, entry.value, openLink)
                         }
                         items(live.textDrafts.entries.toList(), key = { "assistant:${it.key}" }) { entry ->
                             LiveMessage("Assistant", entry.key, entry.value, openLink)
+                        }
+                        // A07-14: the accepted head at the history's end, ahead of the decisions and the queue, as the transcript draws
+                        // a person's turn — no dashes, no "Queued", no Cancel: the runner has it.
+                        items(accepted, key = { "accepted:${it.turnId}" }) { head ->
+                            Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
                         }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
