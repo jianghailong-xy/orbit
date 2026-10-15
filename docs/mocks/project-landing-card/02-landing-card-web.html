@@ -1,0 +1,236 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Web — the Landing card</title>
+<style>
+/* 本板用的都是控制台自己的 token（抄自 src/web/src/index.css 的 :root 亮色），
+   组件类名也照现成的写：.session-project-page-card / .session-project-page-landing /
+   .project-landing*（今天那行）、.session-project-merge（合入卡）。新增的只有 .session-project-landing。 */
+@font-face { font-family: "Inter"; src: url("file:///var/tmp/landing-mock-render/fonts/Inter.ttf"); font-weight: 100 900; }
+@font-face { font-family: "Noto Sans SC"; src: url("file:///var/tmp/landing-mock-render/fonts/NotoSansSC.ttf"); font-weight: 100 900; }
+:root {
+  --bg-base: #ffffff; --bg-raised: #ffffff; --bg-subtle: #fafbfc; --bg-sunken: #f7f8fa;
+  --bg-hover: #f5f6f7; --fill-muted: #f1f1f4;
+  --border: #dee0e3; --border-subtle: #eceef1;
+  --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e; --text-4: #a8acb3;
+  --brand: #3370ff; --brand-border: #bcd3ff; --brand-tint: #eaf1ff;
+  --warning: #c2710c; --warning-solid: #fa8c16; --warning-bg: #fff4e6; --warning-border: #ffd591;
+  --success: #1a7f37;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 40px 44px 60px; background: #e9eaee; color: #16161a; width: max-content;
+       font: 14px/1.55 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 27px; letter-spacing: -.02em; margin: 0 0 8px; }
+.lede { color: #4f4f58; margin: 0 0 26px; font-size: 15px; max-width: 1720px; }
+.lede b { color: #16161a; }
+code { font: 12.5px "DejaVu Sans Mono", monospace; background: #d9d9e0; border-radius: 4px; padding: 1px 5px; }
+.row { display: flex; gap: 40px; align-items: flex-start; }
+figure { margin: 0; width: 392px; flex: none; }
+figcaption { margin-top: 16px; font-size: 13.5px; line-height: 1.62; color: #4a4a52; }
+figcaption > b { color: #16161a; display: block; font-size: 14.5px; margin-bottom: 4px; }
+figcaption ul { margin: 6px 0 0; padding-left: 18px; }
+figcaption li { margin: 3px 0; }
+figcaption li b { color: #16161a; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; margin-bottom: 8px; }
+.tag.now { background: #ffd9d4; color: #8f1d13; }
+.tag.after { background: #d6e4ff; color: #14428f; }
+
+/* 控制台的会话栏（页面本身是白底，这里给板子加一个列的外壳） */
+.col { width: 392px; background: var(--bg-base); border-radius: 12px; padding: 10px 10px 14px;
+       box-shadow: 0 10px 26px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.05); }
+.col-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 10px; }
+.col-head b { font-size: 14px; font-weight: 600; }
+.col-head span { color: var(--text-4); font-size: 12px; }
+.col-head .kebab { margin-left: auto; color: var(--text-3); font-size: 15px; letter-spacing: 1px; }
+
+/* 进度卡（现成：.session-project-page-card / -progress / -landing） */
+.session-project-page-card { margin: 0 0 10px; border-radius: 10px; background: var(--fill-muted); }
+.session-project-page-progress { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+                                 font-size: 12.5px; color: var(--text-2); }
+.session-project-progress-bar { display: flex; width: 66px; height: 4px; overflow: hidden; border-radius: 2px;
+                                background: var(--text-4); }
+.session-project-progress-bar i { display: block; height: 100%; }
+.session-project-page-landing { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px 10px;
+                                border-top: 1px solid var(--border); background: transparent; color: inherit; font: inherit;
+                                text-align: left; }
+.session-project-page-landing .project-landing { flex: 1; min-width: 0; padding-bottom: 9px; border-bottom: 0; font-size: 12.5px; }
+.session-project-page-landing-chev { flex: none; color: var(--text-4); font-size: 11px; }
+.project-landing { padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle); font-size: 13.5px; }
+.project-landing-heading { display: flex; align-items: center; gap: 8px; }
+.project-landing-word { flex: none; font-weight: 600; color: var(--text-2); }
+.project-landing-running .project-landing-ring { color: var(--brand); }
+.project-landing-running .project-landing-word { color: var(--brand); }
+.project-landing-state, .project-landing-clock { flex: none; font-size: 12.5px; color: var(--text-2); }
+.project-landing-clock { font-weight: 600; font-variant-numeric: tabular-nums; }
+.project-landing-running .project-landing-clock { color: var(--brand); }
+.project-landing-state { margin-left: auto; }
+.project-landing-what { margin-top: 8px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+                        overflow: hidden; overflow-wrap: anywhere; color: var(--text-1); }
+.project-landing-meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--text-3); }
+.project-landing-timed-out .project-landing-word, .project-landing-timed-out .project-landing-state,
+.project-landing-timed-out .project-landing-clock { color: var(--warning); }
+
+/* 方案 A 新增：.session-project-landing（和 .session-project-merge 同一形状） */
+.session-project-landing { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg-subtle); color: var(--text-2); font-size: 12px; }
+.session-project-landing .spl-head { display: flex; align-items: center; gap: 6px; }
+.session-project-landing .spl-title { color: var(--brand); font-size: 13px; font-weight: 600; }
+.session-project-landing .spl-state { margin-left: auto; font-size: 12.5px; color: var(--text-2); }
+.session-project-landing .spl-chev { flex: none; color: var(--text-4); font-size: 11px; }
+.session-project-landing .spl-what { color: var(--text-1); font-size: 13px; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.session-project-landing .spl-ref { font-size: 12px; color: var(--text-3); }
+.session-project-landing .spl-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-3); }
+.session-project-landing .spl-meta .u { margin-left: auto; }
+.session-project-landing .spl-clock { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--brand); }
+.session-project-landing .spl-note { color: var(--text-3); }
+.session-project-landing .spl-jobs { list-style: none; margin: 0; padding: 0; }
+.session-project-landing .spl-jobs li { display: flex; align-items: baseline; gap: 8px; color: var(--text-1); font-size: 12.5px; }
+.session-project-landing .spl-jobs li span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-project-landing .spl-jobs .st { flex: none; color: var(--text-3); }
+.session-project-landing .spl-jobs .st.run { color: var(--brand); font-weight: 600; }
+.session-project-landing.is-timed-out { border-color: var(--warning-border); background: var(--warning-bg); }
+.session-project-landing.is-timed-out .spl-title, .session-project-landing.is-timed-out .spl-state,
+.session-project-landing.is-timed-out .spl-clock { color: var(--warning); }
+.session-project-landing .spl-det { color: var(--text-3); }
+.session-project-landing .spl-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.session-project-landing .spl-primary { height: 28px; padding: 0 12px; border: 1px solid var(--brand); border-radius: 6px;
+  background: var(--brand); color: #fff; font: inherit; font-weight: 600; }
+.session-project-landing .spl-link { padding: 0; border: 0; background: transparent; color: var(--brand); font: inherit;
+  font-weight: 600; }
+
+/* 会话行（只画到够看清上下文：标题 + 时间 + 副行） */
+.group { padding: 16px 2px 4px; font-size: 15px; font-weight: 600; color: var(--text-2); }
+.srow { display: flex; flex-direction: column; gap: 2px; padding: 10px 2px 11px; border-bottom: 1px solid var(--bg-hover); }
+.srow .t { display: flex; align-items: baseline; gap: 10px; }
+.srow .t b { font-size: 13.5px; font-weight: 500; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .t .tm { margin-left: auto; flex: none; font-size: 12.5px; color: var(--text-4); }
+.srow .sub { font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 项目页的 Work overview 卡（现成的 Card + KPI 网格，这里只画到够看清位置） */
+.wcard { width: 392px; background: var(--bg-base); border-radius: 12px; padding: 14px 14px 12px;
+         box-shadow: 0 10px 26px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.05); }
+.wcard .wh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.wcard .wh b { font-size: 14.5px; font-weight: 650; }
+.wcard .wh span { color: var(--text-4); font-size: 12px; }
+.kgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--border-subtle);
+         border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.kcell { background: var(--bg-base); padding: 9px 10px 10px; }
+.kcell .kl { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-2); }
+.kcell .kv { font-size: 19px; font-weight: 650; margin-top: 2px; }
+.kcell .kf { font-size: 11px; color: var(--text-4); margin-top: 1px; }
+.meter { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 12px; background: var(--fill-muted); }
+.meter i { display: block; height: 100%; }
+.panel { background: #fff; border-radius: 22px; padding: 22px 26px 20px; box-shadow: 0 6px 24px rgba(0,0,0,.07); margin-top: 34px; }
+.panel h2 { font-size: 18px; margin: 0 0 4px; }
+.panel .hint { color: #6a6a72; font-size: 13.5px; margin: 0 0 12px; }
+table.mx { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13.5px; line-height: 1.5; }
+table.mx th, table.mx td { text-align: left; vertical-align: top; padding: 9px 12px; border-top: 1px solid #ececf0; }
+table.mx thead th { border-top: none; font-size: 13px; color: #55555e; font-weight: 650; }
+table.mx tbody th { width: 210px; color: #16161a; font-weight: 650; white-space: nowrap; }
+table.mx code { font: 12px "DejaVu Sans Mono", monospace; background: #eef0f3; }
+</style>
+<body>
+<h1>Web · Landing 卡（和 iOS 同一张卡、同一份词）</h1>
+<p class="lede">
+Web 今天和 iOS 一样：落地行是<b>进度卡里的最后一行</b>（<code>.session-project-page-landing</code>，上面一条 <code>border-top</code>），项目页 Work overview 里则是 KPI 网格上面的一行（<code>ProjectPanoramaHeader</code>）。<b>方案 A（图 2–4）：把它画成合入卡同一形状的一块</b>——<code>.session-project-landing</code>：1px 边框 + 圆角 10 + <code>--bg-subtle</code>，在跑时标题与时钟用 <code>--brand</code>（和合入卡 <code>is-merging</code> 一致）；没有上报时换成 <code>--warning-border</code> / <code>--warning-bg</code>，加一句“停在哪儿”和 <b>Retry</b>。位置：从进度卡里出来，自己在下面一块（合入卡的地盘，先来先放）；项目页那一行换成同一块内嵌卡。词与 iOS 共用同一份（<code>ProjectPanoramaHeader</code> 那一家的文案）。</p>
+<div class="row" id="figs"></div>
+<div id="panel"></div>
+<script>
+// ── 这一刻的真实数据（截图 9:07 · 项目 34bmzOkov3xN2yLPrnsCk）─────────
+const PROJ2 = 'Wiki 服务端执行与 System model';
+const BYJOB = '维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑；10-10 跑了 13 轮，上限 8）';
+const DOSSIER = '维护：同一会话跨页时，dossier 在一轮里被重复发出（计数虚高；会话中途有新记录时整轮会失败）';
+const BR2 = 'project/34bmz…N2yLPrnsCk';
+const ROWS = [
+  ['执行任务：P10 · 本部署切换到服务端执行', '20m ago', 'Recap · 8:45 AM 第 101 轮已收尾：生产被他人部署到 756…'],
+  ['P10 只读核查：生产主机的网络、wiki-worker 与 System model', '27m ago', 'Recap · 8:39 AM 第 101 轮只读核查完成：检出已变为 756…'],
+];
+const cols = (o) => `<div class="col">
+<div class="col-head"><b>${PROJ2}</b><span>Project · 76 sessions</span><span class="kebab">⋯</span></div>
+${o}</div>`;
+const progressCard = (extra = '') => `<div class="session-project-page-card">
+<div class="session-project-page-progress"><span class="session-project-progress-bar"><i style="width:95%;background:var(--success)"></i></span><span>44/46 done · 0 running</span></div>
+${extra}</div>`;
+const sessRows = () => `<div class="group">Today</div>` + ROWS.map(([t, tm, s]) =>
+  `<div class="srow"><div class="t"><b>${t}</b><span class="tm">${tm}</span></div><div class="sub">${s}</div></div>`).join('');
+const RING = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M20 11a8 8 0 0 0-14.3-4.9"/><path d="M5.5 2.8v3.5H9"/><path d="M4 13a8 8 0 0 0 14.3 4.9"/><path d="M18.5 21.2v-3.5H15"/></svg>';
+const TRI = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg>';
+const CHEV = '<span class="spl-chev">›</span>';
+
+// 图 1 · 现在：进度卡里最后一行
+const nowLanding = `<div class="session-project-page-landing"><div class="project-landing project-landing-running">
+<div class="project-landing-heading">${RING}<span class="project-landing-word">Landing</span><span class="project-landing-state">checking</span></div>
+<div class="project-landing-what">${BYJOB}</div>
+<div class="project-landing-meta"><span>Elapsed <span class="project-landing-clock">1m 6s</span></span><span>Waited <span class="project-landing-clock" style="color:var(--text-2)">0m 34s</span></span><span>Updated just now</span></div>
+</div><span class="session-project-page-landing-chev">›</span></div>`;
+
+// 图 2 · 方案 A · 进行中
+const cardRunning = `<div class="session-project-landing">
+<div class="spl-head">${RING.replace('currentColor', 'var(--brand)')}<span class="spl-title">Landing</span><span class="spl-state">checking</span>${CHEV}</div>
+<div class="spl-what">${BYJOB}</div>
+<div class="spl-ref">onto ${BR2}</div>
+<div class="spl-meta"><span>Elapsed <span class="spl-clock">1m 6s</span></span><span>Waited <span class="spl-clock" style="color:var(--text-2)">0m 34s</span></span><span class="u">Updated just now</span></div>
+<div class="spl-note">Nothing to do — it lands on its own.</div></div>`;
+
+// 图 3 · 方案 A · 没有上报
+const cardTimedOut = `<div class="session-project-landing is-timed-out">
+<div class="spl-head">${TRI}<span class="spl-title">Landing</span><span class="spl-state">Timed out</span>${CHEV}</div>
+<div class="spl-what">${BYJOB}</div>
+<div class="spl-ref">onto ${BR2}</div>
+<div class="spl-meta"><span>No report for <span class="spl-clock">11m</span></span><span class="u">limit 10m</span></div>
+<div class="spl-det">The runner took it at 09:05 · stopped at checking · no push recorded</div>
+<div class="spl-foot"><button class="spl-primary" type="button">Retry</button><button class="spl-link" type="button">All jobs ›</button></div></div>`;
+
+// 图 2 变体 · 两个作业
+const cardJobs = `<div class="session-project-landing">
+<div class="spl-head">${RING.replace('currentColor', 'var(--brand)')}<span class="spl-title">Landing 2 jobs</span><span class="spl-state">checking</span>${CHEV}</div>
+<div class="spl-ref">onto ${BR2}</div>
+<ul class="spl-jobs"><li><span>${BYJOB}</span><span class="st run">checking</span></li><li><span>${DOSSIER}</span><span class="st">queued</span></li></ul>
+<div class="spl-meta"><span>Elapsed <span class="spl-clock">1m 6s</span></span><span>Waited <span class="spl-clock" style="color:var(--text-2)">0m 34s</span></span><span class="u">Updated just now</span></div>
+<div class="spl-note">Nothing to do — it lands on its own.</div></div>`;
+
+// 图 4 · 项目页 Work overview
+const kcell = (l, v, f) => `<div class="kcell"><div class="kl">${l}</div><div class="kv">${v}</div><div class="kf">${f}</div></div>`;
+const workOverview = (landingCard) => `<div class="wcard"><div class="wh"><b>Work overview</b><span>46 tasks · 51 dependencies</span></div>
+${landingCard}
+<div class="kgrid">${kcell('● Running', '0', 'task work in progress')}${kcell('▮ Pending landing', '3', 'no landing receipt yet')}${kcell('✓ On main', '41', 'landed on main')}</div>
+<div class="meter"><i style="width:89%;background:var(--success)"></i><i style="width:7%;background:var(--brand)"></i></div></div>`;
+
+const fig = (tag, label, body, cap) => `<figure><span class="tag ${tag}">${label}</span>${body}<figcaption>${cap}</figcaption></figure>`;
+const figs = [
+  ['now', '现在', cols(progressCard(nowLanding) + sessRows()),
+    `<b>落地行是进度卡里的最后一行</b><ul><li>一条 <code>border-top</code> 分开，右边一个 chevron，整行点开 Jobs 列表——和 iOS 一样。</li>
+     <li>说得了「在动」，说不了落到哪条线、几个作业、出事要不要人管。</li></ul>`],
+  ['after', '方案 A · 进行中', cols(progressCard() + cardRunning + sessRows()),
+    `<b>从卡里出来，一块自己的卡</b><ul>
+     <li>形状照合入卡（<code>.session-project-merge</code>）：1px 边框 + 圆角 10 + <code>--bg-subtle</code>；标题 <b>Landing</b> 与时钟用 <code>--brand</code>，和 <code>is-merging</code> 那张一致。</li>
+     <li>多两行：<b>onto project/…</b>（任务页 Target 同一字段）和 <b>Nothing to do — it lands on its own.</b>（合入卡 <code>PAGE_NOTHING_TO_DO</code> 的截短）。</li>
+     <li>点整块 = 打开 Jobs 列表（今天那一行的行为不变）。</li></ul>`],
+  ['after', '方案 A · 两个作业', cols(progressCard() + cardJobs + sessRows()),
+    `<b>两个作业说得清是谁</b><ul>
+     <li>多个作业时标题写 <b>Landing 2 jobs</b>，每条一个状态（在跑蓝、queued 灰），来自和 Jobs 列表同一份读。</li>
+     <li>右上和三个时间仍是领跑那个作业的（先在跑、再按入队先后；今天那一行也这么读）。</li></ul>`],
+  ['after', '方案 A · 没有上报', cols(progressCard() + cardTimedOut + sessRows()),
+    `<b>要人管的那一刻，卡变成琥珀</b><ul>
+     <li>换成 <code>--warning-border</code> / <code>--warning-bg</code>（和 <code>.is-blocked</code> 同一块色），三角替掉环，状态写 <b>Timed out</b>。</li>
+     <li>一句「停在哪儿、有没有推过」——Jobs 列表里同一句 <code>detail</code>；<b>Retry</b> 只在服务端说 <code>retryable</code> 时出现。</li></ul>`],
+  ['after', '方案 A · 项目页 Work overview', workOverview(cardRunning),
+    `<b>同一块内嵌卡，替掉 KPI 网格上面那一行</b><ul>
+     <li>项目页今天在 KPI 网格上方画的是同一行（<code>ProjectPanoramaHeader</code>）；改成同一块卡，词一份都不用改。</li>
+     <li>内嵌用同一形状（边框 + 圆角 + 底色），和 KPI 面板的边框不打架；没有在途作业时两者都不在。</li></ul>`],
+];
+document.getElementById('figs').innerHTML = figs.map(([k, t, p, c]) => fig(k, t, p, c)).join('');
+
+document.getElementById('panel').innerHTML = `<div class="panel">
+<h2>两端对应（同一份读、同一份词）</h2>
+<p class="hint">Web 不新增服务端读；新类只有一个 <code>.session-project-landing</code>，其余全是现成类与 token。</p>
+<table class="mx"><thead><tr><th>这一块</th><th>Web（今天 → 方案 A）</th></tr></thead><tbody>
+<tr><th>位置 · 项目 sessions 页</th><td>进度卡里最后一行 <code>.session-project-page-landing</code> → 进度卡下面自己一块 <code>.session-project-landing</code>（合入卡 <code>.session-project-merge</code> 的前面）</td></tr>
+<tr><th>位置 · 项目页</th><td>KPI 网格上方的一行（<code>ProjectPanoramaHeader</code> 里那个 <code>.project-landing</code>）→ 同一块内嵌卡，位置不变</td></tr>
+<tr><th>形状 · 在途</th><td><code>border: 1px var(--border)</code> + <code>background: var(--bg-subtle)</code>，标题/时钟 <code>--brand</code>——同 <code>.session-project-merge.is-merging</code></td></tr>
+<tr><th>形状 · 没有上报</th><td><code>--warning-border</code> + <code>--warning-bg</code>，三角代替环——同 <code>.is-blocked</code> 的琥珀</td></tr>
+<tr><th>词</th><td>全部来自 <code>ProjectPanoramaHeader</code>（<code>landingLine</code> / <code>jobPhases</code> / <code>landingClock</code> / <code>LANDING_WORDS</code>）与 <code>ProjectPromotionCard</code>（<code>NOTHING_TO_DO</code>）；新增只有 <b>onto …</b> 一行与作业行的状态列</td></tr>
+<tr><th>Retry</th><td>与 Jobs 列表同一个按钮、同一扇门（<code>POST /projects/:id/integration/jobs/:jobId/retry</code>），只按服务端的 <code>retryable</code> 出现</td></tr>
+</tbody></table></div>`;
+</script>
+</body>
+</html>

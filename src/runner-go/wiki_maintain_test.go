@@ -1311,6 +1311,39 @@ func TestWikiMaintainHoldsBackEveryPageFromTheFirstThatDoesNotFit(t *testing.T) 
 	}
 }
 
+// A session its pages hand out more than once is read, and reported, once a page — this path's loop as it has
+// always been, and what says the fix of 2026-10-11 (`wiki-maintain-job.ts`'s `dossiers`, P10 round 93) did not
+// reach the runner: the server's own run stopped reading such a session twice, and this one still does, by the
+// constraint that its behavior changes nowhere before P11 deletes it. The second page hands session-b out
+// again, and the run counts it a second time: four dossiers for three sessions, its three entries extracted
+// twice and the second read dropped as titles the run already has. Goes with the path.
+func TestWikiMaintainStillReadsASessionItsPagesHandOutTwice(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "automatic", 0, "tok-expect")
+	door.pages[""] = maintainPage("tok-1", true, ruleDossier("session-a"), ruleDossier("session-b"))
+	door.pages["tok-1"] = maintainPage("tok-expect", false, ruleDossier("session-b"), ruleDossier("session-c"))
+	// The breaker lets everything through: what this case reads is the loop's counting, not what it holds back.
+	breaker := &fakeRunBreaker{began: 1000, spent: 0}
+	door.propose = breaker.propose
+	fakeVerifyClaude(t)
+	wikiMaintainSession(t, door.URL, newFakeVLLM(t, ruleAnswers))
+
+	summary, err := runMaintainCLI(t)
+	if err != nil {
+		t.Fatalf("orbit wiki maintain: %v\n%+v", err, summary)
+	}
+	if r := summary.Report; r.Sessions != 4 || r.Dossiers != 4 {
+		t.Errorf("sessions %d, dossiers %d: want 4 and 4 — three sessions over two pages, session-b on both", r.Sessions, r.Dossiers)
+	}
+	if e := summary.Report.Entries; e.Dropped != 3 {
+		t.Errorf("entries = %+v, want the three the second read of session-b dropped", e)
+	}
+	if r := summary.Report.Ops; r.Proposed != 9 {
+		t.Errorf("ops = %+v, want nine proposed: three sessions' three, session-b's counted from either read", r)
+	}
+}
+
 // A retry after an attempt that spent everything the run may change: nothing fits, nothing is proposed, and the
 // run succeeds where the cursor stands — the first page's start — so the next run, with a breaker of its own,
 // reads every dossier again.

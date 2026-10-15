@@ -56,9 +56,9 @@ import {
   deliveryReviewDetailLine,
   markOpenItemsHandling,
   openItemActions,
+  openItemChat,
   openItemRequiredAction,
   primaryAction,
-  openItemChat,
   openItemFacts,
   type LandedFix,
   openItemMessage,
@@ -866,6 +866,12 @@ export class ProjectOpenItemService {
       automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
+      // Named or not named, never defaulted: a suggestion of the one-hour default and no suggestion
+      // at all read the same on the card — an empty box says "one hour unless set" — so inventing
+      // the number here would put a setting on the request that nobody chose.
+      ...(body.mergeCheckTimeoutSeconds !== undefined
+        ? { mergeCheckTimeoutSeconds: body.mergeCheckTimeoutSeconds }
+        : {}),
     };
     const asking = actingSessionId?.trim();
     return withTransactionRetry(this.prisma, async (tx) => {
@@ -2474,7 +2480,9 @@ export class ProjectOpenItemService {
    * attempted again does not answer one either: the task being carried to a new commit is not the
    * new generation §4.2 names, and an item that closed on every retry would close on the way to the
    * landing that is supposed to answer it. Cancelled and replaced are the two that do — nobody is
-   * going to land a task that is gone.
+   * going to land a task that is gone — and they name the fact they saw the way the item's own door
+   * table names it: `SUCCESSOR_FILED` when a successor took the task over (`taskRepair`'s
+   * `task_create`), `TASK_CLOSED` when it was cancelled (`task_update`'s cancel).
    */
   async resolveByFact(taskIds: ReadonlyArray<string | null | undefined>): Promise<void> {
     const ids = unique(taskIds);
@@ -2507,7 +2515,9 @@ export class ProjectOpenItemService {
       await this.prisma.$executeRaw(Prisma.sql`
         UPDATE "project_open_item" i
            SET "state" = 'RESOLVED',
-               "resolution" = 'TASK_CLOSED',
+               "resolution" = CASE
+                 WHEN t."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                 ELSE 'TASK_CLOSED' END,
                "resolved_at" = now(),
                "resolved_by" = 'PLATFORM',
                "updated_at" = now()

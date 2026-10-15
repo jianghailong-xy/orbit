@@ -28,6 +28,9 @@ import {
   RUN_LINE_PROJECT_BRANCH_HINT,
   RUN_MERGE_CHECK_HINT,
   RUN_MERGE_CHECK_NONE_SAYS,
+  RUN_MERGE_CHECK_TIMEOUT,
+  RUN_MERGE_CHECK_TIMEOUT_HINT,
+  RUN_MERGE_CHECK_TIMEOUT_UNIT,
   START_CHAT_PLACEHOLDER,
   START_NOT_RECORDED,
   START_OPENS_COORDINATOR,
@@ -465,6 +468,12 @@ async function mergeCheckBox(card: HTMLElement): Promise<HTMLTextAreaElement> {
   return settingRow(card, 'Merge check').querySelector<HTMLTextAreaElement>('textarea')!;
 }
 
+/** The budget under the merge check's command, in the row the command lives in. */
+async function mergeCheckBudgetBox(card: HTMLElement): Promise<HTMLInputElement> {
+  await mergeCheckBox(card);
+  return settingRow(card, 'Merge check').querySelector<HTMLInputElement>('input')!;
+}
+
 async function key(init: KeyboardEventInit = {}): Promise<void> {
   await act(async () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }));
@@ -649,21 +658,27 @@ describe('the plan by level', () => {
 });
 
 describe('what a press sends', () => {
-  it('opens with Automatic on whatever the coordinator suggested', () => {
-    const suggestedOff = requestOf({ settings: { ...requestOf().settings, automatic: false } });
+  it('opens with Automatic on whatever the coordinator suggested, and the check budget it suggested', () => {
+    const suggestedOff = requestOf({
+      settings: { ...requestOf().settings, automatic: false, mergeCheckTimeoutSeconds: 900 },
+    });
     expect(startDraftOf(suggestedOff.settings)).toEqual({
       line: 'PROJECT_BRANCH',
       upstream: null,
       automatic: true,
       maxConcurrentTasks: 3,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
+      mergeCheckTimeoutSeconds: 900,
     });
+    // A coordinator that suggested no budget leaves the box empty, which is the default one.
+    expect(startDraftOf(requestOf().settings).mergeCheckTimeoutSeconds).toBeNull();
   });
 
   it('sends the seal it was asked about, every setting as the card shows it, and the request', () => {
     const request = requestOf();
     expect(startBody(request, {
       line: 'PROJECT_BRANCH', upstream: null, automatic: false, maxConcurrentTasks: 5, mergeCheckCommand: '  npm test  ',
+      mergeCheckTimeoutSeconds: 90,
     }, 'item-1')).toEqual({
       criteriaDigest: SEAL,
       line: 'PROJECT_BRANCH',
@@ -671,17 +686,21 @@ describe('what a press sends', () => {
       automatic: false,
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'npm test',
+      mergeCheckTimeoutSeconds: 90,
       requestId: 'item-1',
     });
-    // Directly into main names no branch — the door refuses one — and a blank check is none.
+    // Directly into main names no branch — the door refuses one — and a blank check is none. An
+    // empty budget box is the naming that runs the check on its one-hour default.
     expect(startBody(request, {
       line: 'MAIN', upstream: null, automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: '   ',
+      mergeCheckTimeoutSeconds: null,
     }, 'item-1')).toEqual({
       criteriaDigest: SEAL,
       line: 'MAIN',
       automatic: true,
       maxConcurrentTasks: 3,
       mergeCheckCommand: null,
+      mergeCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
   });
@@ -954,6 +973,7 @@ describe('the press', () => {
       automatic: false,
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
+      mergeCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
     // The question is answered: the card goes, and the record is the conversation's to draw.
@@ -1214,6 +1234,7 @@ describe('the main branch on the card', () => {
       automatic: true,
       maxConcurrentTasks: 3,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
+      mergeCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
   });
@@ -1289,8 +1310,48 @@ describe('the main branch a press sends', () => {
   });
 
   it('names the main branch only when the card offered one', () => {
-    const draft = { line: 'MAIN' as const, automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: '' };
+    const draft = {
+      line: 'MAIN' as const, automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: '',
+      mergeCheckTimeoutSeconds: null,
+    };
     expect(startBody(requestOf(), { ...draft, upstream: 'master' }, null)).toMatchObject({ upstreamRef: 'refs/heads/master' });
     expect(startBody(requestOf(), { ...draft, upstream: null }, null)).not.toHaveProperty('upstreamRef');
+  });
+});
+
+// ── the merge check's budget ──────────────────────────────────────────────────────────────────
+
+describe('the merge check budget on the card', () => {
+  it('opens on the coordinator’s suggestion, says what an empty box means, and presses it back', async () => {
+    server.row = rowOf('item-1', requestOf({
+      settings: { ...requestOf().settings, mergeCheckTimeoutSeconds: 900 },
+    }));
+    const { card } = await delivered();
+    const box = await mergeCheckBudgetBox(card());
+    expect(box.value).toBe('900');
+    // The number and the unit, then what it means and what an empty box is.
+    const row = settingRow(card(), 'Merge check');
+    expect(row.textContent).toContain(RUN_MERGE_CHECK_TIMEOUT);
+    expect(row.textContent).toContain(RUN_MERGE_CHECK_TIMEOUT_UNIT);
+    expect(row.textContent).toContain(RUN_MERGE_CHECK_TIMEOUT_HINT);
+
+    // The owner changes the budget the coordinator suggested, and the press carries theirs.
+    await type(box, '90');
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press to reach the door');
+    expect(bodies[0]).toMatchObject({ mergeCheckTimeoutSeconds: 90, requestId: 'item-1' });
+  });
+
+  it('opens empty when nobody suggested a budget, and an empty box presses the default', async () => {
+    server.row = rowOf('item-1');
+    const { card } = await delivered();
+    expect((await mergeCheckBudgetBox(card())).value).toBe('');
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press to reach the door');
+    expect(bodies[0]).toMatchObject({ mergeCheckTimeoutSeconds: null, requestId: 'item-1' });
   });
 });

@@ -1,0 +1,329 @@
+12:25:01.411 scroll #1 t=1453.028 sample off=0.0 content=0.0 gap=0.0 inset=0.0 <- off=0.0 content=0.0 gap=0.0 inset=0.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:01.413 scroll #2 t=1453.029 phase idle
+12:25:01.414 scroll #3 t=1453.029 geo off=0.0 size=0.0 insets=0.0/0.0 container=0.0 visible=0.0..0.0
+12:25:01.535 scroll #4 t=1453.166 sample off=-77.0 content=24.0 gap=-455.0 inset=77.0 <- off=0.0 content=0.0 gap=0.0 inset=0.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:01.536 scroll #5 t=1453.166 geo off=-77.0 size=24.0 insets=77.0/0.0 container=556.0 visible=-77.0..479.0
+12:25:01.681 metrics #6 t=1453.266 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=-77.0 doc=479.0 visible=556.0 insets=77.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:02.289 scroll #7 t=1453.883 publish rev=1 atBottom=true detached=false
+12:25:02.292 scroll #8 t=1453.883 followScrollTo bottom
+12:25:02.304 scroll #9 t=1453.887 sample off=232.0 content=788.0 gap=0.0 inset=77.0 <- off=-77.0 content=24.0 gap=-455.0 inset=77.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:02.306 scroll #10 t=1453.887 geo off=232.0 size=788.0 insets=77.0/0.0 container=556.0 visible=232.0..788.0
+12:25:02.349 scroll #12 t=1453.971 follow=true gap=44.0
+12:25:02.350 scroll #13 t=1453.971 repinAfterResize
+12:25:02.351 scroll #11 t=1453.971 sample off=232.0 content=832.0 gap=44.0 inset=77.0 <- off=232.0 content=788.0 gap=0.0 inset=77.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:02.355 scroll #14 t=1453.971 holdScroll transcript-bottom animated=false
+12:25:02.358 scroll #15 t=1453.971 geo off=232.0 size=832.0 insets=77.0/0.0 container=556.0 visible=232.0..788.0
+12:25:02.359 scroll #16 t=1453.985 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:02.359 scroll #17 t=1453.987 sample off=276.0 content=832.0 gap=0.0 inset=77.0 <- off=232.0 content=832.0 gap=44.0 inset=77.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:02.359 scroll #18 t=1453.987 geo off=276.0 size=832.0 insets=77.0/0.0 container=556.0 visible=276.0..832.0
+12:25:02.424 scroll #19 t=1454.052 repinAfterResize
+12:25:02.441 scroll #20 t=1454.052 holdScroll transcript-bottom animated=false
+12:25:02.475 scroll #21 t=1454.064 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:02.795 metrics #22 t=1454.418 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=276.0 doc=832.0 visible=556.0 insets=77.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:03.870 scroll #23 t=1455.460 sample off=652.0 content=1238.0 gap=30.0 inset=107.0 <- off=276.0 content=832.0 gap=0.0 inset=77.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:03.871 scroll #24 t=1455.462 follow=true gap=30.0
+12:25:03.872 scroll #26 t=1455.462 holdScroll transcript-bottom animated=false
+12:25:03.873 scroll #25 t=1455.462 repinAfterResize
+12:25:03.874 scroll #27 t=1455.462 geo off=652.0 size=1238.0 insets=107.0/0.0 container=556.0 visible=652.0..1208.0
+12:25:03.876 scroll #28 t=1455.468 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:04.015 scroll #29 t=1455.472 sample off=682.0 content=1238.0 gap=0.0 inset=107.0 <- off=652.0 content=1238.0 gap=30.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:04.021 scroll #30 t=1455.472 geo off=682.0 size=1238.0 insets=107.0/0.0 container=556.0 visible=682.0..1238.0
+12:25:04.087 metrics #31 t=1455.712 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=682.0 doc=1238.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:04.277 scroll #32 t=1455.789 publish rev=3 atBottom=true detached=false
+12:25:04.279 scroll #33 t=1455.789 followScrollTo bottom
+12:25:10.284 mark 0-opened-light t=1461.909
+12:25:11.487 scroll #34 t=1463.083 publish rev=4 atBottom=true detached=false
+12:25:11.488 scroll #35 t=1463.084 followScrollTo bottom
+12:25:11.494 scroll #36 t=1463.122 sample off=785.0 content=1341.0 gap=0.0 inset=107.0 <- off=682.0 content=1238.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:11.495 scroll #37 t=1463.122 geo off=785.0 size=1341.0 insets=107.0/0.0 container=556.0 visible=785.0..1341.0
+12:25:11.569 metrics #38 t=1463.194 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=785.0 doc=1341.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:12.392 mark 1-turn-started-light t=1464.012
+12:25:13.501 scroll #40 t=1465.129 followScrollTo bottom
+12:25:13.501 scroll #39 t=1465.129 publish rev=5 atBottom=true detached=false
+12:25:13.511 scroll #41 t=1465.140 sample off=837.0 content=1393.0 gap=0.0 inset=107.0 <- off=785.0 content=1341.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:13.511 scroll #42 t=1465.140 geo off=837.0 size=1393.0 insets=107.0/0.0 container=556.0 visible=837.0..1393.0
+12:25:13.572 metrics #43 t=1465.203 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=837.0 doc=1393.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=36.0 off=0.0 doc=35.0 visible=36.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:13.807 scroll #44 t=1465.436 publish rev=6 atBottom=true detached=false
+12:25:13.812 scroll #45 t=1465.436 followScrollTo bottom
+12:25:13.845 scroll #47 t=1465.469 follow=true gap=40.0
+12:25:13.846 scroll #48 t=1465.469 repinAfterResize
+12:25:13.847 scroll #50 t=1465.469 geo off=837.0 size=1433.0 insets=107.0/0.0 container=556.0 visible=837.0..1393.0
+12:25:13.847 scroll #46 t=1465.468 sample off=837.0 content=1433.0 gap=40.0 inset=107.0 <- off=837.0 content=1393.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:13.847 scroll #49 t=1465.469 holdScroll transcript-bottom animated=false
+12:25:13.847 scroll #51 t=1465.475 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:13.850 scroll #52 t=1465.478 sample off=877.0 content=1433.0 gap=0.0 inset=107.0 <- off=837.0 content=1433.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:13.850 scroll #53 t=1465.478 geo off=877.0 size=1433.0 insets=107.0/0.0 container=556.0 visible=877.0..1433.0
+12:25:13.968 metrics #54 t=1465.595 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=877.0 doc=1433.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=76.0 off=0.0 doc=75.0 visible=76.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:14.125 scroll #55 t=1465.752 publish rev=7 atBottom=true detached=false
+12:25:14.126 scroll #56 t=1465.753 followScrollTo bottom
+12:25:14.150 scroll #57 t=1465.774 sample off=877.0 content=1473.0 gap=40.0 inset=107.0 <- off=877.0 content=1433.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:14.152 scroll #59 t=1465.774 repinAfterResize
+12:25:14.153 scroll #60 t=1465.774 holdScroll transcript-bottom animated=false
+12:25:14.153 scroll #58 t=1465.774 follow=true gap=40.0
+12:25:14.153 scroll #61 t=1465.774 geo off=877.0 size=1473.0 insets=107.0/0.0 container=556.0 visible=877.0..1433.0
+12:25:14.206 scroll #62 t=1465.785 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:14.206 scroll #63 t=1465.787 sample off=917.0 content=1473.0 gap=0.0 inset=107.0 <- off=877.0 content=1473.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:14.206 scroll #64 t=1465.788 geo off=917.0 size=1473.0 insets=107.0/0.0 container=556.0 visible=917.0..1473.0
+12:25:14.363 metrics #65 t=1465.994 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=917.0 doc=1473.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=116.0 off=0.0 doc=115.0 visible=116.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:14.490 scroll #66 t=1466.104 publish rev=8 atBottom=true detached=false
+12:25:14.491 scroll #67 t=1466.104 followScrollTo bottom
+12:25:14.805 scroll #68 t=1466.365 publish rev=9 atBottom=true detached=false
+12:25:14.809 scroll #69 t=1466.365 followScrollTo bottom
+12:25:14.809 scroll #70 t=1466.391 sample off=917.0 content=1513.0 gap=40.0 inset=107.0 <- off=917.0 content=1473.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:14.810 scroll #71 t=1466.392 follow=true gap=40.0
+12:25:14.811 scroll #72 t=1466.392 repinAfterResize
+12:25:14.825 scroll #73 t=1466.392 holdScroll transcript-bottom animated=false
+12:25:14.838 scroll #74 t=1466.392 geo off=917.0 size=1513.0 insets=107.0/0.0 container=556.0 visible=917.0..1473.0
+12:25:14.853 scroll #75 t=1466.397 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:14.867 scroll #76 t=1466.401 sample off=957.0 content=1513.0 gap=0.0 inset=107.0 <- off=917.0 content=1513.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:14.886 scroll #77 t=1466.401 geo off=957.0 size=1513.0 insets=107.0/0.0 container=556.0 visible=957.0..1513.0
+12:25:14.960 metrics #78 t=1466.428 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=957.0 doc=1513.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=156.0 off=0.0 doc=155.0 visible=156.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:15.181 scroll #79 t=1466.659 publish rev=10 atBottom=true detached=false
+12:25:15.187 scroll #80 t=1466.659 followScrollTo bottom
+12:25:15.189 scroll #81 t=1466.696 sample off=957.0 content=1518.0 gap=5.0 inset=107.0 <- off=957.0 content=1513.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:15.193 scroll #82 t=1466.697 follow=true gap=5.0
+12:25:15.195 scroll #83 t=1466.697 repinAfterResize
+12:25:15.197 scroll #84 t=1466.697 holdScroll transcript-bottom animated=false
+12:25:15.199 scroll #85 t=1466.697 geo off=957.0 size=1518.0 insets=107.0/0.0 container=556.0 visible=957.0..1513.0
+12:25:15.201 scroll #86 t=1466.704 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:15.201 scroll #87 t=1466.706 sample off=962.0 content=1518.0 gap=0.0 inset=107.0 <- off=957.0 content=1518.0 gap=5.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:15.202 scroll #88 t=1466.706 geo off=962.0 size=1518.0 insets=107.0/0.0 container=556.0 visible=962.0..1518.0
+12:25:15.204 metrics #89 t=1466.796 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=962.0 doc=1518.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=160.0 off=35.0 doc=195.0 visible=160.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:15.441 scroll #90 t=1467.049 publish rev=11 atBottom=true detached=false
+12:25:15.442 scroll #91 t=1467.049 followScrollTo bottom
+12:25:15.608 metrics #92 t=1467.193 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=962.0 doc=1518.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=160.0 off=75.0 doc=235.0 visible=160.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:15.941 scroll #93 t=1467.569 publish rev=12 atBottom=true detached=false
+12:25:15.943 scroll #94 t=1467.569 followScrollTo bottom
+12:25:17.305 mark 2-think1-box-light t=1468.930
+12:25:17.842 scroll #95 t=1469.464 publish rev=13 atBottom=true detached=false
+12:25:17.925 scroll #96 t=1469.464 followScrollTo bottom
+12:25:17.953 scroll #97 t=1469.478 sample off=1006.0 content=1562.0 gap=0.0 inset=107.0 <- off=962.0 content=1518.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:17.954 scroll #98 t=1469.478 geo off=1006.0 size=1562.0 insets=107.0/0.0 container=556.0 visible=1006.0..1562.0
+12:25:17.954 scroll #99 t=1469.542 sample off=840.0 content=1396.0 gap=0.0 inset=107.0 <- off=1006.0 content=1562.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:17.955 scroll #100 t=1469.542 geo off=840.0 size=1396.0 insets=107.0/0.0 container=556.0 visible=840.0..1396.0
+12:25:17.973 metrics #101 t=1469.592 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=840.0 doc=1396.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:18.314 mark 3a-fold1-plus0-light t=1469.946
+12:25:18.982 scroll #102 t=1470.219 publish rev=14 atBottom=true detached=false
+12:25:18.990 scroll #103 t=1470.219 followScrollTo bottom
+12:25:18.997 scroll #104 t=1470.229 sample off=857.0 content=1413.0 gap=0.0 inset=107.0 <- off=840.0 content=1396.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:19.031 scroll #105 t=1470.229 geo off=857.0 size=1413.0 insets=107.0/0.0 container=556.0 visible=857.0..1413.0
+12:25:19.054 metrics #106 t=1470.393 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=857.0 doc=1413.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:19.660 mark 3b-fold1-plus04-light t=1471.262
+12:25:27.061 scroll #107 t=1478.118 sample off=219.0 content=775.0 gap=0.0 inset=107.0 <- off=857.0 content=1413.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:27.650 scroll #108 t=1478.118 geo off=219.0 size=775.0 insets=107.0/0.0 container=556.0 visible=219.0..775.0
+12:25:28.114 metrics #109 t=1478.392 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=219.0 doc=775.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:28.148 scroll #110 t=1479.142 sample off=857.0 content=1413.0 gap=0.0 inset=107.0 <- off=219.0 content=775.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:28.149 metrics #112 t=1479.154 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=857.0 doc=1413.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:28.193 mark 3c-fold1-missing-light t=1479.514
+12:25:28.196 scroll #111 t=1479.142 geo off=857.0 size=1413.0 insets=107.0/0.0 container=556.0 visible=857.0..1413.0
+12:25:29.007 scroll #113 t=1480.593 publish rev=15 atBottom=true detached=false
+12:25:29.016 scroll #114 t=1480.593 followScrollTo bottom
+12:25:29.044 scroll #115 t=1480.607 sample off=909.0 content=1465.0 gap=0.0 inset=107.0 <- off=857.0 content=1413.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:29.063 scroll #116 t=1480.608 geo off=909.0 size=1465.0 insets=107.0/0.0 container=556.0 visible=909.0..1465.0
+12:25:29.229 metrics #117 t=1480.793 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=909.0 doc=1465.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=36.0 off=0.0 doc=35.0 visible=36.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:29.377 scroll #118 t=1480.922 publish rev=16 atBottom=true detached=false
+12:25:29.382 scroll #119 t=1480.922 followScrollTo bottom
+12:25:29.391 scroll #120 t=1480.959 sample off=909.0 content=1505.0 gap=40.0 inset=107.0 <- off=909.0 content=1465.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:29.397 scroll #121 t=1480.960 follow=true gap=40.0
+12:25:29.410 scroll #122 t=1480.960 repinAfterResize
+12:25:29.411 scroll #124 t=1480.961 geo off=909.0 size=1505.0 insets=107.0/0.0 container=556.0 visible=909.0..1465.0
+12:25:29.415 scroll #125 t=1480.973 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:29.432 scroll #126 t=1480.974 sample off=949.0 content=1505.0 gap=0.0 inset=107.0 <- off=909.0 content=1505.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:29.439 scroll #123 t=1480.960 holdScroll transcript-bottom animated=false
+12:25:29.442 scroll #127 t=1480.974 geo off=949.0 size=1505.0 insets=107.0/0.0 container=556.0 visible=949.0..1505.0
+12:25:29.559 metrics #128 t=1481.191 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=949.0 doc=1505.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=76.0 off=0.0 doc=75.0 visible=76.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:29.744 scroll #129 t=1481.341 publish rev=17 atBottom=true detached=false
+12:25:29.750 scroll #130 t=1481.341 followScrollTo bottom
+12:25:29.752 scroll #131 t=1481.362 sample off=949.0 content=1545.0 gap=40.0 inset=107.0 <- off=949.0 content=1505.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:29.754 scroll #132 t=1481.362 follow=true gap=40.0
+12:25:29.754 scroll #133 t=1481.362 repinAfterResize
+12:25:29.755 scroll #135 t=1481.362 geo off=949.0 size=1545.0 insets=107.0/0.0 container=556.0 visible=949.0..1505.0
+12:25:29.761 scroll #136 t=1481.368 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:29.764 scroll #134 t=1481.362 holdScroll transcript-bottom animated=false
+12:25:29.795 scroll #137 t=1481.369 sample off=989.0 content=1545.0 gap=0.0 inset=107.0 <- off=949.0 content=1545.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:29.796 scroll #138 t=1481.370 geo off=989.0 size=1545.0 insets=107.0/0.0 container=556.0 visible=989.0..1545.0
+12:25:29.797 scroll #140 t=1481.383 geo off=969.0 size=1525.0 insets=107.0/0.0 container=556.0 visible=969.0..1525.0
+12:25:29.798 scroll #139 t=1481.383 sample off=969.0 content=1525.0 gap=0.0 inset=107.0 <- off=989.0 content=1545.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:29.981 metrics #141 t=1481.593 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=969.0 doc=1525.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=96.0 off=0.0 doc=95.0 visible=96.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:30.053 scroll #142 t=1481.669 publish rev=18 atBottom=true detached=false
+12:25:30.108 scroll #143 t=1481.670 followScrollTo bottom
+12:25:30.112 scroll #144 t=1481.701 sample off=969.0 content=1565.0 gap=40.0 inset=107.0 <- off=969.0 content=1525.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:30.113 scroll #145 t=1481.701 follow=true gap=40.0
+12:25:30.122 scroll #146 t=1481.702 repinAfterResize
+12:25:30.137 scroll #147 t=1481.702 holdScroll transcript-bottom animated=false
+12:25:30.154 scroll #148 t=1481.702 geo off=969.0 size=1565.0 insets=107.0/0.0 container=556.0 visible=969.0..1525.0
+12:25:30.164 scroll #149 t=1481.713 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:30.170 scroll #150 t=1481.716 sample off=1009.0 content=1565.0 gap=0.0 inset=107.0 <- off=969.0 content=1565.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:30.172 scroll #151 t=1481.716 geo off=1009.0 size=1565.0 insets=107.0/0.0 container=556.0 visible=1009.0..1565.0
+12:25:30.173 scroll #152 t=1481.743 sample off=989.0 content=1545.0 gap=0.0 inset=107.0 <- off=1009.0 content=1565.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:30.175 scroll #153 t=1481.743 geo off=989.0 size=1545.0 insets=107.0/0.0 container=556.0 visible=989.0..1545.0
+12:25:30.377 metrics #154 t=1481.992 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=989.0 doc=1545.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=116.0 off=0.0 doc=115.0 visible=116.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:30.447 scroll #155 t=1482.077 publish rev=19 atBottom=true detached=false
+12:25:30.492 scroll #156 t=1482.077 followScrollTo bottom
+12:25:30.494 scroll #158 t=1482.101 follow=true gap=40.0
+12:25:30.494 scroll #157 t=1482.101 sample off=989.0 content=1585.0 gap=40.0 inset=107.0 <- off=989.0 content=1545.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:30.495 scroll #159 t=1482.101 repinAfterResize
+12:25:30.498 scroll #160 t=1482.102 holdScroll transcript-bottom animated=false
+12:25:30.504 scroll #161 t=1482.102 geo off=989.0 size=1585.0 insets=107.0/0.0 container=556.0 visible=989.0..1545.0
+12:25:30.543 scroll #162 t=1482.108 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:30.544 scroll #163 t=1482.111 sample off=1029.0 content=1585.0 gap=0.0 inset=107.0 <- off=989.0 content=1585.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:30.544 scroll #164 t=1482.111 geo off=1029.0 size=1585.0 insets=107.0/0.0 container=556.0 visible=1029.0..1585.0
+12:25:30.546 scroll #165 t=1482.118 sample off=1009.0 content=1565.0 gap=0.0 inset=107.0 <- off=1029.0 content=1585.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:30.546 scroll #166 t=1482.118 geo off=1009.0 size=1565.0 insets=107.0/0.0 container=556.0 visible=1009.0..1565.0
+12:25:30.762 scroll #168 t=1482.360 followScrollTo bottom
+12:25:30.763 scroll #167 t=1482.360 publish rev=20 atBottom=true detached=false
+12:25:30.764 scroll #169 t=1482.385 sample off=1009.0 content=1590.0 gap=25.0 inset=107.0 <- off=1009.0 content=1565.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:30.764 scroll #170 t=1482.385 follow=true gap=25.0
+12:25:30.765 scroll #171 t=1482.385 repinAfterResize
+12:25:30.796 scroll #172 t=1482.385 holdScroll transcript-bottom animated=false
+12:25:30.800 scroll #173 t=1482.385 geo off=1009.0 size=1590.0 insets=107.0/0.0 container=556.0 visible=1009.0..1565.0
+12:25:30.803 scroll #174 t=1482.390 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:30.806 scroll #176 t=1482.392 geo off=1034.0 size=1590.0 insets=107.0/0.0 container=556.0 visible=1034.0..1590.0
+12:25:30.807 scroll #175 t=1482.392 sample off=1034.0 content=1590.0 gap=0.0 inset=107.0 <- off=1009.0 content=1590.0 gap=25.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:30.807 metrics #177 t=1482.400 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1034.0 doc=1590.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=160.0 off=15.0 doc=175.0 visible=160.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:31.001 scroll #178 t=1482.624 publish rev=21 atBottom=true detached=false
+12:25:31.005 scroll #179 t=1482.624 followScrollTo bottom
+12:25:31.192 metrics #180 t=1482.792 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1034.0 doc=1590.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=160.0 off=55.0 doc=215.0 visible=160.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:31.859 scroll #181 t=1483.446 publish rev=22 atBottom=true detached=false
+12:25:31.879 scroll #182 t=1483.446 followScrollTo bottom
+12:25:33.282 mark 2-think2-box-light t=1484.905
+12:25:33.445 mark 4a-fold2-plus0-light t=1485.073
+12:25:33.696 scroll #183 t=1485.318 publish rev=23 atBottom=true detached=false
+12:25:33.709 scroll #184 t=1485.318 followScrollTo bottom
+12:25:33.711 scroll #185 t=1485.322 sample off=1051.0 content=1607.0 gap=0.0 inset=107.0 <- off=1034.0 content=1590.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:33.712 scroll #187 t=1485.339 sample off=885.0 content=1441.0 gap=0.0 inset=107.0 <- off=1051.0 content=1607.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:33.712 scroll #186 t=1485.323 geo off=1051.0 size=1607.0 insets=107.0/0.0 container=556.0 visible=1051.0..1607.0
+12:25:33.712 scroll #188 t=1485.339 geo off=885.0 size=1441.0 insets=107.0/0.0 container=556.0 visible=885.0..1441.0
+12:25:33.942 mark 4b-fold2-plus04-light t=1485.543
+12:25:33.972 metrics #189 t=1485.594 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=885.0 doc=1441.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:42.673 mark 4c-fold2-missing-light t=1494.301
+12:25:43.111 scroll #190 t=1494.713 publish rev=24 atBottom=true detached=false
+12:25:43.111 scroll #193 t=1494.717 geo off=912.0 size=1468.0 insets=107.0/0.0 container=556.0 visible=912.0..1468.0
+12:25:43.111 scroll #191 t=1494.713 followScrollTo bottom
+12:25:43.115 scroll #192 t=1494.717 sample off=912.0 content=1468.0 gap=0.0 inset=107.0 <- off=885.0 content=1441.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:43.168 metrics #194 t=1494.793 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=912.0 doc=1468.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:43.845 scroll #195 t=1495.451 publish rev=25 atBottom=true detached=false
+12:25:43.847 scroll #196 t=1495.451 followScrollTo bottom
+12:25:43.848 scroll #197 t=1495.460 sample off=929.0 content=1485.0 gap=0.0 inset=107.0 <- off=912.0 content=1468.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:43.848 scroll #198 t=1495.460 geo off=929.0 size=1485.0 insets=107.0/0.0 container=556.0 visible=929.0..1485.0
+12:25:43.975 metrics #199 t=1495.593 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=929.0 doc=1485.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:44.788 mark 5-tool2-light t=1496.413
+12:25:45.791 scroll #200 t=1497.410 publish rev=26 atBottom=true detached=false
+12:25:45.792 scroll #201 t=1497.411 followScrollTo bottom
+12:25:45.793 scroll #202 t=1497.418 sample off=961.0 content=1517.0 gap=0.0 inset=107.0 <- off=929.0 content=1485.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:45.797 scroll #203 t=1497.418 geo off=961.0 size=1517.0 insets=107.0/0.0 container=556.0 visible=961.0..1517.0
+12:25:45.963 metrics #204 t=1497.593 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=961.0 doc=1517.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=16.0 off=0.0 doc=15.0 visible=16.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:46.066 scroll #205 t=1497.694 publish rev=27 atBottom=true detached=false
+12:25:46.066 scroll #206 t=1497.694 followScrollTo bottom
+12:25:46.098 scroll #207 t=1497.726 sample off=961.0 content=1577.0 gap=60.0 inset=107.0 <- off=961.0 content=1517.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:46.100 scroll #208 t=1497.726 follow=true gap=60.0
+12:25:46.101 scroll #209 t=1497.726 repinAfterResize
+12:25:46.109 scroll #210 t=1497.726 holdScroll transcript-bottom animated=false
+12:25:46.113 scroll #211 t=1497.726 geo off=961.0 size=1577.0 insets=107.0/0.0 container=556.0 visible=961.0..1517.0
+12:25:46.115 scroll #212 t=1497.739 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:46.116 scroll #213 t=1497.740 sample off=1021.0 content=1577.0 gap=0.0 inset=107.0 <- off=961.0 content=1577.0 gap=60.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:46.117 scroll #214 t=1497.740 geo off=1021.0 size=1577.0 insets=107.0/0.0 container=556.0 visible=1021.0..1577.0
+12:25:46.130 scroll #215 t=1497.758 sample off=1001.0 content=1557.0 gap=0.0 inset=107.0 <- off=1021.0 content=1577.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:46.130 scroll #216 t=1497.758 geo off=1001.0 size=1557.0 insets=107.0/0.0 container=556.0 visible=1001.0..1557.0
+12:25:46.361 metrics #217 t=1497.993 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1001.0 doc=1557.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=56.0 off=0.0 doc=55.0 visible=56.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:46.450 scroll #218 t=1498.053 publish rev=28 atBottom=true detached=false
+12:25:46.451 scroll #219 t=1498.053 followScrollTo bottom
+12:25:46.466 scroll #220 t=1498.087 sample off=1001.0 content=1597.0 gap=40.0 inset=107.0 <- off=1001.0 content=1557.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:46.467 scroll #223 t=1498.087 holdScroll transcript-bottom animated=false
+12:25:46.468 scroll #221 t=1498.087 follow=true gap=40.0
+12:25:46.468 scroll #222 t=1498.087 repinAfterResize
+12:25:46.468 scroll #225 t=1498.095 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:46.469 scroll #224 t=1498.088 geo off=1001.0 size=1597.0 insets=107.0/0.0 container=556.0 visible=1001.0..1557.0
+12:25:46.474 scroll #227 t=1498.097 geo off=1041.0 size=1597.0 insets=107.0/0.0 container=556.0 visible=1041.0..1597.0
+12:25:46.474 scroll #226 t=1498.097 sample off=1041.0 content=1597.0 gap=0.0 inset=107.0 <- off=1001.0 content=1597.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:46.789 scroll #228 t=1498.418 publish rev=29 atBottom=true detached=false
+12:25:46.790 scroll #229 t=1498.419 followScrollTo bottom
+12:25:46.791 metrics #230 t=1498.421 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1041.0 doc=1597.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=96.0 off=0.0 doc=95.0 visible=96.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:46.840 scroll #232 t=1498.444 follow=true gap=40.0
+12:25:46.840 scroll #231 t=1498.443 sample off=1041.0 content=1637.0 gap=40.0 inset=107.0 <- off=1041.0 content=1597.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:46.840 scroll #233 t=1498.444 repinAfterResize
+12:25:46.842 scroll #234 t=1498.444 holdScroll transcript-bottom animated=false
+12:25:46.847 scroll #235 t=1498.444 geo off=1041.0 size=1637.0 insets=107.0/0.0 container=556.0 visible=1041.0..1597.0
+12:25:46.855 scroll #238 t=1498.455 geo off=1081.0 size=1637.0 insets=107.0/0.0 container=556.0 visible=1081.0..1637.0
+12:25:46.858 scroll #237 t=1498.455 sample off=1081.0 content=1637.0 gap=0.0 inset=107.0 <- off=1041.0 content=1637.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:46.859 scroll #239 t=1498.466 sample off=1061.0 content=1617.0 gap=0.0 inset=107.0 <- off=1081.0 content=1637.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:46.859 scroll #236 t=1498.453 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:46.860 scroll #240 t=1498.467 geo off=1061.0 size=1617.0 insets=107.0/0.0 container=556.0 visible=1061.0..1617.0
+12:25:47.166 scroll #241 t=1498.698 publish rev=30 atBottom=true detached=false
+12:25:47.364 scroll #242 t=1498.698 followScrollTo bottom
+12:25:47.364 scroll #243 t=1498.722 sample off=1061.0 content=1657.0 gap=40.0 inset=107.0 <- off=1061.0 content=1617.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:47.368 scroll #244 t=1498.722 follow=true gap=40.0
+12:25:47.372 scroll #245 t=1498.722 repinAfterResize
+12:25:47.372 scroll #246 t=1498.722 holdScroll transcript-bottom animated=false
+12:25:47.409 scroll #247 t=1498.722 geo off=1061.0 size=1657.0 insets=107.0/0.0 container=556.0 visible=1061.0..1617.0
+12:25:47.438 scroll #248 t=1498.729 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:47.441 metrics #251 t=1498.793 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1101.0 doc=1657.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=156.0 off=0.0 doc=155.0 visible=156.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:47.441 scroll #250 t=1498.731 geo off=1101.0 size=1657.0 insets=107.0/0.0 container=556.0 visible=1101.0..1657.0
+12:25:47.441 scroll #249 t=1498.731 sample off=1101.0 content=1657.0 gap=0.0 inset=107.0 <- off=1061.0 content=1657.0 gap=40.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:47.603 scroll #252 t=1499.227 publish rev=31 atBottom=true detached=false
+12:25:47.603 scroll #253 t=1499.228 followScrollTo bottom
+12:25:47.624 scroll #258 t=1499.254 geo off=1101.0 size=1662.0 insets=107.0/0.0 container=556.0 visible=1101.0..1657.0
+12:25:47.625 scroll #255 t=1499.254 follow=true gap=5.0
+12:25:47.625 scroll #257 t=1499.254 holdScroll transcript-bottom animated=false
+12:25:47.625 scroll #254 t=1499.253 sample off=1101.0 content=1662.0 gap=5.0 inset=107.0 <- off=1101.0 content=1657.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:47.630 scroll #256 t=1499.254 repinAfterResize
+12:25:47.633 scroll #259 t=1499.261 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:25:47.634 scroll #261 t=1499.262 geo off=1106.0 size=1662.0 insets=107.0/0.0 container=556.0 visible=1106.0..1662.0
+12:25:47.635 scroll #260 t=1499.262 sample off=1106.0 content=1662.0 gap=0.0 inset=107.0 <- off=1101.0 content=1662.0 gap=5.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:47.923 scroll #262 t=1499.550 publish rev=32 atBottom=true detached=false
+12:25:47.924 scroll #263 t=1499.550 followScrollTo bottom
+12:25:47.961 metrics #264 t=1499.592 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1106.0 doc=1662.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=160.0 off=35.0 doc=195.0 visible=160.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:48.339 scroll #265 t=1499.962 publish rev=33 atBottom=true detached=false
+12:25:48.341 scroll #266 t=1499.962 followScrollTo bottom
+12:25:48.554 metrics #267 t=1500.166 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1106.0 doc=1662.0 visible=556.0 insets=107.0/0.0 flipped=true | DocumentView x=653.0..958.0 h=160.0 off=55.0 doc=215.0 visible=160.0 insets=0.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:49.802 mark 2-think3-box-light t=1501.402
+12:25:50.014 mark 6a-fold3-plus0-light t=1501.647
+12:25:50.283 scroll #268 t=1501.892 publish rev=34 atBottom=true detached=false
+12:25:50.287 scroll #269 t=1501.893 followScrollTo bottom
+12:25:50.293 scroll #270 t=1501.899 sample off=1123.0 content=1679.0 gap=0.0 inset=107.0 <- off=1106.0 content=1662.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:50.295 scroll #271 t=1501.899 geo off=1123.0 size=1679.0 insets=107.0/0.0 container=556.0 visible=1123.0..1679.0
+12:25:50.296 scroll #272 t=1501.923 sample off=957.0 content=1513.0 gap=0.0 inset=107.0 <- off=1123.0 content=1679.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:50.297 scroll #273 t=1501.923 geo off=957.0 size=1513.0 insets=107.0/0.0 container=556.0 visible=957.0..1513.0
+12:25:50.363 metrics #274 t=1501.991 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=957.0 doc=1513.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:50.606 mark 6b-fold3-plus04-light t=1502.159
+12:25:52.259 scroll #275 t=1503.886 sample off=257.0 content=813.0 gap=0.0 inset=107.0 <- off=957.0 content=1513.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:52.273 scroll #276 t=1503.886 geo off=257.0 size=813.0 insets=107.0/0.0 container=556.0 visible=257.0..813.0
+12:25:52.398 metrics #277 t=1503.993 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=257.0 doc=813.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:52.868 scroll #278 t=1504.498 sample off=957.0 content=1513.0 gap=0.0 inset=107.0 <- off=257.0 content=813.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:52.869 scroll #279 t=1504.498 geo off=957.0 size=1513.0 insets=107.0/0.0 container=556.0 visible=957.0..1513.0
+12:25:52.948 metrics #280 t=1504.536 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=957.0 doc=1513.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:25:58.041 scroll #281 t=1509.642 sample off=257.0 content=813.0 gap=0.0 inset=107.0 <- off=957.0 content=1513.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:58.047 scroll #282 t=1509.642 geo off=257.0 size=813.0 insets=107.0/0.0 container=556.0 visible=257.0..813.0
+12:25:58.637 scroll #283 t=1510.258 sample off=957.0 content=1513.0 gap=0.0 inset=107.0 <- off=257.0 content=813.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:58.641 scroll #284 t=1510.259 geo off=957.0 size=1513.0 insets=107.0/0.0 container=556.0 visible=957.0..1513.0
+12:25:58.997 mark 6c-fold3-missing-light t=1510.604
+12:25:59.703 scroll #285 t=1511.326 publish rev=35 atBottom=true detached=false
+12:25:59.706 scroll #286 t=1511.327 followScrollTo bottom
+12:25:59.708 scroll #287 t=1511.337 sample off=1024.0 content=1580.0 gap=0.0 inset=107.0 <- off=957.0 content=1513.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:25:59.708 scroll #288 t=1511.337 geo off=1024.0 size=1580.0 insets=107.0/0.0 container=556.0 visible=1024.0..1580.0
+12:26:00.308 metrics #289 t=1511.593 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1024.0 doc=1580.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:26:00.314 scroll #290 t=1511.721 publish rev=36 atBottom=true detached=false
+12:26:00.316 scroll #291 t=1511.721 followScrollTo bottom
+12:26:00.318 scroll #293 t=1511.740 geo off=1041.0 size=1597.0 insets=107.0/0.0 container=556.0 visible=1041.0..1597.0
+12:26:00.318 scroll #292 t=1511.740 sample off=1041.0 content=1597.0 gap=0.0 inset=107.0 <- off=1024.0 content=1580.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:26:00.552 scroll #294 t=1512.165 sample off=1041.0 content=1608.0 gap=11.0 inset=107.0 <- off=1041.0 content=1597.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:26:00.556 scroll #295 t=1512.165 follow=true gap=11.0
+12:26:00.559 scroll #296 t=1512.165 repinAfterResize
+12:26:00.561 scroll #297 t=1512.165 holdScroll transcript-bottom animated=false
+12:26:00.562 scroll #298 t=1512.165 geo off=1041.0 size=1608.0 insets=107.0/0.0 container=556.0 visible=1041.0..1597.0
+12:26:00.567 scroll #300 t=1512.175 sample off=1052.0 content=1608.0 gap=0.0 inset=107.0 <- off=1041.0 content=1608.0 gap=11.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:26:00.568 scroll #301 t=1512.175 geo off=1052.0 size=1608.0 insets=107.0/0.0 container=556.0 visible=1052.0..1608.0
+12:26:00.572 scroll #299 t=1512.173 held transcript-bottom anchor=UnitPoint(x: 0.5, y: 1.0) animated=false
+12:26:00.733 metrics #302 t=1512.359 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1052.0 doc=1608.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:26:01.243 mark 7-reply-light t=1512.871
+12:26:02.414 scroll #303 t=1513.977 publish rev=37 atBottom=true detached=false
+12:26:02.421 scroll #304 t=1513.978 followScrollTo bottom
+12:26:02.423 metrics #305 t=1513.993 SwiftUIOutlineListView x=0.0..628.0 h=652.0 off=-52.0 doc=600.0 visible=652.0 insets=52.0/0.0 flipped=true | SwiftUIOutlineListView x=629.0..1000.0 h=556.0 off=1035.0 doc=1591.0 visible=556.0 insets=107.0/0.0 flipped=true | SwiftUIOutlineListView x=8.0..328.0 h=636.0 off=-44.0 doc=543.0 visible=636.0 insets=44.0/49.0 flipped=true
+12:26:04.127 mark 8a-rest-plus0-light t=1515.738
+12:26:06.472 mark 8b-rest-light t=1517.870
+12:26:08.982 scroll #307 t=1520.515 geo off=335.0 size=891.0 insets=107.0/0.0 container=556.0 visible=335.0..891.0
+12:26:08.983 scroll #306 t=1520.514 sample off=335.0 content=891.0 gap=0.0 inset=107.0 <- off=1052.0 content=1608.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:26:09.464 scroll #308 t=1520.915 sample off=1035.0 content=1591.0 gap=0.0 inset=107.0 <- off=335.0 content=891.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:26:09.607 scroll #309 t=1520.916 geo off=1035.0 size=1591.0 insets=107.0/0.0 container=556.0 visible=1035.0..1591.0
+12:26:11.512 scroll #310 t=1523.127 sample off=335.0 content=891.0 gap=0.0 inset=107.0 <- off=1035.0 content=1591.0 gap=0.0 inset=107.0 pinned=true atBottom=true scrolling=false reader=false
+12:26:11.516 scroll #311 t=1523.127 geo off=335.0 size=891.0 insets=107.0/0.0 container=556.0 visible=335.0..891.0

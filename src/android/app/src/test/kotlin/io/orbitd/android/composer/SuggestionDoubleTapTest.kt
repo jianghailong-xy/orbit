@@ -26,23 +26,18 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /** The engine's guess in the empty box on a touch screen (docs/prompt-suggestions-design.md §4.3, §9 补充二): no Use button, a
- * double-tap on the field takes it, and "Double-tap to use" follows the words until that has worked once on this device. */
+ * double-tap on the field takes it, and "Double-tap to use" follows the words. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = TestOrbitApplication::class)
 class SuggestionDoubleTapTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
-    @Test fun theHintFollowsTheWordsUntilLearnedAndTalkBackSkipsIt() {
-        var learned by mutableStateOf(false)
-        compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) { SuggestionPlaceholder("run the tests", showsHint = !learned) } } }
+    @Test fun theHintFollowsTheWordsAndTalkBackSkipsIt() {
+        compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) { SuggestionPlaceholder("run the tests") } } }
         compose.waitForIdle()
         compose.onNodeWithText("run the tests").assertExists()
         compose.onNodeWithTag("composer-suggestion-hint", useUnmergedTree = true).assertExists()
         compose.onAllNodesWithText("Double-tap to use", useUnmergedTree = true).assertCountEquals(0)
-        learned = true
-        compose.waitForIdle()
-        compose.onAllNodesWithTag("composer-suggestion-hint", useUnmergedTree = true).assertCountEquals(0)
-        compose.onNodeWithText("run the tests").assertExists()
     }
 
     private var value by mutableStateOf("")

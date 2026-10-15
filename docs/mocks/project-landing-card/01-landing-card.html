@@ -1,0 +1,144 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Project sessions page — the Landing card</title>
+<link rel="stylesheet" href="kit.css">
+<style>
+/* 图板新增：@font-face（渲染机没装字体）、进度卡里的那行 Landing（现状），
+   以及 Landing 卡上 .what / .det / 带状态的作业行——其余全部复用 kit.css 的合入卡（.mc.chk / .mc.blk / .btn） */
+@font-face { font-family: "Inter"; src: url("file:///var/tmp/landing-mock-render/fonts/Inter.ttf"); font-weight: 100 900; }
+@font-face { font-family: "Noto Sans SC"; src: url("file:///var/tmp/landing-mock-render/fonts/NotoSansSC.ttf"); font-weight: 100 900; }
+@font-face { font-family: "DejaVu Sans Mono"; src: url("file:///var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf"); font-weight: 100 800; }
+
+/* 现状：进度卡里的那一行（iOS 截图 9:07 同款） */
+.lrow { border-top: .5px solid var(--sep); padding: 10px 30px 11px 12px; position: relative; }
+.lrow .l1 { display: flex; align-items: center; gap: 8px; }
+.lrow .l1 .w { font-size: 15px; font-weight: 600; color: var(--tint); }
+.lrow .l1 .s { margin-left: auto; font-size: 13px; color: var(--l2); }
+.lrow .what { font-size: 15px; line-height: 1.36; margin-top: 4px; }
+.lrow .l2 { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--l2);
+            margin-top: 6px; font-variant-numeric: tabular-nums; }
+.lrow .l2 b { font-weight: 600; color: var(--tint); }
+.lrow .l2 b.w2 { color: var(--l2); }
+.lrow .l2 .u { margin-left: auto; }
+.lrow > .chev { position: absolute; right: 8px; top: 58%; transform: translateY(-50%); }
+
+/* Landing 卡（方案 A）：.mc.chk 用于在途，.mc.blk 用于没有上报；下面只是它自己的三小件 */
+.mc .what { font-size: 15px; line-height: 1.36; margin-top: 5px;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mc .det { font-size: 13px; color: var(--l2); margin-top: 6px; line-height: 1.45; }
+.mc .ln b.clk { color: var(--tint); }
+.mc .ln b.wt { color: var(--l2); }
+.mc.blk .ln b.clk { color: var(--amber-ink); }
+.mc .mh .s.amb { color: var(--amber-ink); }
+.mc ul.tk li.split { display: flex; align-items: baseline; gap: 8px; }
+.mc ul.tk li.split .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mc ul.tk li.split .st { flex: none; font-size: 13px; color: var(--l2); }
+.mc ul.tk li.split .st.run { color: var(--tint); font-weight: 600; }
+</style>
+<script src="kit.js"></script>
+<body>
+<h1>Landing 卡：和合入卡同一套语言</h1>
+<p class="lede" style="max-width:2000px">
+现状（图 1，你 9:07 的截图）：项目 sessions 页的进度卡里只有一行 Landing——圈 + 词 + 状态 + 标题 + 三个时间。同一个页面上，合入这件事是有卡的语言的（Merge check / Merge into main? / Merging… / 合不了）：说得出对象、进度、要不要你管，也有能按的门。落地这行没有：说不了落到哪条线；同时有两个作业时只写 “2 jobs”；没有上报时也只是把词换成 Timed out。<br>
+<b>方案 A（图 2–4）：把这一件作业画成和合入卡同一张卡</b>——在途用 Merge check 那种灰卡（图 2、3），没有上报用「合不了」那种琥珀卡加 Retry（图 4）；位置不变，在进度卡下面自己一张；没有在途作业时这张卡不存在，页面和现在一样。<b>方案 B：</b>只想在要人管的时刻成卡——平时保持图 1 的一行，只有图 4 那种状态才换成卡。两种方案的新语言是同一套（图 2–4）。</p>
+<div class="row" id="figs"></div>
+<div id="panel" style="margin-top:34px"></div>
+<script>
+// ── 这一刻的真实数据（截图 9:07 · 项目 34bmzOkov3xN2yLPrnsCk）─────────
+const PROJ2 = 'Wiki 服务端执行与 System model';
+const BYJOB = '维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑；10-10 跑了 13 轮，上限 8）';
+const DOSSIER = '维护：同一会话跨页时，dossier 在一轮里被重复发出（计数虚高；会话中途有新记录时整轮会失败）';
+const BR2 = 'project/34bmz…N2yLPrnsCk';
+
+const lpNav = (sessions) => `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div>
+<div class="ttl"><b>${PROJ2}</b><span>Project · ${sessions} sessions</span></div><div class="circ">${ic('dots', 25, '#000', 1.7)}</div></div>`;
+const lpProg = (done, total, run) => `<div class="pcard"><div class="prog"><span class="meter"><i style="width:${done / total * 100}%;background:var(--green)"></i></span><span class="pmeta">${done}/${total} done · ${run} running</span></div>`;
+const coord2 = () => sessRow({ t: PROJ2, tm: '1m ago', eye: true, chip: 'Coordinator', sub: 'Watching any 1 of 12 tasks…' });
+const today2 = () => [
+  { t: '执行任务：维护每日轮数上限在服务端路径上没…', tm: '1m ago', sub: 'Recap · 9:05 AM Fixed the wiki daily-limit NULL trap (job…' },
+  { t: '执行任务：P10 · 本部署切换到服务端执行', tm: '20m ago', sub: 'Recap · 8:45 AM 第 101 轮已收尾：生产被他人部署到 756…' },
+  { t: '执行任务：维护：同一会话跨页时，dossier 在…', tm: '23m ago', sub: 'Recap · 8:43 AM 修复 wiki-maintain 跨页重复读会话，44…' },
+  { t: 'P10 只读核查：生产主机的网络、wiki-wor…', tm: '27m ago', sub: 'Recap · 8:39 AM 第 101 轮只读核查完成：检出已变为 756…' },
+].map(sessRow).join('');
+const lpPhone = (list) => phone(`${statusBar('9:07', 97)}${lpNav(76)}<div class="list">${list}</div>`);
+const lpPage = (first, card) => lpPhone(`${first}${card}${sh('Coordinator')}${coord2()}${sh('Today')}${today2()}`);
+
+// ── 图 1 · 现状：进度卡里的一行 ─────────────────────────────
+const nowRow = () => `<div class="lrow">
+<div class="l1">${ic('ring', 13, 'var(--tint)', 2.4)}<span class="w">Landing</span><span class="s">checking</span></div>
+<div class="what">${BYJOB}</div>
+<div class="l2"><span>Elapsed <b>1m 6s</b></span><span>Waited <b class="w2">0m 34s</b></span><span class="u">Updated just now</span></div>
+<span class="chev">${chev('var(--l3)', 13)}</span></div>`;
+
+// ── 图 2 · 方案 A · 进行中：一张灰卡（Merge check 同一形状）──────
+const lpCardChecking = () => `<div class="mc chk lp">
+<div class="mh">${ic('ring', 15, 'var(--tint)', 2.3)}<b>Landing</b><span class="s">checking</span>${chev('var(--l3)', 12)}</div>
+<div class="what">${BYJOB}</div>
+<div class="ref">onto ${BR2}</div>
+<div class="ln"><span>Elapsed <b class="clk">1m 6s</b> · Waited <b class="wt">0m 34s</b></span><span class="u">Updated just now</span></div>
+<div class="note">Nothing to do — it lands on its own.</div></div>`;
+
+// ── 图 3 · 方案 A · 排队中 / 两个作业 ─────────────────────────
+const lpCardQueued = () => `<div class="mc chk lp">
+<div class="mh">${ic('ring', 15, 'var(--tint)', 2.3)}<b>Landing 2 jobs</b><span class="s">checking</span>${chev('var(--l3)', 12)}</div>
+<div class="ref">onto ${BR2}</div>
+<ul class="tk">
+<li class="split"><span class="tt">${BYJOB}</span><span class="st run">checking</span></li>
+<li class="split"><span class="tt">${DOSSIER}</span><span class="st">queued</span></li>
+</ul>
+<div class="ln"><span>Elapsed <b class="clk">1m 6s</b> · Waited <b class="wt">0m 34s</b></span><span class="u">Updated just now</span></div>
+<div class="note">Nothing to do — it lands on its own.</div></div>`;
+
+// ── 图 4 · 方案 A · 没有上报：「合不了」那种琥珀卡 + Retry ────────
+const lpCardTimedOut = () => `<div class="mc blk lp">
+<div class="mh">${ic('warn', 15, 'var(--orange)', 2.1)}<b>Landing</b><span class="s amb">Timed out</span>${chev('var(--amber-ink)', 12)}</div>
+<div class="what">${BYJOB}</div>
+<div class="ref">onto ${BR2}</div>
+<div class="ln"><span>No report for <b class="clk">11m</b></span><span class="u">limit 10m</span></div>
+<div class="det">The runner took it at 09:05 · stopped at checking · no push recorded</div>
+<div class="foot" style="margin-top:11px"><span class="btn pri sm">Retry</span>
+<span class="lnk" style="margin-left:auto">All jobs ${chev('var(--tint)', 11)}</span></div></div>`;
+
+// ── 图注 ──────────────────────────────────────────────────────
+const figs = [
+  ['now', '现在 · 9:07 截图同款', lpPage(lpProg(44, 46, 0) + nowRow() + '</div>', ''),
+    `<b>只有一行，且在进度卡里</b><ul>
+     <li>说得出「在动」：圈会转、<code>checking</code> 是当前阶段、三个时间都是真的。</li>
+     <li>说不了的：落到哪条线（<code>project/34bmz…</code>）；两个作业时是谁；没有上报时要不要你管。同一页的合入卡这些都说了。</li></ul>`],
+  ['after', '方案 A · 进行中：一张卡', lpPage(lpProg(44, 46, 0) + '</div>', lpCardChecking()),
+    `<b>和 Merge check 卡同一个形状</b><ul>
+     <li>灰底、左上是那个环、标题用行里同一个词 <b>Landing</b>、右上是阶段词 + chevron——点整张卡进 Jobs 列表（今天那一行的行为不变）。</li>
+     <li>多两行：<b>onto project/…</b>（任务页 Target 行同一字段）和一句 <b>Nothing to do — it lands on its own.</b>（合入卡 B 状态那句的截短）。</li>
+     <li>位置不变：进度卡下面；没有在途作业时这张卡不存在。</li></ul>`],
+  ['after', '方案 A · 两个作业（一个在跑、一个排队）', lpPage(lpProg(44, 46, 0) + '</div>', lpCardQueued()),
+    `<b>“2 jobs” 说得清是谁</b><ul>
+     <li>标题按行里的规则写 <b>Landing 2 jobs</b>；卡里把两个作业都列出来，各自带状态（running 蓝、queued 灰），来自和 Jobs 列表同一份读。</li>
+     <li>右上和三个时间仍是领跑那个作业的（先在跑、再按入队先后；今天那一行也这么读）。全部在排队时圈不转、状态词就是 <code>queued</code>。</li></ul>`],
+  ['after', '方案 A · 没有上报：琥珀卡', lpPage(lpProg(44, 46, 0) + '</div>', lpCardTimedOut()),
+    `<b>要人管的那一刻，卡变成琥珀</b><ul>
+     <li>和合入卡「合不了」同一形状：琥珀底 + 三角（不转），状态写 <b>Timed out</b>；<code>No report for 11m · limit 10m</code> 是客户端按认领租约读的心跳。</li>
+     <li>一句「停在哪儿、有没有推过」——Jobs 列表里同一句 <code>detail</code>。</li>
+     <li><b>Retry</b> 只在服务端说这条能重试（<code>retryable</code>）时出现，和列表里是同一扇门。</li>
+     <li><b>方案 B</b> = 图 1 + 这一张：平常保持一行，只有这一种状态才换成卡。</li></ul>`],
+];
+document.getElementById('figs').innerHTML = figs.map(([k, t, p, c]) => fig(k, t, p, c)).join('');
+
+// ── 出处表：卡上每一行来自哪里（没有新编的数据） ────────────────
+document.getElementById('panel').innerHTML = `<div class="panel">
+<h2>卡上每一行的出处</h2>
+<p class="hint">方案 A 不新增服务端读，也不新造词：每一条要么是今天那一行已经有的，要么是 Jobs 列表 / 任务页已经在说的。</p>
+<table class="mx"><thead><tr><th>卡上的行</th><th>从哪来</th></tr></thead><tbody>
+<tr><th>Landing · checking / queued</th><td>行里的同一个词：<span class="k">JOB_WORDS[LAND_TASK]</span>，阶段取 <span class="k">jobPhases[phase]</span>（fetching / syncing main / rebasing / merging / checking / verifying / pushing）</td></tr>
+<tr><th>任务标题</th><td><span class="k">inFlight.taskTitle</span> / 列表每条的 <span class="k">taskTitle</span></td></tr>
+<tr><th>onto project/…</th><td><span class="k">landTask.targetRef</span>（任务页 <span class="k">LandTaskStatus</span> 的 Target 行）</td></tr>
+<tr><th>Elapsed · Waited · Updated</th><td>行里同一套规则：<span class="k">landingClock</span> / <span class="k">waitMs</span> / 心跳；读取失败或超过 90 秒就冻结并说 <span class="k">Update unavailable</span>，心跳静默就写 <span class="k">No report for Nm</span></td></tr>
+<tr><th>Nothing to do — it lands on its own.</th><td>合入卡 B 状态的 <span class="k">NOTHING_TO_DO</span> 截短</td></tr>
+<tr><th>作业行（标题 + 各自状态）</th><td><span class="k">inFlightJobs</span>——Jobs 列表（10-08 的 sheet）同一份读</td></tr>
+<tr><th>No report for 11m · limit 10m</th><td>客户端按 <span class="k">INTEGRATION_CLAIM_STALE_MS</span> 读心跳；<span class="k">limitSeconds</span> 是服务端给的</td></tr>
+<tr><th>The runner took it at 09:05 · stopped at checking · no push recorded</th><td><span class="k">LandingJobLine.detail</span>（Jobs 列表里同一句，含 may have been pushed 的情形）</td></tr>
+<tr><th>Retry</th><td>服务端 <span class="k">retryable</span> 说的算——和列表同一扇门，不多一个</td></tr>
+</tbody></table>
+<div class="leg"><span><i></i>方案 A 新增的说法只有三处：onto 一行、Nothing to do 一句、作业行的状态列。</span></div>
+</div>`;
+</script>
+</body>
+</html>

@@ -238,6 +238,13 @@ export function runMergeCheckHint(main: string = DEFAULT_MAIN_BRANCH): string {
   return `Runs on the combined tree before anything lands — on the project branch and again before ${main}.`;
 }
 export const RUN_MERGE_CHECK_PLACEHOLDER = 'No check — work lands once it rebases cleanly';
+/** The check's budget, under the command: the seconds it may run before the landing is stopped. An
+ *  empty box is the one-hour default the platform runs a check with no budget on. */
+export const RUN_MERGE_CHECK_TIMEOUT = 'Times out after';
+export const RUN_MERGE_CHECK_TIMEOUT_UNIT = 'seconds';
+export const RUN_MERGE_CHECK_TIMEOUT_HINT =
+  'How long the check may run on the combined tree before the landing is stopped. '
+  + 'One hour unless set — leave the box empty for that.';
 /** The merge check's row on the start card, folded to its value, and what an empty one means. */
 export const RUN_MERGE_CHECK_SET = 'Set';
 export const RUN_MERGE_CHECK_NONE = 'None';

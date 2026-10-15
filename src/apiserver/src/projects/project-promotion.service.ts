@@ -1413,21 +1413,38 @@ async function writeUpstreamReceipts(
     select: { taskId: true, sessionId: true, landedSha: true },
   });
   const byTask = new Map(landings.map((row) => [row.taskId, row]));
+  const sessionFor = (taskId: string) =>
+    byTask.get(taskId)?.sessionId ?? (onItsOwnBranch ? input.promotion.sessionId : null);
+  // Both ids a receipt is written against are history references (0423, 0424), and both are foreign
+  // keys on the receipt: a task deleted, or a session purged from Trash, while its work waited for
+  // this merge leaves its id on the landing and on the promotion. So each is looked up first, one
+  // `IN` apiece, and a gone one is written as the NULL its key used to leave — no receipt for a
+  // session that is gone, as when the landing's `session_id` read NULL, and a receipt naming no task
+  // for a task that is gone, as SET NULL leaves one written a moment before the delete.
+  const sessionIds = [...new Set(input.promotion.includedTaskIds.flatMap((taskId) => sessionFor(taskId) ?? []))];
+  const liveSessions = new Set(sessionIds.length === 0 ? [] : (await tx.session.findMany({
+    where: { id: { in: sessionIds } },
+    select: { id: true },
+  })).map((row) => row.id));
+  const liveTasks = new Set(input.promotion.includedTaskIds.length === 0 ? [] : (await tx.task.findMany({
+    where: { id: { in: input.promotion.includedTaskIds } },
+    select: { id: true },
+  })).map((row) => row.id));
   const receiptIds: string[] = [];
   for (const taskId of input.promotion.includedTaskIds) {
     const landing = byTask.get(taskId);
-    const sessionId = landing?.sessionId ?? (onItsOwnBranch ? input.promotion.sessionId : null);
+    const sessionId = sessionFor(taskId);
     // The job's tested commit, or — when there is none because the landing answered ALREADY_LANDED
     // — the candidate's own source, which is the commit that turned out to be on the upstream
     // already. Without the second half that answer would leave the task with no receipt and the
     // criterion reading unlanded while its work sits on main.
     const sourceSha = landing?.landedSha
       ?? (onItsOwnBranch ? input.testedSha ?? input.promotion.sourceSha : null);
-    if (!sessionId || !sourceSha) continue;
+    if (!sessionId || !liveSessions.has(sessionId) || !sourceSha) continue;
     const written = await MergeReceiptService.fromIntegrationJob(tx, {
       ownerId: input.promotion.ownerId,
       sessionId,
-      taskId,
+      taskId: liveTasks.has(taskId) ? taskId : null,
       projectId: input.promotion.projectId,
       jobId: input.jobId,
       state: input.state,

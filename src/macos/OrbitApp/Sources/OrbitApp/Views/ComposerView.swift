@@ -127,9 +127,6 @@ struct ComposerView: View {
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
-    /// Set by the first double-tap that takes a suggestion on this device: from then on the line is
-    /// the guess alone, without "Double-tap to use" after it.
-    @AppStorage("composer.suggestionDoubleTapLearned") private var suggestionDoubleTapLearned = false
     #endif
 
     // The models of the current engine and provider, in catalog order (Opus → Haiku). The model control's
@@ -247,13 +244,11 @@ struct ComposerView: View {
 
     #if os(iOS)
     /// A touch screen's way to take it: a double-tap on the field's line (`GrowingTextEditor`), or
-    /// VoiceOver's "Use suggestion". A light tap says it landed, and "Double-tap to use" has been
-    /// learned on this device.
+    /// VoiceOver's "Use suggestion". A light tap says it landed.
     private func useSuggestionByTouch() {
         guard offeredSuggestion != nil else { return }
         PlatformHaptics.tap()
         acceptSuggestion()
-        suggestionDoubleTapLearned = true
     }
     #endif
 
@@ -330,7 +325,7 @@ struct ComposerView: View {
                     .overlay(alignment: .topLeading) {
                         if let suggestion = offeredSuggestion {
                             #if os(iOS)
-                            PromptSuggestionLine(text: suggestion, showsDoubleTapHint: !suggestionDoubleTapLearned)
+                            PromptSuggestionLine(text: suggestion)
                             #else
                             PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
                             #endif
@@ -1398,13 +1393,11 @@ struct ComposerView: View {
 /// The engine's guess at the next message, drawn on the empty field's first line where the
 /// placeholder would be (docs/prompt-suggestions-design.md §4.1). On a Mac, Use at its end (or Tab)
 /// takes it, and only Use takes the click. A touch screen has no button: a double-tap on the line
-/// takes it (`GrowingTextEditor`), and until the first one on this device the words are followed by
+/// takes it (`GrowingTextEditor`), and the words are followed by
 /// "Double-tap to use". Either way a tap anywhere else lands in the field, to type something else.
 private struct PromptSuggestionLine: View {
     let text: String
-    #if os(iOS)
-    let showsDoubleTapHint: Bool
-    #else
+    #if !os(iOS)
     let accept: () -> Void
     #endif
 
@@ -1414,12 +1407,10 @@ private struct PromptSuggestionLine: View {
         // field's own line height and the words sit exactly where typed ones would.
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             words
-            if showsDoubleTapHint {
-                Text("Double-tap to use")
-                    .font(.orbitLabel)
-                    .foregroundStyle(Self.placeholderColor)
-                    .fixedSize()
-            }
+            Text("Double-tap to use")
+                .font(.orbitLabel)
+                .foregroundStyle(Self.placeholderColor)
+                .fixedSize()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .allowsHitTesting(false)

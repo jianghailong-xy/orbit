@@ -66,20 +66,22 @@ final class ProjectMergeCardTests: XCTestCase {
         XCTAssertNil(ProjectMergeCard.shape(promotion: nil, integration: nil))
     }
 
-    func testTheMergeJobsLineMovesFromTheProgressCardIntoTheMergeCard() {
+    /// The page's two cards split the kinds between them: a task landing on the project branch is
+    /// the landing card's (owner decision 2026-10-11), a job about main is the merge card's.
+    func testTheMergeJobsMoveFromTheLandingCardIntoTheMergeCard() {
         let now = date("2026-10-06T03:24:00Z")
         for kind in ["CHECK_PROMOTION", "LAND_PROMOTION"] {
             let view = integration(kind: kind)
-            XCTAssertNil(ProjectMergeCard.progressLandingLine(view, now: now, updatedAt: now), kind)
+            XCTAssertNil(ProjectMergeCard.taskLandingCard(view, now: now, updatedAt: now), kind)
             XCTAssertEqual(ProjectMergeCard.mergeLandingLine(view, now: now, updatedAt: now),
                            ProjectPage.landingLine(view, now: now, updatedAt: now), kind)
         }
         let task = integration(kind: "LAND_TASK")
-        XCTAssertEqual(ProjectMergeCard.progressLandingLine(task, now: now, updatedAt: now),
-                       ProjectPage.landingLine(task, now: now, updatedAt: now))
+        XCTAssertEqual(ProjectMergeCard.taskLandingCard(task, now: now, updatedAt: now),
+                       ProjectPage.landingCard(task, now: now, updatedAt: now))
         XCTAssertNil(ProjectMergeCard.mergeLandingLine(task, now: now, updatedAt: now))
-        // An older server names no kind: the line stays where it always was.
-        XCTAssertNotNil(ProjectMergeCard.progressLandingLine(integration(kind: nil), now: now, updatedAt: now))
+        // An older server names no kind: the card stays where it always was.
+        XCTAssertNotNil(ProjectMergeCard.taskLandingCard(integration(kind: nil), now: now, updatedAt: now))
     }
 
     func testThePageCardSaysWhatIsAskedOfMainWithTheBranchUnderIt() {

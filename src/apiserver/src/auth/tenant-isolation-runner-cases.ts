@@ -319,6 +319,11 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { replaces: 'not its title', title: 'named by the census' } }),
   },
+  'POST /runner/sessions/:id/turns/:turnId/suggestion': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.turnSessionId, turnId: of.runner.shellTurnId } }),
+    nested: ['turnId'],
+  },
   'POST /runner/sessions/:id/turn-complete': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.turnSessionId }, body: { turnId: of.runner.shellTurnId, status: 'SUCCEEDED' } }),

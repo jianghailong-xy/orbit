@@ -372,9 +372,16 @@ test('a landing is not judged before the work it is about has stopped moving', {
       select: {
         state: true, sourceRef: true, mainSyncSha: true, targetShaBefore: true, upstreamSha: true,
         sourceOnUpstream: true, sourceFullyApplied: true, receiptIds: true, startedAt: true, claimedAt: true,
-        session: { select: { finishedAt: true, worktreeBranch: true, worktreeDirty: true } },
+        sessionId: true,
       },
     });
+    // Beside the job, by id: `session_id` is a history reference with no relation to nest (0424).
+    const session = row.sessionId
+      ? await prisma.session.findUnique({
+        where: { id: row.sessionId },
+        select: { finishedAt: true, worktreeBranch: true, worktreeDirty: true },
+      })
+      : null;
     const facts: LandingJobFacts = {
       state: row.state,
       mainSyncSha: row.mainSyncSha,
@@ -385,7 +392,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
       receiptIds: row.receiptIds,
       sourceRef: row.sourceRef,
       startedAt: row.startedAt,
-      session: row.session,
+      session,
     };
     return { row, facts };
   }

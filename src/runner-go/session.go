@@ -562,6 +562,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// claim payload on a cold resume while the event flusher runs concurrently.
 	// Capture the immutable id so that goroutine never races that pointer swap.
 	sessionID := job.SessionID
+	// Non-Claude engines have no --prompt-suggestions of their own: when the control plane
+	// still asks for suggestions, the guess comes from the server instead
+	// (orbit_prompt_suggestion.go). Captured once, like sessionID — the fetch goroutine
+	// outlives the turn that spawned it, and job's fields race the same swap.
+	wantsOrbitSuggestions := job.Agent.PromptSuggestions && job.Agent.Provider != providerClaude
 	scratch := runDir(sessionID)
 	_ = os.MkdirAll(scratch, 0o755)
 	// A newer runner process may fence this process while it is still active. Keep that
@@ -712,6 +717,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
 	// announces its runner-hosted jobs again behind every `resumed` handshake.
 	var bg *bgTailer
+	// Declared ahead of emitThrough, which spawns it behind a successful turn_end, and assigned
+	// once emitFor exists: the server's next-message guess for an engine without one
+	// (orbit_prompt_suggestion.go), filed against the turn it follows like the engine's own.
+	var requestOrbitSuggestion func(turnID string, atSeq int)
 	// emitThrough buffers one event, filed against turnID, if gate still admits it.
 	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		// The one place a turn the engine runs on its own shows up at all. Told before the
@@ -737,6 +746,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				coordinatorContextBarrier.mark()
 			}
 			bufMu.Unlock()
+			// Only a turn that ran to an answer earns a guess at what follows it, and only a
+			// turn the person opened: claude's own side turns arrive with no turnID at all.
+			if wantsOrbitSuggestions && eventType == evTurnEnd && turnID != "" && turnEndSucceeded(payload) {
+				go requestOrbitSuggestion(turnID, s)
+			}
 		})
 		// A `resumed` handshake says this session's engine was replaced, and the control plane empties
 		// the session's running background set on it (runner-api.controller bgReset): the replaced
@@ -760,6 +774,22 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// wrong turn — which is the crossing this avoids rather than races.
 	emitFor := func(turnID, eventType string, payload map[string]interface{}) {
 		emitThrough(emissionGate, turnID, eventType, payload)
+	}
+	// The server's guess rides eventCtx like every other post-turn send, and is dropped the
+	// moment the session has moved on: any event buffered after this turn's end (a new message
+	// has answered what the guess was predicting) or a turn already running makes it stale.
+	requestOrbitSuggestion = func(turnID string, atSeq int) {
+		fetchOrbitSuggestion(eventCtx, t, sessionID, turnID, func() bool {
+			seqMu.Lock()
+			moved := seq != atSeq+1
+			seqMu.Unlock()
+			curTurnMu.Lock()
+			busy := curTurn != ""
+			curTurnMu.Unlock()
+			return moved || busy
+		}, func(text string) {
+			emitFor(turnID, evPromptSuggestion, map[string]interface{}{"text": text, "source": "orbit"})
+		})
 	}
 	// The ordinary path: whatever turn the session is attributing to right now, through gate.
 	emitOn := func(gate *eventEmissionGate) emitFn {

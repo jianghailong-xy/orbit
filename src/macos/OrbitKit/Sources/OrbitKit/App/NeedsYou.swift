@@ -201,7 +201,12 @@ public enum NeedsYouLogic {
     /// A kind this build does not know is skipped rather than named: the count already includes it
     /// (the server counted it), and a bar reading "needs you ·" with nothing after it would be
     /// worse than the bar the older wording gives.
-    static func oldestOwnerItem(_ sessions: [Session]) -> (session: Session, item: SessionOwnerItem)? {
+    ///
+    /// Public because a session ROW's own press asks it too: the row that says which item is
+    /// waiting lands on that item's card (`AppModel`'s row press → `ConsoleModel.focus(ownerItem:)`),
+    /// and picking a different item there than the banner does would send the reader to a card the
+    /// line above them was not about.
+    public static func oldestOwnerItem(_ sessions: [Session]) -> (session: Session, item: SessionOwnerItem)? {
         var oldest: (session: Session, item: SessionOwnerItem, at: Date)?
         for session in sessions {
             for item in session.ownerItems ?? [] where item.kind != .unknown {
@@ -247,21 +252,41 @@ public enum NeedsYouLogic {
         }
     }
 
+    /// What separates the word for a kind from the short reason an escalated item carries — the
+    /// browser's `OWNER_ITEM_NEED_SEPARATOR`.
+    public static let needSeparator = " · "
+
     /// The word for the item a row says it is waiting on: the oldest one, which is the same item the
     /// banner names, so the row and the bar above it point at the same card. Nil when nothing on the
     /// row is a kind this build can name.
+    ///
+    /// An ESCALATED item says its `need` as well — `Escalated to you · the check on the combined
+    /// tree failed` — because "Escalated to you" alone names the route and not the thing; the
+    /// browser's row does the same and the two ends are held to each other by
+    /// `OwnerItemCardsTests`. The other three kinds carry no need, and one that is absent or blank
+    /// leaves the row with the word alone rather than trailing a separator.
     public static func oldestItemWord(_ items: [SessionOwnerItem]?) -> String? {
         guard let items else { return nil }
         var oldest: (word: String, at: Date)?
         for item in items {
             let main = RunSettings.mainBranchName(item.mainBranch)
-            guard let word = kindWord(item.kind, main: main) else { continue }
+            guard let base = kindWord(item.kind, main: main) else { continue }
+            let word = itemWord(item, base: base)
             // An unparseable instant sorts last rather than first, exactly as it does for the
             // banner: it must not beat an item whose wait is known.
             let at = RelativeTime.parse(item.since) ?? Date.distantFuture
             if oldest == nil || at < oldest!.at { oldest = (word, at) }
         }
         return oldest?.word
+    }
+
+    /// One item's word, in the browser's own reading: the kind's word, and — for the one kind that
+    /// carries one — the short reason after it.
+    static func itemWord(_ item: SessionOwnerItem, base: String) -> String {
+        guard item.kind == .escalated,
+              let need = item.need?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !need.isEmpty else { return base }
+        return base + needSeparator + need
     }
 
     /// One session names its workspace; several collapse to a count. The workspace name (not the

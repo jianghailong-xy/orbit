@@ -1,0 +1,1786 @@
+{
+ "tests": [
+  {
+   "name": "orbit-field select-down burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter-from-7 burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter-from-7 burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter-from-7 burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter-from-7 paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter-from-7 paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-enter-from-7 paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter-from-7 burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter-from-7 burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter-from-7 burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter-from-7 paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter-from-7 paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-enter-from-7 paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-enter-from-7",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-home-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-home-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-home-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-home-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-home-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-home-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-home-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-home-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-home-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-home-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-home-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-home-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-home-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-home-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-home-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-home-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-home-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-home-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-home-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-home-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-home-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-home-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-end-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-end-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-end-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-end-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-end-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-end-enter",
+   "result": "never | list open | listbox×1 | @option:30 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-end-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-end-enter",
+   "result": "never | list open | listbox×1 | @option:30 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-end-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-end-enter",
+   "result": "never | list open | listbox×1 | @option:30 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-end-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-end-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-end-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-end-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-end-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-end-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-end-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-end-enter",
+   "result": "Never | list open | listbox×1 | @option:30 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-end-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-end-enter",
+   "result": "Never | list open | listbox×1 | @option:30 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-end-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-end-enter",
+   "result": "Never | list open | listbox×1 | @option:30 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-space",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-space",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-space",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-space",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-space",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-space",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-space burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-space",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-space burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-space",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-space burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-space",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-space paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-space",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-space paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-space",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-space paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-space",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space-from-null burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-space-from-null",
+   "result": "null | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space-from-null burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-space-from-null",
+   "result": "null | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space-from-null burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-space-from-null",
+   "result": "null | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space-from-null paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-space-from-null",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space-from-null paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-space-from-null",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-space-from-null paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-space-from-null",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-space-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-space-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-space-down-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-space-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-space-down-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-space-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-space-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-space-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-space-down-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-space-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-space-down-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-space-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-space-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-space-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-space-down-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-space-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-space-down-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-space-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-space-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-space-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-space-down-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-space-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-space-down-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-space-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-down-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-down-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-down-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-down-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter-down-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-down-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-down-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-down-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-down-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-down-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-down-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter-down-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-7-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-7-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-7-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-7-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-7-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-7-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-7-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-7-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-7-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-7-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-7-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-7-enter",
+   "result": "7 | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-7-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-7-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-7-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-7-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-7-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-7-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-7-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-7-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-7-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-7-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-7-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-7-enter",
+   "result": "7 days | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-n-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-n-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-n-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-n-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-n-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-n-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-n-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-n-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-n-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-n-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-n-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-n-enter",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-n-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-n-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-n-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-n-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-n-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-n-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-n-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-n-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-n-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-n-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-n-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-n-enter",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter",
+   "result": "never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter",
+   "result": "Never | list open | listbox×1 | @option:Never",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-down",
+   "result": "never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-down",
+   "result": "never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-down",
+   "result": "never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-down",
+   "result": "never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-down",
+   "result": "never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-down",
+   "result": "never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-down",
+   "result": "Never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-down",
+   "result": "Never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-down",
+   "result": "Never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-down",
+   "result": "Never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-down",
+   "result": "Never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-down",
+   "result": "Never | list open | listbox×1 | @option:7 days",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-tab burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-tab burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-tab paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-tab paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-tab burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-tab burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-tab paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-tab paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-shift-tab",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-shift-tab burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-shift-tab",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-shift-tab burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-shift-tab",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-shift-tab",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-shift-tab paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-shift-tab",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-shift-tab paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-shift-tab",
+   "result": "never | list closed | none | @combobox:Expires",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-shift-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-shift-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-shift-tab burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-shift-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-shift-tab burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-shift-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-shift-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-shift-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-shift-tab paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-shift-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-shift-tab paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-shift-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down-tab burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down-tab burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-down-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down-tab paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-down-down-tab paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-down-down-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down-tab burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down-tab burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-down-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down-tab paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-down-down-tab paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-down-down-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-tab burst sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-tab burst sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "burst",
+   "sequence": "select-enter-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-tab paced sample 1",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-field select-enter-tab paced sample 2",
+   "status": "expected",
+   "target": "orbit-field",
+   "mode": "paced",
+   "sequence": "select-enter-tab",
+   "result": "never | list closed | none | @combobox:Workspace",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-tab burst sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-tab burst sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-tab burst sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "burst",
+   "sequence": "select-enter-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-tab paced sample 0",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-tab paced sample 1",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  },
+  {
+   "name": "orbit-sample select-enter-tab paced sample 2",
+   "status": "expected",
+   "target": "orbit-sample",
+   "mode": "paced",
+   "sequence": "select-enter-tab",
+   "result": "Never | list closed | none | @combobox:Sample choice",
+   "error": null
+  }
+ ]
+}

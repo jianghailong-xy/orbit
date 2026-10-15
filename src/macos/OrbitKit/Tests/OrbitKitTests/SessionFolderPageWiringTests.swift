@@ -223,7 +223,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
         let pageRow = try slice(code(try appSource("Views/SessionFolderPage.swift")),
                                 from: "@ViewBuilder private func sessionRow(_ s: Session)", to: "\n    }")
         for part in ["AgentSessionRow(session: s, deleted:",
-                     "app.push(.console(sessionID: s.id, origin: .list))",
+                     "app.openSessionRow(s)",
                      "row.sessionRowActions(s, scope:",
                      "onTag: { taggingSession = s }",
                      "onShare: { sharingSession = s }",

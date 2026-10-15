@@ -735,6 +735,26 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/fuse/\(episodeID)/resume")
     }
 
+    /// Run a failed task landing again (`POST /projects/:id/tasks/:taskId/integration/retry`) — the
+    /// owner's own door (§4.7, T5). The reason is required: it is the record the rerun leaves, and
+    /// it is what the coordinator is told when the item is being handled.
+    ///
+    /// The owner's own credential and no acting session, like the three doors above: the door
+    /// refuses a session, and it is the same decision the coordinator's card-gated route makes.
+    public func retryTaskIntegration(projectID: String, taskID: String,
+                                     _ req: IntegrationRetryRequest) async throws -> IntegrationRetryReceipt {
+        try await post("projects/\(projectID)/tasks/\(taskID)/integration/retry", body: req)
+    }
+
+    /// Run a blocked candidate's failed check again
+    /// (`POST /projects/:id/promotions/:promotionId/integration/retry`) — the owner's own door
+    /// (§4.7, T5). No new candidate is created: the check is queued again on this one, and the
+    /// reason travels with it.
+    public func retryPromotionCheck(projectID: String, promotionID: String,
+                                    _ req: IntegrationRetryRequest) async throws -> IntegrationRetryReceipt {
+        try await post("projects/\(projectID)/promotions/\(promotionID)/integration/retry", body: req)
+    }
+
     /// What this project is currently asking its owner to merge, or nil when it is asking nothing.
     /// The door answers a bare `null` for that, which decodes straight into the optional.
     public func currentPromotion(projectID: String) async throws -> ProjectPromotionView? {

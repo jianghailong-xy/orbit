@@ -270,12 +270,16 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * The backstop (§4.2): close every OPEN item nobody owes any more, and say which ones those were.
    *
    * An item is closed by the transaction that moves what it is about, one edge per fact, and this
-   * catches the edge somebody missed. It writes the ending that edge would have written —
-   * PROMOTION_MOVED_ON for an item about a candidate (SUPERSEDED when the candidate was, as
-   * `closePromotionItems` writes it), TASK_CLOSED for one about a cancelled or replaced task, both by
-   * the PLATFORM — with a `resolution_note` that starts `backstop:` and names the fact, so an item
-   * closed here can be told apart from one its edge closed and a missing edge is something a query
-   * can count. Each one is also a warning in the log, which is where somebody learns an edge is
+   * catches the edge somebody missed. By the same facts and in the same order, it writes the ending
+   * that edge would have written: `resolveByFact`'s three statements, one per family — a task's
+   * failure (`TASK_DONE` / `SUCCESSOR_FILED` / `TASK_CLOSED` / `RETRIED`), an integration item about
+   * a dead task (`SUCCESSOR_FILED` when a successor took it over, `TASK_CLOSED` when it was
+   * cancelled) and a delivery review (`RETRIED` / `SUCCESSOR_FILED` / `TASK_CLOSED`) — and for an item
+   * about a candidate the edge's own `PROMOTION_MOVED_ON`, with the state `closePromotionItems`
+   * writes (SUPERSEDED when the candidate was). All by the PLATFORM, with a `resolution_note` that
+   * starts `backstop:` and names the fact as it stands — the one thing here an edge never writes — so
+   * an item closed here can be told apart from one its edge closed and a missing edge is something a
+   * query can count. Each one is also a warning in the log, which is where somebody learns an edge is
    * missing: the kind, what the item was about and where that stands now, how long it was open,
    * and whose it was. The owners whose items closed have their badge recounted, since an item they
    * held may have been one of the four it counts.
@@ -291,8 +295,7 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
       UPDATE "project_open_item" item
          SET "state" = CASE WHEN stale."promotionState" = 'SUPERSEDED' THEN 'SUPERSEDED'
                             ELSE 'RESOLVED' END,
-             "resolution" = CASE WHEN item."promotion_id" IS NOT NULL THEN 'PROMOTION_MOVED_ON'
-                                 ELSE 'TASK_CLOSED' END,
+             "resolution" = stale."resolution",
              "resolved_by" = 'PLATFORM', "resolved_at" = now(), "updated_at" = now(),
              "resolution_note" = 'backstop: ' || stale."about" || stale."why"
                                  || '; no edge closed this item when that happened'
@@ -302,12 +305,42 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                  CASE WHEN stale_item."promotion_id" IS NOT NULL
                       THEN 'promotion ' || promotion."id"::text || '@' || promotion."state"
                       ELSE 'task ' || task."id"::text || '@' || task."status"::text END AS "about",
+                 -- resolveByFact's three CASEs, family by family, in their own order: the ending
+                 -- each family's edge writes, read off the same two rows that edge reads.
+                 CASE WHEN stale_item."promotion_id" IS NOT NULL THEN 'PROMOTION_MOVED_ON'
+                      WHEN stale_item."kind" = 'TASK_FAILED' THEN
+                        CASE WHEN task."status" = 'DONE' THEN 'TASK_DONE'
+                             WHEN task."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                             WHEN task."status" = 'CANCELLED' THEN 'TASK_CLOSED'
+                             ELSE 'RETRIED' END
+                      WHEN stale_item."kind" = 'DELIVERY_REVIEW' THEN
+                        CASE WHEN task."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                             WHEN task."status" = 'CANCELLED' THEN 'TASK_CLOSED'
+                             ELSE 'RETRIED' END
+                      WHEN stale_item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                        THEN CASE WHEN task."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                                  ELSE 'TASK_CLOSED' END
+                      ELSE 'TASK_CLOSED' END AS "resolution",
+                 -- The fact, not the ending — the same branch of each family's CASE, said in words.
+                 -- A review whose task was returned to work reads "left DONE" and is never called the
+                 -- cancellation it is not; one whose task really was cancelled is.
                  CASE WHEN stale_item."kind" = 'PROMOTION_APPROVAL'
                         THEN ' is not READY, so the card asks nothing'
                       WHEN stale_item."promotion_id" IS NOT NULL THEN ' is no longer live'
-                      WHEN task."superseded_by_task_id" IS NOT NULL
-                        THEN ' was replaced by task ' || task."superseded_by_task_id"::text
-                      ELSE ' was cancelled' END AS "why"
+                      WHEN stale_item."kind" = 'TASK_FAILED' THEN
+                        CASE WHEN task."status" = 'DONE' THEN ' left FAILED'
+                             WHEN task."superseded_by_task_id" IS NOT NULL
+                               THEN ' was superseded by task ' || task."superseded_by_task_id"::text
+                             WHEN task."status" = 'CANCELLED' THEN ' was cancelled'
+                             ELSE ' is being attempted again' END
+                      WHEN stale_item."kind" = 'DELIVERY_REVIEW' THEN
+                        CASE WHEN task."superseded_by_task_id" IS NOT NULL
+                               THEN ' was superseded by task ' || task."superseded_by_task_id"::text
+                             WHEN task."status" = 'CANCELLED' THEN ' was cancelled'
+                             ELSE ' left DONE' END
+                      ELSE CASE WHEN task."superseded_by_task_id" IS NOT NULL
+                                  THEN ' was superseded by task ' || task."superseded_by_task_id"::text
+                                ELSE ' was cancelled' END END AS "why"
             FROM "project_open_item" stale_item
             LEFT JOIN "project_promotion" promotion ON promotion."id" = stale_item."promotion_id"
             LEFT JOIN "task" task ON task."id" = stale_item."task_id"
