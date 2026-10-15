@@ -36,7 +36,7 @@ require(packageId.matches(Regex("[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+"))) { "I
 val updateRepository = providers.gradleProperty("orbitUpdateRepository").orElse("jianghailong-xy/orbit").get()
 require(updateRepository.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"))) { "orbitUpdateRepository must be owner/name" }
 // Only an update rehearsal swaps GitHub for a stand-in on the device's loopback (adb reverse), and only in a
-// disposable *.upgradetest package; that build alone may reach 127.0.0.1 without TLS (src/updateRehearsal).
+// disposable *.upgradetest package, which merges src/updateRehearsal.
 val githubApi = "https://api.github.com"
 val updateApi = providers.gradleProperty("orbitUpdateApi").orElse(githubApi).get()
 require(updateApi == githubApi || updateApi.matches(Regex("http://127\\.0\\.0\\.1:[1-9][0-9]{0,4}")) && packageId.endsWith(".upgradetest")) {
