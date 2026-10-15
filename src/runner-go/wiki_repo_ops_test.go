@@ -71,6 +71,31 @@ func TestWikiRepoOpSnapshotReadsOriginMasterWhenItIsTheDefaultBranch(t *testing.
 	}
 }
 
+func TestWikiRepoOpFindsTheSpacesRepositoryInAMultiRepoWorkspace(t *testing.T) {
+	f := newWikiRepoOpFixture(t)
+	workspace := filepath.Join(f.home, "workspace")
+	checkout := filepath.Join(workspace, "cbai-docs")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(f.checkout, checkout); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(workspace, "cbai-web")
+	mustGit(t, workspace, "init", "-q", "-b", "main", other)
+	mustGit(t, other, "remote", "add", "origin", "https://gitlab.example/cbai-web.git")
+
+	cmd := f.command(t, "snapshot", map[string]interface{}{})
+	cmd.WorkDir = workspace
+	outcome := runWikiRepoOp(cmd, nil)
+	if outcome.state != "succeeded" {
+		t.Fatalf("snapshot from a multi-repository workspace failed: %s", outcome.err)
+	}
+	if outcome.result["sha"] != f.first {
+		t.Fatalf("snapshot sha = %v, want cbai-docs at %s", outcome.result["sha"], f.first)
+	}
+}
+
 func (f *wikiRepoOpFixture) write(t *testing.T, name, content string) {
 	t.Helper()
 	path := filepath.Join(f.seed, name)
