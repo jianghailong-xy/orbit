@@ -401,21 +401,23 @@ func claudeOAuthLoginIn(configDir string) (claudeOAuthLogin, error) {
 // file error is preserved when the fallback also fails, so the logged reason stays accurate on
 // non-mac hosts.
 //
-// The Keychain fallback is the machine's own login only: the item is a single one for the whole
-// user, with nothing naming an account, so an added account that fell back to it would report the
-// machine's quota as its own. A slot with no file has no reading, and says so.
+// Each CLAUDE_CONFIG_DIR has its own Keychain item (claudeKeychainService), so an added account
+// falls back to that account's item rather than borrowing the machine's login.
 func claudeCredentialsJSONIn(configDir string) ([]byte, error) {
 	b, err := os.ReadFile(claudeCredentialsPathIn(configDir))
 	if err == nil {
 		return b, nil
 	}
-	if configDir == "" && runtime.GOOS == "darwin" {
-		if kb, kerr := keychainCredentials(context.Background(), claudeKeychainService("")); kerr == nil {
+	if claudeCredentialsUseKeychain {
+		if kb, kerr := keychainCredentials(context.Background(), claudeKeychainService(configDir)); kerr == nil {
 			return kb, nil
 		}
 	}
 	return nil, err
 }
+
+// A variable only so the Keychain branch can be covered on non-macOS builders.
+var claudeCredentialsUseKeychain = runtime.GOOS == "darwin"
 
 // claudeKeychainService names the macOS Keychain item Claude Code keeps a login's credentials in:
 // "Claude Code-credentials" for a CLI run with no CLAUDE_CONFIG_DIR, and for one run with it, the
