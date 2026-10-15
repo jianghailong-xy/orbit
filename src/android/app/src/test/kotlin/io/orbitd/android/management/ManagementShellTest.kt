@@ -83,9 +83,9 @@ class ManagementShellTest {
         signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
-        compose.onNode(hasText("Runners") and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText(Infrastructure.TITLE) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
+        compose.onNode(hasText("Old alias") and hasClickAction()).performScrollTo().performClick()
         await("About")
         compose.onNodeWithContentDescription("Increase Max Concurrent").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
@@ -105,7 +105,7 @@ class ManagementShellTest {
         back()
         fixture.selfUpdate = "enabled"
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
+        compose.onNode(hasText("Old alias") and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText(RunnerCopy.UPDATE_RUNNER_NOW) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText(RunnerCopy.UPDATE_RUNNER_NOW) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { fixture.calls.contains("POST runners/${fixture.RUNNER}/self-update") }
@@ -150,9 +150,9 @@ class ManagementShellTest {
     private fun runnerPage() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
-        compose.onNode(hasText("Runners") and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText(Infrastructure.TITLE) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
+        compose.onNode(hasText("Old alias") and hasClickAction()).performScrollTo().performClick()
         await("About")
     }
     private fun runnerNamePage() {

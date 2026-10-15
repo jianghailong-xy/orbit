@@ -10,9 +10,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The Providers page's rules and words: a port of OrbitKit ProvidersOverview, ProviderPools, SharedPoolPage,
- * CodexLoginPool, SharedPools (adapter), CodexPoolPage, WhoCanUseIt, SharePool, JustMine, AddPoolKey and
- * CodexSignIn. Pure, so PoolLogicTest pins it to the iOS wording and gates.
+ * The account pools' rules and words, on Infrastructure and on each pool's page: a port of OrbitKit ProvidersOverview,
+ * ProviderPools, SharedPoolPage, CodexLoginPool, SharedPools (adapter), CodexPoolPage, WhoCanUseIt, SharePool, JustMine,
+ * AddPoolKey and CodexSignIn. Pure, so PoolLogicTest pins it to the iOS wording and gates.
  */
 internal fun providerObjects(element: JsonElement): List<JsonObject> =
     (element as? JsonArray)?.filterIsInstance<JsonObject>() ?: error("The server returned an unreadable list.")
@@ -329,14 +329,6 @@ internal object ProviderPools {
     }
 
     // ProvidersOverview
-    fun runnerSummary(runner: JsonObject): String {
-        val engines = runner["engines"] as? JsonArray ?: return "Engines not reported"
-        // Antigravity counts only where the runner can sign it in with Google.
-        val all = RunnerPage.loginEngines.filter { it != "antigravity" || runner.obj("antigravity")?.str("googleLogin") == "available" }
-        val ready = all.count { engine -> engines.filterIsInstance<JsonObject>().any { it.str("engine") == engine && it.str("auth") == "yes" } }
-        val line = if (ready == all.size) "All signed in" else "$ready of ${all.size} signed in"
-        return if (runner.bool("online") == true) line else "Offline · $line"
-    }
     fun poolSummary(pool: Pool, nowMs: Long) = pool.unavailable ?: "${readyCount(pool, nowMs)} of ${pool.members.size} available"
     fun isShared(pool: Pool) = pool.shared?.let(PoolPage::hasPeople) ?: false
     fun codexPoolLine(pool: Pool, nowMs: Long): String {
