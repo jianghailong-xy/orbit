@@ -392,7 +392,7 @@ class RealStackDeviceTest {
         compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput(note)
         hideKeyboard()
-        compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
+        compose.onNodeWithTag("item:$item:mark-handled-confirm").performScrollTo().performClick()
         compose.waitUntil(30_000) { get("/projects/$id/open-items").jsonObject.objects("needsYou").none { it.text("itemId") == item } }
         val settled = get("/projects/$id/open-items").jsonObject.objects("settled").firstOrNull { it.text("itemId") == item }
         record("item after Mark handled", settled ?: "not open, not in settled")

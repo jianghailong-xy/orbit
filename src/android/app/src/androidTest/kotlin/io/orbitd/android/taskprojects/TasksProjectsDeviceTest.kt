@@ -310,7 +310,7 @@ class TasksProjectsDeviceTest {
         compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Checked the fixed source and current server record")
         hideKeyboard()
-        compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
+        compose.onNodeWithTag("item:x1:mark-handled-confirm").performScrollTo().performClick()
         compose.waitUntil(20_000) { journal().any { row ->
             row.text("method") == "POST" && row.text("path") == "/api/projects/$projectId/open-items/x1/resolve" &&
                 row.obj("body")?.text("note") == "Checked the fixed source and current server record"
