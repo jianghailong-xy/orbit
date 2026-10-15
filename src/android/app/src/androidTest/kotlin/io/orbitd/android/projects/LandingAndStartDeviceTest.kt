@@ -128,8 +128,8 @@ class LandingAndStartDeviceTest {
                 // ⑥ Blocked: who is in front of the merge, on the card, in its review and in the conversation's review.
                 integration = line(listOf(job("j-sync", state = "QUEUED", title = "Sync the project line with main")), blocking = true)
                 promotion = BLOCKED
-                await { exists(hasTestTag("project-merge-card:blocked-by")) }
-                assertEquals("Blocked by: $BEHIND", text("project-merge-card:blocked-by"))
+                // The card can show a moment before the page's next landing read names the new landing: wait for its sentence.
+                await { text("project-merge-card:blocked-by") == "Blocked by: $BEHIND" }
                 compose.onNodeWithTag("project-merge-card:blocked-by").performScrollTo()
                 capture("07-blocked-by-card")
                 compose.onNodeWithTag("project-merge-card:details").performScrollTo().performClick()
@@ -169,7 +169,9 @@ class LandingAndStartDeviceTest {
                 capture("13-task-graph-fullscreen")
                 compose.onNodeWithText("Done").performClick(); settle()
                 await { !exists(hasTestTag("project-graph-fullscreen")) }
-                compose.onNodeWithTag("project-start-request-cancel").performClick(); settle()
+                // Cancel is at the head of the sheet, scrolled out of view: bring it back first.
+                compose.onNodeWithTag("project-start-request-cancel").performScrollTo().performClick(); settle()
+                await { !exists(hasTestTag("project-start-request-sheet")) }
 
                 // ⑧ The same card with words that fit — no More — a criterion two lines cut — Read all — and a two-task plan, which the
                 // phone draws as the task graph, its head counting tasks only.
@@ -188,7 +190,9 @@ class LandingAndStartDeviceTest {
                 capture("14-start-read-all-no-more")
                 compose.onNodeWithTag("project-start-request-plan-graph").performScrollTo()
                 capture("15-start-plan-graph")
-                compose.onNodeWithTag("project-start-request-cancel").performClick(); settle()
+                // Cancel is at the head of the sheet, scrolled out of view: bring it back first.
+                compose.onNodeWithTag("project-start-request-cancel").performScrollTo().performClick(); settle()
+                await { !exists(hasTestTag("project-start-request-sheet")) }
                 File(evidence, "result.txt").writeText("PASS\n")
             } catch (failure: Throwable) {
                 File(evidence, "failure.txt").writeText(failure.stackTraceToString())
