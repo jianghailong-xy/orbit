@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.json.*
 
 /** One controlled Orbit server for the A07c composer tests: the production Activity, AuthSession, RealtimeStore, session page
@@ -43,6 +44,7 @@ internal object ComposerShell {
     val answers = ConcurrentHashMap<String, () -> ApiResponse>()
 
     fun reset() {
+        while (frames.tryReceive().isSuccess) Unit
         calls.clear(); bodies.clear(); answers.clear(); disk.clear()
         session = emptyMap(); workspace = emptyMap(); providers = "[]"; pools = "[]"; sharedPools = "[]"
         events = emptyList(); retryMessage = """{"text":""}"""; attachments = emptyMap()
@@ -101,10 +103,18 @@ internal object ComposerShell {
         }
     }
 
-    /** The streams open and stay quiet: the account is connected, so writes are offered. */
+    /** What a test sends down the session's stream: an event as the server would ([push]), or its end ([endStream]). */
+    private val frames = Channel<SseFrame>(Channel.UNLIMITED)
+    private const val END = "__end_of_stream__"
+    fun push(event: String) { frames.trySend(SseFrame(event, null, null)) }
+    /** The session's stream ends as a server closing it would, and the app connects again. */
+    fun endStream() { frames.trySend(SseFrame(END, null, null)) }
+
+    /** The streams open and stay quiet, but for what a test sends down the session's: the account is connected, so writes are offered. */
     private val events_ = object : EventTransport {
         override suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
             onOpen()
+            if (request.api.path.size > 1) for (frame in frames) { if (frame.data == END) return; onFrame(frame) }
             awaitCancellation()
         }
     }

@@ -64,6 +64,11 @@ object DshRuntime {
             }
         }
 
+        /** The detail, naming the session's key where the reader knows it — `the DeepSeek key “DeepSeek 2”` (A07-19 (b), iOS 6f3083272
+         * `detail(keyName:)`): one DeepSeek key runs on Claude Code, OpenCode and Harness alike, and there can be several, so neither
+         * the engine nor "the key" says which. */
+        fun detail(keyName: String?) = if (this == INVALID_KEY && keyName != null) "Update $keyName in Infrastructure, then send your message again." else detail
+
         /** Fixed on the session's own key, in Infrastructure. */
         val isKeyProblem get() = this == NEEDS_KEY || this == INVALID_KEY
     }
