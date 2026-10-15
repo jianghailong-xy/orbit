@@ -8,6 +8,7 @@ import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 
 /** One controlled Orbit server for the A05d shell tests: the production Activity, AuthSession, RealtimeStore and navigation over
@@ -192,6 +193,9 @@ internal object ProjectShell {
         }
     }
 
+    /** Requests answer on the caller's thread, as the other shell fixtures' do (ManagementFixture, WatchFixture, ComposerShell): on
+     * Dispatchers.IO a page's LaunchedEffect read resumes on the IO worker under the test's unconfined effect dispatcher and writes
+     * its state off the main thread, and a sheet could then stay on its spinner with every read answered. */
     fun session() = AuthSession(transport, object : CredentialStore {
         private var value: StoredSession? = null
         override suspend fun load() = value
@@ -204,7 +208,7 @@ internal object ProjectShell {
         override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = null
         override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) = Unit
         override suspend fun clearAll() = Unit
-    }, "a05d-shell", eventTransport = events)
+    }, "a05d-shell", dispatcher = Dispatchers.Unconfined, eventTransport = events)
 
     suspend fun signIn(session: AuthSession) = session.login(ServerAddress.parse("https://a05d.test"), "owner@a05d.test", "fixture")
 }
