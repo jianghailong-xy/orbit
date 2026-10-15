@@ -22,7 +22,6 @@ internal object RunnerCopy {
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
     fun versionTag(version: String) = "v$version"
     fun runningOf(active: Int, max: Int) = "$active of $max running"
-    fun slots(active: Int, max: Int) = "$active/$max"
     const val ADD = "Add Runner"
     const val ADD_FOOTER = "Run one command on the new machine — it installs Orbit, then asks you to confirm it’s yours."
     const val NEEDS_ATTENTION = "Needs Attention"
