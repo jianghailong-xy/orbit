@@ -3,7 +3,6 @@ package io.orbitd.android.auth
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import io.orbitd.android.BuildConfig
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.GoogleCallback
@@ -56,7 +55,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun login(address: String, email: String, password: String) = signIn(::messageFor) {
-        val server = ServerAddress.parse(address, allowLoopbackHttp = BuildConfig.DEBUG)
+        val server = ServerAddress.parse(address)
         session.login(server, email.trim(), password)
     }
 
@@ -75,7 +74,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     /** What the instance at [address] offers; null — the password alone — when it cannot say. */
     suspend fun signInMethods(address: String): SignInMethods? {
         val server = try {
-            ServerAddress.parse(address, allowLoopbackHttp = BuildConfig.DEBUG)
+            ServerAddress.parse(address)
         } catch (_: InvalidServerAddress) { return null }
         return try { session.signInMethods(server) } catch (error: CancellationException) { throw error }
         catch (_: Exception) { null }
@@ -84,7 +83,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     /** The email the last password sign-in on the instance at [address] used (A03c), for the login page to prefill. */
     suspend fun rememberedEmail(address: String): String? {
         val server = try {
-            ServerAddress.parse(address, allowLoopbackHttp = BuildConfig.DEBUG)
+            ServerAddress.parse(address)
         } catch (_: InvalidServerAddress) { return null }
         return session.rememberedEmail(server)
     }
@@ -96,7 +95,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         ++attempt
         mutableMessage.value = null
         val server = try {
-            ServerAddress.parse(address, allowLoopbackHttp = BuildConfig.DEBUG)
+            ServerAddress.parse(address)
         } catch (_: InvalidServerAddress) {
             mutableMessage.value = AuthMessage.INVALID_ADDRESS
             return

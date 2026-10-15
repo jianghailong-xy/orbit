@@ -145,8 +145,9 @@ The repository is a Gradle property (`orbitUpdateRepository`, default
 is `BuildConfig.UPDATE_API`, always `https://api.github.com` except in an update
 rehearsal: `-PorbitUpdateApi=http://127.0.0.1:<port>` is accepted only for a
 `*.upgradetest` package, and only then does the build merge `src/updateRehearsal`
-(a network security config allowing cleartext to 127.0.0.1, where `adb reverse`
-brings a stand-in for GitHub). `build-release.sh` takes it as
+(a network security config allowing cleartext, as every build has since the account
+owner's 2026-10-15 decision, see `authentication.md`; `adb reverse` brings a stand-in
+for GitHub to 127.0.0.1). `build-release.sh` takes it as
 `ORBIT_ANDROID_UPDATE_API` for test signatures only.
 
 ## Install and replace without losing state
