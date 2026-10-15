@@ -274,7 +274,8 @@ class ProjectPageTest {
         assertEquals("Needs you", live("RUNNING", false, 1))
         assertEquals("Working", live("RUNNING", false, 0))
         assertEquals("Working", live("AWAITING_INPUT", true, 0))
-        assertEquals("Needs you", live("AWAITING_INPUT", false, 0))
+        assertEquals("Idle", live("AWAITING_INPUT", false, 0))       // a turn that ended on its own
+        assertEquals("Needs you", live("AWAITING_INPUT", false, 1))  // parked, with a question it asked
         assertEquals("Idle", live("FAILED", false, 0))
         assertEquals("Completed", ProjectPage.coordinatorPill(status("LIVE", """{"id":"s","runState":"AWAITING_INPUT","lifecycleState":"COMPLETED"}""")).label)
         assertEquals("Not started", ProjectPage.coordinatorPill(status("NEVER_OPENED")).label)
@@ -298,9 +299,10 @@ class ProjectPageTest {
         assertEquals("Open tasks are coordinated from this conversation.", ProjectPage.dispatchNote(null, false).second)
         assertEquals("No open tasks remain.", ProjectPage.dispatchNote(0, false).second)
         assertEquals("Open work" to "A completed conversation is told nothing new — and 2 open tasks still point at it.", ProjectPage.dispatchNote(2, true))
-        assertEquals("Reply to coordinator", ProjectPage.coordinatorPress(false, true))
-        assertEquals("Open coordinator", ProjectPage.coordinatorPress(false, false))
-        assertEquals("Open coordinator", ProjectPage.coordinatorPress(true, true))
+        assertEquals("Review 1 request", ProjectPage.coordinatorPress(false, 1))
+        assertEquals("Review 2 requests", ProjectPage.coordinatorPress(false, 2))
+        assertEquals("Open coordinator", ProjectPage.coordinatorPress(false, 0))
+        assertEquals("Open coordinator", ProjectPage.coordinatorPress(true, 1))
     }
 
     // MARK: open items

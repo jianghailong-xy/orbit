@@ -120,7 +120,9 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
 
     func testTheCoordinatorCardsWords() throws {
         let web = try source(Self.coordinator)
-        assertSays(web, "'Open coordinator' : 'Reply to coordinator'", in: Self.coordinator)
+        assertSays(web, "? 'Open coordinator'", in: Self.coordinator)
+        assertSays(web, ": `Review ${session.pendingApprovals} request${session.pendingApprovals === 1 ? '' : 's'}`",
+                   in: Self.coordinator)
         assertSays(web, "'Open work' : 'Manual dispatch'", in: Self.coordinator)
         for text in ["Open tasks are coordinated from this conversation.", "No open tasks remain.",
                      "A completed conversation is told nothing new, and this project still points at it.",
