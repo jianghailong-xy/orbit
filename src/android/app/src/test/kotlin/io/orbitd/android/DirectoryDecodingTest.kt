@@ -38,9 +38,21 @@ class DirectoryDecodingTest {
         "completed" to "[${session("s3", "Filed", folderId = "\"f1\"", lastTurnAt = "\"2026-10-08T01:06:00.000Z\"")}]",
         "trash" to "[${session("s4", "Deleted", deletedAt = "\"2026-10-08T01:07:00.000Z\"")}]")
 
-    private fun directory() = directoryData(RealtimeState(directoryFresh = true, directory = DirectorySnapshot(
+    private fun directory(trashing: Set<String> = emptySet()) = directoryData(RealtimeState(directoryFresh = true, directory = DirectorySnapshot(
         workspaces = rows(workspaces), sessions = sessions.mapValues { rows(it.value) },
-        folders = rows(folders), tags = rows(tags), runners = rows(runners))))
+        folders = rows(folders), tags = rows(tags), runners = rows(runners))), trashing)
+
+    /** A05-9: a session on its way to Trash is in no view of the decoded directory — whichever read the snapshot came from — so
+     * nothing drawn from it lists or counts it; every other row is as the server sent it. */
+    @Test fun aSessionOnItsWayToTrashIsInNoViewOfTheDirectory() {
+        val data = directory(setOf(TrashingSessions.key("s1"), TrashingSessions.key("s3")))
+        assertNull(data.error)
+        assertEquals(listOf("No workspace"), data.sessions.getValue("open").map { it.name })
+        assertEquals(emptyList<String>(), data.sessions.getValue("completed").map { it.name })
+        assertEquals(listOf("Deleted"), data.sessions.getValue("trash").map { it.name })
+        assertEquals(listOf("Research"), data.folders.map { it.name })
+        assertEquals(listOf("Directory check", "No workspace"), directory().sessions.getValue("open").map { it.name })
+    }
 
     @Test fun aWorkspaceNobodyHasReorderedIsListedInsteadOfAnUnreadableDirectory() {
         val data = directory()

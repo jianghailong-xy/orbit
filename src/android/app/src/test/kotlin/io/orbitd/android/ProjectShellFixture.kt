@@ -7,6 +7,7 @@ import io.orbitd.android.core.realtime.SseFrame
 import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 
 /** One controlled Orbit server for the A05d shell tests: the production Activity, AuthSession, RealtimeStore and navigation over
@@ -58,10 +59,19 @@ internal object ProjectShell {
     /** Every write's body, by `METHOD path`. */
     val bodies = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+    // A05-9: sessions moved to Trash. The server takes a move when the DELETE's held answer is let go; from then no list has the row.
+    @Volatile var trashed: Set<String> = emptySet()
+    @Volatile var holdDelete: CompletableDeferred<Unit>? = null
+    /** A read of Launch's own sessions (`projectId`) waits for this before it answers, with the rows as they were when it arrived. */
+    @Volatile var holdMembers: CompletableDeferred<Unit>? = null
+    /** Launch's `attention` in `GET projects`, which the drawer's count is read from; none by default. */
+    @Volatile var attention: String? = null
+
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true
         promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
+        trashed = emptySet(); holdDelete?.complete(Unit); holdMembers?.complete(Unit); holdDelete = null; holdMembers = null; attention = null
     }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
@@ -85,7 +95,7 @@ internal object ProjectShell {
         PLAIN -> row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
         else -> row(DONE, "Shipped docs", ALPHA, "SUCCEEDED", ""","completedAt":"${ago(2 * 24 * 60)}",${member("TASK")}""", "COMPLETED", ago(2 * 24 * 60))
     }
-    private fun list(vararg sessions: String) = sessions.joinToString(",", "[", "]") { session(it) }
+    private fun list(vararg sessions: String) = sessions.filter { it !in trashed }.joinToString(",", "[", "]") { session(it) }
 
     private fun sidebar() = """[${if (done) "" else """{"id":"$LAUNCH","title":"Launch","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{"running":2},
         "taskCounts":{"done":3,"failed":1,"total":8},"attention":{},"integration":{"line":"PROJECT_BRANCH","ref":"project/launch","activeJobCount":1},
@@ -104,7 +114,8 @@ internal object ProjectShell {
         "confirmation":"CONFIRMED","criteria":[${(1..5).joinToString(",") { """{"definitionId":"c$it","satisfied":true,"landing":"LANDED","landingReason":null}""" }},
         {"definitionId":"c6","satisfied":true,"landing":"LANDED","landingReason":"CODELESS"}]}"""
     private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"${if (done) "DONE" else "OPEN"}","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8}${
-        if (done) ""","doneBy":"$doneBy","derivedDone":$projection""" else ""}${criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}}"""
+        if (done) ""","doneBy":"$doneBy","derivedDone":$projection""" else ""}${criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}${
+        attention?.let { ""","attention":$it""" }.orEmpty()}}"""
 
     /** A press on Launch's candidate: the door's answer is the candidate in its next state, or the server's refusal. */
     private fun press(door: String): ApiResponse {
@@ -133,9 +144,18 @@ internal object ProjectShell {
             path == "workspaces" -> ok(workspaces)
             path == "runners" -> ok("""[{"id":"r1","name":"Fixture runner","online":true}]""")
             path == "sessions" && scoped == QUIET -> if (quietStatus == 200) ok("[]") else ApiResponse(quietStatus, """{"message":"The project's sessions are unavailable"}""".encodeToByteArray())
-            path == "sessions" && scoped == LAUNCH -> ok(if (view == "open") list(COORD, WORKER, WAITING) else if (view == "completed") list(DONE) else "[]")
+            path == "sessions" && scoped == LAUNCH -> {
+                val answer = ok(if (view == "open") list(COORD, WORKER, WAITING) else if (view == "completed") list(DONE) else "[]")
+                holdMembers?.await()
+                answer
+            }
             path == "sessions" -> ok(when (view) { "open" -> list(COORD, WORKER, WAITING, PLAIN); "completed" -> list(DONE); else -> "[]" })
             api.path.size == 2 && path.startsWith("sessions/") && method == "GET" -> ok(session(path.removePrefix("sessions/")))
+            api.path.size == 2 && path.startsWith("sessions/") && method == "DELETE" -> {
+                holdDelete?.await()
+                trashed = trashed + path.removePrefix("sessions/")
+                ok("{}")
+            }
             path.startsWith("sessions/") && path.endsWith("/page") -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")
             path == "projects/sidebar" -> ok(sidebar())
             path == "projects" -> ok("""[$project,{"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z"}]""")

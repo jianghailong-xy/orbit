@@ -346,6 +346,40 @@ class RealtimeStoreTest {
         assertEquals("new", store.state.value.directory!!.sessions["open"]!![0].text("title"))
     }
 
+    /** A05-9: a write's re-read is a read that left after the write was answered. One still on the wire from before — the
+     * list poll, or the re-read of an earlier write — is not it: it is dropped rather than published, and read again. */
+    @Test fun aRereadReturnsOnceAReadThatLeftAfterItHasLandedNotOneAlreadyOnTheWire() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        val earlier = CompletableDeferred<Unit>()
+        rig.title = "before the write"; rig.heldDirectory = earlier
+        store.refreshDirectory(); runCurrent()
+        val behind = CompletableDeferred<Unit>()
+        rig.title = "after the write"; rig.heldDirectory = behind
+        val reread = async { store.rereadDirectory() }
+        runCurrent()
+        earlier.complete(Unit); runCurrent()
+        assertFalse("the read from before the write does not count", reread.isCompleted)
+        assertEquals("nor is it published", "original", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+        behind.complete(Unit); runCurrent()
+        assertTrue(reread.isCompleted)
+        assertEquals("after the write", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
+    /** In the background no read can land: the re-read waits for the first one of the next connection. */
+    @Test fun aRereadAskedInTheBackgroundReturnsWithTheNextConnectionsRead() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.setForeground(false); runCurrent()
+        rig.title = "moved while away"
+        val reread = async { store.rereadDirectory() }
+        advanceTimeBy(60_000); runCurrent()
+        assertFalse(reread.isCompleted)
+        store.setForeground(true); runCurrent()
+        assertTrue(reread.isCompleted)
+        assertEquals("moved while away", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+    }
+
     @Test fun defaultNetworkIdentityChangesReconnectEvenWithoutOfflineTransition() = runTest {
         val rig = Rig(this)
         val (_, store) = rig.start()

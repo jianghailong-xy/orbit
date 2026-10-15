@@ -107,7 +107,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val listed = remember(state.session?.snapshot?.detail) {
         state.session?.snapshot?.detail?.let { runCatching { Wire.json.decodeFromJsonElement(DirectorySession.serializer(), it) }.getOrNull() }
     }
-    val actions = remember(api) { SessionActions(api, app.processScope) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
+    val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(rows)
     val nested = remember { object : NestedScrollConnection {

@@ -25,8 +25,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,6 +47,8 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
     private val network = MutableStateFlow(Network())
     private val selection = MutableStateFlow(Selection(null, 0))
     private val directoryRevision = MutableStateFlow(0L)
+    /** The revision the last directory read that landed left at: what [rereadDirectory] waits on. */
+    private val directoryLanded = MutableStateFlow(0L)
     private val sessionRevision = MutableStateFlow(0L)
     private val mutableState = MutableStateFlow(RealtimeState())
     val state: StateFlow<RealtimeState> = mutableState.asStateFlow()
@@ -72,6 +76,13 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         }
     }
     fun refreshDirectory() { directoryRevision.update { it + 1 } }
+    /** Reads the directory again and returns once a read that left after this call has landed — one that saw a write the
+     * caller already had answered. A read still on the wire from before is not it: the revision this bumps makes the loop
+     * drop that answer and read again. Offline or in the background it waits for the next connection's read. */
+    suspend fun rereadDirectory() {
+        val asked = directoryRevision.updateAndGet { it + 1 }
+        directoryLanded.first { it >= asked }
+    }
     fun refreshSession() { sessionRevision.update { it + 1 } }
     /** Mutations check the live inputs too: collectors may not yet have withdrawn `fresh`. */
     fun canAct(handle: SessionHandle, sessionId: String): Boolean {
@@ -175,6 +186,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     if (directoryRevision.value != revision) { refresh.trySend(Unit); continue }
                     publish(handle) { it.copy(directory = snapshot, directoryRefreshing = false,
                         directoryFresh = true, directoryError = null) }
+                    directoryLanded.update { maxOf(it, revision) }
                     cache.update { it.copy(directory = snapshot) }
                     writes.trySend(Unit)
                     retry.healthy()

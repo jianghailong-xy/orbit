@@ -6,6 +6,7 @@ import io.orbitd.android.core.realtime.EventTransport
 import io.orbitd.android.core.realtime.SseFrame
 import io.orbitd.android.navigation.ObjectId
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 
 /** One controlled Orbit server for the A05c shell tests: the production Activity, AuthSession, RealtimeStore and
@@ -35,10 +36,17 @@ internal object NavShell {
     /** What the runner answers a merge of [PLAIN]'s worktree with: `merged`, or `conflict`; null before any merge. */
     @Volatile var mergeAnswer = "merged"
     @Volatile var mergeStatus: String? = null
+    /** A move to Trash waits for this before the server takes it — or refuses it, with [refuse]; [holdDeletes] holds one session's. */
+    @Volatile var holdDelete: CompletableDeferred<Unit>? = null
+    val holdDeletes = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+    /** A read of the Open list waits for this before it answers, with the list as it was when the read arrived. */
+    @Volatile var holdOpen: CompletableDeferred<Unit>? = null
 
     fun reset() {
         calls.clear(); refuse = null; mergeAnswer = "merged"; mergeStatus = null
         lifecycle = mapOf(SESSION to "OPEN", PLAIN to "OPEN"); running = emptySet(); ended = emptySet()
+        holdDelete?.complete(Unit); holdOpen?.complete(Unit); holdDelete = null; holdOpen = null
+        holdDeletes.values.forEach { it.complete(Unit) }; holdDeletes.clear()
     }
 
     val workspaces = """[
@@ -77,14 +85,20 @@ internal object NavShell {
         if (path == "auth/login") return@HttpTransport ok("""{"accessToken":"a05c-access","refreshToken":"a05c-refresh","user":{"id":"u1","email":"owner@a05c.test","name":"Owner"}}""")
         val query = api.query.joinToString("&") { (k, v) -> "$k=$v" }
         calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
-        if (method != "GET") refuse?.let { (status, message) -> return@HttpTransport ApiResponse(status, """{"message":"$message"}""".encodeToByteArray()) }
         val id = api.path.getOrNull(1)?.let { part -> listOf(SESSION, PLAIN).firstOrNull { ObjectId.same(it, part) } }
+        if (method == "DELETE") (id?.let { holdDeletes[it] } ?: holdDelete)?.await()
+        if (method != "GET") refuse?.let { (status, message) -> return@HttpTransport ApiResponse(status, """{"message":"$message"}""".encodeToByteArray()) }
         when {
             path == "auth/logout" -> ok("{}")
             path == "users/me" -> ok("""{"id":"u1","email":"owner@a05c.test","name":"Owner"}""")
             path == "workspaces" -> ok(workspaces)
             path == "runners" -> ok("""[{"id":"r1","name":"Fixture runner","online":true}]""")
-            path == "sessions" -> ok(view(api.query.firstOrNull { it.first == "view" }?.second ?: "open"))
+            path == "sessions" -> {
+                val name = api.query.firstOrNull { it.first == "view" }?.second ?: "open"
+                val answer = view(name)
+                if (name == "open") holdOpen?.await()
+                ok(answer)
+            }
             id != null && api.path.size == 2 && method == "GET" -> ok(session(id))
             id != null && api.path.size == 2 && method == "PATCH" -> ok(session(id))
             id != null && api.path.last() == "complete" -> { lifecycle = lifecycle + (id to "COMPLETED"); ok("{}") }

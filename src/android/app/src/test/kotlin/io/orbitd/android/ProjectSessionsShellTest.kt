@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -220,6 +221,76 @@ class ProjectSessionsShellTest {
         compose.onAllNodesWithTag("project-sessions-progress").assertCountEquals(0)
     }
 
+    /** A05-9 (iOS 62b7009ca): a member moved to Trash leaves the page on the press, and the project's row in the list with it — the
+     * row stops saying a member runs here — while the server has yet to answer. */
+    @Test fun aMemberMovedToTrashLeavesThePageAndItsProjectRowOnThePress() {
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row-running", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasText("Project · 4 sessions")) && exists(hasContentDescription("Options for Wire tests")) }
+        val answer = CompletableDeferred<Unit>()
+        ProjectShell.holdDelete = answer
+        memberAction("Wire tests", "Move to Trash")
+        await { ProjectShell.calls.any { it == "DELETE sessions/${ProjectShell.WORKER}" } }
+        compose.onAllNodesWithContentDescription("Options for Wire tests").assertCountEquals(0)
+        await { exists(hasText("Project · 3 sessions")) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
+        compose.onAllNodesWithTag("project-row-running", useUnmergedTree = true).assertCountEquals(0)
+        assertFalse(toastShows("Moved to Trash"))
+        answer.complete(Unit)
+        await { toastShows("Moved to Trash") }
+        await { app().trashing.ids.value.isEmpty() }
+        compose.onAllNodesWithTag("project-row-running", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    /** A05-9: a member read that left before a move to Trash settled — here the page's first read, still out when the move was taken
+     * and let go — answers with the row in its Completed list. It is read again rather than written, so the row stays gone. */
+    @Test fun aMemberReadFromBeforeTheMoveSettledDoesNotPutTheRowBack() {
+        signIn(); openAlpha()
+        val early = CompletableDeferred<Unit>()
+        ProjectShell.holdMembers = early
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { completedReads() == 1 }
+        ProjectShell.holdMembers = null
+        // Drawn from the app's own lists while the page's read is out.
+        await { exists(hasContentDescription("Options for Shipped docs")) }
+        memberAction("Shipped docs", "Move to Trash")
+        await { toastShows("Moved to Trash") }
+        await { app().trashing.ids.value.isEmpty() && app().trashing.releases == 1L }
+        compose.onAllNodesWithContentDescription("Options for Shipped docs").assertCountEquals(0)
+        val before = completedReads()
+        early.complete(Unit)
+        await { completedReads() > before }
+        compose.waitForIdle()
+        compose.onAllNodesWithContentDescription("Options for Shipped docs").assertCountEquals(0)
+        await { exists(hasText("Project · 3 sessions")) }
+    }
+
+    /** A11-2's rest: a drawer project row counts what waits on you as M2's iOS does (`ProjectAttention.drawerMark`, a
+     * `NeedsYouCountCapsule`) — the four owner items by their counts, the coordinator asking to start the project, and asking to
+     * record it done — and a project with nothing waiting carries no count. */
+    @Test fun aDrawerProjectRowCountsWhatWaitsOnYou() {
+        val since = "2026-10-05T00:00:00Z"
+        ProjectShell.attention = """{"ownerItems":[{"kind":"COORDINATOR_QUESTION","count":1,"oldestWaitingSince":"$since"},
+            {"kind":"ESCALATED","count":2,"oldestWaitingSince":"$since"},{"kind":"SOMETHING_NEW","count":4,"oldestWaitingSince":"$since"}],
+            "startRequest":{"waitingSince":"$since"},"doneRequest":{"waitingSince":"$since"}}"""
+        signIn(); openAlpha()
+        openDrawer(); await { exists(drawerRow("Launch")) }
+        await { compose.onAllNodesWithTag("drawer-project-needs-you:${ProjectShell.LAUNCH}", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("drawer-project-needs-you:${ProjectShell.LAUNCH}", useUnmergedTree = true).assert(hasContentDescription("5 waiting for you"))
+        compose.onAllNodesWithTag("drawer-project-needs-you:${ProjectShell.QUIET}", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNode(drawerRow("Launch")).assert(hasContentDescription("5 waiting for you"))
+    }
+
+    private fun completedReads() = ProjectShell.calls.count { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}" }
+    private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
+    private fun memberAction(session: String, action: String) {
+        compose.onNodeWithContentDescription("Options for $session").performScrollTo().performClick()
+        await { exists(hasText(action) and hasAnyAncestor(isDialog())) }
+        compose.onNode(hasText(action) and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+        compose.waitForIdle()
+    }
     private fun pageLines(): List<String> = compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions"))).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
         .filter { it in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch", "Wire tests", "Quota retry", "Shipped docs") }
