@@ -969,9 +969,12 @@ struct TranscriptView: View {
             // Drawn by the row the transcript draws the same turn with once a runner takes it, so a
             // turn that is a card is that card from the moment it is queued — off the cards the
             // projection carried (`QueuedTurnInfo.cards`), never out of its words — and keeps its
-            // shape when it lands; the queue adds only its own controls.
+            // shape when it lands; the queue adds only its own controls. A steer the server still
+            // holds is taken back by its own Withdraw instead, as it is once a runner has it.
             UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {
                 Task { await console.cancelQueued(bubble) }
+            }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
+                Task { await console.withdrawSteer(bubble) }
             })
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
@@ -1626,7 +1629,7 @@ struct TranscriptItemView: View {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b)
+            UserTurnRow(bubble: b, steer: steerControls(b))
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
@@ -1666,6 +1669,15 @@ struct TranscriptItemView: View {
             // behind the triangle.
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+        }
+    }
+
+    /// A steer the reader typed offers to take it back while nothing has read it, through the
+    /// console — which a list drawn without one (a sub-agent's) has none of.
+    private func steerControls(_ bubble: UserBubble) -> SteerControls? {
+        guard let console else { return nil }
+        return SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
+            Task { await console.withdrawSteer(bubble) }
         }
     }
 }

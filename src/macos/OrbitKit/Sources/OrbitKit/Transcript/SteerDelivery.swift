@@ -7,11 +7,16 @@ import Foundation
 /// queued-turns list. The two look nothing alike to the person who sent one:
 ///
 /// - a QUEUED message is waiting for its own turn. Nothing has read it, it can still be
-///   withdrawn, and when it finally runs it gets a reply of its own.
-/// - a STEER is already on its way into the turn in progress. It cannot be withdrawn (the engine
-///   may be reading it as we ask), it produces no reply of its own — the running turn's does —
-///   and so how far it got IS the whole visible outcome. Silence here is indistinguishable from a
-///   message that was dropped, which is why every stage has a word for it.
+///   cancelled, and when it finally runs it gets a reply of its own.
+/// - a STEER is already on its way into the turn in progress. It produces no reply of its own —
+///   the running turn's does — and so how far it got IS the whole visible outcome. Silence here is
+///   indistinguishable from a message that was dropped, which is why every stage has a word for it.
+///   Until the engine reads it, it can be withdrawn where the engine can drop it unread and say so
+///   (claude: its runner marks the steer `withdrawable`); once read, it is part of the turn.
+///
+/// The words follow the read receipts people already know from chat: sending, then waiting to be
+/// read, then read. Once the engine has it the message has arrived; what it waits for is the
+/// engine, not the wire.
 ///
 /// The stages are the runner's, not invented here (`RunEventType.userDelivery`): a message is
 /// accepted, then handed to the engine, then echoed back by it, which is the only moment it is
@@ -55,14 +60,16 @@ public enum SteerDelivery {
     public static func state(_ delivery: String?) -> SteerDeliveryState {
         switch delivery {
         case "written":
-            // The engine has it and the model has not read it yet: `claude` inside a tool call
-            // reads nothing off stdin until that tool finishes, and codex buffers a steer until
-            // its next model request — measured at 31 seconds. On its way, but past us.
-            return SteerDeliveryState(label: "Delivering…", tone: .progress)
+            // The engine has it and the model has not read it yet: `claude` busy in a tool call
+            // takes it into the conversation only when that tool finishes, and codex buffers a
+            // steer until its next model request — measured at 31 seconds. It has arrived; what it
+            // waits for is the engine.
+            return SteerDeliveryState(label: "Waiting to be read", tone: .progress)
         case "acknowledged":
             // The engine echoed it back (claude's --replay-user-messages, codex's userMessage
-            // item). It is in the conversation.
-            return SteerDeliveryState(label: "Sent into this turn", tone: .delivered)
+            // item). The message is in the conversation, and the reply this turn gives is the
+            // answer to it.
+            return SteerDeliveryState(label: "Read in this turn", tone: .delivered)
         case "requeued":
             // It missed the turn it was aimed at, and the runner can prove nothing read it, so
             // it goes back to being an ordinary queued message. The one non-delivery that still
@@ -70,8 +77,36 @@ public enum SteerDelivery {
             return SteerDeliveryState(label: "Queued for next turn instead", tone: .progress)
         case "failed":
             return SteerDeliveryState(label: "Not delivered", tone: .failed)
+        case "unconfirmed":
+            // It reached the engine; whether the engine read it is what nobody can say. Neutral on
+            // purpose: it may have been acted on, and a resend would do the work twice.
+            return SteerDeliveryState(label: "Couldn't confirm it was read", tone: .failed)
         default:
             return SteerDeliveryState(label: "Sending…", tone: .progress)
         }
+    }
+
+    /// The runner's word that the engine dropped a steer unread at its sender's request: nothing
+    /// will ever read it, so its bubble leaves the transcript (`TranscriptReducer`).
+    public static let withdrawn = "withdrawn"
+
+    /// Whether to offer taking a steer back: its runner said the engine can drop it unread
+    /// (`withdrawable` on its user event), and nothing has read, failed or withdrawn it since.
+    public static func offersWithdraw(delivery: String?, withdrawable: Bool) -> Bool {
+        withdrawable && (delivery == nil || delivery == "enqueued" || delivery == "written")
+    }
+
+    /// Whether this bubble offers to take its steer back. While the server still holds it —
+    /// `pending`, not yet echoed by any runner — it can be had back whatever the engine: the
+    /// server simply deletes it. Once a runner holds it, only where that runner said its engine
+    /// can drop it unread. Either way only for words somebody typed
+    /// (`ComposerLogic.restorableText`), which are what a withdrawal hands back to the composer,
+    /// and only once the server's turn id is known, which the DELETE keys on. Web parity:
+    /// `Transcript.tsx`'s `SteerState` and the queued tail's `onWithdraw`.
+    public static func offersWithdraw(_ bubble: UserBubble) -> Bool {
+        guard bubble.steer, bubble.turnId != nil, !bubble.undelivered,
+              ComposerLogic.restorableText(of: bubble) != nil else { return false }
+        return offersWithdraw(delivery: bubble.delivery,
+                              withdrawable: bubble.pending || bubble.withdrawable)
     }
 }

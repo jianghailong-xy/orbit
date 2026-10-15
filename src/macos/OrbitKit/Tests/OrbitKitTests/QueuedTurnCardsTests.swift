@@ -49,7 +49,7 @@ final class QueuedTurnCardsTests: XCTestCase {
     /// Everything on a `UserBubble` that is not a card: the turn's words and inputs, and how far it got.
     private static let notCards: Set<String> = [
         "id", "text", "attachments", "ts", "clientTurnId", "turnId", "pending", "queued", "undelivered",
-        "note", "authoredByOrbit", "steer", "delivery",
+        "note", "authoredByOrbit", "steer", "delivery", "withdrawable",
     ]
 
     /// What the agent reads on such a turn: words written for it, which no card is read out of.

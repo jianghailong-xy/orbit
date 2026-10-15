@@ -2779,7 +2779,7 @@ final class ConsoleModel {
             if let tid = accepted.turnId {
                 // …and with what the server filed it AS. A message sent during a running turn is
                 // written into that turn (a steer) rather than queued behind it, and the bubble
-                // has to stop saying "Queued" and stop offering a withdraw the server refuses.
+                // has to stop saying "Queued" and trade the queue's Cancel for a steer's Withdraw.
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
                                             steer: SteerDelivery.isSteerKind(accepted.kind))
                 publishStateNow()
@@ -3478,6 +3478,46 @@ final class ConsoleModel {
             }
         } catch {
             showTransientStatus("This message is already being processed and can't be withdrawn")
+        }
+    }
+
+    /// Steers asked for back and not yet answered, by turn id: each one's bubble reads
+    /// "Withdrawing…" and offers nothing more until the server answers (`withdrawSteer`).
+    private(set) var withdrawingSteers: Set<String> = []
+
+    /// Take back a message sent into the running turn while nothing has read it yet — a steer's
+    /// Withdraw (web parity: `WorkspaceView`'s `withdrawSteer`). The same DELETE as `cancelQueued`:
+    /// the server deletes a steer no runner has taken yet, and asks the runner holding one to have
+    /// its engine drop it unread, which only the engine can say it did — so unlike Cancel, nothing
+    /// leaves the screen or comes back until the server answers. Then the bubble goes at once,
+    /// ahead of the runner's own `withdrawn` delivery, and the words go back into the composer
+    /// under whatever is being typed there: an explicit press, so a draft keeps its place above
+    /// them instead of winning over them. Attachments aren't rehydrated (the composer needs their
+    /// bytes), as with Cancel. Offered only for words somebody typed (`SteerDelivery.offersWithdraw`).
+    func withdrawSteer(_ bubble: UserBubble) async {
+        guard let turnId = bubble.turnId, !withdrawingSteers.contains(turnId) else { return }
+        withdrawingSteers.insert(turnId)
+        defer { withdrawingSteers.remove(turnId) }
+        do {
+            try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+            reducer.removeWithdrawnSteer(turnId: turnId)
+            publishStateNow()
+            if let body = ComposerLogic.restorableText(of: bubble) {
+                composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? body : composerText + "\n\n" + body
+            }
+        } catch {
+            // Too late is an answer, not a failure: the engine read it first, so it is part of the
+            // turn now — said in the reader's terms, the server's longer sentence being for the API's
+            // own callers. Anything else left the message where it was, on its way to being read.
+            if APIClient.refusalCode(error) == "STEER_ALREADY_READ" {
+                let reader = engine == "codex" ? "Codex" : engine == "claude" ? "Claude" : "The agent"
+                onToast(ToastRequest(message: "Too late to withdraw",
+                                     detail: "\(reader) has already read it.", tone: .info))
+            } else {
+                onToast(ToastRequest(message: "Couldn't withdraw the message",
+                                     detail: APIClient.failureReason(error), tone: .error))
+            }
         }
     }
 

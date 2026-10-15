@@ -1168,6 +1168,127 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items[0].asAssistant?.displayText, "still streaming")
     }
 
+    // MARK: - taking a steer back
+
+    /// A message written into the running turn (a steer), as its runner files it: `withdrawable`
+    /// when its engine can drop it unread (claude), absent from a runner that cannot or predates it.
+    private func steerEvent(_ seq: Int, turn: String, text: String = "use the other endpoint",
+                            withdrawable: Bool? = true) -> RunEvent {
+        var payload: [String: JSONValue] = ["text": .string(text), "steer": .bool(true),
+                                            "delivery": .string("written")]
+        if let withdrawable { payload["withdrawable"] = .bool(withdrawable) }
+        return RunEvent(seq: seq, type: .user, turnId: turn, payload: .object(payload))
+    }
+
+    private func withdrawnEvent(_ seq: Int, turn: String) -> RunEvent {
+        RunEvent(seq: seq, type: .userDelivery,
+                 payload: .object(["turnId": .string(turn), "delivery": .string("withdrawn")]))
+    }
+
+    /// Whether a steer can be taken back is the runner's word on the steer's own durable `user`
+    /// event, so the bubble holds it after a reload as well as live — and an idle send the server
+    /// filed as a steer takes it when its echo reconciles the bubble in place.
+    func testASteerCarriesWhetherItsEngineCanDropItUnread() {
+        var r = TranscriptReducer()
+        r.apply(steerEvent(1, turn: "t1", text: "first"))
+        r.apply(steerEvent(2, turn: "t2", text: "second", withdrawable: nil))
+        r.apply(steerEvent(3, turn: "t3", text: "third", withdrawable: false))
+        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.withdrawable), [true, false, false])
+
+        var sent = TranscriptReducer()
+        sent.addOptimisticUser(clientTurnId: "c1", text: "use the other endpoint")
+        sent.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", steer: true)
+        sent.apply(steerEvent(4, turn: "t1"))
+        XCTAssertEqual(sent.state.items.count, 1, "the echo reconciles the bubble rather than adding one")
+        XCTAssertEqual(sent.state.items[0].asUser?.withdrawable, true)
+    }
+
+    /// A steer the engine provably never read runs again as the ordinary message it would have been:
+    /// no steer any more, and nothing to withdraw either — the queue's own rules apply to it now.
+    func testASteerHandedBackAsAMessageIsNoLongerWithdrawable() throws {
+        var r = TranscriptReducer()
+        r.apply(steerEvent(1, turn: "t1"))
+        r.apply(RunEvent(seq: 2, type: .userDelivery,
+                         payload: .object(["turnId": .string("t1"), "delivery": .string("requeued")])))
+        r.apply(RunEvent(seq: 3, type: .user, turnId: "t1", payload: .object([
+            "text": .string("use the other endpoint"), "delivery": .string("enqueued"),
+        ])))
+
+        XCTAssertEqual(r.state.items.count, 1, "the same message, not a second copy of it")
+        let bubble = try XCTUnwrap(r.state.items[0].asUser)
+        XCTAssertFalse(bubble.steer)
+        XCTAssertFalse(bubble.withdrawable)
+    }
+
+    /// The runner's word that the engine dropped a steer unread (`withdrawn`) takes its bubble out of
+    /// the transcript — the agent never saw it, and its words went back to the composer that asked —
+    /// while the reply it landed in streams on into the same bubble, the cursor closed over the gap.
+    func testAWithdrawnSteerLeavesTheTranscriptAndTheReplyStreamsOn() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, turnId: "t0",
+                         payload: .object(["text": .string("refactor the parser")])))
+        r.apply(steerEvent(2, turn: "t1"))
+        r.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("Renaming the ")])))
+
+        r.apply(withdrawnEvent(3, turn: "t1"))
+        r.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("widget.")])))
+
+        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.text), ["refactor the parser"])
+        XCTAssertEqual(r.state.items.compactMap(\.asAssistant).map(\.displayText), ["Renaming the widget."])
+    }
+
+    /// A steer still drawn in the queued tail, or as the accepted head, its echo not in yet, is taken
+    /// down there by the same word — and no other row moves.
+    func testAWithdrawnSteerLeavesTheTailItIsDrawnIn() {
+        var r = TranscriptReducer()
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t-head", kind: "message", content: "already taken", placement: "accepted"),
+            QueuedTurnInfo(turnId: "t1", kind: "steer", content: "use the other endpoint"),
+            QueuedTurnInfo(turnId: "t2", kind: "message", content: "and then deploy"),
+        ], knownBefore: [])
+        XCTAssertEqual(r.state.accepted.map(\.turnId), ["t-head"])
+        XCTAssertEqual(r.state.queued.map(\.turnId), ["t1", "t2"])
+
+        r.apply(withdrawnEvent(1, turn: "t1"))
+        XCTAssertEqual(r.state.queued.map(\.turnId), ["t2"], "only the withdrawn steer leaves the queue")
+
+        r.removeWithdrawnSteer(turnId: "t-head")
+        XCTAssertTrue(r.state.accepted.isEmpty)
+        XCTAssertEqual(r.state.queued.map(\.turnId), ["t2"])
+    }
+
+    /// The console that asked takes the bubble down the moment the server confirms
+    /// (`removeWithdrawnSteer`), ahead of the runner's own word; that word then finds nothing left to
+    /// remove. Either order is one removal, and a turn drawn nowhere changes nothing.
+    func testRemovingAWithdrawnSteerAheadOfTheRunnersWordIsOneRemoval() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, turnId: "t0",
+                         payload: .object(["text": .string("refactor the parser")])))
+        r.apply(steerEvent(2, turn: "t1", text: "use the other endpoint"))
+        r.apply(steerEvent(3, turn: "t2", text: "and keep the old one"))
+
+        r.removeWithdrawnSteer(turnId: "t1")
+        let texts = ["refactor the parser", "and keep the old one"]
+        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.text), texts)
+
+        r.apply(withdrawnEvent(4, turn: "t1"))
+        r.removeWithdrawnSteer(turnId: "never-drawn")
+        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.text), texts)
+    }
+
+    /// A snapshot keeps whether a steer can be withdrawn, and one written before the flag existed
+    /// still rehydrates — as not withdrawable, which offers nothing the runner never said it could do.
+    func testWithdrawableSurvivesASnapshotAndAnOlderSnapshotDecodesWithoutIt() throws {
+        let bubble = UserBubble(id: "u1", text: "use the other endpoint", turnId: "t1", pending: false,
+                                steer: true, delivery: "written", withdrawable: true)
+        XCTAssertEqual(try JSONDecoder().decode(UserBubble.self, from: JSONEncoder().encode(bubble)), bubble)
+
+        let older = try JSONDecoder().decode(UserBubble.self,
+                                             from: Data(#"{"id":"u1","text":"hi","steer":true}"#.utf8))
+        XCTAssertTrue(older.steer)
+        XCTAssertFalse(older.withdrawable)
+    }
+
     /// The durable `user` event carries `attachments` ([{id,mime,name}]) and a `ts` — both must
     /// land on the bubble so it can render image thumbnails / file chips and a relative time
     /// (web parity; the runner echoes `attachments`, not `attachmentIds`).

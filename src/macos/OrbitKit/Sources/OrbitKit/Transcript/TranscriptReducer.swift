@@ -597,8 +597,8 @@ public struct TranscriptReducer: Sendable, Codable {
     /// files a message sent while a turn is running into that turn instead of queueing it behind
     /// it. It is authoritative over the send's own guess — that guess is read off a status the
     /// stream may not have caught up with, while the server decided this under the Session row
-    /// lock — so a bubble that says "Queued" here stops saying it, and stops offering a withdraw
-    /// the server would refuse.
+    /// lock — so a bubble that says "Queued" here stops saying it, and trades the queue's Cancel
+    /// for a steer's own Withdraw (`SteerDelivery.offersWithdraw`).
     public mutating func setOptimisticTurnId(clientTurnId: String, turnId: String, steer: Bool = false) {
         // A queued send lives in `state.queued`, an idle one in `state.items` — tag whichever holds it.
         if let i = state.queued.firstIndex(where: { $0.clientTurnId == clientTurnId && $0.pending }) {
@@ -642,6 +642,26 @@ public struct TranscriptReducer: Sendable, Codable {
     /// reconcile, since it's gone by then). Web parity: `setQueued(q ⇒ q.filter(…))`.
     public mutating func removeQueued(id: String) {
         state.queued.removeAll { $0.id == id }
+    }
+
+    /// Take a withdrawn steer off the screen, wherever it is drawn: the transcript, the queued tail
+    /// or the accepted head. The runner's `withdrawn` delivery does this for every client watching
+    /// (`applyUserDelivery`); the console that asked calls it the moment the server confirms, ahead
+    /// of that event, because the words have already gone back to its composer (web parity:
+    /// `withdrawnSteers`). A turn drawn nowhere is a no-op, so the two arriving in either order
+    /// make one removal.
+    public mutating func removeWithdrawnSteer(turnId: String) {
+        state.queued.removeAll { $0.turnId == turnId }
+        state.accepted.removeAll { $0.turnId == turnId }
+        guard let i = state.items.lastIndex(where: {
+            if case .user(let b) = $0 { return b.turnId == turnId }
+            return false
+        }) else { return }
+        state.items.remove(at: i)
+        // The open-bubble cursors are item INDICES, and a steer lands in the middle of a reply that
+        // may still be streaming: close the gap, as `removeOptimisticUser` does.
+        if let o = openAssistant, o > i { openAssistant = o - 1 }
+        if let o = openThinking, o > i { openThinking = o - 1 }
     }
 
     /// Reconcile the visible queued tail, and the accepted head, against GET
@@ -1151,8 +1171,15 @@ public struct TranscriptReducer: Sendable, Codable {
     /// and reads the same to the person: this message never reached the engine. A message is never
     /// re-marked as arrived by a later report — the states only move forward — but neither is a
     /// failure ever overwritten by a stale one, since the runner reports each transition once.
+    ///
+    /// `withdrawn` is the engine's word that it dropped a steer unread at its sender's request:
+    /// nothing will ever read it, so nothing of it is drawn (`removeWithdrawnSteer`).
     private mutating func applyUserDelivery(_ ev: RunEvent) {
         guard let turnId = str(ev, "turnId") ?? ev.turnId, let delivery = str(ev, "delivery") else { return }
+        if delivery == SteerDelivery.withdrawn {
+            removeWithdrawnSteer(turnId: turnId)
+            return
+        }
         if let i = state.items.lastIndex(where: {
             if case .user(let b) = $0 { return b.turnId == turnId }
             return false
@@ -1200,6 +1227,10 @@ public struct TranscriptReducer: Sendable, Codable {
         // says nothing about itself.
         let delivery = str(ev, "delivery")
         let steer = ev.payload["steer"]?.boolValue == true
+        // And whether its runner can have the engine drop it unread, which is what lets its bubble
+        // offer to take it back (`SteerDelivery.offersWithdraw`) — on the same durable event, so a
+        // reload still knows.
+        let withdrawable = ev.payload["withdrawable"]?.boolValue == true
         // An ordinary user message opens a turn, so anything still streaming when it arrives was
         // left dangling and is closed here. A steer is the one user message that is NOT a
         // boundary: it lands in the middle of a reply that is still being written. Closing that
@@ -1264,6 +1295,7 @@ public struct TranscriptReducer: Sendable, Codable {
             return false
         }), case .user(var b) = state.items[i] {
             b.steer = false
+            b.withdrawable = false
             b.delivery = delivery
             b.undelivered = delivery == "failed"
             if str(ev, "text") != nil {
@@ -1295,6 +1327,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
+                b.withdrawable = withdrawable
                 // Only a runner that reports delivery at all gets to settle this: an older one
                 // says nothing, and reading its silence as "arrived" would clear a bubble the
                 // terminal-drain had already marked as never taken.
@@ -1314,6 +1347,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                             undelivered: delivery == "failed",
                                             note: recorded?.note,
                                             steer: steer, delivery: delivery,
+                                            withdrawable: withdrawable,
                                             itemCard: itemCard, taskStart: taskStart,
                                             startedCard: startedCard,
                                             sessionMessage: sessionMessage,

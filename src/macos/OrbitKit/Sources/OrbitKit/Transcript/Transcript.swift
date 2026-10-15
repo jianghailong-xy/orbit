@@ -165,20 +165,27 @@ public struct UserBubble: Equatable, Sendable, Codable {
     public var authoredByOrbit: Bool
     /// Filed by the server as a steer: written into the turn that was already running rather than
     /// queued behind it. Not a variety of `queued` — the opposite of it: this message is not
-    /// waiting for anything and cannot be withdrawn. Since it is answered by the turn it joined
-    /// rather than by one of its own, `delivery` below is the only report it ever gets, so the
-    /// indicator is shown for a steer where an ordinary message shows nothing. Learned from the
-    /// POST response, and re-learned from the durable `user` event after a reload.
+    /// waiting for a turn of its own, and it can be taken back only until the engine reads it
+    /// (`withdrawable`). Since it is answered by the turn it joined rather than by one of its own,
+    /// `delivery` below is the only report it ever gets, so the indicator is shown for a steer
+    /// where an ordinary message shows nothing. Learned from the POST response, and re-learned from
+    /// the durable `user` event after a reload.
     public var steer: Bool
     /// How far this message got into the engine's conversation: the state its `user` event opened
     /// with, amended by each `user_delivery` after it (`SteerDelivery`). Nil for a transcript
     /// recorded before the runner reported delivery at all, and on every runtime that does not.
     public var delivery: String?
+    /// The runner's word, on a steer's own `user` event, that its engine can drop it unread
+    /// (claude's CLI can take a message back out of its queue and say whether it did) — so the
+    /// bubble may offer to take it back while it waits (`SteerDelivery.offersWithdraw`). False on
+    /// every other message, on an engine that cannot, and from a runner that predates it.
+    public var withdrawable: Bool
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
                 undelivered: Bool = false, note: String? = nil,
-                steer: Bool = false, delivery: String? = nil, itemCard: OpenItemDelivery? = nil,
+                steer: Bool = false, delivery: String? = nil, withdrawable: Bool = false,
+                itemCard: OpenItemDelivery? = nil,
                 taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
                 sessionReplies: [SessionReply]? = nil,
@@ -197,6 +204,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.note = note
         self.steer = steer
         self.delivery = delivery
+        self.withdrawable = withdrawable
         self.itemCard = itemCard
         self.taskStart = taskStart
         self.startedCard = startedCard
@@ -212,7 +220,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery, itemCard, taskStart, startedCard, sessionMessage, sessionReplies
-        case authoredByOrbit, reviewRequest, reviewReturn
+        case authoredByOrbit, reviewRequest, reviewReturn, withdrawable
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -228,6 +236,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         note = try? c.decodeIfPresent(String.self, forKey: .note)
         steer = (try? c.decodeIfPresent(Bool.self, forKey: .steer)) ?? false
         delivery = try? c.decodeIfPresent(String.self, forKey: .delivery)
+        withdrawable = (try? c.decodeIfPresent(Bool.self, forKey: .withdrawable)) ?? false
         // A snapshot written before the delivery card existed has no such key, and its turns are
         // exactly the deliveries that keep their old reading — a bubble.
         itemCard = try? c.decodeIfPresent(OpenItemDelivery.self, forKey: .itemCard)

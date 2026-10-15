@@ -7,12 +7,29 @@ import OrbitKit
 struct QueuedControls {
     /// Takes the turn back off the queue (`ConsoleModel.cancelQueued`): a card's Cancel, a watch
     /// wake's Withdraw. Nil until the server's turn id is known — the DELETE keys on it — and for a
-    /// steer: written into the running turn rather than queued behind it, it is refused by the server,
-    /// which will not withdraw what the engine may already be reading.
+    /// steer: written into the running turn rather than queued behind it, it is taken back by its
+    /// own Withdraw (`SteerControls`), and only while nothing has read it.
     let onCancel: (() -> Void)?
 
     init(bubble: UserBubble, cancel: @escaping () -> Void) {
         onCancel = bubble.turnId == nil || bubble.steer ? nil : cancel
+    }
+}
+
+/// What a steer the reader typed has while nothing has read it, wherever it is drawn — still on the
+/// server's queue, or written into the running turn: the way to take it back
+/// (`ConsoleModel.withdrawSteer`), drawn beside how far it got, and whether that has been asked for
+/// and not yet answered.
+struct SteerControls {
+    /// Nil wherever there is nothing to take back (`SteerDelivery.offersWithdraw`): no steer, no
+    /// words of the reader's, or one the engine has read, failed or cannot drop unread.
+    let onWithdraw: (() -> Void)?
+    /// Asked for and not yet answered: the bubble reads "Withdrawing…" and offers nothing more.
+    let withdrawing: Bool
+
+    init(bubble: UserBubble, withdrawing asked: Set<String>, withdraw: @escaping () -> Void) {
+        onWithdraw = SteerDelivery.offersWithdraw(bubble) ? withdraw : nil
+        withdrawing = bubble.turnId.map { asked.contains($0) } ?? false
     }
 }
 
@@ -31,6 +48,8 @@ struct UserTurnRow: View {
     let bubble: UserBubble
     /// What only a turn still waiting on the queue has; nil for one the transcript holds.
     var queued: QueuedControls? = nil
+    /// What a steer has, queued or delivered; nil where there is no console to act through.
+    var steer: SteerControls? = nil
 
     var body: some View {
         let b = bubble
@@ -131,7 +150,8 @@ struct UserTurnRow: View {
             // in it, in the reader's own name. A job that ended while a turn ran was written
             // into that turn as a steer: the same line, where its echo landed inside the running
             // turn, saying how far it got (web parity: `Transcript.tsx`'s `steer=`) — and, while
-            // it waits for the runner, with no Cancel, because nothing takes a steer back.
+            // it waits for the runner, with no Cancel: a steer is taken back only by its own
+            // Withdraw, and only when somebody typed it.
             VStack(alignment: .leading, spacing: 6) {
                 BackgroundWakeCardView(wake: background, ts: b.ts,
                                        undelivered: undelivered,
@@ -146,7 +166,7 @@ struct UserTurnRow: View {
                 }
             }
         } else {
-            UserBubbleView(bubble: b, onCancelQueued: cancel)
+            UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer)
         }
     }
 
