@@ -271,15 +271,16 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 		return root, "", nil
 	}
 	// A failure here is read in the job's error: it says which operation, in which checkout, and what git said.
-	if err := fetchWikiOriginMain(root); err != nil {
-		return "", "", fmt.Errorf("the %s operation could not fetch origin main into the checkout %s, so nothing was read: %v",
+	trackingRef, err := fetchWikiOriginDefault(root)
+	if err != nil {
+		return "", "", fmt.Errorf("the %s operation could not fetch origin's default branch into the checkout %s, so nothing was read: %v",
 			cmd.Kind, root, err)
 	}
-	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", trackingRef+"^{commit}")
 	ref := strings.TrimSpace(string(out))
 	if err != nil || code != 0 || !wikiCommitSha.MatchString(ref) {
-		return "", "", fmt.Errorf("the %s operation found no commit at origin/main in the checkout %s after the fetch, so "+
-			"nothing was read: %s", cmd.Kind, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
+		return "", "", fmt.Errorf("the %s operation found no commit at %s in the checkout %s after the fetch, so "+
+			"nothing was read: %s", cmd.Kind, trackingRef, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
 	}
 	if first != "" && !wikiRepoOpStartsFrom(root, ref, first) {
 		return "", "", fmt.Errorf("the checkout %s does not start from the space's first commit %s: "+

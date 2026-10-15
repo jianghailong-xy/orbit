@@ -432,7 +432,7 @@ func TestWikiAnchorsFetchFailureChecksNothing(t *testing.T) {
 		return http.StatusOK, anchorsListReply(f.checkout, "", `{"entryId":"e1","revision":1,"anchors":[{"index":0,"type":"path","path":"docs/a.md"}]}`)
 	}, recordEveryEntry)
 	err := cmdWikiCLI([]string{"anchors", "verify", "--space", "space-1"}, strings.NewReader(""), io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "git fetch origin main failed") || !strings.Contains(err.Error(), "nothing was checked") {
+	if err == nil || !strings.Contains(err.Error(), "git fetch of origin's default branch failed") || !strings.Contains(err.Error(), "nothing was checked") {
 		t.Fatalf("a failed fetch = %v, want the refusal that says nothing was checked", err)
 	}
 	if reports := reportsOf(requests()); len(reports) != 0 {

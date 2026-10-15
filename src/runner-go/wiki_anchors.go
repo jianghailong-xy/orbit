@@ -76,10 +76,6 @@ const (
 	wikiAnchorReportTimeout = 2 * time.Minute
 )
 
-// wikiAnchorsVerifyRefspec is what the fetch asks for: origin's main, into origin/main, whatever the
-// checkout's own configured refspecs are.
-const wikiAnchorsVerifyRefspec = "+refs/heads/main:refs/remotes/origin/main"
-
 var wikiCommitSha = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // ── The server's two routes ─────────────────────────────────────────────────────────────────────
@@ -367,24 +363,26 @@ func wikiAnchorsCheckout(flagValue string, listed *wikiAnchorRepo) (string, erro
 	return abs, nil
 }
 
-// fetchWikiAnchorsRef fetches origin's main and answers the commit origin/main names after it: every
+// fetchWikiAnchorsRef fetches origin's default branch and answers the commit it names after it: every
 // anchor of the run is checked on that one commit, and the report says which.
 func fetchWikiAnchorsRef(repo string) (string, error) {
-	if err := fetchWikiOriginMain(repo); err != nil {
-		return "", fmt.Errorf("orbit wiki anchors verify: git fetch origin main failed in %s, so nothing was checked and "+
-			"nothing reported — a check against an origin/main that was not just fetched says nothing about main: %v",
+	trackingRef, err := fetchWikiOriginDefault(repo)
+	if err != nil {
+		return "", fmt.Errorf("orbit wiki anchors verify: git fetch of origin's default branch failed in %s, so nothing was checked and "+
+			"nothing reported — a check against a branch that was not just fetched says nothing about its current state: %v",
 			repo, err)
 	}
-	out, code, stderr, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+	out, code, stderr, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", trackingRef+"^{commit}")
 	ref := strings.TrimSpace(string(out))
 	if err != nil || code != 0 || !wikiCommitSha.MatchString(ref) {
-		return "", fmt.Errorf("orbit wiki anchors verify: origin/main names no commit in %s after the fetch: %s",
+		return "", fmt.Errorf("orbit wiki anchors verify: %s names no commit in %s after the fetch: %s",
+			trackingRef,
 			repo, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
 	}
 	return ref, nil
 }
 
-// The wiki fetch lock (fetchWikiOriginMain): a file in the repository's git directory, and how often a
+// The wiki fetch lock (fetchWikiOriginDefault): a file in the repository's git directory, and how often a
 // fetch waiting for it looks again.
 const (
 	wikiFetchLockName = "orbit-wiki-fetch.lock"
@@ -396,9 +394,10 @@ const (
 // (repoWaitSeconds). A variable only so a test can outwait a held lock in less than a minute.
 var wikiFetchLockWait = time.Minute
 
-// fetchWikiOriginMain fetches origin's main into refs/remotes/origin/main — the one fetch every wiki
+// fetchWikiOriginDefault fetches origin's default branch into its remote-tracking ref — the one fetch every wiki
 // reader of a checkout makes: the runner's repository operations, `orbit wiki anchors verify`, and a
-// maintenance run's checkout in a session. An error is git's own words; each caller says what it means.
+// maintenance run's checkout in a session. It answers that tracking ref. An error is git's own words;
+// each caller says what it means.
 //
 // THE FAILURE THIS EXISTS FOR (2026-10-09, the canary's docs build 79620f23). A fetch updates
 // refs/remotes/origin/main only from the value it read when it began. Two fetches of one checkout that
@@ -422,22 +421,70 @@ var wikiFetchLockWait = time.Minute
 // --no-auto-maintenance: the run starts no maintenance in a checkout it only reads. Git's own after a
 // fetch is a detached process that holds the fetch's output for a moment after the fetch has exited —
 // a moment as long as a loaded machine makes it (wikiAnchorGit).
-func fetchWikiOriginMain(repo string) error {
+func fetchWikiOriginDefault(repo string) (string, error) {
 	if common := gitCommonDir(repo); common != "" {
 		if release, held := acquireWikiFetchLock(filepath.Join(common, wikiFetchLockName), wikiFetchLockWait); held {
 			defer release()
 		}
 	}
+	branch, err := wikiOriginDefaultBranch(repo)
+	if err != nil {
+		return "", err
+	}
+	trackingRef := "refs/remotes/origin/" + branch
+	refspec := "+refs/heads/" + branch + ":" + trackingRef
 	for attempt := 1; ; attempt++ {
-		_, code, stderr, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", wikiAnchorsVerifyRefspec)
+		_, code, stderr, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", refspec)
 		if err == nil && code == 0 {
-			return nil
+			// Some older clones have no origin/HEAD. Repair it best-effort so readers that do not fetch
+			// (notably an import in an existing session) choose the same branch this fetch discovered.
+			_, _, _, _ = wikiAnchorGit(repo, wikiAnchorGitTimeout, "symbolic-ref", "refs/remotes/origin/HEAD", trackingRef)
+			return trackingRef, nil
 		}
 		if err != nil || !strings.Contains(stderr, "cannot lock ref") || attempt == integrationFetchLockAttempts {
-			return errors.New(firstNonEmpty(strings.TrimSpace(stderr), errString(err), fmt.Sprintf("git fetch exited %d", code)))
+			return "", errors.New(firstNonEmpty(strings.TrimSpace(stderr), errString(err), fmt.Sprintf("git fetch exited %d", code)))
 		}
 		integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
 	}
+}
+
+// wikiOriginDefaultBranch reads the remote's HEAD, not a branch name guessed by Orbit. The remote
+// query handles an old checkout whose origin/HEAD was never created; the local symref is the offline
+// fallback and is also what a normal clone already has.
+func wikiOriginDefaultBranch(repo string) (string, error) {
+	if out, code, _, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "ls-remote", "--symref", "origin", "HEAD"); err == nil && code == 0 {
+		for _, line := range strings.Split(string(out), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 3 && fields[0] == "ref:" && fields[2] == "HEAD" && strings.HasPrefix(fields[1], "refs/heads/") {
+				if branch := strings.TrimPrefix(fields[1], "refs/heads/"); branch != "" {
+					return branch, nil
+				}
+			}
+		}
+	}
+	if out, code, _, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"); err == nil && code == 0 {
+		if ref := strings.TrimSpace(string(out)); strings.HasPrefix(ref, "refs/remotes/origin/") {
+			if branch := strings.TrimPrefix(ref, "refs/remotes/origin/"); branch != "" {
+				return branch, nil
+			}
+		}
+	}
+	return "", errors.New("origin does not advertise a default branch and refs/remotes/origin/HEAD is not set")
+}
+
+// wikiOriginDefaultTrackingRef is the best local answer for code that deliberately does not fetch.
+func wikiOriginDefaultTrackingRef(repo string) string {
+	if out, code, _, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"); err == nil && code == 0 {
+		if ref := strings.TrimSpace(string(out)); strings.HasPrefix(ref, "refs/remotes/origin/") {
+			return ref
+		}
+	}
+	for _, ref := range []string{"refs/remotes/origin/main", "refs/remotes/origin/master"} {
+		if _, code, _, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", ref+"^{commit}"); err == nil && code == 0 {
+			return ref
+		}
+	}
+	return ""
 }
 
 // ── The three checks ────────────────────────────────────────────────────────────────────────────
