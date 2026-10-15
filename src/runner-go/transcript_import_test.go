@@ -272,6 +272,92 @@ func TestParseImportTranscriptDeterministic(t *testing.T) {
 	}
 }
 
+// A screenshot a tool returned is base64 in the transcript, hundreds of kilobytes of it, and a long
+// conversation replayed with them was too large to store. The events leave every image and document
+// out, with a note where each was, and keep the text around them; the replay self-check holds.
+func TestParseImportTranscriptLeavesImagesOut(t *testing.T) {
+	const png, pdf = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB", "JVBERi0xLjQKJcfsj6IKNSAwIG9iago"
+	var tr importTestTranscript
+	tr.add(importMsgRow("user", "/ws", "2026-09-15T10:00:00Z", map[string]interface{}{"type": "text", "text": "what does the page look like"}))
+	tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:01Z",
+		map[string]interface{}{"type": "tool_use", "id": "t1", "name": "Read", "input": map[string]interface{}{"file_path": "/ws/shot.png"}},
+		map[string]interface{}{"type": "tool_use", "id": "t2", "name": "Read", "input": map[string]interface{}{"file_path": "/ws/spec.pdf"}},
+		map[string]interface{}{"type": "tool_use", "id": "t3", "name": "Bash", "input": map[string]interface{}{"command": "ls"}},
+	))
+	tr.add(importMsgRow("user", "/ws", "2026-09-15T10:00:02Z",
+		map[string]interface{}{"type": "tool_result", "tool_use_id": "t1", "content": []interface{}{
+			map[string]interface{}{"type": "image", "source": map[string]interface{}{"type": "base64", "media_type": "image/png", "data": png}},
+		}},
+		map[string]interface{}{"type": "tool_result", "tool_use_id": "t2", "content": []interface{}{
+			map[string]interface{}{"type": "text", "text": "Page 1 of 3"},
+			map[string]interface{}{"type": "document", "source": map[string]interface{}{"type": "base64", "media_type": "application/pdf", "data": pdf}},
+		}},
+		map[string]interface{}{"type": "tool_result", "tool_use_id": "t3", "content": "shot.png spec.pdf"},
+	))
+	tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:03Z", map[string]interface{}{"type": "text", "text": "a login form"}))
+
+	events := mustParseEvents(t, writeImportFixture(t, &tr))
+	got := map[string]interface{}{}
+	for _, e := range events {
+		if e.Type == evToolResult {
+			got[asString(e.Payload["toolUseId"])] = e.Payload["content"]
+		}
+	}
+	want := map[string]interface{}{
+		"t1": []interface{}{map[string]interface{}{"type": "text", "text": "[image not imported]"}},
+		"t2": []interface{}{
+			map[string]interface{}{"type": "text", "text": "Page 1 of 3"},
+			map[string]interface{}{"type": "text", "text": "[document not imported]"},
+		},
+		"t3": "shot.png spec.pdf",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("tool results stored as %v, want %v", got, want)
+	}
+	if raw := dumpEvents(events); strings.Contains(raw, png) || strings.Contains(raw, pdf) {
+		t.Errorf("the events still carry base64: %s", raw)
+	}
+}
+
+// A record too large for a request of its own would refuse the whole import, so any record past
+// importEventMaxBytes is clipped: it keeps how it starts and every short field, and the replay
+// self-check still holds, both sides reading the record as stored.
+func TestParseImportTranscriptClipsAnOversizedRecord(t *testing.T) {
+	huge := strings.Repeat("0123456789abcdef", (3<<20)/16)
+	var tr importTestTranscript
+	tr.add(importMsgRow("user", "/ws", "2026-09-15T10:00:00Z", map[string]interface{}{"type": "text", "text": "here is the log: " + huge}))
+	tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:01Z", map[string]interface{}{
+		"type": "tool_use", "id": "t1", "name": "Write", "input": map[string]interface{}{"file_path": "/ws/log.txt", "content": huge},
+	}))
+	tr.add(importMsgRow("user", "/ws", "2026-09-15T10:00:02Z", map[string]interface{}{"type": "tool_result", "tool_use_id": "t1", "content": huge}))
+	tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:03Z", map[string]interface{}{"type": "text", "text": "saved"}))
+
+	events := mustParseEvents(t, writeImportFixture(t, &tr))
+	if len(events) != 4 {
+		t.Fatalf("parsed %d events, want 4: %v", len(events), dumpEvents(events))
+	}
+	clipped := func(what string, v interface{}, prefix string) {
+		t.Helper()
+		s := asString(v)
+		if n := jsonLen(s); n > importEventMaxBytes {
+			t.Errorf("%s stored as %d bytes, over the %d one record may take", what, n, importEventMaxBytes)
+		}
+		if !strings.HasPrefix(s, prefix+"0123456789abcdef") || !strings.HasSuffix(s, "…") {
+			t.Errorf("%s stored as %.40q…%q, want how it starts, marked as clipped", what, s, s[max(0, len(s)-8):])
+		}
+	}
+	clipped("the user's text", events[0].Payload["text"], "here is the log: ")
+	input, _ := events[1].Payload["input"].(map[string]interface{})
+	if input["file_path"] != "/ws/log.txt" {
+		t.Errorf("the Write's file_path stored as %v, want it whole", input["file_path"])
+	}
+	clipped("the Write's content", input["content"], "")
+	clipped("the tool result", events[2].Payload["content"], "")
+	if events[3].Payload["text"] != "saved" {
+		t.Errorf("a short record stored as %v, want it as written", events[3].Payload["text"])
+	}
+}
+
 func writeImportFixture(t *testing.T, tr *importTestTranscript) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "t.jsonl")

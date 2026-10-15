@@ -377,8 +377,13 @@ model RefreshToken {
   // Non-null once the token is consumed (rotated) or revoked (logout / theft-triggered family
   // kill); a dead token presented again is treated as replay.
   revokedAt DateTime? @map("revoked_at")
+  // The login session: minted at sign-in, carried by every rotation and by the access JWT (`sid`).
+  // Live while one of its tokens is unrevoked and unexpired (docs/push-login-session-design.md).
+  // NULL on tokens issued before 0425; their next rotation starts one.
+  loginSessionId String? @map("login_session_id") @db.Uuid
 
   @@index([userId])
+  @@index([loginSessionId])
   @@map("refresh_token")
 }
 
@@ -570,6 +575,9 @@ model DeviceToken {
   environment String   @default("production")
   bundleId    String   @map("bundle_id")
   installationId String? @map("installation_id") // Android install UUID, stable across token/account changes
+  // The login session that registered it; nothing is pushed once that session has ended. NULL: no
+  // session was named (registered before 0425), pushed to as before (docs/push-login-session-design.md).
+  loginSessionId String? @map("login_session_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
