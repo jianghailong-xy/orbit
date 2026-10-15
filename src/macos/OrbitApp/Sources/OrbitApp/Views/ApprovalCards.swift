@@ -524,6 +524,8 @@ struct QuestionCard: View {
     let approval: PendingApproval
     @Environment(ApprovalReviewDrafts.self) private var drafts
     @Environment(\.dismissApprovalReview) private var dismissReview
+    /// Answered in this review: the question is drawn as its record, with what it sent ticked.
+    @Environment(\.reviewRecord) private var record
     private var draft: QuestionReviewDraft { drafts.question(approval.id) }
 
     private var questions: [AskQuestion] {
@@ -559,12 +561,33 @@ struct QuestionCard: View {
                 }
             }
             Text(q.question).font(.orbitProse.bold())
-            ForEach(q.options) { opt in
-                OptionRow(option: opt,
-                          picked: isSelected(q, opt.label),
-                          multiSelect: q.multiSelect) { toggle(q, opt.label) }
+            if let answers = record?.answers {
+                answeredOptions(q, answers)
+            } else {
+                ForEach(q.options) { opt in
+                    OptionRow(option: opt,
+                              picked: isSelected(q, opt.label),
+                              multiSelect: q.multiSelect) { toggle(q, opt.label) }
+                }
+                customField(q)
             }
-            customField(q)
+        }
+    }
+
+    /// The options as they were offered, the ones sent ticked and the rest grey — and the words
+    /// typed instead of an option, under their own label (`ReviewRecords.answer`).
+    @ViewBuilder
+    private func answeredOptions(_ q: AskQuestion, _ answers: [String: [String]]) -> some View {
+        let sent = ReviewRecords.answer(to: q, in: answers)
+        ForEach(q.options) { opt in
+            AnsweredOptionRow(label: opt.label, description: nonEmpty(opt.description),
+                              picked: sent.picked.contains(opt.label))
+        }
+        if let typed = sent.typed {
+            Text(ReviewRecords.yourAnswer)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            AnsweredOptionRow(label: "“\(typed)”", description: nil, picked: true)
         }
     }
 
@@ -681,6 +704,36 @@ private struct OptionRow: View {
     private var glyph: String {
         if multiSelect { return picked ? "checkmark.square.fill" : "square" }
         return picked ? "checkmark.circle.fill" : "circle"
+    }
+}
+
+/// One option of an answered question, as the record shows it: ticked on a light wash when it was
+/// sent, grey but readable when it was not — the coordinator question's record rows.
+private struct AnsweredOptionRow: View {
+    let label: String
+    let description: String?
+    let picked: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: picked ? "checkmark.circle.fill" : "circle")
+                .font(.orbitGlyph)
+                .foregroundStyle(picked ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.orbitProse.weight(picked ? .semibold : .regular))
+                    .foregroundStyle(picked ? Color.primary : Color.secondary)
+                if let description {
+                    Text(description).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: ApprovalMetrics.rowMinHeight, alignment: .leading)
+        .background(picked ? Color.accentColor.opacity(0.10) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(picked ? .isSelected : [])
     }
 }
 
@@ -2070,6 +2123,138 @@ struct DeliveredDecisionCardView: View {
     }
 }
 
+/// A decision card this review answered, drawn as its record: the card as it was asked when the
+/// press went in (`ConsoleModel.answeredDecisions`), read-only, with who answered and when where
+/// its buttons were. The owner's boards of 2026-10-15, ④–⑧.
+struct AnsweredDecisionView: View {
+    let console: ConsoleModel
+    let answered: ConsoleModel.AnsweredDecision
+
+    var body: some View {
+        switch answered {
+        case .evidence(let row, let at):
+            ApprovalReviewLayout(title: EvidenceDecisions.askHeading, symbol: "checkmark.seal.fill",
+                                 tone: .blue, summary: row.title) {
+                Text(CriteriaDecisions.provenanceLabel)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                EvidenceDecisionFacts(row: row)
+            } actions: {
+                EmptyView()
+            }
+            .environment(\.reviewRecord, ReviewRecord(
+                title: ReviewRecords.decisionTitle,
+                footer: ReviewRecords.evidence(revision: row.evidenceRevision, at: at)))
+
+        case .criteria(let row, let answer, let resultingSeal, let at):
+            CriteriaDecisionCard(console: console, intentID: row.intentId, asked: row)
+                .environment(\.reviewRecord, ReviewRecord(
+                    title: ReviewRecords.decisionTitle,
+                    footer: ReviewRecords.criteriaDecision(approved: answer == .approve,
+                                                           baseSeal: row.baselineSeal,
+                                                           resultingSeal: resultingSeal, at: at)))
+
+        case .ownerConfirmed(let view, let waiting, let at):
+            OwnerConfirmedRecordView(view: view, waiting: waiting)
+                .environment(\.reviewRecord, ReviewRecord(
+                    title: OwnerConfirmations.confirmedHeading,
+                    footer: ReviewRecords.ownerConfirmed(at: at, reportedAt: waiting.report?.reportedAt)))
+
+        case .acceptance(let standing, let criteria, let started, let at):
+            let version = standing.currentVersion
+            ApprovalReviewLayout(title: AcceptanceConfirmations.title, symbol: "checkmark.seal.fill",
+                                 tone: .blue, summary: "\(console.projectTitle) · \(criteria.count) criteria") {
+                StartSectionHead(title: StartProject.doneWhenHead(criteria.count))
+                ForEach(criteria) { item in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(item.ordinal)")
+                            .font(.orbitMonoFine).foregroundStyle(.secondary)
+                            .frame(minWidth: 14, alignment: .trailing)
+                        Text(item.text).font(.orbitProse)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } actions: {
+                EmptyView()
+            }
+            .environment(\.reviewRecord, ReviewRecord(
+                title: ReviewRecords.decisionTitle,
+                footer: started
+                    ? ReviewRecords.started(criteria: version.material.count, seal: version.digest, at: at)
+                    : ReviewRecords.confirmed(criteria: version.material.count, seal: version.digest,
+                                              changes: nil, at: at)))
+
+        case .criteriaChange(let standing, _, let changes, let at):
+            CriteriaChangeCardView(console: console, asked: standing)
+                .environment(\.reviewRecord, ReviewRecord(
+                    title: ReviewRecords.decisionTitle,
+                    footer: ReviewRecords.confirmed(criteria: standing.currentVersion.material.count,
+                                                    seal: standing.currentVersion.digest,
+                                                    changes: changes, at: at)))
+
+        case .started(let asked, let at):
+            StartProjectCard(
+                projectID: console.projectID ?? "",
+                projectTitle: asked.projectTitle,
+                askedAt: asked.askedAt,
+                request: asked.request,
+                criteria: asked.criteria,
+                plan: asked.plan,
+                escalationSeconds: asked.escalationSeconds,
+                branches: asked.branches,
+                lastMainBranch: asked.lastMainBranch,
+                draft: asked.draft,
+                standing: .live,
+                onDraft: { _ in },
+                onStart: {},
+                onViewTasks: { _ = console.openCreatedTasks() },
+                graph: asked.graph,
+                recordSettings: console.acceptanceConfirmation?.confirmation?.startedWith)
+                .environment(\.reviewRecord, ReviewRecord(
+                    title: ReviewRecords.decisionTitle,
+                    footer: ReviewRecords.started(criteria: asked.criteria.count,
+                                                  seal: asked.request.criteriaDigest, at: at)))
+        }
+    }
+}
+
+/// A task confirmed done in this review, as its record: what was asked — the task, what counts as
+/// done, what the agent said, its review — without what confirming would set off, which it now has.
+private struct OwnerConfirmedRecordView: View {
+    let view: OwnerConfirmationView?
+    let waiting: OwnerConfirmationWaiting
+
+    var body: some View {
+        ApprovalReviewLayout(title: OwnerConfirmations.heading, symbol: "checkmark.seal.fill", tone: .blue,
+                             summary: view?.title ?? "") {
+            Text(CriteriaDecisions.provenanceLabel)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let view {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(view.title)
+                        .font(.orbitProse.bold())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(OwnerConfirmations.yours).font(.orbitLabel)
+                        Text(view.taskId).font(.orbitMonoFine)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
+                                       report: waiting.report, foldsCriteria: true)
+            }
+            if let review = waiting.review {
+                OwnerConfirmationReviewBarView(review: review, place: .receipt)
+            }
+        } actions: {
+            EmptyView()
+        }
+    }
+}
+
 /// The held loosening proposal: what an agent asked for, and the two answers only the account
 /// owner can give.
 ///
@@ -2080,12 +2265,32 @@ struct DeliveredDecisionCardView: View {
 private struct CriteriaDecisionCard: View {
     let console: ConsoleModel
     let intentID: String
+    /// Set when this review answered it: the proposal as it was asked, drawn as its record.
+    var asked: PendingCriteriaDecisionRow? = nil
     @State private var deciding = false
     @State private var proposalOpen = false
 
     private var standing: CriteriaDecisionStanding { console.criteriaStanding(intentID) }
 
     var body: some View {
+        if let asked {
+            // What it was while it waited — the badge, the seal it was composed against, "nothing
+            // is on hold" — is over; what was proposed is the record.
+            ApprovalReviewLayout(title: CriteriaDecisions.title, symbol: "exclamationmark.triangle.fill",
+                                 tone: .orange, summary: CriteriaDecisions.changeSummary(asked.diff)) {
+                Text("\(CriteriaDecisions.provenanceLabel) — \(CriteriaDecisions.provenanceNote).")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                proposal(asked)
+            } actions: {
+                EmptyView()
+            }
+        } else {
+            live
+        }
+    }
+
+    @ViewBuilder private var live: some View {
         let standing = self.standing
         ApprovalReviewLayout(title: CriteriaDecisions.title, symbol: "exclamationmark.triangle.fill", tone: .orange,
                              summary: standing.row.map { CriteriaDecisions.changeSummary($0.diff) } ?? CriteriaDecisions.heading(standing),
@@ -2681,7 +2886,11 @@ struct StartProjectCard: View {
     /// Opens one task of the plan; where there is no such press, a task opens the way View tasks
     /// does.
     var onOpenTask: ((String) -> Void)? = nil
+    /// Started in this review: the settings the start recorded, drawn as one line in place of the
+    /// rows that chose them (`RunSettingsSummaryText`) — nil until the read that follows has them.
+    var recordSettings: ProjectStartRecord? = nil
     @Environment(\.dismissApprovalReview) private var dismissReview
+    @Environment(\.reviewRecord) private var record
     @State private var starting = false
     @State private var criteriaOpen = false
     @State private var whyOpen = false
@@ -2721,9 +2930,9 @@ struct StartProjectCard: View {
 
     @ViewBuilder
     private var content: some View {
-        let editable = standing == .live && !starting
+        let editable = standing == .live && !starting && record == nil
         header
-        if let stale = StartProject.staleExplanation(standing) {
+        if record == nil, let stale = StartProject.staleExplanation(standing) {
             Text(stale)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .padding(.horizontal, 10).padding(.vertical, 8)
@@ -2737,9 +2946,18 @@ struct StartProjectCard: View {
         Text(StartProject.explanation(criteria.count))
             .font(.orbitLabel).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-        howItRunsSection(editable: editable)
+        if record != nil, let started = recordSettings {
+            StartSectionHead(title: StartProject.howItRuns)
+            StartPanel {
+                RunSettingsSummaryText(settings: started.settings, differs: started.differsFromRequest)
+                    .font(.orbitLabel)
+                    .startRow()
+            }
+        } else {
+            howItRunsSection(editable: editable)
+        }
         planSection
-        if let error {
+        if record == nil, let error {
             Text(error)
                 .font(.orbitLabel).foregroundStyle(Color.red)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -3251,10 +3469,14 @@ private struct StartPlanPill: View {
 private struct CriteriaChangeCardView: View {
     @Environment(\.dismissApprovalReview) private var dismissReview
     let console: ConsoleModel
+    /// Set when this review confirmed it: the change as it was asked, drawn as its record — the read
+    /// says only the new seal once the set is confirmed.
+    var asked: StandardSetConfirmationStanding? = nil
+    @Environment(\.reviewRecord) private var record
     @State private var confirming = false
     @State private var showAll = false
 
-    private var standing: StandardSetConfirmationStanding? { console.acceptanceConfirmation }
+    private var standing: StandardSetConfirmationStanding? { asked ?? console.acceptanceConfirmation }
 
     var body: some View {
         let standing = self.standing
@@ -3266,7 +3488,7 @@ private struct CriteriaChangeCardView: View {
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if !CriteriaChanges.answerable(standing),
+            if record == nil, !CriteriaChanges.answerable(standing),
                let stale = AcceptanceConfirmations.staleExplanation(standing) {
                 Text(stale)
                     .font(.orbitLabel).foregroundStyle(.secondary)
@@ -3278,9 +3500,12 @@ private struct CriteriaChangeCardView: View {
             if let changes = standing?.changesSinceConfirmed {
                 changeList(changes)
             }
-            Text(CriteriaChanges.explains)
-                .font(.orbitProse)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // What happens until they are confirmed — over once they are.
+            if record == nil {
+                Text(CriteriaChanges.explains)
+                    .font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         } actions: {
             ApprovalActions {
                 confirmButton(standing)
