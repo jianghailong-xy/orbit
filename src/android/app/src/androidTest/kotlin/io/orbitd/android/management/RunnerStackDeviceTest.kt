@@ -91,7 +91,7 @@ class RunnerStackDeviceTest {
         await("2 accounts signed in"); await("Next: Default"); await("3p-weekly"); await("98% remaining")
         compose.onAllNodesWithText("98% remaining", substring = true).onFirst().performScrollTo()
         capture("stack-agy-runner")
-        click(hasText("Antigravity") and hasClickAction()); await("Accounts")
+        click(hasText("Antigravity CLI") and hasClickAction()); await("Accounts")
         await("Work"); await("~/.orbit/antigravity-accounts/5c2e91a0"); await("gemini-5h"); await("4% remaining")
         capture("stack-agy-engine")
         compose.onAllNodesWithText("Google terms", substring = true).onLast().performScrollTo()

@@ -111,7 +111,8 @@ class ManagementDeviceTest {
                 signIn(server)
                 settings()
                 assertTrue(compose.onAllNodes(hasText("Admin") and hasClickAction()).fetchSemanticsNodes().isEmpty())
-                await("0 of 1 online"); await("1 active")
+                // The runner is offline here: a line of Infrastructure's Needs you, which the row counts (A13g, iOS 5e75edbde).
+                await("1 needs you"); await("1 active")
                 capture("settings-home")
                 // Default permission and Appearance are menus on their rows; each write is one preference key.
                 click(hasText("Default permission") and hasClickAction()); click(hasText("Plan") and hasClickAction(), scroll = false)
@@ -298,7 +299,7 @@ class ManagementDeviceTest {
                 await("Next: Default"); await("2 accounts signed in"); await("98% remaining")
                 compose.onAllNodesWithText("98% remaining", substring = true).onFirst().performScrollTo()
                 capture("agy-runner-engines")
-                click(hasText("Antigravity") and hasClickAction()); await("Accounts"); await("4% remaining")
+                click(hasText("Antigravity CLI") and hasClickAction()); await("Accounts"); await("4% remaining")
                 capture("agy-engine")
                 compose.onAllNodesWithText("Google terms", substring = true).onLast().performScrollTo()
                 compose.onNode(hasText("Add Account") and hasClickAction()).assertExists()
@@ -429,7 +430,7 @@ class ManagementDeviceTest {
                 compose.onAllNodesWithText("Next: Default", substring = true).onFirst().performScrollTo()
                 capture("kimi-runner-two")
                 // NEXT on every engine page, by the same rule.
-                for ((engine, shot) in listOf("Claude Code" to "next-claude", "Codex" to "next-codex", "Antigravity" to "next-antigravity")) {
+                for ((engine, shot) in listOf("Claude Code" to "next-claude", "Codex" to "next-codex", "Antigravity CLI" to "next-antigravity")) {
                     click(hasText(engine) and hasClickAction()); await("NEXT")
                     capture(shot)
                     back()
