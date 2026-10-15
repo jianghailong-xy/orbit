@@ -4863,33 +4863,6 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--brand);
   color: #fff;
 }
-.session-project-page-landing {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 9px 12px 10px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 10px 10px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.session-project-page-landing .project-landing {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 0;
-  border-bottom: 0;
-  font-size: 12.5px;
-}
-.session-project-page-landing-chev {
-  flex: none;
-  color: var(--text-4);
-  font-size: 11px;
-}
 /* The page with no rows says what is there in the middle, as iOS's empty page does. */
 .session-project-empty {
   display: flex;
@@ -4949,6 +4922,135 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-project-progress-bar .failed {
   background: var(--error);
+}
+/* The landing in flight, as a card of its own (owner decision 2026-10-11, mock board
+   docs/mocks/project-landing-card): the merge card's shape, on the project's sessions page under
+   the progress card and inside the project page's Work overview. The row it grew out of was a
+   line inside the progress card and could say none of what this does — which branch the work goes
+   onto, who the several jobs are when there are several, and whether a stopped runner wants the
+   reader at all.
+
+   The wash says which half of the wait it is, exactly as the row did: grey while the job runs or
+   waits its turn, amber for a runner the server has judged silent (`.is-timed-out`, the same pair
+   `.session-project-merge.is-blocked` wears), and the brand on the title and clock only while the
+   job is RUNNING. Colour is never the only channel — `checking` / `queued` / `Timed out` are the
+   words beside the mark, and `prefers-reduced-motion` below stops the spin and nothing else. */
+.session-project-landing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-size: 12px;
+}
+/* The press is the whole card above its foot: the head can be pressed without the Retry inside the
+   card being pressed with it, and a server that lists no jobs draws the same shape to read. */
+.session-project-landing .spl-press {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-project-landing .spl-what {
+  color: var(--text-1);
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+/* One row per job, so a title's ellipsis cannot clip the state beside it. */
+.session-project-landing .spl-jobs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.session-project-landing .spl-jobs li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-1);
+  font-size: 12.5px;
+}
+.session-project-landing .spl-jobs li span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-project-landing .spl-jobs .st {
+  flex: none;
+  color: var(--text-3);
+}
+.session-project-landing .spl-jobs .st.run {
+  color: var(--brand);
+  font-weight: 600;
+}
+.session-project-landing .spl-ref {
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-project-landing .spl-note {
+  color: var(--text-3);
+}
+.session-project-landing.is-timed-out {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.session-project-landing .spl-det {
+  color: var(--text-3);
+}
+.session-project-landing .spl-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+/* The one press the card carries, drawn as the merge card's primary: the same door the jobs list
+   opens (POST …/integration/jobs/:jobId/retry), and only where the server offers it. */
+.session-project-landing .spl-primary {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-project-landing .spl-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.session-project-landing .spl-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-project-landing .spl-error {
+  color: var(--error);
 }
 /* The merge into main on a project's sessions page, under the progress strip (owner decision
    2026-10-06): one card at four moments. Only the asking card is warm — it is the one thing on the
@@ -9493,6 +9595,17 @@ button.chat-jump-start:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
 }
+/* A running background task's folded card: the sub-agent's current step, under the label
+   (row padding-left 10 + caret 10 + gap 8 + icon 22 + gap 8). */
+.chat-tool-live {
+  padding: 0 10px 6px 58px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* path summary: bold leaf filename + dimmed parent dir */
 .chat-path-file {
   font-weight: 600;
@@ -10865,6 +10978,10 @@ button.chat-jump-start:hover {
   gap: 8px;
   font-size: 13px;
   color: var(--text-1);
+}
+/* The check's budget, a row of its own under the command it belongs to. */
+.start-card-budget {
+  margin-top: 8px;
 }
 .start-card-settings .start-card-count,
 .project-run-settings .start-card-count {
@@ -18604,110 +18721,98 @@ button.chat-jump-start:hover {
     grid-row: 1 / span 2;
   }
 }
-/* The Work overview's live landing line (ProjectPanoramaHeader): the card's one moving part, shown
-   only while the platform is landing work — which is exactly the minutes its counts stand still and
-   the page reads as stopped. Full width above the cells, with the same hairline under it that
-   separates the cells from each other.
-
-   The ring uses brand blue while a fresh read reports a running job. Queued jobs and unavailable
-   updates remain grey and still. The state words carry the meaning without colour or motion,
-   including under `prefers-reduced-motion` below. */
-.project-landing {
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 13.5px;
-}
-.project-landing-heading {
+/* The head the merge check card and the landing card wear over a job in flight (owner decision
+   2026-10-11, board docs/mocks/project-merge-check-row): the timeline's "Merged into main" row one
+   moment earlier — the same 28px circle, the word, the live clock at the right of it, and the
+   state, the wait and the freshness in one line under both. The check and the merge it becomes are
+   one shape. The colour rules carry the head's own state, so it reads the same in either host; the
+   words beside the mark say the same thing without colour. */
+.landing-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
-.project-landing-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.project-landing-ring {
+.landing-head-mark {
   display: inline-flex;
   flex: none;
-  color: var(--text-3);
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-2);
 }
-.project-landing-running .project-landing-ring {
+.landing-head.is-running .landing-head-mark {
+  background: var(--brand-tint);
   color: var(--brand);
   animation: project-landing-spin 1.6s linear infinite;
 }
-.project-landing-word {
-  flex: none;
-  font-weight: 600;
-  color: var(--text-2);
+.landing-head.is-timed-out .landing-head-mark {
+  background: var(--warning-bg);
+  color: var(--warning-solid);
 }
-.project-landing-running .project-landing-word {
-  color: var(--brand);
+.landing-head-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
-/* The task has its own line so the phase and elapsed clock stay readable on a phone. */
-.project-landing-what {
-  margin-top: 8px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+.landing-head-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.landing-head-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
 }
-.project-landing-state,
-.project-landing-clock {
+.landing-head.is-timed-out .landing-head-title {
+  color: var(--warning);
+}
+/* The live number, which is the one thing on the head that moves: tabular digits so it does not
+   jitter as it counts, and the ink the mark wears. */
+.landing-head-right {
   flex: none;
-  font-size: 12.5px;
   color: var(--text-2);
-}
-/* Tabular figures so the count does not shuffle the words beside it as the digits change. */
-.project-landing-clock {
+  font-size: 12.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.project-landing-running .project-landing-clock {
+.landing-head.is-running .landing-head-right {
   color: var(--brand);
 }
-.project-landing-state {
-  margin-left: auto;
-}
-/* A job the server judged timed out (docs/mocks/landing-jobs-sheet/02-timeout-retry): a warning
-   mark that never spins in place of the ring, and the word, the state and the silence in amber.
-   "Timed out" carries the same fact without the colour. */
-.project-landing-timed-out .project-landing-ring {
-  color: var(--warning-solid);
-}
-.project-landing-timed-out .project-landing-word,
-.project-landing-timed-out .project-landing-state,
-.project-landing-timed-out .project-landing-clock {
+.landing-head.is-timed-out .landing-head-right {
   color: var(--warning);
 }
-/* The landing row as a press that lists every job in flight (LandingRowButton): the row and a
-   chevron, with the row's own spacing and hairline drawn under both. */
-.project-landing-press {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.landing-head-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* The press that opens the jobs in flight: the whole head, as the merged line is the whole row's
+   press — the chevron the head used to carry is gone. */
+.landing-head-press {
+  display: block;
   width: 100%;
-  padding: 0 0 14px;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--border-subtle);
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.project-landing-press .project-landing {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-.project-landing-press-chev,
 .landing-jobs-chev {
   flex: none;
   color: var(--text-4);
@@ -18746,9 +18851,17 @@ div.landing-jobs-open {
   flex: 1;
   min-width: 0;
 }
-.landing-jobs .project-landing {
-  padding-bottom: 0;
-  border-bottom: 0;
+/* The job's task, under the head — the sheet names the jobs, so the title is its own line, two
+   lines at most before the ellipsis. */
+.landing-jobs-what {
+  margin-top: 6px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--text-1);
+  font-size: 13px;
 }
 .landing-jobs-detail {
   margin-top: 6px;
@@ -18787,7 +18900,7 @@ div.landing-jobs-open {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-landing-running .project-landing-ring {
+  .landing-head.is-running .landing-head-mark {
     animation: none;
   }
 }
@@ -22143,6 +22256,26 @@ button.project-open-item-action:disabled {
   line-height: 1.6;
   color: var(--text-2);
 }
+.project-open-item-next {
+  margin: 0 0 12px;
+  padding: 10px 12px 8px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+}
+.project-open-item-required-action {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.55;
+  font-weight: 600;
+}
+.project-open-item-handled-by {
+  margin: 5px 0 0;
+  color: var(--brand);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
 /* The card's fact block (mock 5): the rows under the heading, and the tail of what a failed check
    printed under the Check row. The label and value cells are the merge confirmation card's own two
    classes, so a row reads the same on both cards; the two treatments below are the ones that card
@@ -22170,11 +22303,20 @@ button.project-open-item-action:disabled {
   line-height: 1.55;
 }
 .project-open-item-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+}
+.project-open-item-door {
+  display: grid;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 2px 10px;
+}
+.project-open-item-consequence {
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
 }
 .project-open-item-actions:empty {
   display: none;
@@ -22203,13 +22345,23 @@ button.project-open-item-action:disabled {
   flex-basis: 100%;
 }
 .project-open-item-error {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
 }
 .project-open-item-reason-label {
   display: block;
   margin-bottom: 4px;
   font-size: 12.5px;
   font-weight: 600;
+}
+@media (max-width: 600px) {
+  .project-open-item-door {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .project-open-item-consequence,
+  .project-open-item-error {
+    grid-column: 1;
+  }
 }
 .project-open-item-foot {
   padding: 8px 14px;

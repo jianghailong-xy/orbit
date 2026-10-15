@@ -77,6 +77,22 @@ describe('sessionLine', () => {
     });
   });
 
+  it('writes the server need after the escalation marker', () => {
+    expect(sessionLine({
+      status: 'AWAITING_INPUT',
+      engineTurnActive: false,
+      waitingKind: 'OWNER_ITEM',
+      pendingApprovals: 1,
+      ownerItems: [{
+        itemId: 'i1',
+        kind: 'ESCALATED',
+        title: 'Checks failed on the combined tree',
+        need: 'Checks failed',
+        since: '2026-09-22T00:19:41Z',
+      }],
+    }, true)).toEqual({ text: 'Escalated to you · Checks failed', tone: 'approval' });
+  });
+
   /** A merge approval asks to merge into the project's main branch, which the item names. */
   it('names the branch a merge approval merges into, main as before', () => {
     const waiting = {

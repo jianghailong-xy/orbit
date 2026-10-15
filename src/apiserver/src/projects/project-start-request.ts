@@ -266,13 +266,17 @@ export function startReadiness(
       { tasks: taskRefs(unrunnable) });
   }
   const mergeCheck = settings.mergeCheckCommand?.trim() || null;
-  const needsRepository = settings.line === 'PROJECT_BRANCH' || mergeCheck || settings.upstreamRef;
+  // A budget with no command is still a merge check setting, and one that needs the same row the
+  // command does: the start writes both to the project's binding, and a project with no repository
+  // has none to write. Refused here so the coordinator hears it before the owner's card is filed.
+  const checkNamed = mergeCheck !== null || settings.mergeCheckTimeoutSeconds != null;
+  const needsRepository = settings.line === 'PROJECT_BRANCH' || checkNamed || settings.upstreamRef;
   if (!plan.repository && needsRepository) {
     finding('REFUSE', 'START_REPOSITORY_UNKNOWN',
       settings.line === 'PROJECT_BRANCH'
         ? 'tasks are to land on a project branch, and this project names no repository to hold one: '
           + 'its coordination workspace has no recorded remote'
-        : mergeCheck
+        : checkNamed
           ? 'a merge check needs a repository to run on, and this project names none: its '
             + 'coordination workspace has no recorded remote'
           : 'a main branch is a branch of a repository, and this project names none: its '

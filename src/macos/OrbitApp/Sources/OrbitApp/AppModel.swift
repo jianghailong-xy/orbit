@@ -260,6 +260,7 @@ final class AppModel {
             // the console (`NavState.selectConsole`); clearing pops the console that is there —
             // never a draft or a deeper frame.
             if let id = newValue {
+                focusConsoleOnOwnerItem(id)
                 nav.selectConsole(.console(sessionID: id, origin: .list))
             } else if case .console = nav.path.last {
                 nav.pop()
@@ -1877,6 +1878,33 @@ final class AppModel {
         #endif
         consoleRegistry?.model(for: s.id, agentID: s.agent?.id ?? s.agentId).focus(ownerItem: item)
         openNeedsYouSession(s)
+    }
+
+    /// A session ROW's press in the compact shell: open the conversation, and — when the row is
+    /// waiting on one of the four owner items (§7.6 V13) — land on the card the row's own line
+    /// named. The row already says which item ("Escalated to you · …"), so opening the conversation
+    /// without it would leave the reader to find the card the line they pressed was about.
+    ///
+    /// The three-column shells carry the same act in `selectedAgentSessionID`'s setter, which is
+    /// where their `List(selection:)` lands: one behaviour, both shapes.
+    func openSessionRow(_ s: Session) {
+        focusConsoleOnOwnerItem(s.id)
+        push(.console(sessionID: s.id, origin: .list))
+    }
+
+    /// Point the console a row is about to open at the card the row says it is waiting on, if it is
+    /// waiting on one. Read off the LIST's own snapshot — the same rows the row's line was derived
+    /// from — and a no-op for a conversation waiting on nothing: the console's own read of the item
+    /// list runs on appear, and this only tells it where to land first.
+    ///
+    /// It is NOT an entrance of its own and does not touch the stack: the two rows that call it
+    /// (`openSessionRow`, and the selection setter the three-column shells write) have already
+    /// decided which frame goes up.
+    private func focusConsoleOnOwnerItem(_ sessionID: String) {
+        guard let session = sessions.first(where: { $0.id == sessionID }),
+              let item = NeedsYouLogic.oldestOwnerItem([session])?.item else { return }
+        consoleRegistry?.model(for: sessionID, agentID: session.agent?.id ?? session.agentId)
+            .focus(ownerItem: item)
     }
 
     /// ⌘1…⌘9: select the agent at `index` (0-based) in sidebar order, navigating into the Agents

@@ -301,7 +301,7 @@ describe('every exception card carries the conversation about it', () => {
   it('is no door: drawn apart from the action row, which is exactly what it was', () => {
     const doors = (row: ProjectOpenItemRow) =>
       [...parse(card(row, () => undefined)).querySelectorAll('.project-open-item-actions > *')]
-        .map((press) => press.textContent?.trim());
+        .map((door) => door.querySelector<HTMLElement>('button, a')?.textContent?.trim() ?? '');
     expect(doors(ESCALATED_TASK)).toEqual([
       'Ask the coordinator again',
       'Open task session',

@@ -1,0 +1,676 @@
+tree: /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base (f78e93f61)
+edits:
+   .../components/ui/__fixtures__/ChoicesFixture.tsx  |   1 -
+   src/web/ui-migration/choices.browser.mjs           | 241 +++++++++------------
+   2 files changed, 100 insertions(+), 142 deletions(-)
+load: 14.81 9.60 6.48 17/3336 3171994
+available: 6586 MB
+
+P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.
+
+Running 20 tests using 1 worker
+
+  ✘   1 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘   2 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.6s)
+  ✘   3 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘   4 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘   5 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘   6 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘   7 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘   8 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘   9 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘  10 [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘  11 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘  12 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘  13 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘  14 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘  15 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+  ✘  16 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘  17 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘  18 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘  19 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✘  20 [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.3s)
+
+
+  1) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat1/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat2/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat2/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat2/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat3/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat3/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat3/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat4/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat4/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat4/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat5/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat5/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat5/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat6/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat6/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat6/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat7/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat7/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat7/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat8/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat8/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat8/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat9/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat9/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat9/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat1/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat2/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat2/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat2/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat3/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat3/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat3/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat4/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat4/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat4/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat5/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat5/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat5/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  17) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat6/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat6/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat6/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  18) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat7/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat7/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat7/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  19) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat8/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat8/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat8/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  20) [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ResizeObserver loop completed with undelivered notifications.",
+    + ]
+
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 | });
+    > 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });
+         |                                                               ^
+      13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });
+      14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));
+      15 | async function settle(locator) {
+        at /mnt/data/tmp/34dcr9bZPPrl6TDzvXowg/v/exp-base/src/web/ui-migration/choices.browser.mjs:12:63
+
+    Error Context: .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat9/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat9/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat9/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  20 failed
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-light-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+    [webkit-dark-phone] › ui-migration/choices.browser.mjs:474:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values 
+exit=1

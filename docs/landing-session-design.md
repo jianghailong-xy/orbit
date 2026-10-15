@@ -560,6 +560,7 @@
    - 我在一次性的 PG16 容器里复现过：整条 DELETE 回滚。
    - `purgeTrash` 是单条 `deleteMany`（`reaper.service.ts:139`），一个被引用的会话就会让整批回收失败。永久删除（`sessions.service.ts:8631`）和任务删除（`tasks.service.ts:11508`）也一样。
    - 修法：改成不带外键的历史引用（同 0344:7-10 的做法）。
+   - 已修（2026-10-14）：0423 去掉作业的 `task_id` 外键，0424 去掉作业的 `session_id` 与 `project_promotion.task_id`、`session_id` 外键；见 `task-delete-integration-job.pg.spec.ts`、`session-delete-integration-job.pg.spec.ts`、`promotion-delete-integration-job.pg.spec.ts`。
 3. **【中高】检查期间不续租。** 只在阶段边界回报（`integrate.go:977`），所以健康的长检查显示 Update unavailable（`ProjectPage.swift:184`）。
 4. **【中】J-T1c 没有实现，但 J5 依赖它（契约 :345、:370）。**
    - 入队点只有 `project-integration-job.ts:580,637,799,877,1028`，`turnComplete` 里没有从 branchSha 到入队的路径。

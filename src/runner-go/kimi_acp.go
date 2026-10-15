@@ -1626,6 +1626,12 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		"provider":  providerKimi,
 		"runtime":   "acp",
 	})
+	// ACP reports nothing of what a sub-agent does while an Agent call runs — its card spins
+	// blank for minutes. The wires under the session's agents/ hold that work as it happens;
+	// the relay re-emits it parent-stamped, so the card fills as the sub-agent runs. Its stop
+	// must precede the overlay's removal: the wires are read through it.
+	subRelay := startKimiSubRelay(ctx, kimiSessionDirIn(realHome, sessionID), scratchDir, emit)
+	defer subRelay.stop()
 	pollCtx, pollCancel := context.WithCancel(ctx)
 	defer pollCancel()
 	inboxCh := make(chan *RunInboxResponse, 8)
