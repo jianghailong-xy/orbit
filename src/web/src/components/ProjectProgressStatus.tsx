@@ -125,6 +125,7 @@ const ITEM_HEADING: Partial<Record<OpenItemKind, string>> = {
 };
 
 const REVIEW_HEADING: Readonly<Record<string, string>> = {
+  CRITERION_EXEMPTION_ARGUED: 'Kept the judgment method Orbit questioned',
   OUTSIDE_DECLARED_SCOPE: 'Changed files it didn’t declare',
   MERGE_REFUSED_BY_GIT: 'Git refused to merge it',
 };
@@ -1180,7 +1181,9 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
       ) : null}
       {/* Only where the item is about a task: the press this sentence describes is a push to that
           task's branch, and a promotion's failure has no task branch to push to. */}
-      {facts.review ? (
+      {facts.review?.reason === 'CRITERION_EXEMPTION_ARGUED' ? (
+        <FactRow label="Its reason">{facts.review.argument ?? ''}</FactRow>
+      ) : facts.review ? (
         <FactRow label="Declared">
           <span className="project-open-item-mono">
             {facts.review.declaredPaths.length > 0
@@ -1311,7 +1314,9 @@ function itemFactLines(row: ProjectOpenItemRow): string[] {
     lines.push(`Into: ${facts.targetRef}${sha}${facts.nothingLanded ? ' · nothing landed' : ''}`);
   }
   if (facts.files.length > 0) lines.push(`Files: ${facts.files.join(' · ')}`);
-  if (facts.review) {
+  if (facts.review?.reason === 'CRITERION_EXEMPTION_ARGUED') {
+    lines.push(`Its reason: ${facts.review.argument ?? ''}`);
+  } else if (facts.review) {
     const declared = facts.review.declaredPaths;
     lines.push(`Declared: ${declared.length > 0 ? declared.join(' · ') : 'no paths'}`);
   }

@@ -477,6 +477,7 @@ export class WakeDispositionService {
       paths: stopped.disposition.paths,
       declaredPaths: stopped.observed.declaredPaths,
       criterionKey: stopped.criterionKey,
+      argument: reason === 'CRITERION_EXEMPTION_ARGUED' ? stopped.argument : null,
     }), loggedRetry(this.logger, 'wakeDisposition.fileDeliveryReview'));
     await this.openItems?.deliverForTasks([stopped.taskId]);
     return filed?.itemId ?? null;
@@ -489,7 +490,6 @@ export class WakeDispositionService {
       where: { id: blocker.taskId },
       select: {
         title: true,
-        completionCriterionOverrideReason: true,
         criterionDefinition: { select: { ordinal: true, revision: true, text: true } },
       },
     });
@@ -504,9 +504,6 @@ export class WakeDispositionService {
         reason: blocker.reason,
         requiredAction: REQUIRED_ACTION[blocker.reason],
         taskTitle: task.title,
-        agentArgument: blocker.reason === 'CRITERION_EXEMPTION_ARGUED'
-          ? task.completionCriterionOverrideReason
-          : null,
         criterionOrdinal: task.criterionDefinition?.ordinal ?? null,
         criterionRevision: task.criterionDefinition?.revision ?? null,
         criterionText: task.criterionDefinition?.text ?? null,
@@ -583,6 +580,7 @@ export class WakeDispositionService {
         taskId: task.id,
         sessionId: task.sessions[0]?.id ?? null,
         criterionKey: criterionKeyOf(row.id),
+        argument: task.completionCriterionOverrideReason?.trim() || null,
         observed: {
           // Written prose only: the record the criterion-change door keeps in the same column says
           // the criterion moved, not that one does not apply (`blocker-disposition.ts` §2).
@@ -676,6 +674,10 @@ export class WakeDispositionService {
    * it lands on, the merge they were holding back has happened and they no longer block anything.
    * A branch git refused is not among them: that ends when a person has untangled the tree.
    *
+   * The delivery reviews that end the same way are `LANDED_REVIEW_REASONS`: a refused branch once
+   * somebody merged it after all, and an argued exemption, which holds back the merge exactly as its
+   * blocker did. Files outside the declaration stay open: a merge decides nothing about them.
+   *
    * "Landed" is `receiptIsLandingEvidence`, the definition every other reader of landing uses, so
    * this follows it when that definition changes. Rows are chosen by the key `raiseBlocker` writes —
    * never by `kind`, which the missing-judgment-path signal shares, and never by `detail`, which is
@@ -700,7 +702,7 @@ export class WakeDispositionService {
           projectId: { in: ids },
           kind: DELIVERY_REVIEW_KIND,
           state: 'OPEN',
-          dedupeKey: { startsWith: deliveryReviewKey('MERGE_REFUSED_BY_GIT', '') },
+          OR: LANDED_REVIEW_REASONS.map((reason) => ({ dedupeKey: { startsWith: deliveryReviewKey(reason, '') } })),
           taskId: { not: null },
         },
         select: { id: true, projectId: true, taskId: true },
@@ -772,6 +774,8 @@ interface ObservedDelivery {
   taskId: string;
   sessionId: string | null;
   criterionKey: string;
+  /** The override reason as written, for the review that shows it; the fold reads only `observed`. */
+  argument: string | null;
   observed: DeliveryObservations;
 }
 
@@ -780,7 +784,8 @@ interface StoppedDelivery extends ObservedDelivery {
 }
 
 function isDeliveryReviewReason(reason: BlockerDisposition['reason']): reason is DeliveryReviewReason {
-  return reason === 'OUTSIDE_DECLARED_SCOPE' || reason === 'MERGE_REFUSED_BY_GIT';
+  return reason === 'CRITERION_EXEMPTION_ARGUED' || reason === 'OUTSIDE_DECLARED_SCOPE'
+    || reason === 'MERGE_REFUSED_BY_GIT';
 }
 
 /** The reasons whose blocker a landing ends — see `resolveLandedBlockers`. */
@@ -788,6 +793,12 @@ const LANDED_WORK_REASONS: ReadonlyArray<BlockerDisposition['reason']> = [
   'CRITERION_EXEMPTION_ARGUED',
   'ACCEPTANCE_STANDARD_MOVED',
   'OUTSIDE_DECLARED_SCOPE',
+];
+
+/** The reasons whose delivery review a landing ends — see `resolveLandedBlockers`. */
+const LANDED_REVIEW_REASONS: ReadonlyArray<DeliveryReviewReason> = [
+  'CRITERION_EXEMPTION_ARGUED',
+  'MERGE_REFUSED_BY_GIT',
 ];
 
 /** The open-episode key a reason's blocker is raised under for one task, or the prefix of all of them. */
@@ -798,8 +809,9 @@ function dispositionKey(reason: BlockerDisposition['reason'], taskId = ''): stri
 /** One executable sentence per reason, addressed to the person the blocker hands the delivery to. */
 const REQUIRED_ACTION: Readonly<Record<BlockerDisposition['reason'], string>> = {
   CRITERION_EXEMPTION_ARGUED:
-    'This delivery wrote down why a criterion “does not apply”. Read that reasoning and rule on whether it holds, '
-    + 'then decide whether to merge it; do not merge before you have ruled, and do not let the next one through either.',
+    'This task keeps the completion criterion it declared although Orbit questioned it, and whoever filed it wrote '
+    + 'down why. Read that reason against the acceptance criterion it serves and rule on whether it holds before it '
+    + 'merges.',
   ACCEPTANCE_STANDARD_MOVED:
     'The acceptance criterion this work declared was changed after it started. Confirm whether it passes under '
     + 'today’s wording; only the account owner can change the acceptance criteria, and the coordinator session cannot '

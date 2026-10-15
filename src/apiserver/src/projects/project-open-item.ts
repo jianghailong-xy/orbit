@@ -53,8 +53,9 @@ export interface ProjectOpenItemDelivery {
 /** What an item is about (§4.2), and a coordinator's request to start its project
  *  (`START_REQUEST`, `project-start-request.ts`; migration 0333) or to have it recorded done
  *  (`DONE_REQUEST`, `project-done-request.ts`; migration 0345). `DELIVERY_REVIEW` (0375) is a
- *  finished delivery whose landing somebody has to decide — files outside its declaration, or a
- *  branch git refused — put to the coordinator first. */
+ *  finished delivery whose landing somebody has to decide — files outside its declaration, a
+ *  branch git refused, or a written reason for keeping a completion criterion Orbit questioned —
+ *  put to the coordinator first. */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -1084,8 +1085,11 @@ export async function rearmItemFixedBy(
 /** What a finished delivery whose landing somebody has to decide is filed under (0375). */
 export const DELIVERY_REVIEW_KIND = 'DELIVERY_REVIEW' satisfies OpenItemKind;
 
-/** The two readings answered by the bounded task-landing decision. */
-export type DeliveryReviewReason = 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
+/** The three readings answered by the bounded task-landing decision. */
+export type DeliveryReviewReason =
+  | 'CRITERION_EXEMPTION_ARGUED'
+  | 'OUTSIDE_DECLARED_SCOPE'
+  | 'MERGE_REFUSED_BY_GIT';
 
 /** A finished delivery the platform could not settle, with the observations shown to its reviewer. */
 export interface DeliveryReview {
@@ -1096,9 +1100,12 @@ export interface DeliveryReview {
   paths: readonly string[];
   declaredPaths: readonly string[];
   criterionKey: string | null;
+  /** The task's written reason for keeping its completion criterion, for an argued exemption. */
+  argument?: string | null;
 }
 
 const DELIVERY_REVIEW_TITLE: Readonly<Record<DeliveryReviewReason, string>> = {
+  CRITERION_EXEMPTION_ARGUED: 'Kept the judgment method Orbit questioned',
   OUTSIDE_DECLARED_SCOPE: 'Changed files it didn’t declare',
   MERGE_REFUSED_BY_GIT: 'Git refused to merge it',
 };
@@ -1154,6 +1161,7 @@ export async function recordDeliveryReview(
         paths: [...review.paths],
         declaredPaths: [...review.declaredPaths],
         criterionKey: review.criterionKey,
+        ...(review.argument ? { argument: review.argument } : {}),
       },
       waitingSince: now,
       assignedAt: now,
@@ -1811,7 +1819,13 @@ export function openItemFacts(
           limit: typeof row.chain?.limit === 'number' ? row.chain.limit : TASK_FAILURE_CHAIN_LIMIT,
         }
       : null,
-    review: review ? { reason: review.reason, declaredPaths: review.declaredPaths } : null,
+    review: review
+      ? {
+          reason: review.reason,
+          declaredPaths: review.declaredPaths,
+          ...(review.argument ? { argument: review.argument } : {}),
+        }
+      : null,
   };
 }
 
@@ -1830,15 +1844,23 @@ interface DeliveryReviewPayload {
   paths?: unknown;
   declaredPaths?: unknown;
   criterionKey?: string | null;
+  argument?: unknown;
 }
 
 function deliveryReviewOf(row: DeliveryReviewPayload): {
   reason: DeliveryReviewReason;
   paths: string[];
   declaredPaths: string[];
+  argument: string | null;
 } | null {
-  if (row.reason !== 'OUTSIDE_DECLARED_SCOPE' && row.reason !== 'MERGE_REFUSED_BY_GIT') return null;
-  return { reason: row.reason, paths: paths(row.paths), declaredPaths: paths(row.declaredPaths) };
+  if (row.reason !== 'CRITERION_EXEMPTION_ARGUED' && row.reason !== 'OUTSIDE_DECLARED_SCOPE'
+      && row.reason !== 'MERGE_REFUSED_BY_GIT') return null;
+  return {
+    reason: row.reason,
+    paths: paths(row.paths),
+    declaredPaths: paths(row.declaredPaths),
+    argument: filled(row.argument),
+  };
 }
 
 /** The check that disagreed, complete enough to draw: a payload that names no command is not one. */
@@ -2024,11 +2046,19 @@ function openItemBody(item: OpenItemMessageSource): string {
 }
 
 const MAX_REVIEW_PATHS_IN_MESSAGE = 40;
+const MAX_REVIEW_ARGUMENT_IN_LINE = 160;
 
 /** The list-card summary for a delivery review. */
 export function deliveryReviewDetailLine(payload: unknown): string {
   const review = deliveryReviewOf((payload ?? {}) as DeliveryReviewPayload);
   if (!review) return '';
+  if (review.reason === 'CRITERION_EXEMPTION_ARGUED') {
+    if (!review.argument) return '';
+    const line = review.argument.replace(/\s+/g, ' ');
+    return line.length > MAX_REVIEW_ARGUMENT_IN_LINE
+      ? `Its reason: ${line.slice(0, MAX_REVIEW_ARGUMENT_IN_LINE)}…`
+      : `Its reason: ${line}`;
+  }
   const count = review.paths.length;
   const files = `${count} file${count === 1 ? '' : 's'}`;
   const first = review.paths[0];
@@ -2069,14 +2099,20 @@ function deliveryReviewMessage(
   const retry = `${doors.retryMcp} (projectId: ${projectId}, taskId: ${taskId}, `
     + 'reason: why this time will be different)';
   const conflict = review?.reason === 'MERGE_REFUSED_BY_GIT';
+  const exemption = review?.reason === 'CRITERION_EXEMPTION_ARGUED';
   const observed = conflict
     ? `Task ${taskId} in project ${projectId} has a merge receipt saying git refused the merge.\n`
       + listed('Files git reported as conflicting', review?.paths ?? [])
-    : `The delivery of task ${taskId} in project ${projectId} changed files its own declaration does not mention. `
-      + 'This is a mechanical scope warning: the platform only compares the paths written in the task’s title, description and acceptance criteria with the files '
-      + 'this delivery actually changed, and does not judge whether those changes are right.\n'
-      + listed('Paths the declaration names', review?.declaredPaths ?? [])
-      + listed('Files changed outside the declaration', review?.paths ?? []);
+    : exemption
+      ? `Task ${taskId} in project ${projectId} keeps the completion criterion it declared although Orbit questioned it `
+        + 'when the task was filed — its acceptance wording read like another way of judging it — and whoever filed it '
+        + 'wrote down why. The platform only notices that this reason exists and does not judge whether it holds.\n'
+        + `The reason, as written:\n“${review?.argument ?? ''}”\n`
+      : `The delivery of task ${taskId} in project ${projectId} changed files its own declaration does not mention. `
+        + 'This is a mechanical scope warning: the platform only compares the paths written in the task’s title, description and acceptance criteria with the files '
+        + 'this delivery actually changed, and does not judge whether those changes are right.\n'
+        + listed('Paths the declaration names', review?.declaredPaths ?? [])
+        + listed('Files changed outside the declaration', review?.paths ?? []);
   const answers = conflict
     ? [
         `Send it back: write with ${doors.taskCommentMcp} where the conflict is, then ${doors.taskReopenMcp} (taskId: ${taskId}), so that it is resolved on the task branch;`,
@@ -2084,22 +2120,32 @@ function deliveryReviewMessage(
         `Already resolved and merged by hand: record that merge with merge_receipt (this item closes by itself once the work lands), or use ${resolve} to say how you dealt with it;`,
         'Do not rerun it as it stands: merging the same commits again would conflict again, and the landing rerun does not accept a conflict either.',
       ]
-    : [
-        `Accept the scope: these files belong to what this delivery had to do — use ${resolve} to state your judgment, and the reason stays on the item. Accepting only records the judgment and merges nothing by itself;`,
-        `Send it back: the delivery changed something it should not have — write with ${doors.taskCommentMcp} which changes to withdraw or split out, then ${doors.taskReopenMcp} (taskId: ${taskId}) so that it is redone as the original task;`,
-        `Supersede it: the task’s scope itself was written wrong — ${doors.taskUpdateMcp} to CANCELLED, then ${doors.taskCreateMcp} with supersedesTaskId, the new task’s declaration naming the paths it has to change;`,
-        `Rerun the landing: the delivery is fine, and the landing check failed, timed out or hit an integration error — requeue the landing once with ${retry}; a conflict cannot be rerun.`,
-      ];
+    : exemption
+      ? [
+          `Accept the reason: the acceptance criterion this task serves really is judged the way the task declared, and the evidence it was judged on shows it is met — use ${resolve} to state your judgment, and the reason stays on the item. Accepting only records the judgment and merges nothing by itself;`,
+          `Send it back: the reason does not hold, so the work has not been checked the way its acceptance criterion needs — write with ${doors.taskCommentMcp} what still has to be shown and how, then ${doors.taskReopenMcp} (taskId: ${taskId}) so that it is redone as the original task;`,
+          `Supersede it: the task should have declared a different completion criterion — ${doors.taskUpdateMcp} to CANCELLED, then ${doors.taskCreateMcp} with supersedesTaskId, the new task declaring the one its acceptance criterion needs;`,
+        ]
+      : [
+          `Accept the scope: these files belong to what this delivery had to do — use ${resolve} to state your judgment, and the reason stays on the item. Accepting only records the judgment and merges nothing by itself;`,
+          `Send it back: the delivery changed something it should not have — write with ${doors.taskCommentMcp} which changes to withdraw or split out, then ${doors.taskReopenMcp} (taskId: ${taskId}) so that it is redone as the original task;`,
+          `Supersede it: the task’s scope itself was written wrong — ${doors.taskUpdateMcp} to CANCELLED, then ${doors.taskCreateMcp} with supersedesTaskId, the new task’s declaration naming the paths it has to change;`,
+          `Rerun the landing: the delivery is fine, and the landing check failed, timed out or hit an integration error — requeue the landing once with ${retry}; a conflict cannot be rerun.`,
+        ];
   return `From Orbit · exception item: ${item.title}\n\n`
     + `${observed}\n`
     + 'This project has Automatic on: whether this delivery lands is yours to judge, and it does not go to the account owner first. '
     + `Read the task’s declaration (${doors.taskGetMcp}, taskId: ${taskId}), the criterion it serves (acceptanceCriteriaItems in `
-    + 'project_get) and its actual changes, then choose one:\n'
+    + `project_get) and ${exemption ? 'the evidence it was judged on' : 'its actual changes'}, then choose one:\n`
     + `${answers.map((line) => `- ${line}`).join('\n')}\n`
-    + 'When the task is sent back, cancelled or superseded, the platform closes this item itself; once you take it up it stays yours, '
+    + `When the task is sent back, cancelled or superseded${exemption ? ', or its work lands' : ''}, the platform closes this item itself; once you take it up it stays yours, `
     + 'and the platform does not hand it to the account owner because time ran out.\n'
-    + 'This is not a question about the acceptance criteria, so do not put it to the account owner as one: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to do; '
-    + 'a delivery that claims a criterion does not apply, or a criterion changed after the work started — those two cases are the account owner’s blockers.\n\n'
+    + 'This is not a question about the acceptance criteria, so do not put it to the account owner as one: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to do, '
+    + 'and a criterion that changed after the work started is the account owner’s blocker.'
+    + (exemption
+      ? ' If the reason in fact argues that the acceptance criterion this task serves should not apply or should say something else, do not accept it: that would be changing the acceptance criteria.'
+      : '')
+    + '\n\n'
     + notice;
 }
 

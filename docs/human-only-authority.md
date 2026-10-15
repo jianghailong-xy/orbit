@@ -30,16 +30,21 @@ It is deliberately limited to those actions. It does not redesign authentication
 ## A delivery's landing is not a HUMAN_ONLY question
 
 What happens to a finished delivery that the platform could not land cleanly — files outside its
-declaration or a branch git refused — is `DECIDE_TASK_LANDING`, graded `COORDINATOR_BOUNDED` in
+declaration, a branch git refused, or a task's written reason for keeping a completion criterion
+Orbit questioned — is `DECIDE_TASK_LANDING`, graded `COORDINATOR_BOUNDED` in
 `coordinator-authority.ts`. In an Automatic project these observations become a `DELIVERY_REVIEW`
 exception item for the coordinator; they reach the account owner only through the item's ordinary
 escalation or when no live coordinator exists. The coordinator may accept, return, replace, or
 explicitly retry where the failure class permits it, and every choice leaves a reason. It never
 changes the acceptance ruler and the platform never silently retries.
 
-Questions about the ruler remain owner-facing: a criterion exemption is
-`EDIT_ACCEPTANCE_CRITERIA`, and a moved standard is `CONFIRM_ACCEPTANCE_CRITERIA`. Those two
-`HUMAN_ONLY` routes are intentionally unchanged by the delivery review path.
+The question about the ruler remains owner-facing: a moved standard is
+`CONFIRM_ACCEPTANCE_CRITERIA`, and that `HUMAN_ONLY` route is intentionally unchanged by the
+delivery review path. A criterion exemption was `EDIT_ACCEPTANCE_CRITERIA` until 2026-10-14. It is a
+delivery review now: the prose it reads is a task's answer to Orbit's question about its completion
+criterion — how that one task is checked — and it changes nothing in the acceptance criteria. Prose
+that does argue an acceptance criterion should not apply is not the coordinator's to accept, because
+accepting it would be editing the ruler.
 
 ## Decision
 
