@@ -47,6 +47,8 @@ type importRecord struct {
 // ("" if it never did) and the event list. The conversion is refused — with a sentence the CLI
 // and the failed-session record both show — when the file holds no real conversation or when
 // replaying the events through replayMessagesFromEvents would not reproduce the transcript.
+// Images in tool results are left out of the events and an oversized record is clipped, so the
+// replay can be stored however long the conversation ran.
 func parseImportTranscript(path string) (cwd, title string, events []StoredEvent, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -56,7 +58,7 @@ func parseImportTranscript(path string) (cwd, title string, events []StoredEvent
 
 	var (
 		out     []StoredEvent
-		direct  []replayMessage // what the transcript says, with the forward function's normalizations
+		direct  []replayMessage // what the transcript says, as stored, with the forward function's normalizations
 		called  = map[string]bool{}
 		pending []string
 		lastTs  time.Time
@@ -123,7 +125,7 @@ func parseImportTranscript(path string) (cwd, title string, events []StoredEvent
 					// The forward function reads the summary from a system event and turns it
 					// into storedSummary, not a message; the direct side skips it the same way.
 					flushPending(lastTs)
-					ev(evSystem, map[string]interface{}{"subtype": "compact_summary", "text": compactSummaryText(rec.Message.Content)})
+					ev(evSystem, map[string]interface{}{"subtype": "compact_summary", "text": clipImportValue(compactSummaryText(rec.Message.Content))})
 					continue
 				}
 				for _, b := range blocks {
@@ -134,6 +136,7 @@ func parseImportTranscript(path string) (cwd, title string, events []StoredEvent
 						if strings.TrimSpace(text) == "" {
 							continue
 						}
+						text = clipImportValue(text)
 						flushPending(lastTs)
 						ev(evUser, map[string]interface{}{"text": text})
 						direct = append(direct, newReplayMessage("user",
@@ -145,15 +148,16 @@ func parseImportTranscript(path string) (cwd, title string, events []StoredEvent
 						}
 						pending = removeString(pending, id)
 						isErr, _ := m["is_error"].(bool)
+						content := clipImportValue(importedToolResultContent(m["content"]))
 						ev(evToolResult, map[string]interface{}{
 							"toolUseId": id,
-							"content":   m["content"],
+							"content":   content,
 							"isError":   isErr,
 						})
 						direct = append(direct, newReplayMessage("user", []map[string]interface{}{{
 							"type":        "tool_result",
 							"tool_use_id": id,
-							"content":     clip(toolResultText(m["content"]), transcriptToolResultMaxRunes),
+							"content":     clip(toolResultText(content), transcriptToolResultMaxRunes),
 							"is_error":    isErr,
 						}}, lastTs))
 					}
@@ -167,6 +171,7 @@ func parseImportTranscript(path string) (cwd, title string, events []StoredEvent
 						if strings.TrimSpace(text) == "" {
 							continue
 						}
+						text = clipImportValue(text)
 						// The forward function flushes open tool calls before every assistant
 						// message, so a tool_use followed by prose in the same row closes the
 						// call on both sides.
@@ -187,6 +192,7 @@ func parseImportTranscript(path string) (cwd, title string, events []StoredEvent
 						if input == nil {
 							input = map[string]interface{}{}
 						}
+						input = clipImportValue(input)
 						called[id] = true
 						pending = append(pending, id)
 						ev(evToolUse, map[string]interface{}{"id": id, "name": name, "input": input})
@@ -250,6 +256,70 @@ func compactSummaryText(content interface{}) string {
 		return strings.TrimSpace(b.String())
 	}
 	return ""
+}
+
+// importEventMaxBytes bounds what one replayed record stores. Once images are left out a
+// conversation rarely holds anything near it, but one record too large for a request of its own
+// would refuse the whole import, so such a record is clipped instead. Half a request
+// (maxEventBatchBytes), so the event around it always fits in one.
+const importEventMaxBytes = 1 << 20
+
+// importedToolResultContent is a tool_result's content as an import stores it: each image or
+// document block, a base64 screenshot or PDF often hundreds of kilobytes long, is replaced by a
+// one-line text note. Those blocks are what made a long conversation's replay too large to store,
+// and leaving them out costs the agent nothing: the copy --resume reads keeps them all.
+func importedToolResultContent(content interface{}) interface{} {
+	blocks, ok := content.([]interface{})
+	if !ok {
+		return content
+	}
+	out := make([]interface{}, len(blocks))
+	for i, b := range blocks {
+		m, _ := b.(map[string]interface{})
+		switch m["type"] {
+		case "image", "document":
+			out[i] = map[string]interface{}{"type": "text", "text": fmt.Sprintf("[%s not imported]", m["type"])}
+		default:
+			out[i] = b
+		}
+	}
+	return out
+}
+
+// clipImportValue is v as an import stores it: unchanged while its JSON is within
+// importEventMaxBytes, and otherwise with every string in it clipped, to half the length each
+// round, until it is.
+func clipImportValue[T any](v T) T {
+	for limit := importEventMaxBytes; limit > 0 && jsonLen(v) > importEventMaxBytes; limit /= 2 {
+		v, _ = clipStrings(v, limit).(T)
+	}
+	return v
+}
+
+// clipStrings is v with every string in it clipped to at most n runes.
+func clipStrings(v interface{}, n int) interface{} {
+	switch x := v.(type) {
+	case string:
+		return clip(x, n)
+	case []interface{}:
+		out := make([]interface{}, len(x))
+		for i, it := range x {
+			out[i] = clipStrings(it, n)
+		}
+		return out
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(x))
+		for k, it := range x {
+			out[k] = clipStrings(it, n)
+		}
+		return out
+	}
+	return v
+}
+
+func jsonLen(v interface{}) int {
+	raw, _ := json.Marshal(v)
+	return len(raw)
 }
 
 // findClaudeTranscripts is the glob-all sibling of findClaudeTranscript: every project
