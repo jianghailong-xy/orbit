@@ -358,11 +358,11 @@ test.describe('P4.3a a project page', () => {
     const trace = [];
     await page.goto(P43A_PATHS.project);
     const card = page.getByRole('region', { name: 'Coordinator' });
-    await expect(button(card, 'Reply to coordinator')).toBeVisible();
+    await expect(button(card, 'Open coordinator')).toBeVisible();
     await top(page.locator('.project-command-center'));
     await frames(page);
     trace.push(await observe(page, [fixtures], 'live coordinator'));
-    await capture('p43a-coordinator', { card, split: button(card, 'Reply to coordinator') });
+    await capture('p43a-coordinator', { card, split: button(card, 'Open coordinator') });
 
     await button(card, 'More coordinator actions').click();
     const newOne = item(page, /^Start a new coordinator/);
@@ -403,7 +403,7 @@ test.describe('P4.3a a project page', () => {
     await expect(button(rebind, 'Rebind')).toBeEnabled();
     await button(rebind, 'Rebind').click();
     await expect(rebind).toHaveCount(0);
-    await expect(button(card, 'Reply to coordinator')).toBeVisible();
+    await expect(button(card, 'Open coordinator')).toBeVisible();
     trace.push(await observe(page, [fixtures], 'rebound'));
 
     // Never opened, with nowhere to open: choosing the workspace it opens in (cancelled).

@@ -100,6 +100,29 @@ const crashRespawnBackoff = 5 * time.Second
 // and far shorter than forever.
 const maxEventFlushServerRejections = 30
 
+// The most one /events request carries. A flush used to post everything buffered as one request,
+// and the control plane parses a body of up to 10 MB (main.ts; its gateways allow 30): an imported
+// transcript replayed in one go, or a buffer that grew while the control plane was unreachable, was
+// refused whole with a 413 that no retry clears. Well under the limit, so a slow uplink still lands
+// each request inside postEvents' timeout.
+const maxEventBatchBytes = 2 << 20
+
+// eventBatchLen is how many of events, from the first, the next /events request carries: as many as
+// keep its body within maxBytes, and never fewer than one — an event larger than that on its own is
+// still sent, alone, where its refusal holds up nothing else that was buffered with it.
+func eventBatchLen(events []RunEvent, maxBytes int) int {
+	// The request around the events: braces, field names and the lease owner, a UUID.
+	size := len(`{"leaseOwner":"00000000-0000-0000-0000-000000000000","events":[]}`)
+	for i, e := range events {
+		raw, _ := json.Marshal(e)
+		size += len(raw) + 1 // the event and the comma after it
+		if i > 0 && size > maxBytes {
+			return i
+		}
+	}
+	return len(events)
+}
+
 func isCriticalDeliveryAcknowledgement(event RunEvent) bool {
 	if event.Type != evUser && event.Type != evUserDelivery {
 		return false
@@ -673,32 +696,41 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			uploadCtx, cancelUploads := context.WithTimeout(flushCtx, replyAttachmentBudget)
 			attachLocalReplyFiles(uploadCtx, t, sessionID, events, replyFileRoots, replyFiles)
 			cancelUploads()
-			serverRejections := 0
-			err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
-				return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: events})
-			}, eventFlushRetryPolicy(&serverRejections))
-			if isLeaseOwnershipError(err) {
-				// Another process owns the session now: this batch will never be sent from here.
-				backlog.settled(len(events))
-				markOwnershipLost(err)
-				return err
-			}
-			if err != nil {
-				if serverRejections >= maxEventFlushServerRejections {
-					logln("dropping", len(events), "events for", sessionID,
-						fmt.Sprintf("(seq %d-%d)", events[0].Seq, events[len(events)-1].Seq),
-						"after", serverRejections, "server rejections:", err)
+			// Sent as requests of at most maxEventBatchBytes, one at a time and in seq order, so the
+			// control plane only ever holds a prefix of what was taken: the seq a reclaim resumes
+			// after (MaxSeq) still marks where the unsent rest begins.
+			for len(events) > 0 {
+				batch := events[:eventBatchLen(events, maxEventBatchBytes)]
+				serverRejections := 0
+				err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
+					return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: batch})
+				}, eventFlushRetryPolicy(&serverRejections))
+				if isLeaseOwnershipError(err) {
+					// Another process owns the session now: none of this will ever be sent from here.
 					backlog.settled(len(events))
-					return criticalFlushFence.recordDropped(events, err)
+					markOwnershipLost(err)
+					return err
 				}
-				// Keep the batch available to the final flush. Requests are seq-idempotent, so
-				// restoring after a lost committed response is safe and avoids dropping the tail.
-				bufMu.Lock()
-				buf = append(events, buf...)
-				bufMu.Unlock()
-				return err
+				if err != nil {
+					if serverRejections >= maxEventFlushServerRejections {
+						logln("dropping", len(batch), "events for", sessionID,
+							fmt.Sprintf("(seq %d-%d)", batch[0].Seq, batch[len(batch)-1].Seq),
+							"after", serverRejections, "server rejections:", err)
+						backlog.settled(len(batch))
+						err = criticalFlushFence.recordDropped(batch, err)
+						events = events[len(batch):]
+					}
+					// Keep what is still unsent available to the final flush. Requests are
+					// seq-idempotent, so restoring after a lost committed response is safe and avoids
+					// dropping the tail.
+					bufMu.Lock()
+					buf = append(events, buf...)
+					bufMu.Unlock()
+					return err
+				}
+				backlog.settled(len(batch))
+				events = events[len(batch):]
 			}
-			backlog.settled(len(events))
 			return nil
 		})
 	}

@@ -412,8 +412,15 @@ class TasksProjectsDeviceTest {
             put("criteriaDigest", "seal1"); put("requestId", "start1"); put("line", "PROJECT_BRANCH"); put("automatic", true); put("maxConcurrentTasks", 2)
             put("mergeCheckCommand", "./verify"); put("projectBranchName", "refs/heads/project/cards")
         }, journal().drop(before).last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
-        // The review says the decision was recorded, then closes itself.
-        awaitGone("card-review"); capture("start-asked-4-accepted")
+        // The review stays open as the record the start made: its settings one line, who started it where Start was.
+        compose.waitUntil(20_000) {
+            compose.onAllNodes(hasTestTag("card-review:footer-line") and hasText("Started by you · ", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("card-review:title").assertTextEquals(CardPreviews.decisionRecorded)
+        compose.onNodeWithTag("start:start1-settings").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithTag("start:start1:START").assertCountEquals(0)
+        capture("start-asked-4-accepted")
+        compose.onNodeWithTag("card-review:close").performClick(); awaitGone("card-review")
     }
 
     @Test fun aDeliveryBlockerIsReviewedWithItsReasonRecorded() = journey("project-blocker") {

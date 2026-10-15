@@ -711,13 +711,15 @@ public enum ProjectPage {
     public static func coordinatorPill(_ status: ProjectCoordinatorStatus) -> Pill {
         if status.state == .live, let session = status.coordination.session,
            !coordinatorFinished(status) {
-            // A pending approval blocks INSIDE a turn, so it is asked before "Working".
+            // What waits on the reader — a card, or an owner decision drawn in the conversation, both
+            // counted in `pendingApprovals` — is asked before "Working": a pending approval blocks
+            // INSIDE a turn. A turn that ended on its own is the coordinator's resting state between
+            // wake-ups, and reads "Idle" (owner decision, 2026-10-15).
             if session.pendingApprovals > 0 { return Pill(label: "Needs you", tone: .warning) }
             if session.runState == .running
                 || (session.runState == .awaitingInput && session.engineTurnActive) {
                 return Pill(label: "Working", tone: .brand)
             }
-            if session.runState == .awaitingInput { return Pill(label: "Needs you", tone: .warning) }
             return Pill(label: "Idle", tone: .neutral)
         }
         if coordinatorFinished(status) { return Pill(label: "Completed", tone: .neutral) }

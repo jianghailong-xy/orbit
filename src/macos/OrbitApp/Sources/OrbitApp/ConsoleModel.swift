@@ -951,8 +951,19 @@ final class ConsoleModel {
     enum ApprovalAnswerPhase: Equatable {
         /// Pressed, optimistically removed, and not yet answered by the door.
         case sending
-        /// The door took it. The card is not coming back.
-        case sent
+        /// The door took it. The card is not coming back, so the sheet draws it as its record from
+        /// what was pressed (`AnsweredApproval`).
+        case sent(AnsweredApproval)
+    }
+
+    /// An approval as it was answered here: the card as it was asked, and the press that answered
+    /// it. The one copy of it there is — the server keeps no record of an approval's question — so
+    /// the record lives as long as this console does.
+    struct AnsweredApproval: Equatable {
+        let approval: PendingApproval
+        let behavior: ApprovalBehavior
+        let answers: [String: [String]]?
+        let at: Date
     }
     /// Sink for a session outcome — the app's toast host, injected by `ConsoleRegistry`.
     @ObservationIgnored var onToast: (ToastRequest) -> Void = { _ in }
@@ -3741,7 +3752,8 @@ final class ConsoleModel {
         let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
         do {
             try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req)
-            approvalAnswers[approval.id] = .sent
+            approvalAnswers[approval.id] = .sent(AnsweredApproval(approval: approval, behavior: behavior,
+                                                                  answers: answers, at: Date()))
         }
         catch {
             // Nothing was decided: the press is not what took this card away, and the re-seed below
@@ -3893,6 +3905,11 @@ final class ConsoleModel {
     /// Cards answered or set aside HERE. They do not come back in this window: what is true now is
     /// a fact about the criteria, and what happened is the line left in the conversation.
     private var closedCards: Set<String> = []
+    /// The cards answered HERE, as they were asked when the press went in, by card id: what the
+    /// review sheet that pressed draws as the record (`AnsweredDecisionView`). The read stops
+    /// publishing a question once it is answered, and keeps at most its verdict, so this is the
+    /// one copy of what was asked — kept as long as this console is.
+    private(set) var answeredDecisions: [String: AnsweredDecision] = [:]
     /// The version of the standard set a press HERE confirmed — the one version the confirmation
     /// card's entry in `closedCards` is about (`reopenConfirmationForANewVersion`).
     private var confirmedHereDigest: String?
@@ -4659,9 +4676,11 @@ final class ConsoleModel {
     func decideCriteria(_ row: PendingCriteriaDecisionRow, _ decision: CriteriaDecisionAnswer) async {
         guard let projectID else { return }
         do {
-            _ = try await api.decideCriteriaChange(
+            let result = try await api.decideCriteriaChange(
                 projectID: projectID, intentID: row.intentId,
                 CriteriaDecisions.request(row: row, decision: decision))
+            answeredDecisions[DeliveredDecisionCard(kind: .criteriaDecision(intentID: row.intentId)).id] =
+                .criteria(row, decision, resultingSeal: result.applied ? result.resultingSeal : nil, at: Date())
             close(.criteriaDecision(intentID: row.intentId))
             // The card that was answered HERE gives way to its receipt, which the re-read below
             // draws where the decision happened (`adoptReceipts`). Nothing is written locally: left
@@ -4752,6 +4771,11 @@ final class ConsoleModel {
                                                        note: note, review: review) else { return }
         do {
             _ = try await api.decideOwnerConfirmation(taskID: taskID, request)
+            if decision == .confirm {
+                answeredDecisions[DeliveredDecisionCard(kind: .ownerConfirmation(taskID: taskID,
+                                                                                 requestID: waiting.requestId)).id] =
+                    .ownerConfirmed(ownerConfirmation, waiting, at: Date())
+            }
             close(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
             // Left on screen, the card would go stale into "a later report is waiting", which is
             // the one reading of its own answer this window can be sure is wrong.
@@ -4846,6 +4870,10 @@ final class ConsoleModel {
                                                       decidingSessionID: sessionID) else { return }
         do {
             _ = try await api.decideEvidence(taskID: row.taskId, request)
+            if decision == .confirm {
+                answeredDecisions[DeliveredDecisionCard(kind: .evidenceDecision(
+                    taskID: row.taskId, evidenceRevision: row.evidenceRevision)).id] = .evidence(row, at: Date())
+            }
             close(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
             // The card gives way to its receipt, which the re-read below draws where the decision
             // happened (`adoptEvidenceReceipts`) — and which survives the console being opened
@@ -4866,8 +4894,14 @@ final class ConsoleModel {
     func confirmStandardSet() async {
         guard let projectID, let digest = acceptanceConfirmation?.currentVersion.digest else { return }
         do {
+            let asked = acceptanceConfirmation
             let standing = try await api.confirmAcceptanceCriteria(projectID: projectID,
                                                                    criteriaDigest: digest)
+            if let asked {
+                answeredDecisions[DeliveredDecisionCard(kind: .acceptanceConfirmation).id] =
+                    .acceptance(asked, criteria: projectCriteria.sorted { $0.ordinal < $1.ordinal },
+                                started: projectStarted != true, at: Date())
+            }
             acceptanceConfirmation = standing
             confirmedHereDigest = digest
             close(.acceptanceConfirmation)
@@ -4891,10 +4925,19 @@ final class ConsoleModel {
               let request = row.startRequest, startStanding(itemID) == .live else { return }
         let draft = startDraft(for: row)
         guard draft.complete else { return }
+        let asked = StartedHere(projectTitle: projectTitle, askedAt: row.waitingSince, request: request,
+                                criteria: projectCriteria.sorted { $0.ordinal < $1.ordinal },
+                                plan: StartProject.planView(graph: projectGraph, fallbackCount: projectTaskCount),
+                                escalationSeconds: projectEscalationSeconds,
+                                branches: startIntegration?.branches,
+                                lastMainBranch: startIntegration?.lastMainBranch,
+                                draft: draft, graph: projectGraph)
         do {
             try await api.startProject(projectID: projectID,
                                        StartProject.body(request: request, draft: draft,
                                                          requestId: itemID))
+            answeredDecisions[DeliveredDecisionCard(kind: .startProject(itemID: itemID)).id] =
+                .started(asked, at: Date())
             close(.startProject(itemID: itemID))
         } catch {
             statusMessage = "\(StartProject.notRecorded) — \(APIClient.failureReason(error))."
@@ -4915,6 +4958,9 @@ final class ConsoleModel {
             let next = try await api.confirmAcceptanceCriteria(projectID: projectID,
                                                                criteriaDigest: digest)
             confirmedChangeSummaries[digest] = CriteriaChanges.counts(changes)
+            answeredDecisions[DeliveredDecisionCard(kind: .criteriaChange).id] =
+                .criteriaChange(standing, criteria: projectCriteria.sorted { $0.ordinal < $1.ordinal },
+                                changes: CriteriaChanges.counts(changes), at: Date())
             acceptanceConfirmation = next
             confirmedHereDigest = digest
             close(.criteriaChange)
@@ -5250,6 +5296,40 @@ final class ConsoleModel {
     /// else's ("recorded somewhere else", "approved at another end").
     func answeredHere(_ card: DeliveredDecisionCard) -> Bool {
         closedCards.contains(card.id)
+    }
+
+    /// The card as it was answered here, when this window pressed it (`answeredDecisions`).
+    func answeredDecision(_ card: DeliveredDecisionCard) -> AnsweredDecision? {
+        answeredDecisions[card.id]
+    }
+
+    /// One decision card as this window answered it: what it showed at the press, and the press.
+    enum AnsweredDecision {
+        case evidence(EvidenceDecisionRow, at: Date)
+        case criteria(PendingCriteriaDecisionRow, CriteriaDecisionAnswer, resultingSeal: String?, at: Date)
+        case ownerConfirmed(OwnerConfirmationView?, OwnerConfirmationWaiting, at: Date)
+        /// `started`: the press started the project as well — a project not yet handing work out is
+        /// started by confirming what done means.
+        case acceptance(StandardSetConfirmationStanding, criteria: [ProjectCriteriaDocument.Item],
+                        started: Bool, at: Date)
+        case criteriaChange(StandardSetConfirmationStanding, criteria: [ProjectCriteriaDocument.Item],
+                            changes: String, at: Date)
+        case started(StartedHere, at: Date)
+    }
+
+    /// What the start card was drawn from at the press — the request, the plan and the settings —
+    /// all of which the read stops offering once the project has started.
+    struct StartedHere {
+        let projectTitle: String
+        let askedAt: String?
+        let request: ProjectStartRequest
+        let criteria: [ProjectCriteriaDocument.Item]
+        let plan: StartPlanView
+        let escalationSeconds: Int
+        let branches: ProjectBranchCandidates?
+        let lastMainBranch: ProjectLastMainBranch?
+        let draft: StartSettingsDraft
+        let graph: ProjectDependencyGraph?
     }
 
     /// What a decision leaves behind, in the flow, where it happened — the same place web's

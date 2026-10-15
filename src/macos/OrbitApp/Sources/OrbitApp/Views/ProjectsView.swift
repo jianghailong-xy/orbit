@@ -1168,7 +1168,8 @@ struct ProjectDetailView: View {
                             Text(ProjectPage.startNewCoordinatorDetail(finished: finished))
                         }
                     } label: {
-                        Text(ProjectPage.coordinatorPress(finished: finished, needsReply: pill.label == "Needs you"))
+                        Text(ProjectPage.coordinatorPress(finished: finished,
+                                                          waiting: coordination.session?.pendingApprovals ?? 0))
                             .frame(maxWidth: .infinity)
                     } primaryAction: {
                         openCoordinator(store, focus: nil)

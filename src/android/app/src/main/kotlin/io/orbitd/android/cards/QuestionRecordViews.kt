@@ -129,9 +129,10 @@ internal fun QuestionRecordReview(card: InteractionCard, open: (String) -> Unit)
     }
 }
 
-/** One option as it was offered, ticked when it is the answer, with the owner's words inside it. */
+/** One option as it was offered, ticked when it is the answer, with the owner's words inside it. A review's record draws its
+ * answers with it too. */
 @Composable
-private fun ReplayOption(tag: String, label: String, why: String?, recommended: Boolean, chosen: Boolean, words: String?, wordsLabel: String?) {
+internal fun ReplayOption(tag: String, label: String, why: String?, recommended: Boolean, chosen: Boolean, words: String?, wordsLabel: String?) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.fillMaxWidth().background(if (chosen) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent,
         RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp).testTag(tag), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
