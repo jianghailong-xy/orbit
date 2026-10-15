@@ -111,8 +111,7 @@ func TestClaudeAccountQuotaReadsEachAccountWithItsOwnToken(t *testing.T) {
 }
 
 // TestClaudeAccountQuotaNeverBorrowsTheMachinesLogin: a slot nobody has signed in reports nothing at
-// all, even while the machine's own login has credentials on disk — the macOS Keychain fallback is
-// one global item, and a read that took it would report Default's quota as this account's.
+// all, even while the machine's own login has credentials on disk.
 func TestClaudeAccountQuotaNeverBorrowsTheMachinesLogin(t *testing.T) {
 	home, _ := claudeAccountSlotTestHomes(t)
 	srv, tokens := claudeUsageServer(t, 99)
@@ -147,6 +146,42 @@ func TestClaudeAccountQuotaNeverBorrowsTheMachinesLogin(t *testing.T) {
 	}
 	if got := tokens(); len(got) != 1 || got[0] != "Bearer work-token" {
 		t.Fatalf("tokens seen = %q, want Work's own", got)
+	}
+}
+
+// On macOS Claude Code keeps a CLAUDE_CONFIG_DIR login in a Keychain item named for that directory,
+// not in .credentials.json. The quota read must use the slot's item, which is also what auth status
+// reads, or a successfully added account stays at "No quota reported" forever.
+func TestClaudeAccountQuotaReadsAnAddedAccountsKeychainLogin(t *testing.T) {
+	_, _ = claudeAccountSlotTestHomes(t)
+	srv, tokens := claudeUsageServer(t, 23)
+	planUsageURL = srv.URL
+	work, err := claudeAccountKind.create("Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	previous := claudeCredentialsUseKeychain
+	claudeCredentialsUseKeychain = true
+	t.Cleanup(func() { claudeCredentialsUseKeychain = previous })
+	bin := t.TempDir()
+	service := claudeKeychainService(work.Dir)
+	security := filepath.Join(bin, "security")
+	if err := os.WriteFile(security, []byte(`#!/bin/sh
+if [ "$1" = "find-generic-password" ] && [ "$2" = "-s" ] && [ "$3" = "`+service+`" ] && [ "$4" = "-w" ]; then
+  printf '%s' '{"claudeAiOauth":{"accessToken":"work-keychain-token","refreshToken":"r","subscriptionType":"max"}}'
+  exit 0
+fi
+exit 44
+`), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+
+	usage := newClaudeAccountUsage()
+	read(t, usage.slot(work.ID).probe)
+	if got := tokens(); !slices.Equal(got, []string{"Bearer work-keychain-token"}) {
+		t.Fatalf("tokens seen = %q, want Work's Keychain token", got)
 	}
 }
 

@@ -102,6 +102,19 @@ describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
     expect(html.indexOf('ZXHO-K06HC')).toBeGreaterThan(-1);
     expect(html.indexOf('ZXHO-K06HC')).toBeLessThan(html.indexOf('Copy Code &amp; Open Sign-In Page'));
   });
+
+  it('offers the authorization link for copying into another browser', () => {
+    const html = open(
+      loginState({
+        status: 'awaiting_code',
+        engine: 'codex',
+        url: 'https://auth.example.test/authorize?state=one-time',
+      }),
+    );
+
+    expect(html).toContain('href="https://auth.example.test/authorize?state=one-time"');
+    expect(html).toContain('Copy sign-in link');
+  });
 });
 
 // What ends the wait for the runner to re-report after a sign-in lands. Getting this wrong is
