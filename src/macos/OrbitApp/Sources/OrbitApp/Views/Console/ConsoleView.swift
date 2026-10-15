@@ -827,24 +827,27 @@ struct TranscriptView: View {
         // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
         // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
         // back; it steps back through earlier questions as you scroll up (see `recomputeStuck`) and
-        // hides only at the very top where no question is above. Shown whenever such a question
-        // exists — including at the bottom — exactly like web, not gated on `atBottom`. iOS 18+/macOS
-        // 15+ (needs the scroll/row geometry); on the earlier floor `stuckID` never updates, so this
-        // stays hidden.
+        // hides only at the very top where no question is above. iOS 18+/macOS 15+ (needs the
+        // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
         #if os(iOS)
         // On iOS it is the nav bar's centre piece, not a band under the bar (the owner, 2026-10-15:
         // the band and the title above it took too much of the screen). Up there it moves nothing,
-        // and a `scrollTo(anchor: .top)` lands the target just under the bar.
+        // and a `scrollTo(anchor: .top)` lands the target just under the bar. It shows only while
+        // the reader is off the live tail — scrolled up into the history, or reading a window opened
+        // at a record — the same "off the tail" the jump-to-latest disc answers to: at the tail the
+        // reader is following the answer to what they just asked (the owner, the same day).
         .toolbar {
             ToolbarItem(placement: .principal) {
-                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
+                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, !atBottom || console.detached,
+                   let q = stuckBubble {
                     stickyQuestion(q, proxy: proxy)
                         .frame(idealWidth: questionWidth, maxWidth: questionWidth)
                 }
             }
         }
         #else
-        // In-flow inset (not an overlay) so it pushes content down like web: a
+        // Shown whenever such a question exists — including at the bottom — exactly like web, not
+        // gated on `atBottom`. In-flow inset (not an overlay) so it pushes content down like web: a
         // `scrollTo(anchor: .top)` then lands the target just *below* the header, not hidden under it.
         .safeAreaInset(edge: .top, spacing: 0) {
             if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
