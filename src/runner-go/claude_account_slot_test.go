@@ -269,6 +269,43 @@ func TestClaudeSessionAccountDirsReadTheSessionsRecord(t *testing.T) {
 	}
 }
 
+func TestClaudeSessionMoveToDefaultReleasesThePreviousAccountAfterSpawn(t *testing.T) {
+	_, _ = claudeAccountSlotTestHomes(t)
+	work, err := claudeAccountKind.create("Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execDir := t.TempDir()
+	scratch := runDir("moved-to-default")
+	if err := os.MkdirAll(scratch, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	job := &ClaimedSession{
+		SessionID: "moved-to-default", SessionUUID: "moved-to-default", Provider: providerClaude,
+		Agent: AgentExecConfig{Provider: providerClaude, Env: map[string]string{"CLAUDE_CONFIG_DIR": work.Dir}},
+	}
+	writeSessionMeta(scratch, job, execDir)
+
+	// Selecting Default is only a future destination until its engine starts. The old account must
+	// remain protected during that gap so a removal cannot take the conversation out from under it.
+	job.Agent.Env = nil
+	writeSessionMeta(scratch, job, execDir)
+	if dirs := claudeSessionAccountDirs([]string{job.SessionID}); !dirs[filepath.Clean(work.Dir)] {
+		t.Fatalf("old account was released before the Default engine started: %#v", dirs)
+	}
+
+	// Once the Default engine is running, the conversation has been carried and the old account is
+	// no longer this session's ground. Its empty Default marker must replace, not preserve, the slot.
+	writeClaudeSessionMeta(scratch, job, execDir)
+	if dirs := claudeSessionAccountDirs([]string{job.SessionID}); len(dirs) != 0 {
+		t.Fatalf("old account remains live after the Default engine started: %#v", dirs)
+	}
+	meta := readSessionMeta(filepath.Join(scratch, "meta.json"))
+	if meta == nil || meta.ClaudeConfigDir != "" {
+		t.Fatalf("session record still names the old account: %+v", meta)
+	}
+}
+
 // writeSessionRecordForTest writes a session's meta.json the way the runner does.
 func writeSessionRecordForTest(t *testing.T, dir string, meta sessionMeta) {
 	t.Helper()
