@@ -71,7 +71,8 @@ internal object ProjectShell {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true
         promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
-        trashed = emptySet(); holdDelete?.complete(Unit); holdMembers?.complete(Unit); holdDelete = null; holdMembers = null; attention = null
+        // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
+        trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
     }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()

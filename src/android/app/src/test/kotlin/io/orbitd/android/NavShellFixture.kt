@@ -45,8 +45,9 @@ internal object NavShell {
     fun reset() {
         calls.clear(); refuse = null; mergeAnswer = "merged"; mergeStatus = null
         lifecycle = mapOf(SESSION to "OPEN", PLAIN to "OPEN"); running = emptySet(); ended = emptySet()
-        holdDelete?.complete(Unit); holdOpen?.complete(Unit); holdDelete = null; holdOpen = null
-        holdDeletes.values.forEach { it.complete(Unit) }; holdDeletes.clear()
+        // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state
+        // and post its toast here.
+        holdDelete = null; holdOpen = null; holdDeletes.clear()
     }
 
     val workspaces = """[

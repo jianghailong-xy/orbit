@@ -40,29 +40,23 @@ class TrashShellTest {
 
     @Before fun start() = NavShell.reset()
 
-    /** The list offers Move to Trash only while the directory is fresh, so no read of it is on the wire at the press; the reads that
-     * could bring the row back are the ones that leave after it, before the server has the move — an account event's, or the
-     * re-read of a move pressed just before. */
-    @Test fun theRowLeavesOnThePressAndNoReadBeforeTheMoveSettlesBringsItBack() {
+    /** Gone from the list and from what the drawer counts with the server yet to answer; once it has, the toast at once, and the row
+     * held out until the lists' re-read behind the move has landed. (A read that lands before the server has the move is the next
+     * test's.) */
+    @Test fun theRowLeavesTheListAndItsCountOnThePressAndIsHeldUntilTheReReadLands() {
         NavShell.running = setOf(NavShell.PLAIN)
         signIn(); openAlpha()
         await { exists(hasContentDescription("Options for Plain notes")) }
-        openDrawer(); await { exists(hasText("Fixture runner · 1 running")) }; closeDrawer()
+        // The drawer is composed while it is closed: its Alpha row counts the run.
+        await { exists(hasText("Fixture runner · 1 running")) }
         val answer = CompletableDeferred<Unit>()
         NavShell.holdDelete = answer
         rowAction("Plain notes", "Move to Trash")
         await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } }
-        // Gone with the server yet to answer — from the list, and from what the drawer counts.
         compose.onAllNodesWithContentDescription("Options for Plain notes").assertCountEquals(0)
-        openDrawer(); compose.onAllNodesWithText("Fixture runner · 1 running").assertCountEquals(0); closeDrawer()
+        compose.onAllNodesWithText("Fixture runner · 1 running").assertCountEquals(0)
         assertFalse(toastShows("Moved to Trash"))
-        // A read that leaves before the server has the move answers with the row: the snapshot has it, no list draws it.
-        val reads = openReads()
-        app().realtime.refreshDirectory()
-        await { openReads() > reads && !app().realtime.state.value.directoryRefreshing }
-        assertTrue(snapshotHasPlain())
-        compose.waitForIdle()
-        compose.onAllNodesWithContentDescription("Options for Plain notes").assertCountEquals(0)
+        assertTrue("the server still has it", snapshotHasPlain())
         // The server takes the move: the toast at once, and the row held out while the lists are read again behind it.
         val behind = CompletableDeferred<Unit>()
         NavShell.holdOpen = behind
@@ -77,8 +71,10 @@ class TrashShellTest {
         compose.onAllNodesWithContentDescription("Options for Plain notes").assertCountEquals(0)
     }
 
-    /** Two rows moved to Trash one after the other: the first move's re-read leaves while the server has yet to take the second, and
-     * answers with that row. It stays out, and each row is let go once a read behind its own move has landed. */
+    /** The list offers Move to Trash only while the directory is fresh, so no read of it is on the wire at the press; the reads that
+     * could bring the row back are the ones that leave after it and land before the server has the move. Here: two rows moved to
+     * Trash one after the other, the first move's re-read leaving while the server has yet to take the second — it answers with that
+     * row. The row stays out, and each is let go once a read behind its own move has landed. */
     @Test fun theReReadOfAMovePressedJustBeforeDoesNotBringTheNextRowBack() {
         signIn(); openAlpha()
         val first = CompletableDeferred<Unit>(); val second = CompletableDeferred<Unit>()
@@ -150,8 +146,6 @@ class TrashShellTest {
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.waitForIdle()
     }
-    /** Alpha's row is the destination showing: pressing it only closes the drawer (A05-8). */
-    private fun closeDrawer() { alphaRow().performClick(); compose.waitForIdle() }
     private fun openAlpha() { openDrawer(); alphaRow().performClick(); compose.waitForIdle() }
     private fun app() = compose.activity.application as OrbitApplication
     private fun signIn() {
@@ -160,5 +154,14 @@ class TrashShellTest {
         runBlocking { NavShell.signIn(app().session) }
         compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
     }
-    private fun await(condition: () -> Boolean) = compose.waitUntil(60_000, condition)
+    /** A wait that idles the UI on every look — the store's coroutines run on the main looper, which a condition that reads only the
+     * store or the fixture would never let run — and, timed out, says where the store and the fixture stood. */
+    private fun await(condition: () -> Boolean) = try {
+        compose.waitUntil(60_000) { compose.waitForIdle(); condition() }
+    } catch (timeout: ComposeTimeoutException) {
+        val live = app().realtime.state.value
+        throw AssertionError("timed out: trashing=${app().trashing.ids.value} fresh=${live.directoryFresh} refreshing=${live.directoryRefreshing} " +
+            "control=${live.controlConnection} error=${live.directoryError} open=${live.directory?.sessions?.get("open")?.map { it["id"] }} " +
+            "calls=${NavShell.calls.takeLast(16)}", timeout)
+    }
 }

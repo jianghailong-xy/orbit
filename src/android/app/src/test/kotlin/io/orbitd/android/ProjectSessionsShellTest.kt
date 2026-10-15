@@ -231,7 +231,7 @@ class ProjectSessionsShellTest {
         val answer = CompletableDeferred<Unit>()
         ProjectShell.holdDelete = answer
         memberAction("Wire tests", "Move to Trash")
-        await { ProjectShell.calls.any { it == "DELETE sessions/${ProjectShell.WORKER}" } }
+        settled { ProjectShell.calls.any { it == "DELETE sessions/${ProjectShell.WORKER}" } }
         compose.onAllNodesWithContentDescription("Options for Wire tests").assertCountEquals(0)
         await { exists(hasText("Project · 3 sessions")) }
         compose.onNodeWithContentDescription("Back").performClick()
@@ -240,7 +240,7 @@ class ProjectSessionsShellTest {
         assertFalse(toastShows("Moved to Trash"))
         answer.complete(Unit)
         await { toastShows("Moved to Trash") }
-        await { app().trashing.ids.value.isEmpty() }
+        settled { app().trashing.ids.value.isEmpty() }
         compose.onAllNodesWithTag("project-row-running", useUnmergedTree = true).assertCountEquals(0)
     }
 
@@ -251,17 +251,17 @@ class ProjectSessionsShellTest {
         val early = CompletableDeferred<Unit>()
         ProjectShell.holdMembers = early
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
-        await { completedReads() == 1 }
+        settled { completedReads() == 1 }
         ProjectShell.holdMembers = null
         // Drawn from the app's own lists while the page's read is out.
         await { exists(hasContentDescription("Options for Shipped docs")) }
         memberAction("Shipped docs", "Move to Trash")
         await { toastShows("Moved to Trash") }
-        await { app().trashing.ids.value.isEmpty() && app().trashing.releases == 1L }
+        settled { app().trashing.ids.value.isEmpty() && app().trashing.releases == 1L }
         compose.onAllNodesWithContentDescription("Options for Shipped docs").assertCountEquals(0)
         val before = completedReads()
         early.complete(Unit)
-        await { completedReads() > before }
+        settled { completedReads() > before }
         compose.waitForIdle()
         compose.onAllNodesWithContentDescription("Options for Shipped docs").assertCountEquals(0)
         await { exists(hasText("Project · 3 sessions")) }
@@ -283,6 +283,9 @@ class ProjectSessionsShellTest {
         compose.onNode(drawerRow("Launch")).assert(hasContentDescription("5 waiting for you"))
     }
 
+    /** A wait on the fixture or the store, not the screen: it idles the UI on every look, or the store's coroutines (on the main
+     * looper) would never run. */
+    private fun settled(condition: () -> Boolean) = await { compose.waitForIdle(); condition() }
     private fun completedReads() = ProjectShell.calls.count { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}" }
     private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
     private fun memberAction(session: String, action: String) {
