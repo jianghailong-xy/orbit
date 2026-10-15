@@ -475,7 +475,8 @@ class WikiWatchDeviceTest {
         compose.waitUntil(15_000) { compose.onAllNodes(hasText("Shared links") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Shared links") and hasClickAction()).performScrollTo().performClick()
         await("A12 controlled Wiki")
-        compose.onNodeWithText("Wiki").assertExists()
+        // The row's line, not the closed drawer's Wiki row (which stays composed, and presses).
+        compose.onNode(hasText("Wiki") and !hasClickAction()).assertExists()
         assertTrue(compose.onAllNodesWithText("WIKI", substring = true).fetchSemanticsNodes().isEmpty())
         assertTrue(compose.onAllNodesWithText("Wiki ·", substring = true).fetchSemanticsNodes().isEmpty())
         capture("a12f-shared-links")
