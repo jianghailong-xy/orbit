@@ -62,8 +62,8 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
     var previous by mutableStateOf<List<InteractionCard>>(emptyList()); internal set
     /** The card whose review is open, by its address — kept across the Activity being recreated. */
     val review: String? get() = reviewKey.value
-    /** What this window pressed in the open review: the press its receipt answers to. */
-    var pressed by mutableStateOf<CardVerb?>(null); internal set
+    /** What this window pressed in the open review: the press its record answers to. */
+    var pressed by mutableStateOf<CardPress?>(null); internal set
     /** The merge whose receipt is open (A11-9), from its line in the conversation. */
     var receipt by mutableStateOf<JsonObject?>(null)
     fun open(key: String) { pressed = null; reviewKey.value = key }
@@ -81,10 +81,15 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
      * once the door took it. */
     fun submit(card: InteractionCard, verb: CardVerb, input: CardInput) {
         val press = actions.submit(handle, card, verb, input)
-        if (verb != CardVerb.OWNER_ANSWER) return
+        val review = pressed?.takeIf { it.card === card && it.verb == verb }
+        if (verb != CardVerb.OWNER_ANSWER && review == null) return
         scope.launch {
             press.join()
-            val taken = actions.state.value[card.key]?.takeIf { it.binding == card.binding && it.settled && it.response != null } ?: return@launch
+            val answer = actions.state.value[card.key]?.takeIf { it.binding == card.binding }
+            // The review's record keeps what the door answered, whatever the reads make of the card after it.
+            if (review != null && pressed === review) pressed = review.copy(state = answer)
+            if (verb != CardVerb.OWNER_ANSWER) return@launch
+            val taken = answer?.takeIf { it.settled && it.response != null } ?: return@launch
             answered = answered + (card.objectId to CoordinatorQuestions.answeredHere(card.source, input.option, input.text, taken.response))
         }
     }
@@ -222,7 +227,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     // A08-2: a long decision is a compact preview here, answered in its full-height review.
                     preview != null -> CardPreviewView(card, preview) { cards.open(card.key) }
                     // A11b hook: the coordinator's request draws the start card (iOS `StartProjectCardView`), not the generic card.
-                    card.family == CardFamily.START -> CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit)
+                    card.family == CardFamily.START -> CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit = submit)
                     CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
@@ -311,8 +316,9 @@ internal fun CardPreviewView(card: InteractionCard, preview: CardPreview, onOpen
 /**
  * The full-height review a preview opens (A08-2; iOS `ApprovalReviewSheet`): the card whole, its buttons pinned under it, a ✕ that
  * closes it. Hosted by the reader outside the transcript's rows; the answers typed in it are kept per card version while it closes
- * and opens again ([states]). After this window's own press it says so — "Sending your answer…", then "Answer sent" or "Decision
- * recorded", closing itself — and a request that went away says that instead of drawing nothing.
+ * and opens again ([states]). After this window's own press it says so — "Sending your answer…", then the record the card became:
+ * the card as it was asked, read-only, and where its buttons were, who did what and when; it stays open until closed. A request
+ * that went away says that instead of drawing nothing.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -322,17 +328,19 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
     val results by cards.actions.state.collectAsState()
     val card = cards.shown(session).firstOrNull { it.key == key }
     val result = card?.let { results[it.key]?.takeIf { r -> r.binding == it.binding } } ?: CardActionState()
-    val phase = card?.let { CardPreviews.phase(it, result, cards.pressed) } ?: CardPreviews.Phase.CARD
+    // The press is judged on the card it was made on, which the reads may have moved on from since.
+    val press = cards.pressed?.takeIf { it.card.key == key }
+    val pressResult = press?.let { it.state ?: results[it.card.key]?.takeIf { r -> r.binding == it.card.binding } } ?: CardActionState()
+    val phase = press?.let { CardPreviews.phase(it.card, pressResult, it.verb) } ?: CardPreviews.Phase.CARD
+    val record = if (phase == CardPreviews.Phase.RECORDED) press?.let { CardPreviews.record(it.card, it.verb, pressResult, it.at) } else null
     val preview = card?.let { CardPreviews.preview(it) }
     // Read again as it opens: what it shows is the server's now, not the preview's.
     LaunchedEffect(key) { app.realtime.refreshSession() }
-    LaunchedEffect(phase) {
-        if (phase == CardPreviews.Phase.ANSWER_SENT || phase == CardPreviews.Phase.DECISION_RECORDED) { delay(1_200); cards.close() }
-    }
+    LaunchedEffect(phase) { if (phase == CardPreviews.Phase.CLOSED) cards.close() }
     val title = when {
+        record != null -> record.title
         card == null -> CardPreviews.requestClosed
         phase == CardPreviews.Phase.SENDING -> CardPreviews.sendingTitle
-        phase != CardPreviews.Phase.CARD -> CardPreviews.answeredTitle
         else -> preview?.title ?: card.title
     }
     ModalBottomSheet(onDismissRequest = { cards.close() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -346,28 +354,37 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
                 }
             }
             // A refusal since it opened reads at the top, where the eye is after a press (iOS's banner).
-            if (card != null && phase == CardPreviews.Phase.CARD && cards.pressed != null && !result.busy && !result.settled) result.message?.let {
+            if (card != null && phase == CardPreviews.Phase.CARD && press != null && !result.busy && !result.settled) result.message?.let {
                 Text(it, Modifier.fillMaxWidth().background(LocalOrbitColors.current.needsYou.copy(alpha = 0.12f)).padding(horizontal = 16.dp, vertical = 8.dp)
                     .testTag("card-review:banner"), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.needsYou, maxLines = 4)
             }
             HorizontalDivider()
             when {
+                // The record is drawn from the card as it was pressed: the reads may have moved it on, or taken it away.
+                record != null && press != null -> Column(Modifier.fillMaxSize().testTag("card-review:record")) {
+                    Box(Modifier.weight(1f)) {
+                        if (press.card.family == CardFamily.START) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                            CoordinatorStartCard(press.card, session.snapshot?.standing.orEmpty(), false, pressResult, open, null, press.input) { _, _ -> }
+                        } else BusinessCard(press.card, false, pressResult, open, null, { _, _ -> }, review = true, recorded = press.input)
+                    }
+                    HorizontalDivider()
+                    RecordFooter(record)
+                }
                 card == null -> Centered { Text(CardPreviews.noLongerWaiting, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge) }
                 phase == CardPreviews.Phase.SENDING -> Centered {
                     CircularProgressIndicator()
                     Text(CardPreviews.sending, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                phase == CardPreviews.Phase.ANSWER_SENT -> Receipt(CardPreviews.answerSent, CardPreviews.answerSentDetail)
-                phase == CardPreviews.Phase.DECISION_RECORDED -> Receipt(CardPreviews.decisionRecorded, CardPreviews.decisionRecordedDetail)
                 else -> states.SaveableStateProvider("review:${card.key}") {
                     val fresh = cards.fresh(session, card)
                     // A hand-off to the composer closes the review first: the reply is typed under the conversation.
                     val talk = discuss?.let { into -> { context: String -> cards.close(); into(context) } }
-                    val submit = { verb: CardVerb, input: CardInput -> cards.pressed = verb; cards.submit(card, verb, input) }
+                    val submit = { verb: CardVerb, input: CardInput ->
+                        cards.pressed = CardPress(card, verb, input, java.time.Instant.now()); cards.submit(card, verb, input) }
                     // A question answered with its review open is its record now: the review replays it.
                     if (card.family == CardFamily.QUESTION_RECORD) QuestionRecordReview(card, open)
                     else if (card.family == CardFamily.START) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                        CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, talk, submit)
+                        CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, talk, submit = submit)
                     } else if (card.family == CardFamily.PROMOTION) PromotionCardReview(cards, session, card, fresh, result)
                     else BusinessCard(card, fresh, result, open, talk, submit, review = true)
                 }
@@ -411,10 +428,24 @@ private fun Centered(content: @Composable ColumnScope.() -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally, content = content)
 }
 
-/** The review's receipt: what the press did, in the words iOS's `ReviewReceipt` uses, until it closes itself. */
+/** Where the record's buttons were (the coordinator question's footer, `QuestionRecordReview`): a round icon, who did what and when,
+ * and what came of it. */
 @Composable
-private fun Receipt(title: String, detail: String) = Centered {
-    Icon(painterResource(R.drawable.ic_check_circle), null, Modifier.size(44.dp), tint = LocalOrbitColors.current.success)
-    Text(title, Modifier.testTag("card-review:receipt"), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
-    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+private fun RecordFooter(record: CardRecord) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val (icon, tint) = when (record.icon) {
+        CardRecord.Icon.CHECK -> R.drawable.ic_check_circle to LocalOrbitColors.current.success
+        CardRecord.Icon.KEPT -> R.drawable.ic_refresh to secondary
+        CardRecord.Icon.REFUSED -> R.drawable.ic_x_circle to secondary
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).testTag("card-review:footer"),
+        verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(painterResource(icon), null, Modifier.size(16.dp), tint = tint)
+            Text(record.line, Modifier.testTag("card-review:footer-line"), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+        }
+        record.detail?.let {
+            Text(it, Modifier.padding(start = 22.dp).testTag("card-review:footer-detail"), style = MaterialTheme.typography.bodySmall, color = secondary)
+        }
+    }
 }

@@ -741,7 +741,13 @@ class RealStackDeviceTest {
         compose.waitUntil(30_000) { card(before.text("id")!!).text("status") != "PENDING" }
         val after = record("GET approvals → the batch card after Create 3 tasks", card(before.text("id")!!).let { "${it.text("status")} decidedAt=${it.text("decidedAt")}" })
         assertTrue(after, after.startsWith("ALLOWED"))
-        awaitGone("card-review"); capture("stack-a08c-batch-3-recorded")
+        // The review stays open as the record the batch's yes made, who answered where its buttons were.
+        compose.waitUntil(30_000) {
+            compose.onAllNodes(hasTestTag("card-review:footer-line") and hasText("Approved by you · ", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("card-review:title").assertTextEquals(CardPreviews.answeredTitle)
+        capture("stack-a08c-batch-3-recorded")
+        tap("card-review:close"); awaitGone("card-review")
     }
 
     /** A08-8: the merge-check change offers no standing yes and no Deny — saying no is Chat about this — and Allow is recorded on

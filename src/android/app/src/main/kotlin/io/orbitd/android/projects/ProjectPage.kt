@@ -794,6 +794,15 @@ object StartProjectCopy {
         val automatic = if (suggestedOff) "$automaticByDefault ($coordinatorSuggestedOff)." else "$automaticByDefault."
         return (listOf(automatic) + (if (asked) listOf(restSuggested) else emptyList()) + changeLater).joinToString(" ")
     }
+    /** How a start's record says what it was pressed with, in one read-only line: "Automatic · project/cards · Main branch: main ·
+     * Merge check: Set · At most 2 tasks at a time". [branch] is the project branch, named when tasks land on it. */
+    fun settingsLine(draft: Draft, branch: String): String = listOfNotNull(
+        if (draft.automatic) RunSettings.automatic else "${RunSettings.automatic} off",
+        if (draft.line == "MAIN") RunSettings.lineMain(draft.main) else branch,
+        draft.upstream?.let { "${RunSettings.mainBranch}: $it" },
+        "${RunSettings.mergeCheck}: ${if (draft.hasMergeCheck) RunSettings.mergeCheckSet else RunSettings.mergeCheckNone}",
+        "${RunSettings.atMost} ${draft.maxConcurrentTasks} ${RunSettings.tasksAtATime(draft.maxConcurrentTasks)}",
+    ).joinToString(" · ")
 
     // What still comes to the owner under the Automatic switch.
     const val comesToYou = "Comes to you"

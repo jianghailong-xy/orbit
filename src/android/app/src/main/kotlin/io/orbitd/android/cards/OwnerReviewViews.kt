@@ -136,10 +136,11 @@ internal fun Disclosure(label: String, open: Boolean, tag: String, toggle: () ->
 /**
  * One block per question only the owner can decide (iOS `ReviewAnswerBlocks`): its evidence, its options with the recommendation
  * chosen and marked, then a row for the owner's own words. The first question's words are the bar's first line already, so its
- * block starts at its options.
+ * block starts at its options. [recorded], they are the answers sent: the one chosen ticked, the rest grey, no hint.
  */
 @Composable
-internal fun ReviewAnswerBlocks(questions: List<JsonObject>, choices: List<OwnerAnswer>, enabled: Boolean, choose: (OwnerAnswer) -> Unit) {
+internal fun ReviewAnswerBlocks(questions: List<JsonObject>, choices: List<OwnerAnswer>, enabled: Boolean, choose: (OwnerAnswer) -> Unit,
+    recorded: Boolean = false) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         questions.forEachIndexed { index, question ->
             val id = question.text("key") ?: return@forEachIndexed
@@ -155,20 +156,29 @@ internal fun ReviewAnswerBlocks(questions: List<JsonObject>, choices: List<Owner
                             Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    question.objects("options").forEachIndexed { option, choice ->
-                        ReviewChoiceRow(choice.text("label").orEmpty(), choice.text("description"), chosen.option == option, enabled,
-                            recommended = option == question.number("recommendedOption")) { choose(OwnerAnswer(id, option)) }
+                    if (recorded) {
+                        question.objects("options").forEachIndexed { option, choice ->
+                            ReplayOption("owner-question:$id:option:$option", choice.text("label").orEmpty(), choice.text("description"),
+                                recommended = false, chosen = chosen.option == option, words = null, wordsLabel = null)
+                        }
+                        if (chosen.option == null) ReplayOption("owner-question:$id:other", OwnerReview.otherOwnWords, null, recommended = false,
+                            chosen = true, words = chosen.text, wordsLabel = null)
+                    } else {
+                        question.objects("options").forEachIndexed { option, choice ->
+                            ReviewChoiceRow(choice.text("label").orEmpty(), choice.text("description"), chosen.option == option, enabled,
+                                recommended = option == question.number("recommendedOption")) { choose(OwnerAnswer(id, option)) }
+                        }
+                        ReviewChoiceRow(OwnerReview.otherOwnWords, null, chosen.option == null, enabled) {
+                            if (chosen.option != null) choose(OwnerAnswer(id, text = ""))
+                        }
+                        if (chosen.option == null) OutlinedTextField(chosen.text.orEmpty(), { choose(OwnerAnswer(id, text = it)) },
+                            Modifier.fillMaxWidth().testTag("owner-question:$id:other"), enabled = enabled, minLines = 2, maxLines = 8,
+                            placeholder = { Text(question.text("text").orEmpty()) })
                     }
-                    ReviewChoiceRow(OwnerReview.otherOwnWords, null, chosen.option == null, enabled) {
-                        if (chosen.option != null) choose(OwnerAnswer(id, text = ""))
-                    }
-                    if (chosen.option == null) OutlinedTextField(chosen.text.orEmpty(), { choose(OwnerAnswer(id, text = it)) },
-                        Modifier.fillMaxWidth().testTag("owner-question:$id:other"), enabled = enabled, minLines = 2, maxLines = 8,
-                        placeholder = { Text(question.text("text").orEmpty()) })
                 }
             }
         }
-        Text(OwnerReview.answersSentWithConfirm, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!recorded) Text(OwnerReview.answersSentWithConfirm, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -227,10 +237,11 @@ internal class OwnerForm(val choices: List<OwnerAnswer>, val enabled: Boolean, v
 /**
  * The owner-confirmation card's body in its three shapes (A08-1): the question — the task, what counts as done, what the agent
  * said, the reviewer's box with the answer blocks, what confirming sets off; the receipt a decision left; and the record a
- * reviewer's return left, which asks nothing and draws no buttons.
+ * reviewer's return left, which asks nothing and draws no buttons. The question [recorded] — the record a confirmation from its
+ * review made of it — keeps the report and the review, the owner's answers ticked, and drops what confirming would set off.
  */
 @Composable
-internal fun OwnerCardBody(card: InteractionCard, open: (String) -> Unit, owner: OwnerForm?, reopen: (() -> Unit)?) {
+internal fun OwnerCardBody(card: InteractionCard, open: (String) -> Unit, owner: OwnerForm?, reopen: (() -> Unit)?, recorded: Boolean = false) {
     val view = card.context.obj("view") ?: card.source
     when (card.context.text("ownerCard")) {
         "receipt" -> OwnerDecisionReceiptBody(card.source, view, open, reopen)
@@ -247,10 +258,10 @@ internal fun OwnerCardBody(card: InteractionCard, open: (String) -> Unit, owner:
             OwnerReview.readable(waiting?.get("review"))?.let { review ->
                 val questions = OwnerReview.questions(review)
                 ReviewBarView(review, OwnerReview.Place.CARD, answers = if (owner == null || questions.isEmpty()) null else {
-                    { ReviewAnswerBlocks(questions, owner.choices, owner.enabled, owner.choose) }
+                    { ReviewAnswerBlocks(questions, owner.choices, owner.enabled, owner.choose, recorded) }
                 })
             }
-            Field("If confirmed", view["ifConfirmed"], open)
+            if (!recorded) Field("If confirmed", view["ifConfirmed"], open)
         }
     }
 }
