@@ -125,13 +125,22 @@ it gets no reply of its own, so how far it got is the only report it ever produc
   transcript rebuilt from durable events alone still knows which bubble that was.
 - **A still-PENDING steer is listed** by `GET /sessions/:id/turns`, tagged `kind: 'steer'`. Until
   the runner leases it there is nothing else to render it from, and a message that vanishes on
-  refresh is the one outcome mid-turn sending must not produce. Listed ≠ withdrawable.
+  refresh is the one outcome mid-turn sending must not produce. Listed ≠ cancellable: a steer is
+  withdrawn by its own rule (below), never by Cancel's delete of a queued message.
 - **Four states, from the runner's own `user_delivery` transitions:** *Sending…* (accepted, by the
-  control plane or the runner's writer), *Delivering…* (`written` — its bytes are in the engine's
-  stdin, unread while a tool runs), *Sent into this turn* (`acknowledged` — the engine echoed it
-  back), *Not delivered* (`failed`, with the reason). Shown for a steer alone: an ordinary message
-  is reported by the reply that follows it. Web `lib/steerDelivery.ts` and OrbitKit
-  `Transcript/SteerDelivery.swift` are the same table, so every client says the same words.
+  control plane or the runner's writer), *Waiting to be read* (`written` — the engine has it and
+  takes it into the conversation at its next tool boundary), *Read in this turn* (`acknowledged` —
+  the engine echoed it back), *Not delivered* (`failed`, with the reason). The words follow chat read
+  receipts; until 2026-10-16 the middle two were *Delivering…* and *Sent into this turn*. Shown for a
+  steer alone: an ordinary message is reported by the reply that follows it. Web
+  `lib/steerDelivery.ts` and OrbitKit `Transcript/SteerDelivery.swift` are the same table, so every
+  client says the same words.
+- **A steer can be withdrawn while nothing has read it.** Each steer frame carries its turn id as the
+  frame's `uuid`; the CLI keeps it, echoes it back, and drops a still-queued message by it
+  (`cancel_async_message`, measured on 2.1.296 and 2.1.300). The runner marks such a steer
+  `withdrawable` on its `user` event, takes a `withdraw` turn, and answers it with what the CLI said
+  (`claude_withdraw.go`); only `cancelled: true` removes the message, reported as a `withdrawn`
+  delivery. See `apiserver/src/sessions/steer-withdraw.ts` for the control plane's half.
 - **A mid-turn `user` event is not a turn boundary.** It lands inside a reply that is still
   streaming: clients must not clear/close the open assistant bubble on it, or the reply is blanked
   (web) or rendered twice once its authoritative `assistant` event arrives (native).

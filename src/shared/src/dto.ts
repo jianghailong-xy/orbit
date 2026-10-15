@@ -1829,6 +1829,12 @@ export interface ApprovalDecisionResponse {
 // It is deliberately its own kind rather than a relaxation of the message gate — a steer
 // neither occupies the single in-flight slot nor waits for it, and it settles its own turn
 // on the engine's echo rather than on a `result`, which belongs to the turn it joined.
+// 'withdraw' asks the runner to take back one steer the engine has not read yet. Its `content` is
+// JSON naming that steer ({"turnId": …}); the runner asks the engine to drop the message and
+// completes this turn with what the engine answered (TURN_COMPLETE_STEER_WITHDRAW), which the
+// completion writes back into `content` for the request that filed it to read. Deliverable
+// mid-turn like interrupt — a steer only exists while a turn runs — and filed only for a runtime
+// and runner that can do it (supportsSteerWithdraw).
 export type ConversationTurnKind =
   | 'message'
   | 'interrupt'
@@ -1837,7 +1843,8 @@ export type ConversationTurnKind =
   | 'setconfig'
   | 'shell'
   | 'diff'
-  | 'steer';
+  | 'steer'
+  | 'withdraw';
 
 /** What a routing-v1 sender wants a message to do. Omission retains the installed N-1
  * server-side auto-steer/queue protocol; new clients always send one explicit value. */
@@ -2112,6 +2119,37 @@ export interface TurnCompleteRequest {
  * twice. See docs/codex-turn-steer-contract.md §4.3.
  */
 export const TURN_COMPLETE_STEER_REQUEUE = 'steer_requeue';
+
+/**
+ * `TurnCompleteRequest.subtype` for a `withdraw` turn: the runner asked the engine to drop the steer
+ * it names, and `result` is what came of it (SteerWithdrawOutcome), with `error` saying why when it
+ * was not `withdrawn`. Only `withdrawn` changes anything: the steer's row goes, as a cancelled
+ * queued message's does. Every other outcome leaves the steer exactly where it was, on its way to
+ * being read.
+ */
+export const TURN_COMPLETE_STEER_WITHDRAW = 'steer_withdraw';
+
+/**
+ * What asking the engine to drop a steer came to.
+ *
+ * - `withdrawn`: the engine dropped it unread (claude's `cancel_async_message` answered
+ *   `cancelled: true`). Nothing will ever read it.
+ * - `already_read`: the engine had taken it into the turn first (`cancelled: false`).
+ * - `not_waiting`: the runner holds no such message on its way into the engine — it was read,
+ *   it failed, or it belongs to an engine process that is gone.
+ * - `failed`: the engine never answered, or refused the request; the message is where it was.
+ */
+export type SteerWithdrawOutcome = 'withdrawn' | 'already_read' | 'not_waiting' | 'failed';
+
+/** The machine codes DELETE /sessions/:id/turns/:turnId refuses a steer's withdrawal with. */
+export const STEER_WITHDRAW_ERRORS = {
+  /** The engine had read it already; it is part of the running turn. */
+  ALREADY_READ: 'STEER_ALREADY_READ',
+  /** The engine has it and has no way to give it back (codex, or a runner that predates withdraw). */
+  NOT_WITHDRAWABLE: 'STEER_NOT_WITHDRAWABLE',
+  /** The runner did not answer in time; the message was not withdrawn. */
+  NO_ANSWER: 'STEER_WITHDRAW_NO_ANSWER',
+} as const;
 
 /**
  * One mid-turn message that was leased by a runner process which then died holding it.

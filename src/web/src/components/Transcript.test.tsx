@@ -13,6 +13,8 @@ import {
   LiveToolOutputsCtx,
   MD,
   type RunEvent,
+  SteerWithdrawCtx,
+  type SteerWithdrawHandle,
   Transcript,
   UndeliveredCtx,
   resultText,
@@ -494,11 +496,11 @@ describe('message delivery', () => {
     const html = renderToStaticMarkup(<Transcript events={events} />);
 
     expect(html.split('original adjustment').length - 1).toBe(1);
-    expect(html.split('Delivery could not be confirmed').length - 1).toBe(1);
+    expect(html.split('confirm it was read').length - 1).toBe(1);
     expect(html.indexOf('original adjustment')).toBeLessThan(
-      html.indexOf('Delivery could not be confirmed'),
+      html.indexOf('confirm it was read'),
     );
-    expect(html.indexOf('Delivery could not be confirmed')).toBeLessThan(html.indexOf('newer B'));
+    expect(html.indexOf('confirm it was read')).toBeLessThan(html.indexOf('newer B'));
     expect(html.indexOf('newer B')).toBeLessThan(html.indexOf('newer C'));
     expect(html).not.toContain('Put back in the composer');
   });
@@ -541,7 +543,7 @@ describe('a message steered into the running turn', () => {
     );
 
     expect(html).toContain('Sending…');
-    expect(html).not.toContain('Sent into this turn');
+    expect(html).not.toContain('Read in this turn');
   });
 
   it('moves to delivering once its bytes are in the engine', () => {
@@ -551,7 +553,7 @@ describe('a message steered into the running turn', () => {
       />,
     );
 
-    expect(html).toContain('Delivering…');
+    expect(html).toContain('Waiting to be read');
     expect(html).not.toContain('Sending…');
   });
 
@@ -566,8 +568,8 @@ describe('a message steered into the running turn', () => {
       />,
     );
 
-    expect(html).toContain('Sent into this turn');
-    expect(html).not.toContain('Delivering…');
+    expect(html).toContain('Read in this turn');
+    expect(html).not.toContain('Waiting to be read');
   });
 
   it('replaces the progress with the failure, not both', () => {
@@ -600,7 +602,7 @@ describe('a message steered into the running turn', () => {
     );
 
     expect(html).toContain('use the other endpoint');
-    expect(html).toContain('Sent into this turn');
+    expect(html).toContain('Read in this turn');
     // …and says nothing about the ordinary message it was steering, whose own reply reports it.
     expect(html.split('chat-steer-state').length - 1).toBe(1);
   });
@@ -617,7 +619,7 @@ describe('a message steered into the running turn', () => {
     );
 
     expect(html).not.toContain('chat-steer-state');
-    expect(html).not.toContain('Sent into this turn');
+    expect(html).not.toContain('Read in this turn');
   });
 
   it('offers an undelivered message back to the composer', () => {
@@ -648,6 +650,75 @@ describe('a message steered into the running turn', () => {
 
     expect(html).toContain('Not delivered');
     expect(html).not.toContain('Put back in the composer');
+  });
+});
+
+/**
+ * Taking a steer back while nothing has read it (SteerWithdrawCtx). The runner says on the steer's
+ * own `user` event whether its engine can drop it unread; the bubble offers it beside the state it
+ * would undo, says "Withdrawing…" while the answer is out, and is gone once the engine dropped it.
+ */
+describe('a steer that can be taken back', () => {
+  const withdrawable = (seq: number, turnId: string, text: string): RunEvent => ({
+    seq,
+    type: 'user',
+    turnId,
+    payload: { text, delivery: 'enqueued', steer: true, withdrawable: true },
+  });
+  const delivery = (seq: number, turnId: string, state: string): RunEvent => ({
+    seq,
+    type: 'user_delivery',
+    payload: { turnId, delivery: state },
+  });
+  const handle = (over: Partial<SteerWithdrawHandle> = {}): SteerWithdrawHandle => ({
+    withdraw: () => {},
+    withdrawing: new Set(),
+    withdrawn: new Set(),
+    ...over,
+  });
+  const render = (events: RunEvent[], value: SteerWithdrawHandle | null = handle()) =>
+    renderToStaticMarkup(
+      <SteerWithdrawCtx.Provider value={value}>
+        <Transcript events={events} />
+      </SteerWithdrawCtx.Provider>,
+    );
+
+  it('offers Withdraw beside the state while it waits to be read', () => {
+    const html = render([withdrawable(1, 't1', 'then push it to main'), delivery(2, 't1', 'written')]);
+    expect(html).toContain('Waiting to be read');
+    expect(html).toContain('>Withdraw</button>');
+  });
+
+  it('offers nothing the runner did not say the engine can drop, nor once it is read', () => {
+    expect(
+      render([
+        { seq: 1, type: 'user', turnId: 't1', payload: { text: 'go', delivery: 'enqueued', steer: true } },
+        delivery(2, 't1', 'written'),
+      ]),
+    ).not.toContain('>Withdraw</button>');
+    const read = render([withdrawable(1, 't1', 'go'), delivery(2, 't1', 'written'), delivery(3, 't1', 'acknowledged')]);
+    expect(read).toContain('Read in this turn');
+    expect(read).not.toContain('>Withdraw</button>');
+  });
+
+  it('offers nothing where nothing can be sent', () => {
+    expect(render([withdrawable(1, 't1', 'go')], null)).not.toContain('>Withdraw</button>');
+  });
+
+  it('says Withdrawing… while the answer is out, with nothing to press twice', () => {
+    const html = render([withdrawable(1, 't1', 'go'), delivery(2, 't1', 'written')], handle({ withdrawing: new Set(['t1']) }));
+    expect(html).toContain('Withdrawing…');
+    expect(html).not.toContain('Waiting to be read');
+    expect(html).not.toContain('>Withdraw</button>');
+  });
+
+  it('draws nothing of a steer the engine dropped — on the runner\'s word or the server\'s ahead of it', () => {
+    const words = 'then push it to main';
+    const dropped = render([withdrawable(1, 't1', words), delivery(2, 't1', 'written'), delivery(3, 't1', 'withdrawn')]);
+    expect(dropped).not.toContain(words);
+    expect(dropped).not.toContain('chat-steer-state');
+    const confirmed = render([withdrawable(1, 't1', words), delivery(2, 't1', 'written')], handle({ withdrawn: new Set(['t1']) }));
+    expect(confirmed).not.toContain(words);
   });
 });
 
@@ -683,7 +754,7 @@ describe('a codex steer, whose bubble opens at whatever happened first', () => {
       <Transcript events={[steerEvent(1, 't1', 'use the other endpoint', 'written')]} />,
     );
 
-    expect(html).toContain('Delivering…');
+    expect(html).toContain('Waiting to be read');
     expect(html).not.toContain('Sending…');
   });
 
@@ -697,8 +768,8 @@ describe('a codex steer, whose bubble opens at whatever happened first', () => {
       />,
     );
 
-    expect(html).toContain('Delivering…');
-    expect(html).not.toContain('Sent into this turn');
+    expect(html).toContain('Waiting to be read');
+    expect(html).not.toContain('Read in this turn');
     expect(html).not.toContain('Not delivered');
   });
 
@@ -709,9 +780,9 @@ describe('a codex steer, whose bubble opens at whatever happened first', () => {
       <Transcript events={[steerEvent(1, 't1', 'use the other endpoint', 'acknowledged')]} />,
     );
 
-    expect(html).toContain('Sent into this turn');
+    expect(html).toContain('Read in this turn');
     expect(html).not.toContain('Sending…');
-    expect(html).not.toContain('Delivering…');
+    expect(html).not.toContain('Waiting to be read');
   });
 
   it('opens as the failure it is when codex never took it', () => {

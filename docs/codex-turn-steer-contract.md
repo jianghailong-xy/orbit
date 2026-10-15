@@ -213,15 +213,18 @@ settle 成失败、`retryable: true`、把重发的决定交给人。
 
 沿用 `claude_delivery.go` 已有的 `deliveryState`,不新增状态:
 
-| 状态 | Codex 侧的含义 | 客户端显示(`steerDelivery.ts`,不变) |
+| 状态 | Codex 侧的含义 | 客户端显示(`steerDelivery.ts`) |
 | --- | --- | --- |
 | `pending` | inbox 交出了这条 steer,还没发 | Sending… |
 | `enqueued` | 已写进 app-server stdin,response 未回 | Sending… |
-| `written` | `turn/steer` 返回 OK 且 `turnId` 校验通过 —— **Codex 收下了,模型还没看见** | Delivering… |
-| `acknowledged` | 收到 `item.clientId` 匹配的 userMessage 回显 —— **消息在会话里了** | Sent into this turn |
+| `written` | `turn/steer` 返回 OK 且 `turnId` 校验通过 —— **Codex 收下了,模型还没看见** | Waiting to be read |
+| `acknowledged` | 收到 `item.clientId` 匹配的 userMessage 回显 —— **消息在会话里了** | Read in this turn |
 | `failed` | §4.2 里任何一行 | Not delivered |
 
-`written → acknowledged` 实测可以隔 31 秒。**这段时间显示 "Delivering…" 是正确的,不是卡住。**
+`written → acknowledged` 实测可以隔 31 秒。**这段时间显示 "Waiting to be read" 是正确的,不是卡住。**
+(2026-10-16 起的词。原来叫 "Delivering…",读起来像消息还在路上、一停几分钟就像卡住;`acknowledged` 原来叫
+"Sent into this turn",在聊天软件的回执里 Sent 比 Delivered 还早。改成"发送中 → 等待被读 → 已读"的顺序,
+`unconfirmed` 也从 "Delivery could not be confirmed" 改成 "Couldn't confirm it was read"。)
 
 Web / iOS / macOS 三端**行为**不需要改:`steerDelivery.ts` 与 `SteerDelivery.swift` 是双胞胎,
 都只看 `delivery` 字段,词表没变。唯一要动的是**注释**:两边现在都写着 `claude` / `--replay-user-messages`,
@@ -319,11 +322,20 @@ delivered by codex`)。反向验证:把"读 `user` 事件自带的 delivery"这�
 - **API**:`POST /turns` 返回 `kind`;`GET /sessions/:id/turns` 每行带 `kind`;
 - **CLI / MCP**:`orbit session send` 与 `session_send` 都是 raw JSON 透传,旧服务端不带 `kind` 时也**不补默认值**。
 
-**Cancel 的唯一规则**:`kind='steer'` 不给 Cancel,`message`/`shell` 照旧给。三层都已闭合 ——
-服务端 `cancelQueuedTurn` 只删 `message`/`shell`,steer 命中专门的 409("being written into the running
-turn");web 由 `QueuedTurnMeta` 渲染,steer 分支不渲染 Cancel;macOS/iOS 的 `MessageBubbles.meta` 里
-Cancel 嵌在 `else if bubble.pending` 分支内,而 `bubble.steer` 分支排在它**前面**,结构上不可达。
-(OrbitApp 不在 Linux 可测范围内,所以 Swift 侧钉的是视图分支所读的 `bubble.steer`/`queued` 状态本身。)
+**Cancel 与 Withdraw(2026-10-16 起)**:Cancel 仍只给 `message`/`shell`。steer 有自己的 **Withdraw**,
+走同一个 `DELETE /sessions/:id/turns/:turnId`,只给用户自己打的字(`senderSessionId` 为空且不是
+`isOrbitAuthoredTurn`),规则按它此刻在谁手里分(`apiserver/src/sessions/steer-withdraw.ts`):
+
+- **还 PENDING**(runner 没取):只在 Orbit 手里,服务端直接删,任何引擎都行;
+- **IN_FLIGHT、Claude、runner 声明了 `session-claude-steer-withdraw-v1`**:服务端排一个 `withdraw` 控制 turn,
+  runner 对 CLI 发 `cancel_async_message`(`runner-go/claude_withdraw.go`;steer 的帧带 `uuid = turnId`),
+  以 CLI 的回答为准:`cancelled: true` 才删行,`false` 就是已读;请求方同步等最多 15 秒;
+- **IN_FLIGHT、Codex 或旧 runner**:409 `STEER_NOT_WITHDRAWABLE` —— `turn/steer` 交出去就收不回;
+- **已读**(`ACKNOWLEDGED` 或已结算):409 `STEER_ALREADY_READ`。
+
+客户端只在 runner 在 steer 的 `user` 事件里写了 `withdrawable: true`、且状态还是 `enqueued`/`written` 时给
+Withdraw(排队列表里还 PENDING 的 steer 也给);撤回成功后气泡消失、文字回到输入框,runner 再发一条
+`user_delivery`(`delivery: "withdrawn"`)让别的端也把气泡拿掉。
 
 **`steer_requeue` 的客户端结局**:重排不发任何事件,**排队列表就是公告** —— 同一 `turnId` 以
 `kind='message'` 重新出现,Cancel 必须跟着回来。两端都验了;Swift 侧把
@@ -333,7 +345,7 @@ Cancel 嵌在 `else if bubble.pending` 分支内,而 `bubble.steer` 分支排在
 到第一次 `announce` 之间(实测 6ms~520ms,上限 10s 即 RPC 超时),对**刷新/第三方视角**不可见;
 发送方自己有乐观气泡。**不把 `IN_FLIGHT` 的 steer 列进 `listQueuedTurns` 的理由**:
 
-1. 那个列表的语义是"还没有人读过、可以撤回的行",把已投递的行混进去会让 Cancel 的判据从 `kind` 变成
+1. 那个列表的语义是"还没有人读过、可以取消的行",把已投递的行混进去会让 Cancel 的判据从 `kind` 变成
    `kind + status`,而 `status` 客户端根本看不到;
 2. 要正确实现必须再查 `run_event` 排除"已经有 `user` 事件"的行 —— 每个 focused 客户端都会打这个接口;
 3. 真正无界的那一格是 §4.8(runner 死掉),而那一格**列出来更糟**:会变成一条永远停在 "Sending…"、

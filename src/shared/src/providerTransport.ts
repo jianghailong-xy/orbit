@@ -125,3 +125,26 @@ export function supportsTargetBoundCurrentWorkSteer(
   return supportsSessionCurrentWorkRouting(declaredCapabilities)
     && supportsMidTurnSteer(runtime, declaredCapabilities);
 }
+
+/**
+ * The runner capability that makes a steer the engine has not read yet withdrawable: the runner
+ * takes a `withdraw` turn and asks the resident engine to drop the message (claude's
+ * `cancel_async_message`), and the engine's own answer — dropped, or already read — is the outcome.
+ *
+ * Claude only. Codex buffers a steer inside the running turn with no call that takes one back, so
+ * a codex steer is handed over for good the moment `turn/steer` returns; the other runtimes never
+ * steer at all (their mid-turn messages queue, and a queued message is cancelled by the control
+ * plane alone).
+ */
+export const SESSION_CLAUDE_STEER_WITHDRAW_V1 = 'session-claude-steer-withdraw-v1';
+
+/**
+ * Whether a steer already handed to this runtime can still be taken back before it is read.
+ * Asked of the RUNTIME a session executes on (`execRuntime`), and of what the runner holding it
+ * declared: absent capabilities mean not declared, so a runner that predates `withdraw` keeps the
+ * refusal every steer has always had rather than being sent a turn it has no arm for.
+ */
+export function supportsSteerWithdraw(runtime: string, declaredCapabilities?: readonly string[]): boolean {
+  return runtime === AgentProvider.CLAUDE
+    && (declaredCapabilities ?? []).some((value) => value.trim().toLowerCase() === SESSION_CLAUDE_STEER_WITHDRAW_V1);
+}

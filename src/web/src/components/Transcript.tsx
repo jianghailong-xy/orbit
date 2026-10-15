@@ -68,7 +68,7 @@ import {
   describeNote,
   splitRecordedNote,
 } from '../lib/deliveredMessage';
-import { steerDeliveryState } from '../lib/steerDelivery';
+import { offersSteerWithdraw, steerDeliveryState, WITHDRAWN_DELIVERY } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
@@ -358,6 +358,22 @@ export const UndeliveredCtx = createContext<
 >(null);
 
 /**
+ * Take back a message sent into the running turn while nothing has read it yet: a steer whose runner
+ * said its engine can drop it unread (`withdrawable` on its user event — claude, whose CLI can take
+ * it out of its queue and says whether it did). The bubble offers it beside its state. `withdrawing`
+ * holds the ones asked for and not yet answered, drawn as "Withdrawing…"; `withdrawn` the ones the
+ * server has confirmed, hidden before the runner's own `withdrawn` delivery reaches this transcript.
+ * WorkspaceView supplies it; a reader who cannot send has nothing to take back, so the shared page
+ * and the static export leave it null.
+ */
+export interface SteerWithdrawHandle {
+  withdraw: (turnId: string, text: string, attachments?: readonly TurnAttachmentRef[]) => void;
+  withdrawing: ReadonlySet<string>;
+  withdrawn: ReadonlySet<string>;
+}
+export const SteerWithdrawCtx = createContext<SteerWithdrawHandle | null>(null);
+
+/**
  * The untrimmed payload of a clipped event, fetched the first time its card is opened (`want`).
  * A folded card costs nothing: the whole point of the server-side clip is that a big Read output
  * or Write body only crosses the network if someone actually looks at it. Returns null until it
@@ -487,6 +503,11 @@ type TextNode = {
   // got is the only thing that reports it, and the states above are shown for it alone. On
   // the event itself so a reload still knows which bubble that was.
   steer?: boolean;
+  // The runner's word, on a steer's own `user` event, that its engine can drop it unread — so the
+  // bubble may offer to take it back while it waits (lib/steerDelivery `offersSteerWithdraw`).
+  withdrawable?: boolean;
+  // The conversation turn a user message was filed under: what a withdrawal names it by.
+  turnId?: string;
   // A `!cmd` still on the queue (`queuedTurnEvent`): drawn verbatim as the command it will run, since
   // Markdown would mangle its shell syntax. No echo carries it — the runner runs one as a Bash card.
   shell?: boolean;
@@ -1047,6 +1068,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
+          priorSteer.withdrawable = undefined;
           priorSteer.delivery = typeof p.delivery === 'string' ? p.delivery : undefined;
           priorSteer.deliveryReason = undefined;
           if (p.text) {
@@ -1074,6 +1096,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
             steer: p.steer === true,
+            withdrawable: p.withdrawable === true ? true : undefined,
+            turnId: ev.turnId ?? undefined,
             shell: p.shell === true,
           };
           if (taskStart) {
@@ -1628,8 +1652,18 @@ export function QueuedUserTurn({
 function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?: ReactNode }) {
   const exporting = useContext(ExportCtx);
   const authHelp = useContext(AuthErrorCtx);
+  const withdrawal = useContext(SteerWithdrawCtx);
   switch (node.kind) {
     case 'user': {
+      // A message taken back before anything read it: the runner's word that the engine dropped it
+      // (WITHDRAWN_DELIVERY), or the server's, ahead of that word, on the screen that asked. Nothing
+      // of it is drawn — the agent never saw it, and its words went back to the composer.
+      if (
+        node.steer
+        && (node.delivery === WITHDRAWN_DELIVERY || (node.turnId != null && withdrawal?.withdrawn.has(node.turnId)))
+      ) {
+        return null;
+      }
       // A turn still on the queue is no event yet: nothing for ⌘F to land on, so nothing is stamped.
       const seq = queued ? undefined : node.seq;
       // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
@@ -2386,6 +2420,34 @@ function AutoRetryCard({
 // resumed/old sessions can still carry big messages.
 export const USER_BUBBLE_TRUNCATE = 6000;
 
+// A steer's own progress, shown for a steer alone. An ordinary message is answered by the reply that
+// follows it, so narrating its delivery would be noise; a steer joins a turn that answers something
+// else, so without this line the sender has nothing at all to distinguish "on its way into this turn"
+// from "quietly dropped". While nothing has read it, on an engine that can drop it unread, the way to
+// take it back sits beside the state it would undo — the same link "Put back in the composer" is.
+function SteerState({ node, typed }: { node: TextNode; typed: string }) {
+  const withdrawal = useContext(SteerWithdrawCtx);
+  const exporting = useContext(ExportCtx);
+  const turnId = node.turnId;
+  const asking = turnId != null && !!withdrawal?.withdrawing.has(turnId);
+  const offer =
+    !exporting && withdrawal != null && turnId != null && !asking && offersSteerWithdraw(node.delivery, node.withdrawable);
+  return (
+    <div className="chat-steer-state">
+      {asking ? 'Withdrawing…' : steerDeliveryState(node.delivery).label}
+      {offer && (
+        <button
+          type="button"
+          className="chat-undelivered-retry"
+          onClick={() => withdrawal.withdraw(turnId, typed, node.attachmentRefs)}
+        >
+          Withdraw
+        </button>
+      )}
+    </div>
+  );
+}
+
 // User message bubble. The text is Markdown-rendered by the same `MD` renderer as the assistant
 // turn: the messages sent here are mostly long structured prompts (headings, lists, fenced
 // commands), and reading them as raw '#'/'*' source is what this replaces. `breaks` keeps the
@@ -2464,13 +2526,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
           )}
         </div>
       ) : (
-        node.steer && (
-          // A steer's own progress, shown for a steer alone. An ordinary message is answered by
-          // the reply that follows it, so narrating its delivery would be noise; a steer joins a
-          // turn that answers something else, so without this line the sender has nothing at all
-          // to distinguish "on its way into this turn" from "quietly dropped".
-          <div className="chat-steer-state">{steerDeliveryState(node.delivery).label}</div>
-        )
+        node.steer && <SteerState node={node} typed={typed} />
       )}
       {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>

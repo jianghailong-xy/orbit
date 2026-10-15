@@ -93,7 +93,7 @@ function FailedOutput({ text }: { text: string }) {
  *
  * A job that ended while a turn was running is written into that turn (a steer), so its line sits in
  * the running turn's own stream, and how far it got is the line's to say — the same words a steer's
- * bubble uses (lib/steerDelivery), from "Sending…" to "Sent into this turn".
+ * bubble uses (lib/steerDelivery), from "Sending…" to "Read in this turn".
  */
 export function BackgroundWakeCard({
   wake,

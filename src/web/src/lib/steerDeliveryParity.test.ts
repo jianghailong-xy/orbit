@@ -8,7 +8,7 @@ import { steerDeliveryState } from './steerDelivery';
  *
  * A mid-turn message produces no reply of its own — the running turn's is the answer — so how far
  * it got IS the whole visible outcome. Two people watching the same session from a browser and a
- * phone are watching the same message; if one says "Delivering…" while the other says something
+ * phone are watching the same message; if one says "Waiting to be read" while the other says something
  * else, one of them is being told a different story about the same fact.
  *
  * Swift cannot import the TypeScript, so the table exists twice. This is what keeps the second

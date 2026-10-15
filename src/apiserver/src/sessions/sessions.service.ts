@@ -10,6 +10,7 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   type ConversationTurn,
@@ -28,6 +29,13 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import {
+  readSteerWithdrawRequest,
+  steerWithdrawAnswer,
+  steerWithdrawContent,
+  STEER_WITHDRAW_POLL_MS,
+  STEER_WITHDRAW_WAIT_MS,
+} from './steer-withdraw';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -83,7 +91,9 @@ import {
   type SessionSourceRefusalDetail,
   type SourceRefusalCode,
   type SourceState,
+  STEER_WITHDRAW_ERRORS,
   supportsMidTurnSteer,
+  supportsSteerWithdraw,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
   accountToMoveTo,
@@ -677,6 +687,9 @@ export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
   /** The snapshots `listOpenSince` answers a cursor against — see open-list-delta.ts. */
   private readonly openListDelta = new OpenListDeltaStore();
+  /** How long a steer's withdrawal waits for the runner's answer (steer-withdraw.ts). A field so a
+   *  spec can wait less for an answer it knows is not coming. */
+  protected steerWithdrawWaitMs = STEER_WITHDRAW_WAIT_MS;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -5994,13 +6007,18 @@ export class SessionsService {
    *  running, and will appear in the transcript, so cancelling is rejected.
    *
    *  Also the door for discarding a CURRENT_WORK message whose delivery settled undelivered:
-   *  the engine never received it, so it is still the sender's to take back. */
+   *  the engine never received it, so it is still the sender's to take back.
+   *
+   *  And for withdrawing a steer the reader typed, while nothing has read it. One still PENDING is
+   *  Orbit's alone and goes like a queued message. One the runner holds is the engine's to give
+   *  back: a `withdraw` turn asks it through the runner (steer-withdraw.ts), and this waits for what
+   *  the engine answered — the steer is gone only if it said so. */
   async cancelQueuedTurn(ownerId: string, id: string, turnId: string) {
     await this.getSendable(ownerId, id);
     // Retried whole. A cancel is a compare-and-set against a turn still queued; an attempt the
     // server discarded cancelled nothing, so a re-run either still finds it queued or reports the
     // same 'already gone' the first attempt would have.
-    await withTransactionRetry(this.prisma, async (tx) => {
+    const withdrawal = await withTransactionRetry(this.prisma, async (tx): Promise<{ withdrawTurnId: string } | null> => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -6049,20 +6067,54 @@ export class SessionsService {
             deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
           },
         });
-        if (discarded.count > 0) return;
-        // A steer is the one thing here that is refused for a reason of its own rather than
-        // for being gone: it is not waiting its turn, it is on its way into the one already
-        // running, and the engine may be reading it as we ask. Saying "already started or
-        // not found" would send a client looking for a race that never happened, so name it.
+        if (discarded.count > 0) return null;
         const steer = await tx.conversationTurn.findFirst({
           where: { id: turnId, sessionId: id, kind: 'steer' },
-          select: { id: true },
+          select: { status: true, deliveryStatus: true, clientTurnId: true, senderSessionId: true },
         });
-        throw new ConflictException(
-          steer
-            ? 'this message is being written into the running turn and can no longer be withdrawn'
-            : 'message already started or not found',
-        );
+        if (!steer) throw new ConflictException('message already started or not found');
+        // Only words the reader typed. Another session's message is that session's to take back,
+        // and a turn Orbit wrote itself (a wake, a delivery) has its own door, if it has one.
+        if (steer.senderSessionId || isOrbitAuthoredTurn(steer.clientTurnId)) {
+          throw new ConflictException({
+            code: STEER_WITHDRAW_ERRORS.NOT_WITHDRAWABLE,
+            message: 'Only a message you typed can be withdrawn.',
+          });
+        }
+        // Not handed to anything yet: nothing but Orbit holds it, so it goes the way a queued
+        // message does. A steer occupies no executable slot, so none of the queue bookkeeping
+        // below applies to it.
+        if (steer.status === 'PENDING') {
+          await tx.conversationTurn.deleteMany({
+            where: { id: turnId, sessionId: id, kind: 'steer', status: 'PENDING' },
+          });
+          return null;
+        }
+        const engine = (await sessionEngine(tx, session)) ?? '';
+        const engineName = engine === AgentProvider.CODEX ? 'Codex' : engine === AgentProvider.CLAUDE ? 'Claude' : 'The engine';
+        if (steer.status !== 'IN_FLIGHT' || steer.deliveryStatus === 'ACKNOWLEDGED') {
+          throw new ConflictException({
+            code: STEER_WITHDRAW_ERRORS.ALREADY_READ,
+            message: `${engineName} has already read this message, so it can no longer be withdrawn.`,
+          });
+        }
+        // On its way into the running turn: only the engine can say whether it has read it yet,
+        // and only a runner that declared the way to ask can be asked.
+        const runner = session.assignedRunnerId
+          ? await tx.runner.findUnique({ where: { id: session.assignedRunnerId }, select: { capabilities: true } })
+          : null;
+        if (!supportsSteerWithdraw(engine, runner?.capabilities)) {
+          throw new ConflictException({
+            code: STEER_WITHDRAW_ERRORS.NOT_WITHDRAWABLE,
+            message: `${engineName} already has this message and can't give it back.`,
+          });
+        }
+        const filed = await this.insertTurnLocked(tx, id, {
+          kind: 'withdraw',
+          content: steerWithdrawContent(turnId),
+          clientTurnId: `withdraw:${turnId}:${randomUUID()}`,
+        });
+        return { withdrawTurnId: filed.id };
       }
 
       // Sending to AWAITING_INPUT changes the Session to PENDING. If that last queued
@@ -6088,10 +6140,39 @@ export class SessionsService {
           data: { status: RunStatus.AWAITING_INPUT, lastTurnAt: new Date() },
         });
       }
+      return null;
     }, loggedRetry(this.logger, 'sessions.cancelQueuedTurn'));
     this.realtime.notifyInbox(id);
     this.realtime.publishQueuedTurnsChanged(id);
+    if (withdrawal) return this.awaitSteerWithdrawal(id, withdrawal.withdrawTurnId);
     return { ok: true };
+  }
+
+  /**
+   * Wait for the runner to say what came of a `withdraw` turn, and answer the person with it. The
+   * steer is gone only when the engine said it dropped it; everything else is a refusal naming why.
+   */
+  private async awaitSteerWithdrawal(sessionId: string, withdrawTurnId: string) {
+    const deadline = Date.now() + this.steerWithdrawWaitMs;
+    for (;;) {
+      const row = await this.prisma.conversationTurn.findFirst({
+        where: { id: withdrawTurnId, sessionId },
+        select: { content: true },
+      });
+      const answer = readSteerWithdrawRequest(row?.content);
+      if (answer?.outcome) return steerWithdrawAnswer(answer);
+      if (Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, STEER_WITHDRAW_POLL_MS));
+    }
+    // Nobody answered. A request still undelivered is taken back, so no runner can act on it after
+    // this has said the message stayed (the inbox stops offering it after its window regardless).
+    await this.prisma.conversationTurn.deleteMany({
+      where: { id: withdrawTurnId, sessionId, kind: 'withdraw', status: 'PENDING' },
+    });
+    throw new ServiceUnavailableException({
+      code: STEER_WITHDRAW_ERRORS.NO_ANSWER,
+      message: "The runner didn't answer in time, so the message was not withdrawn.",
+    });
   }
 
   /** End a live session (closes the runner's claude process). */

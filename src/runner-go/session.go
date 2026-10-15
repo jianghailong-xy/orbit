@@ -1923,6 +1923,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				delivery := newMessageDelivery(resp.TurnID, steer)
 				delivery.targetTurnID = resp.TargetTurnID
 				delivery.requeueable = resp.SteerRequeue
+				if steer {
+					// Named by its own turn on the way in (userTurnFrame), so its echo answers it
+					// and a withdrawal can find it in the CLI's queue (claude_withdraw.go).
+					delivery.uuid = resp.TurnID
+				}
 				// Build the claude user message by dispatching each attachment on its MIME
 				// type: images and PDFs are inlined as base64 content blocks; anything else is
 				// written to the session's uploads dir outside the worktree for claude to read
@@ -2056,6 +2061,12 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					// would show the same silence for a steer still on its way and one that
 					// never landed.
 					userEv["steer"] = true
+					// And whether it can still be taken back while it waits to be read: only this
+					// process knows which CLI it is writing to (claude_withdraw.go). A client offers
+					// the way out on this word alone, and only until the message is read.
+					if steerWithdrawable(rt.announcedVersion()) {
+						userEv["withdrawable"] = true
+					}
 				}
 				// Filed against its own turn either way. For a message that is the turn the
 				// cursor already names; for a steer it is the only event of its turn, and
@@ -2076,7 +2087,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						return
 					}
 				}
-				receipt := slot.commit(userFrame(job.SessionUUID, content))
+				frame := userFrame(job.SessionUUID, content)
+				if steer {
+					frame = userTurnFrame(job.SessionUUID, delivery.uuid, content)
+				}
+				receipt := slot.commit(frame)
 				if !steer {
 					rt.beginTurn() // a steer joins a turn that is already waiting
 				}
@@ -2209,6 +2224,28 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						emit(evError, map[string]interface{}{"message": interruptFailureMessage(err)})
 					}
 				}(w)
+			case "withdraw":
+				// A person taking back a steer the engine has not read yet (claude_withdraw.go).
+				// Waited on off to the side, like an interrupt, because this goroutine is how the
+				// next interrupt and `end` arrive. The answer goes back on the withdraw turn, which
+				// the person who asked is waiting on.
+				target, err := withdrawTarget(resp.Content)
+				if err != nil {
+					logln("unreadable withdraw request for", job.SessionID+":", err)
+					settleWithdrawTurn(resp.TurnID, withdrawFailed, err.Error(), job, completeTurn)
+					continue
+				}
+				go func(withdrawTurnID, target string) {
+					outcome, reason := withdrawSteer(procCtx, rt, deliveries, target)
+					if outcome == withdrawWithdrawn {
+						// Said on the session's own stream as well, so every client showing the
+						// bubble takes it down — not only the one that asked, which hears the
+						// outcome from the completion below.
+						reportDelivery(target, deliveryWithdrawn, "", false)
+					}
+					logln("withdraw of", target, "for", job.SessionID+":", outcome, reason)
+					settleWithdrawTurn(withdrawTurnID, outcome, reason, job, completeTurn)
+				}(resp.TurnID, target)
 			case "setconfig":
 				// Model / permission mode / reasoning effort changed, on a session whose engine
 				// is up. None of the three is built into that process the way the provider
@@ -2456,9 +2493,10 @@ scanLoop:
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes
 		// in a pipe. Replays arrive in the order the frames were read, so the oldest
-		// unacknowledged message is the one this answers (deliveryLedger).
+		// unacknowledged message is the one this answers — unless the echo carries back the
+		// uuid a steer's frame was named by, which answers that steer (deliveryLedger).
 		if isReplayedUserTurn(msg) {
-			if d, ok := deliveries.acknowledgeNext(); ok {
+			if d, ok := deliveries.acknowledgeEcho(echoUUID(msg)); ok {
 				reportDelivery(d.turnID, deliveryAcknowledged, "", false)
 				if d.steer {
 					// The echo is a steer's only answer: it has no `result` of its own, so

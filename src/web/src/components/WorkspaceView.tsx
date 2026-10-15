@@ -299,7 +299,7 @@ import {
   type NeverStartedSession,
 } from './RunNeverStartedCard';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
@@ -435,6 +435,7 @@ import {
   isAccountEngine,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
+  STEER_WITHDRAW_ERRORS,
   TRASH_RETENTION_DAYS,
   withEnginePlanUsage,
   type AccountEngine,
@@ -1931,10 +1932,10 @@ const WAKE_WITHDRAW_CONSEQUENCE =
  * the server filed it as, and where the way out of it is offered.
  *
  * A queued message is waiting for its own turn: nothing has read it, so it can still be taken
- * back. A steer is already on its way into the turn in progress, and the engine may be reading it
- * as we ask — the server refuses to withdraw one (409, "being written into the running turn"), so
- * offering Cancel would be offering a button that always fails. `placement` is the server receipt,
- * never a local guess.
+ * back. A steer listed here has not been handed to anything yet either, so it can be withdrawn too —
+ * by its own door (`onWithdraw`, the same one its bubble offers once the runner has it), which hands
+ * a typed steer's words back the way "Put back in the composer" does. `placement` is the server
+ * receipt, never a local guess.
  *
  * Once delivery has settled undelivered, both of those stop being true. Nothing read the message
  * and nothing will; the row is a durable statement about a boundary that has passed. So it is the
@@ -1954,6 +1955,8 @@ export function QueuedTurnMeta({
   wake,
   onCancel,
   onPutBack,
+  onWithdraw,
+  withdrawing,
 }: {
   placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
   delivery?: 'failed' | 'unconfirmed';
@@ -1963,13 +1966,17 @@ export function QueuedTurnMeta({
   wake?: boolean;
   onCancel: () => void;
   onPutBack?: () => void;
+  /** Take back a steer the reader typed (WorkspaceView `withdrawSteer`); absent for anything else. */
+  onWithdraw?: () => void;
+  /** That withdrawal has been asked for and not yet answered. */
+  withdrawing?: boolean;
 }) {
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
-      ? 'Delivery could not be confirmed'
+      ? steerDeliveryState('unconfirmed').label
     : placement === 'steer'
-      ? steerDeliveryState(undefined).label
+      ? withdrawing ? 'Withdrawing…' : steerDeliveryState(undefined).label
       : 'Queued for next turn';
   const why = delivery != null ? deliveryFailureExplanation(deliveryCode, deliveryReason) : undefined;
   return (
@@ -1979,7 +1986,9 @@ export function QueuedTurnMeta({
       </span>
       {why && <span className="chat-queued-why">{why}</span>}
       {delivery == null
-        ? placement === 'queued' && <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
+        ? placement === 'queued'
+          ? <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
+          : onWithdraw && !withdrawing && <a onClick={onWithdraw}>Withdraw</a>
         : onPutBack && <a onClick={onPutBack}>Put back in the composer</a>}
     </span>
   );
@@ -8080,6 +8089,60 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing],
   );
+  // Steers asked for back and not yet answered — drawn "Withdrawing…" — and those the server has
+  // confirmed, hidden before the runner's own `withdrawn` delivery reaches the transcript.
+  const [withdrawingSteers, setWithdrawingSteers] = useState<ReadonlySet<string>>(() => new Set());
+  const [withdrawnSteers, setWithdrawnSteers] = useState<ReadonlySet<string>>(() => new Set());
+  // Take back a message sent into the running turn while nothing has read it (lib/steerDelivery).
+  // Only the engine's word that it dropped the message unread removes it, so nothing is hidden or
+  // handed back until the server says so. Then the words and their files go back into the composer
+  // the way "Put back in the composer" puts them: an explicit press, so a draft keeps its place
+  // above them instead of winning over them.
+  const withdrawSteer = async (
+    turnId: string,
+    text: string,
+    attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
+  ): Promise<void> => {
+    const sessionId = selectedId;
+    if (!sessionId || withdrawingSteers.has(turnId)) return;
+    setWithdrawingSteers((s) => new Set(s).add(turnId));
+    try {
+      await cancelQueuedTurn(sessionId, turnId);
+      setWithdrawnSteers((s) => new Set(s).add(turnId));
+      setQueued((q) => q.filter((x) => x.turnId !== turnId));
+      restoreUndelivered?.(text, attachments);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === STEER_WITHDRAW_ERRORS.ALREADY_READ) {
+        // Said in the reader's terms; the server's longer sentence is for the API's own callers.
+        const reader =
+          shownEngine === AgentProvider.CODEX ? 'Codex' : shownEngine === AgentProvider.CLAUDE ? 'Claude' : 'The agent';
+        message.info('Too late to withdraw', `${reader} has already read it.`);
+      } else {
+        message.error("Couldn't withdraw the message", e instanceof Error ? e.message : undefined);
+      }
+    } finally {
+      setWithdrawingSteers((s) => {
+        const next = new Set(s);
+        next.delete(turnId);
+        return next;
+      });
+    }
+  };
+  const withdrawSteerRef = useRef(withdrawSteer);
+  withdrawSteerRef.current = withdrawSteer;
+  // What the transcript's steers offer (SteerWithdrawCtx). Kept stable between the sets' changes, so
+  // a streaming reply does not redraw every bubble; nothing to take back where nothing can be sent.
+  const steerWithdrawal: SteerWithdrawHandle | null = useMemo(
+    () =>
+      selectedTrashed || selectedMissing
+        ? null
+        : {
+            withdraw: (turnId, text, attachments) => void withdrawSteerRef.current(turnId, text, attachments),
+            withdrawing: withdrawingSteers,
+            withdrawn: withdrawnSteers,
+          },
+    [selectedTrashed, selectedMissing, withdrawingSteers, withdrawnSteers],
+  );
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -10470,6 +10533,7 @@ export function WorkspaceView({
                   <AuthErrorCtx.Provider value={authErrorHelp}>
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
+                      <SteerWithdrawCtx.Provider value={steerWithdrawal}>
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
                           <TaskActivityCtx.Provider value={taskActivity}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
@@ -10493,6 +10557,7 @@ export function WorkspaceView({
                           </StreamingDraftsCtx.Provider>
                           </TaskActivityCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
+                      </SteerWithdrawCtx.Provider>
                       </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
                   </AuthErrorCtx.Provider>
@@ -10687,6 +10752,12 @@ export function WorkspaceView({
                         deliveryReason={q.deliveryReason}
                         wake={wake}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
+                        onWithdraw={
+                          steerWithdrawal && q.placement === 'steer' && !wake && returnsToComposer(q)
+                            ? () => steerWithdrawal.withdraw(q.turnId, q.content, q.attachments)
+                            : undefined
+                        }
+                        withdrawing={withdrawingSteers.has(q.turnId)}
                         onPutBack={
                           restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined
                         }

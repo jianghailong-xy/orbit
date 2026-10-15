@@ -34,6 +34,10 @@ const (
 	// CURRENT_WORK v1 guarantees startup-envelope support and flushes its runtime-authored USER
 	// receipt before any completion/finalization that can terminalize an unacknowledged delivery.
 	sessionCurrentWorkRoutingV1 = "session-current-work-routing-v1"
+	// This runner's claude loop takes a `withdraw` turn: it asks the CLI to drop a steer it has
+	// not read yet and answers with what the CLI said (claude_withdraw.go). Without it the control
+	// plane refuses every withdrawal of a steer this runner holds, as it always has.
+	sessionClaudeSteerWithdrawV1 = "session-claude-steer-withdraw-v1"
 	// These runtimes expose an authoritative history-compaction boundary. The control plane may
 	// therefore attach full project-coordinator context once per engine/compaction epoch instead
 	// of spending it on every user message. Kimi/OpenCode intentionally do not claim this yet.
@@ -74,6 +78,7 @@ func init() {
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
 		sessionCurrentWorkRoutingV1,
+		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,
 		sessionCodexCoordinatorContextV1,
 		sessionSourcePinV1,

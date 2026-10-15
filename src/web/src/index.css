@@ -7405,6 +7405,14 @@ button.chat-jump-start:hover {
   line-height: 1.4;
   color: var(--text-3);
 }
+/* The way to take a steer back sits in that same 12px line. On a touch screen it keeps its size
+   and takes the height a finger needs; the margin gives the padding back, so the line stays put. */
+@media (hover: none) {
+  .chat-steer-state .chat-undelivered-retry {
+    padding: 8px 0;
+    margin: -8px 0 -8px 8px;
+  }
+}
 .chat-copy {
   display: inline-flex;
   align-items: center;

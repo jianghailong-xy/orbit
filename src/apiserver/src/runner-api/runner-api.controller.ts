@@ -138,6 +138,7 @@ import {
   WorktreesRemovableResponse,
   gracefulEndStatus,
   supportsMidTurnSteer,
+  supportsSteerWithdraw,
   supportsTargetBoundCurrentWorkSteer,
   TURN_COMPLETE_STEER_REQUEUE,
   AbandonedSteer,
@@ -164,6 +165,7 @@ import {
 } from '../common/transaction-retry';
 import { TransactionSurface } from '../common/prisma-transaction-surface';
 import { PrismaService } from '../prisma/prisma.service';
+import { settleSteerWithdrawal, STEER_WITHDRAW_DELIVERY_WINDOW_MS } from '../sessions/steer-withdraw';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
@@ -3642,6 +3644,9 @@ export class RunnerApiController {
       const deliverCurrentWorkSteer =
         acceptsSteer
         && supportsTargetBoundCurrentWorkSteer(engine ?? '', declaredCapabilities);
+      // A withdraw is answered by the claude loop's own arm for it, so it goes only to a poller that
+      // declares that arm for the engine this session actually runs on (sessions/steer-withdraw.ts).
+      const deliverWithdraw = supportsSteerWithdraw(engine ?? '', declaredCapabilities);
       // Only runtimes whose runner can durably report history compaction may stop repeating the
       // coordinator block on every turn. A null generation is a legacy poller and cannot prove a
       // process boundary either, so it stays on the correctness-first legacy path.
@@ -3758,6 +3763,13 @@ export class RunnerApiController {
               -- does have to replace the process the running turn is executing in.
               (turn."kind" IN ('interrupt', 'end', 'diff', 'setconfig')
                 AND (turn."status" = 'PENDING' OR (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())))
+              -- withdraw lands at once for the same reason interrupt does: the steer it names is
+              -- waiting inside the running turn, and somebody is waiting on the answer. Only while
+              -- fresh: past the window it is past the point the request that filed it waits to,
+              -- and a withdrawal done after they were told it was not would take their words away
+              -- with nobody holding them (sessions/steer-withdraw.ts).
+              OR (turn."kind" = 'withdraw' AND turn."status" = 'PENDING' AND ${deliverWithdraw}::boolean
+                AND turn."created_at" > now() - (${STEER_WITHDRAW_DELIVERY_WINDOW_MS} * interval '1 millisecond'))
               -- A reload is ordered between executable turns, but does not itself consume
               -- an active-turn slot. A cold runtime can leave it queued until the next claim.
               OR (turn."kind" = 'reload' AND turn."status" = 'PENDING' AND NOT EXISTS (
@@ -3818,7 +3830,7 @@ export class RunnerApiController {
                   ))
                 ))
             )
-          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" = 'setconfig' THEN 1 WHEN turn."kind" IN ('reload', 'steer') THEN 2 ELSE 3 END), turn."seq" ASC
+          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff', 'withdraw') THEN 0 WHEN turn."kind" = 'setconfig' THEN 1 WHEN turn."kind" IN ('reload', 'steer') THEN 2 ELSE 3 END), turn."seq" ASC
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
@@ -4729,6 +4741,21 @@ export class RunnerApiController {
         if (rows[0]?.projectId === (taskProject?.projectId ?? null)) {
           lockedAcceptanceTask = rows[0] ?? null;
         }
+      }
+      // A `withdraw` turn's completion answers a person waiting on DELETE /sessions/:id/turns/:turnId
+      // (TURN_COMPLETE_STEER_WITHDRAW). Like a steer's, it changes nothing about the session: the
+      // steer it names goes only if the engine dropped it, and the outcome is written back onto the
+      // withdraw turn for that request to read (sessions/steer-withdraw.ts).
+      if (completedTurn?.kind === 'withdraw') {
+        const applied = await settleSteerWithdrawal(tx, sessionId, completedTurn, dto);
+        return {
+          applied,
+          steer: true,
+          requeued: false,
+          status: current.status,
+          failSession: false,
+          retryAt: current.retryAt,
+        };
       }
       // A steer settles only itself. It joined a turn that is still running — the `result`
       // that ends that turn belongs to the message it was folded into, and the slot, the
