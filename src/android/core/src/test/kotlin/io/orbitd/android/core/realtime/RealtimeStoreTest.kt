@@ -11,15 +11,16 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RealtimeStoreTest {
-    private class Connection(val request: HttpRequest) {
+    /** [readsBefore] is how many REST reads had been made when this stream connected. */
+    private class Connection(val request: HttpRequest, val readsBefore: Int) {
         val frames = Channel<SseFrame>(Channel.UNLIMITED)
         var closed = false
         suspend fun emit(json: String) { frames.send(SseFrame(json, null, null)) }
     }
-    private class Streams : EventTransport {
+    private class Streams(private val reads: () -> Int) : EventTransport {
         val all = mutableListOf<Connection>()
         override suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
-            val connection = Connection(request).also { all += it }
+            val connection = Connection(request, reads()).also { all += it }
             try { onOpen(); for (frame in connection.frames) onFrame(frame) } finally { connection.closed = true }
         }
         fun session() = all.last { it.request.api.path.size > 1 }
@@ -29,9 +30,11 @@ class RealtimeStoreTest {
         val credentials = MemoryCredentials()
         val instances = MemoryInstances()
         val data = MemoryData()
-        val streams = Streams()
+        val streams = Streams { reads.size }
         val reads = mutableListOf<HttpRequest>()
         var rows = listOf("""{"seq":1,"type":"user","payload":{"text":"initial"}}""")
+        /** One-shot statuses for `after=` page reads, keyed by their cursor. */
+        val pageFailures = mutableMapOf<Long, Int>()
         var pending = true
         var title = "original"
         var directoryError: Int? = null
@@ -46,6 +49,13 @@ class RealtimeStoreTest {
         var heldDirectory: CompletableDeferred<Unit>? = null
         var heldDetail: CompletableDeferred<Unit>? = null
         fun response(json: String) = ApiResponse(200, json.encodeToByteArray())
+        fun row(seq: Long) = """{"seq":$seq,"type":"assistant","payload":{"text":"row $seq"}}"""
+        fun seq(row: String) = Wire.decode(row.encodeToByteArray(), RunEvent.serializer()).seq
+        /** The queries of the `after=` page reads in `reads[from until until]`, to compare with [page]. */
+        fun pages(from: Int = 0, until: Int = reads.size) =
+            reads.subList(from, until).map { it.api.query.toMap() }.filter { "after" in it }
+        /** The query the store sends for the page past [after]. */
+        fun page(after: Long) = mapOf("maxPayload" to "2048", "after" to "$after", "limit" to "200")
         fun client(dispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler)) = AuthSession(HttpTransport { request ->
             reads += request
             val path = request.api.path
@@ -60,9 +70,15 @@ class RealtimeStoreTest {
                 }
                 path.size == 1 -> response("[]")
                 path.last() == "page" -> {
-                    val after = request.api.query.toMap()["after"]?.toLong()
-                    val selected = rows.filter { after == null || Wire.decode(it.encodeToByteArray(), RunEvent.serializer()).seq > after }
-                    response("""{"events":[${selected.joinToString()}],"hasMore":false,"after":null}""")
+                    val query = request.api.query.toMap()
+                    val after = query["after"]?.toLong()
+                    after?.let { pageFailures.remove(it) }?.let { return@HttpTransport ApiResponse(it, "{}".encodeToByteArray()) }
+                    val selected = rows.filter { after == null || seq(it) > after }
+                    // As the server pages: `limit` events above `after` and the cursor past them, or the newest `tail`.
+                    val limit = query["limit"]?.toInt()
+                    val page = if (limit != null) selected.take(limit) else selected.takeLast(query["tail"]?.toInt() ?: selected.size)
+                    val next = if (limit != null && selected.size > limit) seq(page.last()) else null
+                    response("""{"events":[${page.joinToString()}],"hasMore":false,"after":$next}""")
                 }
                 path == listOf("sessions", "s1") || path == listOf("sessions", "s2") -> {
                     val captured = detailError
@@ -253,6 +269,9 @@ class RealtimeStoreTest {
         assertEquals("initial", store.state.value.session!!.transcript.events.single().fields.text("text"))
     }
 
+    /** The old stream delivered seq 3 but never the late seq 2, and live frames never moved the persisted frontier
+     * past 1. The restored window reads that overlap over REST before its stream connects, which finds seq 2; the
+     * stream then resumes from the frontier those pages proved, and onOpen reads one seam page from there. */
     @Test fun processRestoreReplaysOverlapToRecoverMissingOutOfOrderDurableEvent() = runTest {
         val rig = Rig(this)
         val (_, store) = rig.start()
@@ -277,12 +296,100 @@ class RealtimeStoreTest {
         assertFalse(restored.state.value.directoryFresh)
         assertNull(restored.state.value.session!!.snapshot)
         assertTrue(restored.state.value.session!!.transcript.textDrafts.isEmpty())
+        val start = rig.reads.size
         restored.setNetwork(true, "cellular"); restored.setForeground(true); runCurrent()
-        assertEquals("1", rig.streams.session().request.api.query.toMap()["sinceSeq"])
+        val stream = rig.streams.session()
+        assertEquals(listOf(rig.page(1)), rig.pages(start, stream.readsBefore))
+        assertEquals("3", stream.request.api.query.toMap()["sinceSeq"])
+        assertEquals(listOf(rig.page(3)), rig.pages(stream.readsBefore))
         assertEquals(listOf(1L, 2L, 3L), restored.state.value.session!!.transcript.events.map { it.seq })
         assertEquals(3, restored.state.value.session!!.transcript.resumeSeq)
         rig.streams.session().emit(rig.rows[1]); runCurrent()
         assertEquals(3, restored.state.value.session!!.transcript.events.size)
+    }
+
+    /** Live frames never move the REST frontier, so the next connect after a drop or a clean close would replay all
+     * they carried over the uncompressed stream. It closes that gap over REST pages first and resumes past it. */
+    @Test fun aDroppedOrClosedStreamClosesItsGapOverRestBeforeReconnecting() = runTest {
+        for (cause in listOf(NetworkException(), null)) {
+            val rig = Rig(this)
+            val (_, store) = rig.start()
+            val ended = rig.streams.session()
+            rig.rows = rig.rows + (2L..300L).map { rig.row(it) }
+            rig.rows.subList(1, 10).forEach { ended.emit(it) }
+            runCurrent()
+            assertEquals(10, store.state.value.session!!.transcript.maxSeq)
+            assertEquals(1, store.state.value.session!!.transcript.resumeSeq)
+            val start = rig.reads.size
+            ended.frames.close(cause)
+            runCurrent(); advanceTimeBy(1_001); runCurrent()
+            val stream = rig.streams.session()
+            assertNotSame(ended, stream)
+            assertEquals(listOf(rig.page(1), rig.page(201)), rig.pages(start, stream.readsBefore))
+            assertEquals("300", stream.request.api.query.toMap()["sinceSeq"])
+            assertEquals((1L..300L).toList(), store.state.value.session!!.transcript.events.map { it.seq })
+            store.close(); runCurrent()
+        }
+    }
+
+    /** Five 200-event pages are the server's own SSE_GAP_CAP. A restored gap of exactly that many closes in place
+     * before the stream connects; one event more is not paged further but re-seeded from the tail, as the server's
+     * resync would have ordered. */
+    @Test fun aRestoredGapPastFivePagesReseedsFromTheTail() = runTest {
+        for (gap in listOf(1_000L, 1_001L)) {
+            val rig = Rig(this)
+            val (_, store) = rig.start()
+            advanceTimeBy(101); runCurrent()
+            store.close(); runCurrent()
+            rig.rows = rig.rows + (2L..gap + 1).map { rig.row(it) }
+            val auth = rig.client()
+            auth.restore()
+            val restored = RealtimeStore(auth, backgroundScope)
+            val start = rig.reads.size
+            val connects = rig.streams.all.size
+            restored.setNetwork(true); restored.setForeground(true); runCurrent()
+            val catchUp = listOf(1L, 201L, 401L, 601L, 801L).map { rig.page(it) }
+            if (gap == 1_000L) {
+                val stream = rig.streams.session()
+                assertEquals(catchUp, rig.pages(start, stream.readsBefore))
+                assertEquals("1001", stream.request.api.query.toMap()["sinceSeq"])
+                assertEquals((1L..1_001L).toList(), restored.state.value.session!!.transcript.events.map { it.seq })
+            } else {
+                assertEquals(catchUp, rig.pages(start))
+                assertTrue("no session stream before the re-seed", rig.streams.all.drop(connects).none { it.request.api.path.size > 1 })
+                assertTrue(restored.state.value.session!!.transcript.events.isEmpty())
+                advanceTimeBy(1_001); runCurrent()
+                val stream = rig.streams.session()
+                assertEquals(catchUp, rig.pages(start, stream.readsBefore))
+                assertTrue(rig.reads.subList(start, stream.readsBefore).any { it.api.query.toMap()["tail"] == "200" })
+                assertEquals("1002", stream.request.api.query.toMap()["sinceSeq"])
+                assertEquals((803L..1_002L).toList(), restored.state.value.session!!.transcript.events.map { it.seq })
+            }
+            restored.close(); runCurrent()
+        }
+    }
+
+    /** A catch-up page that fails is not retried before the stream: the stream attempt right after it is the retry,
+     * from the frontier the earlier pages advanced. onOpen reads one seam page and does not follow its cursor; the
+     * replay carries the rest. */
+    @Test fun aFailedCatchUpPageLeavesTheRetryToTheStreamFromTheAdvancedFrontier() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        advanceTimeBy(101); runCurrent()
+        store.close(); runCurrent()
+        rig.rows = rig.rows + (2L..600L).map { rig.row(it) }
+        rig.pageFailures[201] = 503
+        val auth = rig.client()
+        auth.restore()
+        val restored = RealtimeStore(auth, backgroundScope)
+        val start = rig.reads.size
+        restored.setNetwork(true); restored.setForeground(true); runCurrent()
+        val stream = rig.streams.session()
+        assertEquals(listOf(rig.page(1), rig.page(201)), rig.pages(start, stream.readsBefore))
+        assertEquals("201", stream.request.api.query.toMap()["sinceSeq"])
+        assertEquals(listOf(rig.page(201)), rig.pages(stream.readsBefore))
+        assertEquals(ConnectionState.CONNECTED, restored.state.value.session!!.connection)
+        assertEquals(401, restored.state.value.session!!.transcript.resumeSeq)
     }
 
     @Test fun resyncDropsWindowAndSeedsTailBeforeUsingNewCursor() = runTest {

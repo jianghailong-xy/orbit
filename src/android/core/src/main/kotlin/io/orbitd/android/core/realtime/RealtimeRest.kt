@@ -36,9 +36,10 @@ internal class RealtimeRest(private val api: OrbitApi) {
         DirectorySnapshot(workspaces.await(), views.awaitAll().toMap(), folders.await(), tags.await(), runners.await())
     }
 
+    /** `after=` pages are 200 events, as on iOS and web: five of them are the server's SSE_GAP_CAP. */
     suspend fun page(handle: SessionHandle, id: String, after: Long? = null): EventPage {
         val query = listOf("maxPayload" to "2048") + if (after == null) listOf("tail" to "200")
-            else listOf("after" to "$after", "limit" to "500")
+            else listOf("after" to "$after", "limit" to "200")
         return Wire.decode(api.request(handle, ApiRequest(listOf("sessions", id, "events", "page"), query = query)).body,
             EventPage.serializer())
     }
