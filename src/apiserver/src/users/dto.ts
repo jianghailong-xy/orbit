@@ -155,3 +155,10 @@ export class SetDisabledDto {
   @IsBoolean()
   disabled!: boolean;
 }
+
+/** View Orbit as another account, read-only (admin area): why, recorded with it. Trimmed server-side, where a blank one is refused. */
+export class ImpersonateDto {
+  @IsString()
+  @MaxLength(500)
+  reason!: string;
+}

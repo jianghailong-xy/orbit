@@ -81,6 +81,7 @@ must be read per authenticated door:
 | Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed; it names no actor — the row records the account owner | allowed | allowed; writes the column directly |
 | Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed, and indistinguishable from the owner REST row |
 | Personal access token (`orbit_pat_…`) | `NON_JUDGMENT`, as the owner REST row, but the request carries `credentialKind=PAT` | **refused whole with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`**; a new project's first criteria, sent with `POST /projects`, are written | **refused with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`** — the confirmation door and `start` alike | allowed with `tasks:write` | **refused whole with `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`** — `status` on `PATCH /projects/:id`, `DONE`, `CANCELLED` and `OPEN` alike, and `POST /projects/:id/done` |
+| Administrator viewing Orbit as the owner (`POST /admin/users/:id/impersonate`, `auth/impersonation.ts`) | `NON_JUDGMENT`, as the owner REST row, but the request carries `credentialKind=IMPERSONATION` | **refused with `IMPERSONATION_READ_ONLY`**: the token reads and writes nothing | **refused with `IMPERSONATION_READ_ONLY`** | **refused with `IMPERSONATION_READ_ONLY`** | **refused with `IMPERSONATION_READ_ONLY`** |
 
 The personal access token row is `docs/personal-access-token-design.md` §5, and it is wider than
 its three refusal cells: a token is refused on every owner-channel action, not only on these
@@ -100,6 +101,13 @@ coordinator (`automatic`, `coordinatorEnabled`, `maxConcurrentTasks`, `sessionBu
 The rule turns on the credential, not on a session: the user door carries no acting session, so the
 session conditions below never see a token, and a login on the same doors is answered exactly as the
 owner REST row says.
+
+The administrator row is Admin → Users → View as: an administrator debugging what an account sees
+reads Orbit as its owner. Its token is signed with a key derived for it alone, so no code that
+verifies a login takes it for one, and `JwtAuthGuard` answers every write it sends — every column
+here, and every owner-channel action besides — 403 `IMPERSONATION_READ_ONLY` before anything is
+read or written. It lasts 30 minutes and is never refreshed. Nothing the owner decides can be
+decided through it, so none of these rows changes for the owner's own login.
 
 The project standard-set confirmation row is the N22 addition, and since migration 0245 gave the
 action its one writer, the rule it states is no longer about a role.

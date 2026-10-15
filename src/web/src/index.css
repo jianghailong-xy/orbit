@@ -572,6 +572,50 @@ button.toast--pill:focus-visible {
   }
 }
 
+/* ---- Viewing Orbit as another user (ImpersonationBanner) ---- */
+/* A band over every page while an administrator looks at another user's Orbit. Everything sized to
+   the viewport is shortened by its height rather than drawn under it, so the band hides nothing. */
+:root:has(.impersonation-banner) {
+  --impersonation-bar: 36px;
+  --app-vh: calc(100svh - var(--impersonation-bar));
+}
+.impersonation-banner {
+  box-sizing: border-box;
+  height: var(--impersonation-bar);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--warning-border);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.impersonation-banner-text {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+.impersonation-banner-prefix {
+  flex: none;
+  margin-right: 0.3em;
+}
+.impersonation-banner-who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.impersonation-banner-left {
+  flex: none;
+  margin-left: 0.3em;
+}
+@media (max-width: 480px) {
+  .impersonation-banner-prefix {
+    display: none;
+  }
+}
+
 /* ---- App shell: side nav | main region (master/detail) ---- */
 .app-shell {
   display: flex;
@@ -14157,10 +14201,10 @@ button.chat-jump-start:hover {
     touch-action: pan-y;
   }
 
-  /* Fixed top bar carrying the drawer toggle. */
+  /* Fixed top bar carrying the drawer toggle, under the band while one is shown. */
   .app-topbar {
     position: fixed;
-    top: 0;
+    top: var(--impersonation-bar, 0px);
     left: 0;
     right: 0;
     height: 48px;
@@ -14198,7 +14242,7 @@ button.chat-jump-start:hover {
      region fills the full width and the page stops overflowing sideways. */
   .app-nav {
     position: fixed;
-    top: 0;
+    top: var(--impersonation-bar, 0px);
     left: 0;
     bottom: 0;
     z-index: 60;
@@ -23046,7 +23090,7 @@ button.project-open-item-action:disabled {
 .wk-toc-sep { height: 1px; background: var(--border-subtle); margin: 8px 8px 0; }
 
 .wk-contents-backdrop { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, .4); }
-.wk-contents { position: fixed; top: 0; left: 0; bottom: 0; z-index: 60; width: min(320px, 84vw); height: var(--app-vh, 100vh);
+.wk-contents { position: fixed; top: var(--impersonation-bar, 0px); left: 0; bottom: 0; z-index: 60; width: min(320px, 84vw); height: var(--app-vh, 100vh);
                display: flex; flex-direction: column; background: var(--bg-raised); box-shadow: 2px 0 16px rgba(0, 0, 0, .18); }
 .wk-contents-h { display: flex; align-items: center; gap: 8px; height: 52px; flex: none; padding: 0 8px 0 16px;
                  border-bottom: 1px solid var(--border-subtle); }
