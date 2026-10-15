@@ -64,7 +64,7 @@ open class OrbitApplication : Application() {
     }
     protected open fun createSession() = AuthSession(
         OkHttpTransport(), AndroidCredentialStore(this), AndroidInstanceStore(this),
-        AndroidSessionDataStore(this), BuildConfig.VERSION_NAME, allowLoopbackHttp = BuildConfig.DEBUG,
+        AndroidSessionDataStore(this), BuildConfig.VERSION_NAME,
         emails = AndroidEmailStore(this), log = { Log.i("OrbitAuth", it) },
     )
     protected open fun createPush() = io.orbitd.android.push.PushController(this, session, realtime, processScope)

@@ -144,7 +144,7 @@ def inspect(apk, identity_path, folder):
     assert identity['signingPurpose'] == 'test' and identity['distributionSignature'] is False, 'test signature only'
     assert identity['applicationId'].endswith('.upgradetest'), 'disposable *.upgradetest package only'
     assert 'application-debuggable' not in badging and identity['sourceDirty'] is False
-    assert 'networkSecurityConfig' in tree, 'a rehearsal build carries the loopback network config'
+    assert 'networkSecurityConfig' in tree, 'a rehearsal build carries its network security config'
     return identity
 
 
