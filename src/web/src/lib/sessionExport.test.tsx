@@ -111,7 +111,9 @@ const DELIVERY: Delivery = {
   check: null,
   errorCode: null,
   failure: null,
-  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none here: the card is what the server sends, and `Retry the task` is not in it.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
 };
 

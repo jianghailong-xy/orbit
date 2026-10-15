@@ -508,6 +508,11 @@ export class ProjectAcceptanceService {
       automatic: input.automatic,
       maxConcurrentTasks: input.maxConcurrentTasks,
       mergeCheckCommand: input.mergeCheckCommand ?? null,
+      // Absent is a client that does not know the field, and is left absent so `startProjectLine`
+      // leaves the binding's budget as it stands rather than clearing one nobody named.
+      ...(input.mergeCheckTimeoutSeconds !== undefined
+        ? { mergeCheckTimeoutSeconds: input.mergeCheckTimeoutSeconds }
+        : {}),
     };
     const started = await this.start(
       ownerId,
@@ -603,6 +608,9 @@ export class ProjectAcceptanceService {
         automatic: asked.automatic,
         maxConcurrentTasks: asked.maxConcurrentTasks,
         mergeCheckCommand: line.mergeCheckCommand,
+        // As the check stands once the start is done: the budget the start named, the one the
+        // binding already had when it named none, or null for a check that runs on its default.
+        mergeCheckTimeoutSeconds: line.mergeCheckTimeoutSeconds ?? null,
       };
 
       const at = new Date();

@@ -10979,6 +10979,10 @@ button.chat-jump-start:hover {
   font-size: 13px;
   color: var(--text-1);
 }
+/* The check's budget, a row of its own under the command it belongs to. */
+.start-card-budget {
+  margin-top: 8px;
+}
 .start-card-settings .start-card-count,
 .project-run-settings .start-card-count {
   width: 72px;

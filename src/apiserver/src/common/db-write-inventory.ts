@@ -138,7 +138,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'projects/project-promotion.service.ts#considerCandidate',
     shape: 'TX_RETRIED',
-    locks: 'project_codebase (rank 55) and project_integration_job (rank 60) are read unlocked, then the rows it writes: project_promotion (rank 60) for the new candidate and for whichever older one it supersedes, project_integration_job (rank 60) for that one\'s queued check, project_open_item (rank 60) for that one\'s card and the failures about it it had open (`closePromotionItems`, §4.2). Nothing above rank 60 is locked — the foreign keys take `project`, `task` and `session` FOR KEY SHARE, which no status write conflicts with.',
+    locks: 'project_codebase (rank 55) and project_integration_job (rank 60) are read unlocked, then the rows it writes: project_promotion (rank 60) for the new candidate and for whichever older one it supersedes, project_integration_job (rank 60) for that one\'s queued check, project_open_item (rank 60) for that one\'s card and the failures about it it had open (`closePromotionItems`, §4.2). Nothing above rank 60 is locked — the foreign keys take `project` FOR KEY SHARE, which no status write conflicts with; the task and session the candidate and its check name are history references with no key (0423, 0424) and take nothing.',
     identity: 'The candidate\'s source: the partial unique index over `(project_id, source_ref)` on live states. Two landings finishing together therefore produce one live candidate whichever order they commit in — the loser of the index is the transaction that is re-run, and its re-run finds the winner already covering the same tip and makes nothing.',
     isolation: '',
     attempts: 4,

@@ -25,6 +25,7 @@ import {
   openItemDoorMessageNames,
   sourceJobForOpenItem,
   type OpenItemDoorInput,
+  type OpenItemDoorMessageNames,
 } from './open-item-doors';
 import type { PrismaService } from '../prisma/prisma.service';
 
@@ -1587,62 +1588,86 @@ function failureClassLines(payload: IntegrationItemPayload, aboutTask: boolean):
 }
 
 /**
+ * The parts of a message this cell can write, in order: a part that would name a door the cell does
+ * not hold is null, and is left out rather than written with a literal name the server would refuse
+ * (`openItemDoorMessageNames`).
+ */
+function lines(...parts: Array<string | null>): string {
+  return parts.filter((part): part is string => part != null && part !== '').join('\n');
+}
+
+/** The same parts, joined as the sentences they are: one after another, a space between them. */
+function composed(...parts: Array<string | null>): string {
+  return parts.filter((part): part is string => part != null && part !== '').join(' ');
+}
+
+/**
  * What an integration item says about the owner (§4.6 and §4.7, revision 13): once the coordinator
  * has taken it up it stays the coordinator's — no clock hands it over — so what the owner has to
  * decide is ASKED, and the item is handed over only when the owner has to act on it themselves.
+ *
+ * Each half is written only where this cell holds that door: a cell with no ask-owner door says
+ * nothing about asking, and one with no hand-over door says nothing about handing over.
  */
-function askOwnerFirst(projectId: string, itemId: string, doors: { askOwnerMcp: string; handOverMcp: string }): string {
-  return `If handling it runs into a trade-off only the account owner can decide (skipping or changing the merge check, for example), ask with ${doors.askOwnerMcp}`
-    + ' (with a recommended option and your reason): the item stays with you, and the answer comes back to this session as a turn; '
-    + 'once you have taken it up, the platform does not hand it to the account owner because time ran out. '
-    + `Only what the account owner must handle in person (their device, account or keys) is handed to them, with ${doors.handOverMcp}`
-    + ` (projectId: ${projectId}, itemId: ${itemId}, note: why).`;
+function askOwnerFirst(
+  projectId: string,
+  itemId: string,
+  doors: Pick<OpenItemDoorMessageNames, 'askOwnerMcp' | 'handOverMcp'>,
+): string | null {
+  const ask = doors.askOwnerMcp == null ? null
+    : `If handling it runs into a trade-off only the account owner can decide (skipping or changing the merge check, for example), ask with ${doors.askOwnerMcp}`
+      + ' (with a recommended option and your reason): the item stays with you, and the answer comes back to this session as a turn; '
+      + 'once you have taken it up, the platform does not hand it to the account owner because time ran out.';
+  const handOver = doors.handOverMcp == null ? null
+    : `Only what the account owner must handle in person (their device, account or keys) is handed to them, with ${doors.handOverMcp}`
+      + ` (projectId: ${projectId}, itemId: ${itemId}, note: why).`;
+  return composed(ask, handOver) || null;
 }
 
 /**
  * The next step a LAND_TASK's failure leaves its coordinator, by the class it failed of (J-T1b).
  *
- * The task is already DONE — a landing is what follows a DONE — so the one door this message must not
- * point at is `task_start`: it runs the task again on a new branch and never queues another landing
- * of the work it finished, which is how three DONE tasks of 34Y7My8sqhKLWtmCQYv1l stopped at their
- * first landing on 2026-10-01 with nothing able to move them.
+ * The task is already DONE — a landing is what follows a DONE — so no sentence here sends the
+ * coordinator to run the task again: a fresh run starts on a new branch and never queues another
+ * landing of the work it finished, which is how three DONE tasks of 34Y7My8sqhKLWtmCQYv1l stopped at
+ * their first landing on 2026-10-01 with nothing able to move them. It is said without naming
+ * `task_start`: this cell holds no such door, and the message names only doors the cell really has.
  */
 function landingNextStep(
   projectId: string,
   itemId: string,
   taskId: string,
   payload: IntegrationItemPayload,
-  doors: {
-    retryMcp: string;
-    askOwnerMcp: string;
-    handOverMcp: string;
-    taskCommentMcp: string;
-    taskReopenMcp: string;
-    taskCreateMcp: string;
-    taskUpdateMcp: string;
-    taskStartMcp: string;
-    taskGetMcp: string;
-  },
+  doors: OpenItemDoorMessageNames,
 ): string {
   const read = `Read the task first (${doors.taskGetMcp}, taskId: ${taskId}; its comments and its session are there). The task itself is already DONE, `
-    + `and a failed landing does not change its status; ${doors.taskStartMcp} only runs the task again on a new branch; it does not queue this landing again.\n`;
+    + 'and a failed landing does not change its status; starting the task again runs it on a new branch and does not queue this landing again.\n';
   const rework = `send the task back for rework with ${doors.taskReopenMcp}, or cancel it (${doors.taskUpdateMcp} to CANCELLED)`;
   const repair = `if you judge it a code or delivery problem, file a fix task with ${doors.taskCreateMcp} and attach it to this item with fixesOpenItemId: ${itemId}`
     + '; that is repair work, not a rewrite of a task that is already DONE.';
   const handOver = askOwnerFirst(projectId, itemId, doors);
   if (payload.phase === 'MAIN_SYNC') return read + mainSyncNextStep(payload, doors);
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
-    return read
-      + `Only a branch that changed can resolve a conflict: rerunning it as it stands would conflict again, and ${doors.retryMcp} does not accept a conflict either. `
-      + `Instead, ${rework}; ${repair}\n${handOver}`;
+    // No rerun is offered in a conflict's cell, so this sentence names none: the landing rerun is
+    // what a conflict is refused, and the two doors that answer it are named instead.
+    return read + lines(
+      'Only a branch that changed can resolve a conflict: rerunning the landing as it stands would conflict again. '
+        + `Instead, ${rework}; ${repair}`,
+      handOver,
+    );
   }
-  return read
-    + 'First work out whose red it is. If the delivery itself is the problem, ' + `${rework}; ${repair}\n`
-    + `If it is not the delivery’s problem — the merge check’s baseline was repaired since, the check timed out, the integration machinery failed — queue the landing once more with ${doors.retryMcp}`
-    + ` (projectId: ${projectId}, taskId: ${taskId}, reason: why this time will be different): `
-    + 'it queues the next generation of this task’s landing; if that lands, the work goes into the project branch and on to the merge checks after it, and if it does not, a new item comes to you. '
-    + 'Whether such a landing goes ahead is yours to judge, not a question for the account owner.\n'
-    + handOver;
+  // The rerun paragraph is written only where the cell really holds that door — the classes that
+  // reach here are the ones a rerun answers, and the matrix gives them the door.
+  const rerun = doors.retryMcp == null ? null
+    : `If it is not the delivery’s problem — the merge check’s baseline was repaired since, the check timed out, the integration machinery failed — queue the landing once more with ${doors.retryMcp}`
+      + ` (projectId: ${projectId}, taskId: ${taskId}, reason: why this time will be different): `
+      + 'it queues the next generation of this task’s landing; if that lands, the work goes into the project branch and on to the merge checks after it, and if it does not, a new item comes to you. '
+      + 'Whether such a landing goes ahead is yours to judge, not a question for the account owner.';
+  return read + lines(
+    'First work out whose red it is. If the delivery itself is the problem, ' + `${rework}; ${repair}`,
+    rerun,
+    handOver,
+  );
 }
 
 /**
@@ -1656,23 +1681,31 @@ function landingNextStep(
  */
 function mainSyncNextStep(
   payload: IntegrationItemPayload,
-  doors: { retryMcp: string; taskCommentMcp: string; taskReopenMcp: string },
+  doors: Pick<OpenItemDoorMessageNames, 'taskCommentMcp' | 'taskReopenMcp'>,
 ): string {
   const line = payload.targetRef ? `the project branch ${payload.targetRef}` : 'the project branch';
+  // The recipe's third step is the one that names doors, and it is written from the cell: the real
+  // MAIN_SYNC conflict cell holds both, and a cell that holds only the re-open still gets the step.
+  const stepThree = doors.taskReopenMcp == null ? null
+    : `3. The merge commit is put into the source branch by this task’s own session: ${doors.taskCommentMcp == null
+        ? `send it back with ${doors.taskReopenMcp}, saying in that round that it does step 1 only`
+        : `first write on the task with ${doors.taskCommentMcp} that this round does step 1 only, then send it back with ${doors.taskReopenMcp}`}. `
+      + 'When it is DONE again, its next landing is queued.';
   return `This conflict stopped at MAIN_SYNC: the platform first merges the upstream (integration.upstreamRef in project_get) into the tip of ${line}, `
     + 'and the conflict happened there, before it looked at this task’s commits. The conflict is between the project line and the upstream, not in this task’s work: '
-    + `rerunning it as it stands would conflict again, and ${doors.retryMcp} does not accept a conflict either; merely having the task redo its own work does not resolve it, `
+    + 'rerunning the landing as it stands would conflict again, and merely having the task redo its own work does not resolve it, '
     + 'because the next landing stops here first just the same.\n'
     + 'Absorb the upstream on the project line and resolve the conflict first, then land:\n'
     + `1. On this task’s source branch, merge in the tip of ${line} and the tip of the upstream, resolve the conflicts in the files above, `
     + 'and commit that merge commit. The task’s original work stays; it does not need redoing.\n'
     + '2. With both tips in the source branch, its next landing no longer merges the upstream first but lands in J-S4’s MERGE mode, '
-    + 'and the tree that goes into the project branch is the source branch’s tree. If one of the tips moves on again while it lands, the source branch lacks it, '
-    + 'and the landing stops at MAIN_SYNC as before: then merge once more.\n'
-    + `3. The merge commit is put into the source branch by this task’s own session: first write on the task with ${doors.taskCommentMcp} that this round does step 1 only, `
-    + `then send it back with ${doors.taskReopenMcp}. When it is DONE again, its next landing is queued.\n`
-    + 'While this item is open, the landings of the other tasks on the same integration line wait (M2); only this task’s own next landing does not wait. '
-    + 'Once it lands in the project branch, the platform closes this item, and the queued landings move on.';
+    + 'and the tree that goes into the project branch is the source branch’s tree. If either tip moves on again while it lands, what happens '
+    + 'depends on which one it is: if the PROJECT BRANCH tip moves, the source branch lacks its new tip, the landing stops at MAIN_SYNC as before, '
+    + 'and that tip has to be merged in once more; if only the UPSTREAM moves, the landing merges the new upstream into this very source branch '
+    + 'and, when that merge is clean, lands by MERGE with nothing more to do — only an upstream commit that really touches the resolved lines '
+    + 'conflicts again.\n'
+    + lines(stepThree == null ? null : `${stepThree}\n`, 'While this item is open, the landings of the other tasks on the same integration line wait (M2); only this task’s own next landing does not wait. '
+      + 'Once it lands in the project branch, the platform closes this item, and the queued landings move on.');
 }
 
 /**
@@ -1690,30 +1723,38 @@ function promotionNextStep(
   promotionId: string | null,
   itemId: string,
   payload: IntegrationItemPayload,
-  doors: { retryMcp: string; taskCreateMcp: string; askOwnerMcp: string; handOverMcp: string },
+  doors: OpenItemDoorMessageNames,
 ): string {
   const about = 'No task stands behind this item: it comes from the job of a promotion (merging the project branch into main), and such a job does no work for any single '
     + 'task.\n';
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
-    return about
-      + `Only a project branch that changed can resolve a conflict: rerunning it as it stands would conflict again, and ${doors.retryMcp} does not accept a conflict either. `
-      + `File a sync task with ${doors.taskCreateMcp} that starts from the project branch tip and merges the upstream tip into its source branch, resolving the conflict and committing it; `
-      + `attach it to this item with fixesOpenItemId: ${itemId}. `
-      + 'Once that task lands, the platform opens a new candidate for the new branch tip and checks it again, '
-      + 'and closes this candidate and this item with it.\n'
-      + askOwnerFirst(projectId, itemId, doors);
+    // The re-check is not named here: a conflict's cell holds no such door, and the sync task below
+    // is the one that answers it.
+    return about + lines(
+      'Only a project branch that changed can resolve a conflict: rerunning the check as it stands would conflict again. '
+        + `File a sync task with ${doors.taskCreateMcp} that starts from the project branch tip and merges the upstream tip into its source branch, resolving the conflict and committing it; `
+        + `attach it to this item with fixesOpenItemId: ${itemId}. `
+        + 'Once that task lands, the platform opens a new candidate for the new branch tip and checks it again, '
+        + 'and closes this candidate and this item with it.',
+      askOwnerFirst(projectId, itemId, doors),
+    );
   }
   const candidate = promotionId ? uuidToBase62(promotionId) : 'this candidate’s id';
   const retry = ` (projectId: ${projectId}, promotionId: ${candidate}, reason: why this time will be different)`;
-  return about
-    + 'First work out whose red it is. If it is a code problem on the project branch, file a fix task with ' + `${doors.taskCreateMcp}`
-    + ` and attach it to this item with fixesOpenItemId: ${itemId}; once it lands, the platform opens a new candidate.\n`
-    + `If it is not the work’s problem — the merge check’s baseline was repaired since, the check timed out (go test hitting its default 10-minute limit, for example), the integration machinery failed — rerun this candidate’s check once with ${doors.retryMcp}`
-    + `${retry}. Once the check passes, the merge is still confirmed by the account owner on the card, or done automatically by the Automatic `
-    + 'setting under its usual rule: this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.\n'
-    + `If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ${doors.askOwnerMcp}`
-    + ', giving at least two options, with the reason in the recommended one. '
-    + askOwnerFirst(projectId, itemId, doors);
+  const rerun = doors.retryMcp == null ? null
+    : `If it is not the work’s problem — the merge check’s baseline was repaired since, the check timed out (go test hitting its default 10-minute limit, for example), the integration machinery failed — rerun this candidate’s check once with ${doors.retryMcp}`
+      + `${retry}. Once the check passes, the merge is still confirmed by the account owner on the card, or done automatically by the Automatic `
+      + 'setting under its usual rule: this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.';
+  const tradeOff = doors.askOwnerMcp == null ? null
+    : `If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ${doors.askOwnerMcp}`
+      + ', giving at least two options, with the reason in the recommended one.';
+  return about + lines(
+    'First work out whose red it is. If it is a code problem on the project branch, file a fix task with ' + `${doors.taskCreateMcp}`
+      + ` and attach it to this item with fixesOpenItemId: ${itemId}; once it lands, the platform opens a new candidate.`,
+    rerun,
+    tradeOff,
+    askOwnerFirst(projectId, itemId, doors),
+  );
 }
 
 /**
@@ -1863,7 +1904,9 @@ function landedFixPreface(item: OpenItemMessageSource): string | null {
   });
   const projectId = uuidToBase62(item.projectId);
   const resolve = `${doors.resolveMcp} (projectId: ${projectId}, itemId: ${uuidToBase62(item.id)})`;
-  const ask = `Anything that needs the account owner’s decision is asked with ${doors.askOwnerMcp}, and the item stays with you.`;
+  // Both of these name a door, so both are written only where the item's own cell holds it.
+  const ask = doors.askOwnerMcp == null ? null
+    : `Anything that needs the account owner’s decision is asked with ${doors.askOwnerMcp}, and the item stays with you.`;
   const landedLines = fixes.map((fix) => {
     const target = fix.targetRef.startsWith('refs/heads/') ? fix.targetRef.slice('refs/heads/'.length) : fix.targetRef;
     const result = fix.state === 'NOTHING_TO_LAND'
@@ -1874,24 +1917,29 @@ function landedFixPreface(item: OpenItemMessageSource): string | null {
   const head = `From Orbit · fix landed: ${fixes.length === 1 ? 'the fix task attached to this item has' : 'the fix tasks attached to this item have'} landed:\n${landedLines.join('\n')}\n`;
   const aboutTask = item.taskId ? uuidToBase62(item.taskId) : null;
   if (!aboutTask || !(INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
-    return head
-      + 'The platform does not close this item just because a fix landed. It is yours to judge whether the fix has answered it: '
-      + `if it has, close it with ${resolve}, giving your reason; if it has not, handle it as its original content below says. ${ask}\n`
-      + 'Below is this item’s original content.';
+    return head + lines(
+      'The platform does not close this item just because a fix landed. It is yours to judge whether the fix has answered it: '
+        + `if it has, close it with ${resolve}, giving your reason; if it has not, handle it as its original content below says.`
+        + (ask == null ? '' : ` ${ask}`),
+      'Below is this item’s original content.',
+    );
   }
   const landedTip = [...fixes].reverse().find((fix) => fix.landedSha)?.landedSha ?? null;
   const check = item.failedSourceSha && landedTip
     ? `for example git merge-base --is-ancestor ${item.failedSourceSha} ${landedTip}`
     : 'against the target branch’s current tip';
-  return head
-    + `The platform does not close this item just because a fix landed: it is about task ${aboutTask}’s own landing, `
-    + 'and the server cannot tell whether that work went live together with the fix. Finishing it is yours:\n'
-    + `- First check whether the commits task ${aboutTask} delivered are already on the target branch (${check});\n`
-    + `- If they are, close the item with ${resolve}, giving your reason;\n`
-    + `- If they are not (the fix only repaired the baseline), requeue its landing with ${doors.retryMcp} (projectId: ${projectId}, taskId: ${aboutTask}, `
-    + 'reason: the fix has landed);\n'
-    + `- ${ask}\n`
-    + 'Below is this item’s original content.';
+  const requeue = doors.retryMcp == null ? null
+    : `- If they are not (the fix only repaired the baseline), requeue its landing with ${doors.retryMcp} (projectId: ${projectId}, taskId: ${aboutTask}, `
+      + 'reason: the fix has landed);';
+  return head + lines(
+    `The platform does not close this item just because a fix landed: it is about task ${aboutTask}’s own landing, `
+      + 'and the server cannot tell whether that work went live together with the fix. Finishing it is yours:',
+    `- First check whether the commits task ${aboutTask} delivered are already on the target branch (${check});`,
+    `- If they are, close the item with ${resolve}, giving your reason;`,
+    requeue,
+    ask == null ? null : `- ${ask}`,
+    'Below is this item’s original content.',
+  );
 }
 
 function openItemBody(item: OpenItemMessageSource): string {
@@ -1924,9 +1972,12 @@ function openItemBody(item: OpenItemMessageSource): string {
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
     const taskId = item.taskId ? uuidToBase62(item.taskId) : null;
     // §4.7 H1–H3, said once for both scopes: a rerun does not close this item, its result does.
-    const handling = (what: string, success: string) => `After you ${what} with ${doorNames.retryMcp}, this item shows as `
-      + `being handled and stays open until the rerun job has a result: if ${success}, it is marked handled (HANDLED) automatically, with your session `
-      + 'and reason recorded; if it fails again, it is marked superseded (RETRIED), and the new failure opens an item of its own.';
+    // Written only where this cell holds the rerun door — a conflict's item is not put into
+    // "being handled" by any press, and its message names none.
+    const handling = (what: string, success: string): string => doorNames.retryMcp == null ? ''
+      : `After you ${what} with ${doorNames.retryMcp}, this item shows as `
+        + `being handled and stays open until the rerun job has a result: if ${success}, it is marked handled (HANDLED) automatically, with your session `
+        + 'and reason recorded; if it fails again, it is marked superseded (RETRIED), and the new failure opens an item of its own.';
     return `From Orbit · exception item: ${item.title}\n\n`
       + `An integration in project ${projectId} did not put the work on the integration line:\n`
       + `${[...integrationItemFacts(item.kind, payload), ...failureClassLines(payload, taskId !== null)].join('\n')}\n\n`
@@ -1935,20 +1986,15 @@ function openItemBody(item: OpenItemMessageSource): string {
       + (taskId
         ? `${landingNextStep(projectId, uuidToBase62(item.id), taskId, payload, doorNames)}\n`
           + 'When the task lands, is cancelled or is superseded, the platform closes this item itself; the landing of a fix task attached to it does not count: '
-          + 'the platform then delivers this item again, for you to check and then close or requeue. '
-          + `${handling('requeue its landing', 'it lands')} You do not need to report back. ${handClose}\n`
-        : `${promotionNextStep(projectId, item.promotionId ?? null, uuidToBase62(item.id), payload, {
-          retryMcp: doorNames.retryMcp,
-          taskCreateMcp: doorNames.taskCreateMcp,
-          askOwnerMcp: doorNames.askOwnerMcp,
-          handOverMcp: doorNames.handOverMcp,
-        })}\n`
+          + `the platform then delivers this item again, for you to check and then close or requeue. `
+          + composed(handling('requeue its landing', 'it lands'), `You do not need to report back. ${handClose}`) + '\n'
+        : `${promotionNextStep(projectId, item.promotionId ?? null, uuidToBase62(item.id), payload, doorNames)}\n`
           + 'When this candidate is superseded by a new landing, declined or merged, the platform closes this item itself. '
-          + `${handling('rerun the check', 'the check passes')} You do not need to report back. ${handClose}\n`)
+          + composed(handling('rerun the check', 'the check passes'), `You do not need to report back. ${handClose}`) + '\n')
       + `\n${notice}`;
   }
   if (item.kind === DELIVERY_REVIEW_KIND && item.taskId) {
-    return deliveryReviewMessage(item, projectId, payload, notice);
+    return deliveryReviewMessage(item, projectId, payload, notice, doorNames);
   }
   if (item.kind !== 'TASK_FAILED' || !item.taskId) {
     return `From Orbit · exception item: ${item.title}\n\n`
@@ -1993,12 +2039,20 @@ export function deliveryReviewDetailLine(payload: unknown): string {
     : `${files} outside its declaration${named}`;
 }
 
-/** Explain the mechanical observation and the bounded coordinator choices. */
+/**
+ * Explain the mechanical observation and the bounded coordinator choices.
+ *
+ * Every executable it names is one of this cell's own doors, read from the table like the rest of
+ * the prose: a review's send-back is `task_comment` + `task_reopen`, its supersession
+ * `task_update` + `task_create`, and its rerun the landing's own door. The one thing it says about
+ * the account owner is that this is NOT their question, so it names no owner door at all.
+ */
 function deliveryReviewMessage(
   item: OpenItemMessageSource,
   projectId: string,
   payload: unknown,
   notice: string,
+  doors: OpenItemDoorMessageNames,
 ): string {
   const review = deliveryReviewOf((payload ?? {}) as DeliveryReviewPayload);
   const taskId = uuidToBase62(item.taskId!);
@@ -2011,8 +2065,8 @@ function deliveryReviewMessage(
       : '';
     return `${label} (${all.length}):\n${shown}${more}\n`;
   };
-  const resolve = `open_item_resolve (projectId: ${projectId}, itemId: ${itemId})`;
-  const retry = `integration_retry (projectId: ${projectId}, taskId: ${taskId}, `
+  const resolve = `${doors.resolveMcp} (projectId: ${projectId}, itemId: ${itemId})`;
+  const retry = `${doors.retryMcp} (projectId: ${projectId}, taskId: ${taskId}, `
     + 'reason: why this time will be different)';
   const conflict = review?.reason === 'MERGE_REFUSED_BY_GIT';
   const observed = conflict
@@ -2025,26 +2079,26 @@ function deliveryReviewMessage(
       + listed('Files changed outside the declaration', review?.paths ?? []);
   const answers = conflict
     ? [
-        `Send it back: write with task_comment where the conflict is, then task_reopen (taskId: ${taskId}), so that it is resolved on the task branch;`,
-        'Supersede it: task_update to CANCELLED, then task_create with supersedesTaskId, filing a task that can be merged;',
+        `Send it back: write with ${doors.taskCommentMcp} where the conflict is, then ${doors.taskReopenMcp} (taskId: ${taskId}), so that it is resolved on the task branch;`,
+        `Supersede it: ${doors.taskUpdateMcp} to CANCELLED, then ${doors.taskCreateMcp} with supersedesTaskId, filing a task that can be merged;`,
         `Already resolved and merged by hand: record that merge with merge_receipt (this item closes by itself once the work lands), or use ${resolve} to say how you dealt with it;`,
-        'Do not rerun it as it stands: merging the same commits again would conflict again, and integration_retry does not accept a conflict either.',
+        'Do not rerun it as it stands: merging the same commits again would conflict again, and the landing rerun does not accept a conflict either.',
       ]
     : [
         `Accept the scope: these files belong to what this delivery had to do — use ${resolve} to state your judgment, and the reason stays on the item. Accepting only records the judgment and merges nothing by itself;`,
-        `Send it back: the delivery changed something it should not have — write with task_comment which changes to withdraw or split out, then task_reopen (taskId: ${taskId}) so that it is redone as the original task;`,
-        'Supersede it: the task’s scope itself was written wrong — task_update to CANCELLED, then task_create with supersedesTaskId, the new task’s declaration naming the paths it has to change;',
+        `Send it back: the delivery changed something it should not have — write with ${doors.taskCommentMcp} which changes to withdraw or split out, then ${doors.taskReopenMcp} (taskId: ${taskId}) so that it is redone as the original task;`,
+        `Supersede it: the task’s scope itself was written wrong — ${doors.taskUpdateMcp} to CANCELLED, then ${doors.taskCreateMcp} with supersedesTaskId, the new task’s declaration naming the paths it has to change;`,
         `Rerun the landing: the delivery is fine, and the landing check failed, timed out or hit an integration error — requeue the landing once with ${retry}; a conflict cannot be rerun.`,
       ];
   return `From Orbit · exception item: ${item.title}\n\n`
     + `${observed}\n`
     + 'This project has Automatic on: whether this delivery lands is yours to judge, and it does not go to the account owner first. '
-    + `Read the task’s declaration (task_get, taskId: ${taskId}), the criterion it serves (acceptanceCriteriaItems in `
+    + `Read the task’s declaration (${doors.taskGetMcp}, taskId: ${taskId}), the criterion it serves (acceptanceCriteriaItems in `
     + 'project_get) and its actual changes, then choose one:\n'
     + `${answers.map((line) => `- ${line}`).join('\n')}\n`
     + 'When the task is sent back, cancelled or superseded, the platform closes this item itself; once you take it up it stays yours, '
     + 'and the platform does not hand it to the account owner because time ran out.\n'
-    + 'This is not a question about the acceptance criteria, so do not ask_owner about it: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to do; '
+    + 'This is not a question about the acceptance criteria, so do not put it to the account owner as one: changing the acceptance criteria and confirming the set of criteria are still only the account owner’s to do; '
     + 'a delivery that claims a criterion does not apply, or a criterion changed after the work started — those two cases are the account owner’s blockers.\n\n'
     + notice;
 }

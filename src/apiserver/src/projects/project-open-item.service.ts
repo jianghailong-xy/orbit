@@ -866,6 +866,12 @@ export class ProjectOpenItemService {
       automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
+      // Named or not named, never defaulted: a suggestion of the one-hour default and no suggestion
+      // at all read the same on the card — an empty box says "one hour unless set" — so inventing
+      // the number here would put a setting on the request that nobody chose.
+      ...(body.mergeCheckTimeoutSeconds !== undefined
+        ? { mergeCheckTimeoutSeconds: body.mergeCheckTimeoutSeconds }
+        : {}),
     };
     const asking = actingSessionId?.trim();
     return withTransactionRetry(this.prisma, async (tx) => {

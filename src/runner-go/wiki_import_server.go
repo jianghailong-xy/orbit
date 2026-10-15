@@ -249,7 +249,8 @@ func (im *wikiImporter) serverNotes(sources []wikiImportSource) ([]wikiImportJob
 //
 // It stops waiting — the job goes on on the server, and the next run collects it — when the System model
 // refuses the deployment's key or is not configured, when the model has not been up, or the job has not
-// started, for wikiImportHealthWait, and when the job has failed wikiImportJobAttempts times over.
+// started while the model is up, for wikiImportHealthWait, and when the job has failed
+// wikiImportJobAttempts times over.
 func (im *wikiImporter) awaitServerJob(id string, earlier bool) (bool, error) {
 	path := "/runner/wiki/spaces/" + url.PathEscape(im.opts.spaceID) + "/import-jobs/" + url.PathEscape(id)
 	began := time.Now()
@@ -298,7 +299,11 @@ func (im *wikiImporter) awaitServerJob(id string, earlier bool) (bool, error) {
 				return true, fmt.Errorf("the System model was not ready within %s (%s): %s", wikiImportHealthWait, job.Model.State, left)
 			}
 		}
-		if job.StartedAt == "" && time.Since(began) >= wikiImportHealthWait {
+		// The job cannot start while the model is away, so that wait — and not this one — is what runs
+		// then, and it names the cause. This deadline is for a job the server does not start while it
+		// has a model; letting it run beside the model's would let whichever clock began first report
+		// the server, which is every time a single poll alone outlasts the wait (a loaded machine).
+		if job.Model.State == "up" && job.StartedAt == "" && time.Since(began) >= wikiImportHealthWait {
 			return true, fmt.Errorf("the server did not start the import job %s within %s: %s", id, wikiImportHealthWait, left)
 		}
 		if job.Attempts >= wikiImportJobAttempts {

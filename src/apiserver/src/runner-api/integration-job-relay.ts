@@ -635,8 +635,6 @@ export async function applyIntegrationJobResult(
         // open can say so — a red reported by a landing whose check never ran must not read as a
         // check that failed.
         skipMergeCheck: true, skipReason: true, skipApprovedByUserId: true, skipApprovalId: true,
-        session: { select: { baseSha: true } },
-        task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
     });
     if (!job) throw new IntegrationJobRefused('NOT_FOUND');
@@ -655,6 +653,25 @@ export async function applyIntegrationJobResult(
     ) {
       throw new IntegrationJobRefused('STALE_CLAIM');
     }
+
+    // The task this job is about, read BESIDE the job rather than below it: `task_id` is a history
+    // reference with no foreign key (0423), so it may name a task that is no longer there — the
+    // trace a deleted task leaves behind — and a job of a deleted task still has a result to record.
+    // A read that may find nothing, where a relation could only ever be null for a promotion.
+    const task = job.taskId
+      ? await tx.task.findFirst({
+        where: { id: job.taskId },
+        select: { title: true, assigneeId: true, creatorType: true, creatorId: true },
+      })
+      : null;
+    // The session it was queued from, read beside it for the same reason: `session_id` is a history
+    // reference too (0424), and a session purged from Trash leaves its id behind. Not found is the
+    // NULL the key used to write — which is all the receipt below may be written against, since its
+    // `session_id` IS a foreign key — and the same goes for the task the receipt and an item name.
+    const session = job.sessionId
+      ? await tx.session.findFirst({ where: { id: job.sessionId }, select: { id: true, baseSha: true } })
+      : null;
+    const liveTaskId = task ? job.taskId : null;
 
     // §2.6 J-T1a: the task's own work, as the two rules below read it. A landing whose subject is one
     // task is judged against that task's sessions — which is the whole of "can this branch still
@@ -721,8 +738,8 @@ export async function applyIntegrationJobResult(
       && (state === 'NOTHING_TO_LAND'
         || (state === 'ALREADY_LANDED'
           && body.sourceSha != null
-          && job.session?.baseSha != null
-          && body.sourceSha === job.session.baseSha));
+          && session?.baseSha != null
+          && body.sourceSha === session.baseSha));
     const effectiveState: IntegrationJobState = wroteNothingOfItsOwn ? 'NOTHING_TO_LAND' : state;
     const ownWork = wroteNothingOfItsOwn && job.taskId
       ? await workSessionsReportingWork(tx, job.taskId)
@@ -794,11 +811,11 @@ export async function applyIntegrationJobResult(
       }
     }
 
-    const receiptIds = receiptState && job.sessionId && !job.promotionId
+    const receiptIds = receiptState && session && !job.promotionId
       ? await MergeReceiptService.fromIntegrationJob(tx, {
         ownerId: job.ownerId,
-        sessionId: job.sessionId,
-        taskId: job.taskId,
+        sessionId: session.id,
+        taskId: liveTaskId,
         projectId: job.projectId,
         jobId: job.id,
         state: receiptState,
@@ -815,12 +832,12 @@ export async function applyIntegrationJobResult(
       : [];
     // The visible signal J-T5 owes a person when the line says it was handed a branch carrying
     // nothing: the job row is not somewhere anybody looks, and the answer is silent otherwise.
-    if (wroteNothingOfItsOwn && job.taskId && job.task) {
+    if (wroteNothingOfItsOwn && job.taskId && task) {
       await tx.taskComment.create({
         data: {
           taskId: job.taskId,
-          authorType: job.task.assigneeId ? CreatorType.AGENT : job.task.creatorType,
-          authorId: job.task.assigneeId ?? job.task.creatorId,
+          authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
+          authorId: task.assigneeId ?? task.creatorId,
           body: fullyApplied
             ? fullyAppliedComment({
               branch: shortBranchName(job.sourceRef),
@@ -977,11 +994,12 @@ export async function applyIntegrationJobResult(
         projectId: job.projectId,
         ownerId: job.ownerId,
         jobId: job.id,
-        taskId: job.taskId,
+        // The item's `task_id` is a foreign key; its `session_id` is history, like the job's (0278).
+        taskId: liveTaskId,
         sessionId: job.sessionId,
         promotionId: job.promotionId,
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
-        title: integrationItemTitle(state, job.kind, job.task?.title ?? 'a task', mainBranch),
+        title: integrationItemTitle(state, job.kind, task?.title ?? 'a task', mainBranch),
         dedupeKey: integrationDedupeKey(state, job.id),
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.

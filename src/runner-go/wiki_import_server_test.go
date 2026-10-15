@@ -41,6 +41,9 @@ type fakeImportServer struct {
 	// probeFails answers it 500.
 	probeMissing bool
 	probeFails   bool
+	// delay holds every answer back before it is written: a test that sets it longer than
+	// wikiImportHealthWait makes a single poll outlast the wait that measures it.
+	delay time.Duration
 	// bodies are the note registrations as they arrived.
 	bodies []map[string]interface{}
 }
@@ -65,6 +68,9 @@ func newFakeImportServer(t *testing.T, run func(input fakeImportJobInput) map[st
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if s.delay > 0 {
+			time.Sleep(s.delay)
+		}
 		w.Header().Set("content-type", "application/json")
 		raw, _ := io.ReadAll(r.Body)
 		const space = "/api/runner/wiki/spaces/space-1"
@@ -443,6 +449,25 @@ func TestWikiImportOnTheServerStopsWaitingForAModelThatIsAway(t *testing.T) {
 	}
 	if len(server.Jobs()) != 1 {
 		t.Errorf("%d jobs: a run that stopped waiting leaves its job for the next one", len(server.Jobs()))
+	}
+}
+
+// The model is away and every answer arrives after the wait has already passed — the first read of the job
+// returns to a run whose whole wikiImportHealthWait is spent, as a poll does on a loaded machine. What the
+// run says must still be about the model: the job has not started because the model is away, which is the
+// true cause, and never the "did not start" deadline the model's own wait runs ahead of.
+func TestWikiImportOnTheServerSaysTheModelIsAwayWhenThePollOutlastsTheWait(t *testing.T) {
+	library := memoryLibrary(t, map[string][2]string{"feedback-1.md": {"feedback", "fact one"}})
+	server := newFakeImportServer(t, readAll(map[string]int{"memory/feedback-1.md": 1}))
+	wikiImportServerSession(t, server)
+	previous := wikiImportHealthWait
+	wikiImportHealthWait = 50 * time.Millisecond
+	t.Cleanup(func() { wikiImportHealthWait = previous })
+	server.modelState = "down"
+	server.delay = 60 * time.Millisecond
+	_, err := runImport(t, "--from", library, "--space", "space-1")
+	if err == nil || !strings.Contains(err.Error(), "was not ready within") {
+		t.Fatalf("a model that is away, answered after the wait = %v", err)
 	}
 }
 
