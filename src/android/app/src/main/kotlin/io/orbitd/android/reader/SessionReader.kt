@@ -44,7 +44,10 @@ import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionNeedsYouBar
 import io.orbitd.android.cards.SessionRunStartCard
 import io.orbitd.android.cards.SessionTasksCard
+import io.orbitd.android.cards.LocalWatchTargetNames
+import io.orbitd.android.cards.watchTargetName
 import io.orbitd.android.watch.SessionWatches
+import io.orbitd.android.watch.rememberSessionTitles
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerReview
@@ -150,10 +153,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val transcript = state.session?.transcript
     val snapshotDetail = state.session?.snapshot?.detail
+    // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
+    val cards = rememberSessionCards(app, handle, route.id!!)
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
-    // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it.
-    val belowRows = remember(state.session?.snapshot) {
-        state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it) }.orEmpty()
+    // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
+    // answered here stops counting with the press, not with the read after it (A08-13).
+    val belowRows = remember(state.session?.snapshot, cards.answered) {
+        state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it, cards.answered) }.orEmpty()
     }
     // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet.
     val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
@@ -226,8 +232,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
         TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
     }
-    // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
-    val cards = rememberSessionCards(app, handle, route.id!!)
     LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
     val reviewStates = rememberSaveableStateHolder()
     val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
@@ -244,8 +248,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         state.window.events.filter { it.type == "user_delivery" }
             .mapNotNull { event -> event.fields.string("turnId")?.let { turn -> event.fields.string("delivery")?.let { turn to it } } }.toMap()
     }
+    // A08-14: what a watch's wake line calls the targets that moved — the watches this conversation observes, the session list,
+    // and its own Tasks card.
+    val sessionTitles = rememberSessionTitles(app, handle)
+    val targetNames = remember(cards.watches, cards.created, sessionTitles) {
+        { watchId: String, target: JsonObject -> watchTargetName(watchId, target, cards.watches.map { it.source }, { sessionTitles(it) }, cards.created) }
+    }
     CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
-        LocalSessionConsole provides console) {
+        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
