@@ -22,7 +22,6 @@ internal object RunnerCopy {
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
     fun versionTag(version: String) = "v$version"
     fun runningOf(active: Int, max: Int) = "$active of $max running"
-    fun slots(active: Int, max: Int) = "$active/$max"
     const val ADD = "Add Runner"
     const val ADD_FOOTER = "Run one command on the new machine — it installs Orbit, then asks you to confirm it’s yours."
     const val NEEDS_ATTENTION = "Needs Attention"
@@ -170,6 +169,22 @@ internal object EngineAccounts {
     fun moveCapability(engine: String) = when (engine) {
         "claude" -> "claude-account-move/v1"; "antigravity" -> ANTIGRAVITY_ACCOUNT_LOGIN; "kimi" -> "kimi-account-move/v1"
         else -> "codex-account-move/v1"
+    }
+
+    /** CodexAccounts.automaticOffered (web `automaticOfferedOn`): Automatic is on offer for [engine] where the workspace picked
+     * none of its accounts ([pick]), its [env] selects no other config directory and no key of its own — for Kimi Code, no model of
+     * its own either, which only both of its variables together are — and the runner has two accounts or more to choose between. */
+    fun automaticOffered(engine: String, pick: String?, env: JsonObject?, accounts: Int): Boolean {
+        if (accounts < 2 || !pick.isNullOrEmpty()) return false
+        fun set(key: String) = (env?.get(key) as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
+        if (engine == "kimi" && set("KIMI_MODEL_NAME") && set("KIMI_MODEL_API_KEY")) return false
+        val deciding = when (engine) {
+            "claude" -> listOf("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN")
+            "antigravity" -> listOf("ORBIT_ANTIGRAVITY_GOOGLE_DIR", "GEMINI_API_KEY")
+            "kimi" -> listOf("KIMI_CODE_HOME")
+            else -> listOf("CODEX_HOME", "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")
+        }
+        return deciding.none(::set)
     }
 
     /** One Antigravity bucket as the window it names, for weighing quota against quota: what agy says is left, as the

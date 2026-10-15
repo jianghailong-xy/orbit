@@ -7,6 +7,8 @@ import io.orbitd.android.core.realtime.SseFrame
 import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 
 /** One controlled Orbit server for the A05d shell tests: the production Activity, AuthSession, RealtimeStore and navigation over
@@ -55,13 +57,29 @@ internal object ProjectShell {
     @Volatile var pressStatus = 200
     /** Whether the coordinator's row says a merge into main waits on the owner (its owner item). */
     @Volatile var mergeWaiting = false
+    // A11-11 / A11-13: the project's current landings and the plan the start card draws.
+    /** `integration.landTasks`, as a JSON array; null leaves the field out, as a server before it does. */
+    @Volatile var landTasks: String? = null
+    /** The dependency graph `projects/:id/dependency-graph` answers, with a confirmation the start card can seal; null answers `{}`. */
+    @Volatile var plan: String? = null
     /** Every write's body, by `METHOD path`. */
     val bodies = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    // A05-9: sessions moved to Trash. The server takes a move when the DELETE's held answer is let go; from then no list has the row.
+    @Volatile var trashed: Set<String> = emptySet()
+    @Volatile var holdDelete: CompletableDeferred<Unit>? = null
+    /** A read of Launch's own sessions (`projectId`) waits for this before it answers, with the rows as they were when it arrived. */
+    @Volatile var holdMembers: CompletableDeferred<Unit>? = null
+    /** Launch's `attention` in `GET projects`, which the drawer's count is read from; none by default. */
+    @Volatile var attention: String? = null
 
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true
         promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
+        landTasks = null; plan = null
+        // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
+        trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
     }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
@@ -85,7 +103,7 @@ internal object ProjectShell {
         PLAIN -> row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
         else -> row(DONE, "Shipped docs", ALPHA, "SUCCEEDED", ""","completedAt":"${ago(2 * 24 * 60)}",${member("TASK")}""", "COMPLETED", ago(2 * 24 * 60))
     }
-    private fun list(vararg sessions: String) = sessions.joinToString(",", "[", "]") { session(it) }
+    private fun list(vararg sessions: String) = sessions.filter { it !in trashed }.joinToString(",", "[", "]") { session(it) }
 
     private fun sidebar() = """[${if (done) "" else """{"id":"$LAUNCH","title":"Launch","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{"running":2},
         "taskCounts":{"done":3,"failed":1,"total":8},"attention":{},"integration":{"line":"PROJECT_BRANCH","ref":"project/launch","activeJobCount":1},
@@ -93,7 +111,8 @@ internal object ProjectShell {
         {"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{},"attention":{},"startedAt":"2026-10-02T00:00:00Z"}]"""
     private val integration get() = """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":1,"queuedCount":0,
         "inFlight":${if (mergeCheck) """{"kind":"CHECK_PROMOTION","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
-            else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}}"""
+            else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}${
+            landTasks?.let { ""","landTasks":$it""" }.orEmpty()}}"""
     private val openItems get() = if (!startRequest) """{"needsYou":[],"withCoordinator":[${holder.orEmpty()}]}""" else """{"needsYou":[],"withCoordinator":[],
         "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Everything is filed.",
         "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
@@ -103,8 +122,10 @@ internal object ProjectShell {
         "ON_PROJECT_BRANCH":0,"NOTHING_TO_LAND":0,"NO_RECEIPT":0,"CODELESS":1}},""" else ""}"status":"DONE","done":true,"withheld":[],
         "confirmation":"CONFIRMED","criteria":[${(1..5).joinToString(",") { """{"definitionId":"c$it","satisfied":true,"landing":"LANDED","landingReason":null}""" }},
         {"definitionId":"c6","satisfied":true,"landing":"LANDED","landingReason":"CODELESS"}]}"""
-    private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"${if (done) "DONE" else "OPEN"}","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8}${
-        if (done) ""","doneBy":"$doneBy","derivedDone":$projection""" else ""}${criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}}"""
+    private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"${if (done) "DONE" else "OPEN"}","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8},
+        "startedAt":${if (started) "\"2026-10-02T00:00:00Z\"" else "null"}${
+        if (done) ""","doneBy":"$doneBy","derivedDone":$projection""" else ""}${criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}${
+        attention?.let { ""","attention":$it""" }.orEmpty()}}"""
 
     /** A press on Launch's candidate: the door's answer is the candidate in its next state, or the server's refusal. */
     private fun press(door: String): ApiResponse {
@@ -133,9 +154,18 @@ internal object ProjectShell {
             path == "workspaces" -> ok(workspaces)
             path == "runners" -> ok("""[{"id":"r1","name":"Fixture runner","online":true}]""")
             path == "sessions" && scoped == QUIET -> if (quietStatus == 200) ok("[]") else ApiResponse(quietStatus, """{"message":"The project's sessions are unavailable"}""".encodeToByteArray())
-            path == "sessions" && scoped == LAUNCH -> ok(if (view == "open") list(COORD, WORKER, WAITING) else if (view == "completed") list(DONE) else "[]")
+            path == "sessions" && scoped == LAUNCH -> {
+                val answer = ok(if (view == "open") list(COORD, WORKER, WAITING) else if (view == "completed") list(DONE) else "[]")
+                holdMembers?.await()
+                answer
+            }
             path == "sessions" -> ok(when (view) { "open" -> list(COORD, WORKER, WAITING, PLAIN); "completed" -> list(DONE); else -> "[]" })
             api.path.size == 2 && path.startsWith("sessions/") && method == "GET" -> ok(session(path.removePrefix("sessions/")))
+            api.path.size == 2 && path.startsWith("sessions/") && method == "DELETE" -> {
+                holdDelete?.await()
+                trashed = trashed + path.removePrefix("sessions/")
+                ok("{}")
+            }
             path.startsWith("sessions/") && path.endsWith("/page") -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")
             path == "projects/sidebar" -> ok(sidebar())
             path == "projects" -> ok("""[$project,{"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z"}]""")
@@ -144,6 +174,9 @@ internal object ProjectShell {
             path == "projects/$LAUNCH/open-items" -> ok(openItems)
             path == "projects/$LAUNCH/promotions/current" -> promotion?.let(::ok) ?: ApiResponse(200, ByteArray(0))
             path == "projects/$LAUNCH/promotions/merged" -> ok(merged)
+            path == "projects/$LAUNCH/dependency-graph" && plan != null -> ok(plan!!)
+            path == "projects/$LAUNCH/acceptance/confirmation" && plan != null ->
+                ok("""{"state":"UNCONFIRMED","confirmed":false,"currentVersion":{"digest":"digest-1","material":[]}}""")
             method == "POST" && path.startsWith("projects/$LAUNCH/promotions/") -> press(path.substringAfterLast('/'))
             path.startsWith("projects/") -> ok("{}")
             path.startsWith("wiki/") -> ApiResponse(404, """{"code":"WIKI_DISABLED","message":"The wiki is off."}""".encodeToByteArray())
@@ -160,6 +193,9 @@ internal object ProjectShell {
         }
     }
 
+    /** Requests answer on the caller's thread, as the other shell fixtures' do (ManagementFixture, WatchFixture, ComposerShell): on
+     * Dispatchers.IO a page's LaunchedEffect read resumes on the IO worker under the test's unconfined effect dispatcher and writes
+     * its state off the main thread, and a sheet could then stay on its spinner with every read answered. */
     fun session() = AuthSession(transport, object : CredentialStore {
         private var value: StoredSession? = null
         override suspend fun load() = value
@@ -172,7 +208,7 @@ internal object ProjectShell {
         override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = null
         override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) = Unit
         override suspend fun clearAll() = Unit
-    }, "a05d-shell", eventTransport = events)
+    }, "a05d-shell", dispatcher = Dispatchers.Unconfined, eventTransport = events)
 
     suspend fun signIn(session: AuthSession) = session.login(ServerAddress.parse("https://a05d.test"), "owner@a05d.test", "fixture")
 }

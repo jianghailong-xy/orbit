@@ -392,7 +392,7 @@ class RealStackDeviceTest {
         compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput(note)
         hideKeyboard()
-        compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
+        compose.onNodeWithTag("item:$item:mark-handled-confirm").performScrollTo().performClick()
         compose.waitUntil(30_000) { get("/projects/$id/open-items").jsonObject.objects("needsYou").none { it.text("itemId") == item } }
         val settled = get("/projects/$id/open-items").jsonObject.objects("settled").firstOrNull { it.text("itemId") == item }
         record("item after Mark handled", settled ?: "not open, not in settled")
@@ -697,10 +697,10 @@ class RealStackDeviceTest {
         })
         assertEquals(true, inFlight().single { it.text("jobId") == jobId }.flag("retryable"))
         signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", stuck.text("title")!!)
-        awaitScrollTo("project-detail", hasTestTag("landing-row"), 60_000)
-        compose.onNodeWithTag("landing-timed-out", useUnmergedTree = true).assertExists()
-        capture("stack-landing-0-row")
-        tap("landing-row", "project-detail"); awaitTag("landing-jobs-sheet")
+        awaitScrollTo("project-detail", hasTestTag("landing-card"), 60_000)
+        compose.onNodeWithTag("landing-head:timed-out", useUnmergedTree = true).assertExists()
+        capture("stack-landing-0-card")
+        tap("landing-card:body", "project-detail"); awaitTag("landing-jobs-sheet")
         compose.onNodeWithTag("landing-job:$jobId:retry").assertTextEquals(ProjectPage.landingRetry)
         capture("stack-landing-1-jobs")
         tap("landing-job:$jobId:retry")

@@ -492,8 +492,10 @@ export interface OpenItemFacts {
   } | null;
   /** The landing question and the declaration used for a DELIVERY_REVIEW item. */
   review?: {
-    reason: 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
+    reason: 'CRITERION_EXEMPTION_ARGUED' | 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
     declaredPaths: string[];
+    /** The task's written reason for keeping its completion criterion (CRITERION_EXEMPTION_ARGUED). */
+    argument?: string;
   } | null;
 }
 

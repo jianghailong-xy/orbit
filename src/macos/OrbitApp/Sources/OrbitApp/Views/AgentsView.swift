@@ -1024,8 +1024,10 @@ struct AgentPanes: View {
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
             // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
             // a button's label otherwise inherits the accent tint, and the rows are unchanged by
-            // design (only the wrapper is new).
-            Button { app.push(.console(sessionID: s.id, origin: .list)) } label: {
+            // design (only the wrapper is new). It presses through `openSessionRow`, the model's
+            // one row entry, which also lands on the owner item the row's own line names — the
+            // three-column rows get the same act from the selection setter they write.
+            Button { app.openSessionRow(s) } label: {
                 row.foregroundStyle(.primary)
             }
             // The row's actions attach to the *row*, not to what the row is made of: `.swipeActions`

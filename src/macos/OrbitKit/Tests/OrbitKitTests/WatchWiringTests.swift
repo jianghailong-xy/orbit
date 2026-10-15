@@ -81,7 +81,8 @@ final class WatchWiringTests: XCTestCase {
     func testTheHeaderRowAndGlyphAreHandedTheWatch() throws {
         let subtitleCalls = code(try source("Views/Console/ConsoleView.swift"))
             .components(separatedBy: "SessionHeader.subtitle(for:").dropFirst()
-        XCTAssertEqual(subtitleCalls.count, 2, "the iOS nav title and the macOS status bar")
+        // The macOS status bar. The iOS nav bar has carried no title or status line since 2026-10-15.
+        XCTAssertEqual(subtitleCalls.count, 1, "the macOS status bar")
         for call in subtitleCalls {
             XCTAssertTrue(call.prefix(120).contains("watching:"), String(call.prefix(120)))
         }

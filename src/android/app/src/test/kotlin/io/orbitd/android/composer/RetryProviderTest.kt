@@ -27,7 +27,8 @@ class RetryProviderTest : ComposerShellTest() {
         failedSession()
         signIn(); openSession(); openModelMenu()
         compose.onNode(hasText("DeepSeek") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
-        awaitText("Applies when this session resumes.")
+        // What the pick will do, and when (A07-19 (a)): the session has ended, so its next message.
+        awaitText("Your next message uses DeepSeek.")
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
         retryFromTheMenu()
         assertEquals(buildJsonObject { put("provider", "deepseek"); put("engine", "claude") },

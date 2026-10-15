@@ -33,7 +33,8 @@ private val LIVE = setOf("QUEUED", "RUNNING", "AWAITING_INPUT", "INTERRUPTED")
  * Rename…, Pin, Move… and Tags…; Open Task or Open Project for a session one of them runs; Complete Session, or Move to
  * Open for a completed one; Move to Trash. A trashed session offers only Move to Open and, asked first, Delete
  * Permanently. What would stop a live run says so. Its writes wait for a fresh session and directory ([writable]), as
- * every Android write does; [left] takes the page away once the session is completed or in Trash.
+ * every Android write does; [left] takes the page away once the session is completed, and on the press of Move to Trash —
+ * before its request goes, as the row leaves every list then (A05-9).
  */
 @Composable
 internal fun SessionMenu(session: DirectorySession?, detail: JsonObject?, link: String, writable: Boolean, actions: SessionActions,

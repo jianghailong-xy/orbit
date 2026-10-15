@@ -22,9 +22,7 @@ struct ConsoleView: View {
     @State private var imagePreviewPages: [PreviewImage] = []
     @State private var fetchedToolImages = FetchedToolImages()
     // Routes to the run a message followed (`handedOverSessionID`) and to the one a refusal names
-    // — both platforms. On iOS it also builds the nav-bar title (session name + "state · when"),
-    // mirroring how web's console header reads `selected` off the cached session list; macOS shows
-    // that status in the in-transcript `statusBar` instead.
+    // — both platforms — and, on iOS, the session the ⋯ menu acts on.
     @Environment(AppModel.self) private var appModel
     /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
@@ -33,9 +31,9 @@ struct ConsoleView: View {
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     #if os(iOS)
-    /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
-    /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
-    /// otherwise be typed in as if it were the name.
+    /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
+    /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
+    /// it were the name.
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var taggingSession: Session?
@@ -44,7 +42,7 @@ struct ConsoleView: View {
     @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
-    /// A phone's stack: the project a coordinator's title opens goes over this console, so the back
+    /// A phone's stack: the task or project the ⋯ menu opens goes over this console, so the back
     /// swipe returns here (`opensPagesOverConsole`).
     @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
     #endif
@@ -53,9 +51,10 @@ struct ConsoleView: View {
         #if os(iOS)
         // A custom `.principal` toolbar item is measured at its ideal width instead of being given
         // the space left between the navigation buttons. Measure the actual detail column here so
-        // the title gets a finite proposal on iPhone, after rotation, and in an iPad split view.
-        // Reserve 80 points on each side for navigation chrome; 260 keeps it title-like in wide
-        // columns instead of turning the navigation bar into another content row.
+        // the sticky question's capsule (`TranscriptView.stickyQuestion`) gets a finite proposal on
+        // iPhone, after rotation, and in an iPad split view. Reserve 80 points on each side for
+        // navigation chrome; 260 keeps it a capsule in wide columns instead of turning the
+        // navigation bar into another content row.
         GeometryReader { geometry in
             consoleBody(navTitleWidth: min(max(geometry.size.width - 160, 0), 260))
         }
@@ -125,7 +124,8 @@ struct ConsoleView: View {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
                     TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
-                                   reviewingCard: approvalReview != nil || promotionReview != nil)
+                                   reviewingCard: approvalReview != nil || promotionReview != nil,
+                                   questionWidth: navTitleWidth)
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
@@ -293,47 +293,15 @@ struct ConsoleView: View {
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
         // …and none at all while a phone's composer holds the keyboard (`foldsChrome`): back, the
-        // title and session menu come back when the keyboard goes.
+        // question and session menu come back when the keyboard goes.
         .toolbar(foldsChrome(registry.peek(sessionID)) ? .hidden : .automatic, for: .navigationBar)
-        // Inline title: the session name over a "state · when" subtitle, matching the web Agent
-        // console header (`AgentView.tsx`). Centered/two-line — the system convention (Messages/Phone)
-        // — rather than web's left-aligned bar. The status word lived in the transcript's `statusBar`
-        // band before; on iOS that band is now retired in favour of this.
+        // No title: back, the ⋯ menu and, between them, the question the top of the screen answers —
+        // a capsule the transcript puts there, as only it knows where the reader is
+        // (`TranscriptView.stickyQuestion`). The session's name and its "state · when" line gave way
+        // to reading space (the owner, 2026-10-15: the title is not needed). Rename… and the project
+        // or task a session belongs to are in the menu; whether it runs, the composer's stop button
+        // says.
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                let session = appModel.session(id: sessionID)
-                let title = ConsoleNavTitle(
-                    session: session,
-                    console: registry.peek(sessionID),
-                    availableWidth: navTitleWidth
-                )
-                // A coordinator conversation's title is its project's — the server keeps the two in
-                // step — so its tap opens that project, the way a Messages header opens what the
-                // conversation is about; the › beside the badge says so. Every other title is tap to
-                // rename, matching web's double-click-the-header-title. A trashed session is not
-                // renamable there either, and a row we haven't loaded yet has no title to seed the
-                // field with — both fall back to the plain, non-interactive title.
-                if let session, let projectID = session.projectId {
-                    Button {
-                        appModel.openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)
-                    } label: {
-                        title
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens the project this conversation coordinates")
-                } else if let session, session.effectiveLifecycleState != .trash {
-                    Button {
-                        renameDraft = session.title ?? ""
-                        renaming = true
-                    } label: {
-                        title
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Renames this session")
-                } else {
-                    title
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 if let session = appModel.session(id: sessionID) {
                     sessionMenu(session)
@@ -517,63 +485,6 @@ private struct TypingFold: ViewModifier {
     }
 }
 
-#if os(iOS)
-/// The pushed console's inline nav-bar title: the session name over a "state · when" subtitle,
-/// mirroring the web Agent console header (see OrbitKit `SessionHeader`). The session (with its
-/// title + timestamps) comes from the app's cached list; when it isn't loaded yet the title falls
-/// back to the live stream's agent name and the subtitle to its current status word.
-private struct ConsoleNavTitle: View {
-    @Environment(AppModel.self) private var appModel
-    let session: Session?
-    let console: ConsoleModel?
-    /// The navigation bar's centre budget, derived from the current detail-column width. Unlike a
-    /// plain `lineLimit`, this gives both text rows a finite proposal they can actually truncate in.
-    let availableWidth: CGFloat
-
-    var body: some View {
-        VStack(spacing: 1) {
-            HStack(spacing: 6) {
-                Text(SessionHeader.title(for: session, fallbackAgent: console?.agentName))
-                    .font(.headline)
-                    .lineLimit(1).truncationMode(.tail)
-                if let session {
-                    SessionCoordinatorBadge(session: session)
-                        .layoutPriority(1)
-                    // The tap opens the project (see the title's button in `ConsoleView`).
-                    if session.projectId != nil {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .layoutPriority(1)
-                            .accessibilityHidden(true)
-                    }
-                }
-            }
-            Text(subtitle)
-                .font(.caption2).foregroundStyle(.secondary)
-                .lineLimit(1).truncationMode(.tail)
-        }
-        .frame(width: availableWidth)
-        // SwiftUI views do not clip to their layout frame by default. Keep a fixed-size badge (or a
-        // future title child) from ever painting over the trailing Share button again.
-        .clipped()
-    }
-
-    private var subtitle: String {
-        // Waiting on a watch, the subtitle says so — targets, progress, last look — instead of
-        // "Background process running · 3m ago".
-        let watching = session.flatMap { appModel.watches?.summary(for: $0.id) }
-        if let s = SessionHeader.subtitle(for: session, watching: watching) { return s }
-        // No cached session yet (fresh deep link): show the live stream's status, prettified like
-        // the old band did (AWAITING_INPUT -> "Awaiting Input").
-        if let status = console?.state.status {
-            return status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
-        }
-        return ""
-    }
-}
-#endif
-
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openApprovalReview) private var openApprovalReview
@@ -584,6 +495,9 @@ struct TranscriptView: View {
     var hidesStickyQuestion = false
     /// Keep the preview's place while its sheet refreshes or the conversation keeps streaming.
     var reviewingCard = false
+    /// The nav bar's centre slot on iOS, which the sticky question's capsule truncates within — a
+    /// `.principal` item is otherwise sized to its ideal width (`ConsoleView.body`). Unused on macOS.
+    var questionWidth: CGFloat = 0
     @State private var reviewSessionID: String?
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
@@ -691,8 +605,8 @@ struct TranscriptView: View {
         ScrollViewReader { proxy in
             chrome(follows(rowsList, proxy), proxy)
         }
-        // macOS shows the session state in this band; iOS carries it in the nav-bar subtitle
-        // (`ConsoleNavTitle`) instead, matching the web header, so the band is retired there.
+        // macOS shows the session state in this band. iOS gave the state up with the nav-bar title,
+        // for reading space (see `ConsoleView`'s toolbar), so the band is retired there.
         #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
         #endif
@@ -913,17 +827,35 @@ struct TranscriptView: View {
         // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
         // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
         // back; it steps back through earlier questions as you scroll up (see `recomputeStuck`) and
-        // hides only at the very top where no question is above. Shown whenever such a question
-        // exists — including at the bottom — exactly like web, not gated on `atBottom`. In-flow inset
-        // (not an overlay) so it pushes content down like web: a `scrollTo(anchor: .top)` then lands
-        // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
+        // hides only at the very top where no question is above. iOS 18+/macOS 15+ (needs the
         // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
+        #if os(iOS)
+        // On iOS it is the nav bar's centre piece, not a band under the bar (the owner, 2026-10-15:
+        // the band and the title above it took too much of the screen). Up there it moves nothing,
+        // and a `scrollTo(anchor: .top)` lands the target just under the bar. It shows only while
+        // the reader is off the live tail — scrolled up into the history, or reading a window opened
+        // at a record — the same "off the tail" the jump-to-latest disc answers to: at the tail the
+        // reader is following the answer to what they just asked (the owner, the same day).
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, !atBottom || console.detached,
+                   let q = stuckBubble {
+                    stickyQuestion(q, proxy: proxy)
+                        .frame(idealWidth: questionWidth, maxWidth: questionWidth)
+                }
+            }
+        }
+        #else
+        // Shown whenever such a question exists — including at the bottom — exactly like web, not
+        // gated on `atBottom`. In-flow inset (not an overlay) so it pushes content down like web: a
+        // `scrollTo(anchor: .top)` then lands the target just *below* the header, not hidden under it.
         .safeAreaInset(edge: .top, spacing: 0) {
             if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
                 stickyQuestion(q, proxy: proxy)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        #endif
         .animation(.easeOut(duration: 0.15), value: atBottom)
         .animation(.easeOut(duration: 0.15), value: stranded)
         // Only fires when the header appears/disappears (not on every text swap), so animating it
@@ -1084,9 +1016,10 @@ struct TranscriptView: View {
     }
 
     // Sticky header that names the turn above the fold and scrolls back to it — web's
-    // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`).
-    // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
-    // region starts below it).
+    // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`):
+    // a band under the toolbar on macOS, a capsule in the nav bar on iOS (see `chrome`).
+    // `anchor: .top` lands the bubble just under either (the band is a safe-area inset, so the
+    // scroll region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
         // What this turn was and what it said. An exception item's delivery — or another card the
         // control plane draws — is still the turn the bar points back at, but it is not the person's
@@ -1112,6 +1045,9 @@ struct TranscriptView: View {
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
             #endif
         } label: { _ in
+            #if os(iOS)
+            questionCapsule(summary)
+            #else
             HStack(spacing: 8) {
                 // Priority, not `fixedSize()`: the label is served first, so the line beside it is
                 // what gives way — but a card's label too long for the row truncates itself rather
@@ -1131,10 +1067,31 @@ struct TranscriptView: View {
             // in an overlay has no stack axis and instead renders as a vertical line down the row's center.
             .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
             .contentShape(Rectangle())
+            #endif
         }
         .accessibilityLabel("Jump to your last question")
         .help("Jump to your last question")
     }
+
+    #if os(iOS)
+    /// The sticky question in the nav bar: the turn's words in a capsule between back and the ⋯ menu,
+    /// their height and their glass. The label and line are the band's, and give way the same way,
+    /// except that the person's own question is labelled by the arrow alone
+    /// (`StickySummary.compactLabel`).
+    private func questionCapsule(_ summary: (label: String, text: String)) -> some View {
+        HStack(spacing: 6) {
+            Text(StickySummary.compactLabel(summary.label))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            Text(summary.text)
+                .font(.orbitSubtext).foregroundStyle(.primary)
+                .lineLimit(1).truncationMode(.tail)
+        }
+        .padding(.horizontal, 14)
+        .questionGlass()
+        .contentShape(Capsule())
+    }
+    #endif
 
     // Circular "scroll to latest" control (ChatGPT parity). Wrapped in `CoastingButton` so the tap lands
     // even while the List is still coasting, and so a press springs the disc ~1.2× larger (ChatGPT's
@@ -1224,6 +1181,21 @@ struct TranscriptView: View {
     }
     #endif
 }
+
+#if os(iOS)
+private extension View {
+    /// The sticky question's capsule: iOS 26's Liquid Glass at the height of the back and ⋯ buttons
+    /// beside it. Earlier systems draw those as bare glyphs in a 44-point bar, so there it is a
+    /// smaller capsule of system fill, as a search field is.
+    @ViewBuilder func questionGlass() -> some View {
+        if #available(iOS 26.0, *) {
+            frame(height: 44).glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            frame(height: 32).background(Color(uiColor: .tertiarySystemFill), in: Capsule())
+        }
+    }
+}
+#endif
 
 /// A tap target that still fires while the enclosing `List` is coasting (momentum scroll) — the whole
 /// reason these controls aren't plain `Button`s. On iOS the scroll view's stop-on-tap arbitration eats

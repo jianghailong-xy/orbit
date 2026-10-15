@@ -27,8 +27,10 @@ import {
 
 test('a reading about the ruler is the owner’s blocker; a reading about the landing is the '
   + 'coordinator’s review', () => {
+  // An argued exemption is a task's reason for keeping its own completion criterion: how that task
+  // is judged, not the project's ruler (`blocker-disposition.ts`, BLOCKER_DECISION).
   assert.deepEqual(BLOCKER_REASONS.map((reason) => [reason, blockerRoute(reason)]), [
-    ['CRITERION_EXEMPTION_ARGUED', 'OWNER_BLOCKER'],
+    ['CRITERION_EXEMPTION_ARGUED', 'EXCEPTION_ITEM'],
     ['ACCEPTANCE_STANDARD_MOVED', 'OWNER_BLOCKER'],
     ['OUTSIDE_DECLARED_SCOPE', 'EXCEPTION_ITEM'],
     ['MERGE_REFUSED_BY_GIT', 'EXCEPTION_ITEM'],
@@ -100,7 +102,7 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
     'mechanical scope warning', 'src/runner-go/worktree.go', 'src/shared/src/project-done.ts',
     'src/apiserver/src/projects/project-owner-done.pg.spec.ts', 'Accept the scope', 'open_item_resolve',
     'Send it back', 'task_reopen', 'Supersede it', 'supersedesTaskId', 'Rerun the landing', 'integration_retry',
-    'once you take it up it stays yours', 'do not ask_owner about it', 'Automatic',
+    'once you take it up it stays yours', 'do not put it to the account owner as one', 'Automatic',
   ]) {
     assert.ok(message.includes(want), `the review message does not say ${JSON.stringify(want)}`);
   }
@@ -133,6 +135,46 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
     payload: { ...reviewPayload, paths: Array.from({ length: 45 }, (_, i) => `src/file-${i}.ts`) },
   });
   assert.ok(many.includes('and 5 more'), 'a long path list is not cut at a size a turn can carry');
+});
+
+test('an argued exemption is the coordinator’s review: it quotes the reason, offers the doors that '
+  + 'judge it, and leaves a change to the ruler with the owner', () => {
+  const argument = '判据 2 要求先复现修复前的 500，再证明修复后的行为——一条命令的退出码判定不了。';
+  const payload = {
+    reason: 'CRITERION_EXEMPTION_ARGUED', paths: [], declaredPaths: [], criterionKey: 'crit-2', argument,
+  };
+  const message = openItemMessage({
+    id: randomUUID(),
+    kind: 'DELIVERY_REVIEW',
+    title: 'Kept the judgment method Orbit questioned: T2',
+    projectId: randomUUID(),
+    taskId: randomUUID(),
+    payload,
+  });
+  for (const want of [
+    argument, 'Orbit questioned it', 'does not judge whether it holds', 'Accept the reason', 'open_item_resolve',
+    'Send it back', 'task_reopen', 'Supersede it', 'supersedesTaskId', 'the evidence it was judged on',
+    'or its work lands', 'do not put it to the account owner as one',
+    'that would be changing the acceptance criteria',
+  ]) {
+    assert.ok(message.includes(want), `the exemption review does not say ${JSON.stringify(want)}`);
+  }
+  assert.ok(!message.includes('Rerun the landing'), 'an argued exemption was offered a landing rerun');
+  assert.ok(!message.includes('ask_owner'), 'the review named an owner door its cell does not have');
+  assert.ok(!message.includes('a delivery that claims a criterion does not apply'),
+    'the review still calls an argued exemption the owner’s blocker');
+
+  const task = { id: 'task-2', title: 'T2' };
+  assert.deepEqual(openItemFacts('DELIVERY_REVIEW', payload, task)?.review, {
+    reason: 'CRITERION_EXEMPTION_ARGUED',
+    declaredPaths: [],
+    argument,
+  });
+  assert.equal(deliveryReviewDetailLine(payload), `Its reason: ${argument}`);
+  assert.equal(deliveryReviewDetailLine({ ...payload, argument: `${'x'.repeat(200)}\n\ny` }),
+    `Its reason: ${'x'.repeat(160)}…`);
+  // Nothing to quote is nothing to draw, not an empty quotation.
+  assert.equal(deliveryReviewDetailLine({ ...payload, argument: undefined }), '');
 });
 
 test('a classified landing failure reaches its coordinator as its own decision, with the rerun '

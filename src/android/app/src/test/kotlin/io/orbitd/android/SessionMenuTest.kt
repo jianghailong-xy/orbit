@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -108,6 +109,22 @@ class SessionMenuTest {
         await { NavShell.calls.any { it == "POST sessions/${NavShell.PLAIN}/complete" } }
         await { compose.onAllNodes(hasText("Session completed") and hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isNotEmpty() }
         await { compose.onAllNodesWithTag("transcript-list").fetchSemanticsNodes().isEmpty() }
+        compose.onNode(hasText("Undo") and hasAnyAncestor(hasTestTag("toast"))).assertExists()
+    }
+
+    /** A05-9 (iOS 62b7009ca `deleteSession` → `dropIfOpen` on the tap): Move to Trash takes the page away on the press, before the
+     * server has answered; the toast follows the answer. */
+    @Test fun movingToTrashFromTheMenuLeavesThePageOnThePress() {
+        signIn(); open("orbit-session:${NavShell.PLAIN}")
+        menu()
+        val answer = CompletableDeferred<Unit>()
+        NavShell.holdDelete = answer
+        item("Move to Trash").performClick()
+        await { NavShell.calls.any { it == "DELETE sessions/${NavShell.PLAIN}" } }
+        await { compose.onAllNodesWithTag("transcript-list").fetchSemanticsNodes().isEmpty() }
+        assertTrue(compose.onAllNodes(hasText("Moved to Trash") and hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isEmpty())
+        answer.complete(Unit)
+        await { compose.onAllNodes(hasText("Moved to Trash") and hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Undo") and hasAnyAncestor(hasTestTag("toast"))).assertExists()
     }
 

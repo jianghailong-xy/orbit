@@ -6,6 +6,7 @@ import io.orbitd.android.composer.ComposerCatalog
 import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.ProviderOption
+import io.orbitd.android.composer.threeTries
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.directory.directoryError
@@ -13,6 +14,9 @@ import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.json.*
 
 /**
@@ -40,17 +44,36 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val runnerVersion get() = runner?.string("version") ?: (detail?.get("assignedRunner") as? JsonObject)?.string("version")
     /** The engine this session runs on for good: the one it records, else the one its provider ran on before engines were. */
     val engine get() = ProviderEngines.sessionEngine(detail?.string("engine"), provider, providers)
+    /** The key this session runs on, as a card about a key its vendor rejected names it (iOS `sessionKeyName`): `the DeepSeek key
+     * “DeepSeek 2”`. The session's own — the credential that failed, never a pick held for its next turn; null on a sign-in, OpenCode's
+     * own configuration, or a key the account no longer lists. */
+    val sessionKeyName get() = provider.takeIf { it.isNotEmpty() && it !in ProviderEngines.LOGIN_ENGINES && it != ProviderEngines.OPENCODE }
+        ?.let { slug -> providers.firstOrNull { it.string("slug") == slug } }?.let(ProviderEngines::keyName)
     /** The CLI that runs this session is Antigravity: on its own sign-in, or on a key it runs. */
     val executesAntigravity get() = engine == ProviderEngines.ANTIGRAVITY
     val executesDsh get() = engine == DshRuntime.ENGINE
 
-    /** Re-read the runner and the providers: on a card's first appearance, and back from the page that fixes it. */
+    /** A card has asked for the runner: what the minute's re-read keeps up to date. */
+    private var asked = false
+
+    /** Re-read the runner and the providers: on a card's first appearance, and back from the page that fixes it — each read tried
+     * three times, as a page's opening reads are (A07-18). A read that fails keeps what is on screen. */
     fun refresh() { scope.launch { reload() } }
-    suspend fun reload() {
+    suspend fun reload() { asked = true; read { threeTries(it) } }
+
+    /** This session's runner row again (A07-18, iOS bc790273c `refreshRunner`), on every reconnect and once a minute while the
+     * session streams: for the cards, once one has asked for it, and for the composer's catalogue. Read once; a read that fails keeps
+     * what is on screen. */
+    suspend fun refreshRunner() {
+        if (asked) read { it() }
+        composer.refreshCatalog()
+    }
+
+    private suspend fun read(attempts: suspend (suspend () -> JsonElement) -> JsonElement) {
         try {
             val id = runnerId
-            runner = (management.get("runners") as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { ObjectId.same(it.string("id"), id) }
-            providers = (management.get("providers") as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
+            runner = (attempts { management.get("runners") } as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { ObjectId.same(it.string("id"), id) }
+            providers = (attempts { management.get("providers") } as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
     }
 
@@ -199,3 +222,14 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
 }
 
 internal val LocalSessionConsole = staticCompositionLocalOf<SessionConsole?> { null }
+
+/** A07-18 (iOS bc790273c: `runnerPollTask` and the reconnect's `refreshRunner`): [refresh] on every reconnect of the session's
+ * stream — its first connect is the page opening, whose reads are its own — and once a minute for as long as it stays connected. */
+internal suspend fun refreshWhileStreaming(connected: Flow<Boolean>, refresh: suspend () -> Unit, minute: Long = 60_000) {
+    var connects = 0
+    connected.distinctUntilChanged().collectLatest { up ->
+        if (!up) return@collectLatest
+        if (connects++ > 0) refresh()
+        while (true) { delay(minute); refresh() }
+    }
+}

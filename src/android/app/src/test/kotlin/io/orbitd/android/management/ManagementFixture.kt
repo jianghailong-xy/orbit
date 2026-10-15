@@ -51,6 +51,8 @@ object ManagementFixture {
     @Volatile var poolLabel = "Team Codex"
     @Volatile var theme = "system"
     @Volatile var shareFails = false
+    /** The account also has a wiki space's link, which GET share-links lists only to a client that names WIKI. */
+    @Volatile var wikiLinks = false
     @Volatile var accessFails = false
     /** The viewer's place in the pool: ADMIN and creator (its owner), ADMIN, or MEMBER. */
     @Volatile var viewerRole = "ADMIN"
@@ -59,6 +61,9 @@ object ManagementFixture {
     @Volatile var membersCanAddAccounts = false
     @Volatile var loginState = "ACTIVE"
     @Volatile var secondRunner = false
+    /** Whether each runner is online; offline, it last checked in yesterday. */
+    @Volatile var runnerOnline = true
+    @Volatile var runnerTwoOnline = true
     @Volatile var runnerOrder = listOf(RUNNER, RUNNER_TWO)
     @Volatile var removedRunners = emptySet<String>()
     /** The runner's selfUpdate report's state; null is a runner too old to report one. */
@@ -83,8 +88,9 @@ object ManagementFixture {
 
     fun reset() {
         calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; runnerCapacity = 2; poolLabel = "Team Codex"; theme = "system"; shareFails = false; accessFails = false
+        wikiLinks = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
-        secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
+        secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         runnerEngines = "[]"; runnerExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear()
         drop = CompletableDeferred(); opened = 0
@@ -118,15 +124,24 @@ object ManagementFixture {
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
         "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
-    private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":true,
-        "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":1,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"}"""
-    private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":true,
-        "status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
+    private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":$runnerTwoOnline,
+        "status":"${if (runnerTwoOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerTwoOnline) now else now.minusSeconds(86_400)}","maxConcurrent":1,
+        "activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"}"""
+    private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":$runnerOnline,
+        "status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerOnline) now else now.minusSeconds(86_400)}","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
         "selfUpdate":${selfUpdate?.let { """{"state":"$it"}""" } ?: "null"},"engines":$runnerEngines$runnerExtra,"enrolledAt":"2026-09-01T00:00:00Z"}"""
     private fun sessionRow() = """{"id":"$SESSION","title":"Fixture session","status":"SUCCEEDED","lifecycleState":"OPEN","workspaceId":"$WORKSPACE",
         "agentId":"$WORKSPACE","createdAt":"${now.minusSeconds(600)}","lastTurnAt":"${now.minusSeconds(300)}","pendingApprovals":0}"""
     private fun link() = """{"id":"L1","token":"fixture-token","kind":"SESSION","state":"ACTIVE","root":{"id":"$SESSION","title":"Fixture session"},
         "include":{"toolOutput":true},"viewCount":0}"""
+    /** A wiki space's link as the server's owner view lists it: its root has a slug and no status. */
+    private fun wikiLink() = """{"id":"L5","token":"wiki-token","kind":"WIKI","state":"ACTIVE","root":{"id":"w1","title":"orbit wiki","slug":"orbit"},
+        "include":{"footnotes":false},"viewCount":3}"""
+    /** `share-links.service.ts` list: the kinds named in `kind`, else the three every shipped client knows. */
+    private fun links(query: List<Pair<String, String>>): String {
+        val kinds = query.firstOrNull { it.first == "kind" }?.second?.split(",") ?: listOf("SESSION", "TASK", "PROJECT")
+        return listOfNotNull(link().takeIf { "SESSION" in kinds }, wikiLink().takeIf { wikiLinks && "WIKI" in kinds }).joinToString(",", """{"links":[""", "]}")
+    }
     private fun login() = """{"state":"$loginState","email":"me@example.test","plan":"plus","fingerprint":"…AB12","userId":"$ME","next":true}"""
     private fun pools() = """[{"id":"$POOL","slug":"team-codex","label":"$poolLabel","engine":"codex","logins":[${login()}]}]"""
     private fun access() = """{"id":"$POOL","slug":"team-codex","label":"$poolLabel","engine":"codex","shared":false,"logins":[${login()}],
@@ -189,7 +204,7 @@ object ManagementFixture {
                 else -> ok(link())
             }
             "providers/pools" -> ok(pools())
-            "share-links" -> ok("""{"links":[${link()}]}""")
+            "share-links" -> ok(links(api.query))
             "providers/shared-pools" -> ok("[]")
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
             else -> when {

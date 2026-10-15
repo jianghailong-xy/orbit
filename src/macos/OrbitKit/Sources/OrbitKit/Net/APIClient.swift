@@ -145,9 +145,14 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("push/register", body: req)
     }
 
-    /// Drop this device's token (e.g. on sign-out) so it stops receiving pushes.
-    public func unregisterDeviceToken(token: String) async throws {
-        _ = try await postRaw("push/unregister", body: ["token": token])
+    /// Drop this device's token on sign-out so it stops receiving pushes. Best-effort; like
+    /// `revokeRefreshToken` it takes its credential — the signed-out session's access token —
+    /// explicitly, so the caller can clear local storage at once. A 401 is not refreshed: by then the
+    /// store may hold the next sign-in's session, whose registration this must not touch.
+    public func unregisterDeviceToken(token: String, accessToken: String) async {
+        guard var req = try? makeRequest("push/unregister", method: "POST", body: ["token": token]) else { return }
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        _ = try? await rawResponse(req, cancellationAware: false)
     }
 
     // MARK: admin (role-gated; non-admins get 403)
@@ -733,6 +738,26 @@ public final class APIClient: @unchecked Sendable {
     /// without raising anything is what the plain press means, so no limits travel with it.
     public func resumeProjectFuse(projectID: String, episodeID: String) async throws -> FuseResumed {
         try await postEmpty("projects/\(projectID)/fuse/\(episodeID)/resume")
+    }
+
+    /// Run a failed task landing again (`POST /projects/:id/tasks/:taskId/integration/retry`) — the
+    /// owner's own door (§4.7, T5). The reason is required: it is the record the rerun leaves, and
+    /// it is what the coordinator is told when the item is being handled.
+    ///
+    /// The owner's own credential and no acting session, like the three doors above: the door
+    /// refuses a session, and it is the same decision the coordinator's card-gated route makes.
+    public func retryTaskIntegration(projectID: String, taskID: String,
+                                     _ req: IntegrationRetryRequest) async throws -> IntegrationRetryReceipt {
+        try await post("projects/\(projectID)/tasks/\(taskID)/integration/retry", body: req)
+    }
+
+    /// Run a blocked candidate's failed check again
+    /// (`POST /projects/:id/promotions/:promotionId/integration/retry`) — the owner's own door
+    /// (§4.7, T5). No new candidate is created: the check is queued again on this one, and the
+    /// reason travels with it.
+    public func retryPromotionCheck(projectID: String, promotionID: String,
+                                    _ req: IntegrationRetryRequest) async throws -> IntegrationRetryReceipt {
+        try await post("projects/\(projectID)/promotions/\(promotionID)/integration/retry", body: req)
     }
 
     /// What this project is currently asking its owner to merge, or nil when it is asking nothing.

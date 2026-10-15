@@ -36,9 +36,10 @@ internal class RealtimeRest(private val api: OrbitApi) {
         DirectorySnapshot(workspaces.await(), views.awaitAll().toMap(), folders.await(), tags.await(), runners.await())
     }
 
+    /** `after=` pages are 200 events, as on iOS and web: five of them are the server's SSE_GAP_CAP. */
     suspend fun page(handle: SessionHandle, id: String, after: Long? = null): EventPage {
         val query = listOf("maxPayload" to "2048") + if (after == null) listOf("tail" to "200")
-            else listOf("after" to "$after", "limit" to "500")
+            else listOf("after" to "$after", "limit" to "200")
         return Wire.decode(api.request(handle, ApiRequest(listOf("sessions", id, "events", "page"), query = query)).body,
             EventPage.serializer())
     }
@@ -46,7 +47,9 @@ internal class RealtimeRest(private val api: OrbitApi) {
     suspend fun session(handle: SessionHandle, id: String): SessionSnapshot = coroutineScope {
         val base = listOf("sessions", id)
         val approvals = async { objects(handle, base + "approvals", listOf("status" to "PENDING")) }
-        val queue = async { objects(handle, base + "turns") }
+        // The active view (A07-14; iOS 0588fe262, web `listQueuedTurns`): the bare one is the queue alone and leaves out the head a
+        // runner has taken but not echoed yet, so that turn vanished from the reader until its echo.
+        val queue = async { objects(handle, base + "turns", listOf("view" to "active")) }
         val background = async { objects(handle, base + "background") }
         val evidence = async { get(handle, listOf("tasks", "evidence-decisions", "pending"), listOf("decidingSessionId" to id)) }
         val detail = get(handle, base) as? JsonObject ?: throw ProtocolException()
@@ -69,7 +72,10 @@ internal class RealtimeRest(private val api: OrbitApi) {
             // drawn with it rather than drawn on main and moved. A read that fails draws no row, and the start keeps the main
             // branch the project stands on.
             val document = standing["project"] as? JsonObject
-            if (document != null && document["startedAt"] is JsonNull) try {
+            // And for a candidate a check BLOCKED, what the line is doing about its branch (iOS befc9694c): one of the project's current
+            // landings may be holding the merge, and the review names it — "Blocked by". The same read, failing the same way.
+            val blocked = (standing["promotion"] as? JsonObject)?.text("state") == "BLOCKED"
+            if ((document != null && document["startedAt"] is JsonNull) || blocked) try {
                 standing["integration"] = get(handle, listOf("projects", project, "integration"))
             } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
         }

@@ -32,15 +32,18 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.directory.ProjectMergeCard
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.CoordinatorDoneCard
 import io.orbitd.android.projects.CoordinatorStartCard
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
 /**
@@ -51,7 +54,7 @@ import kotlinx.serialization.json.*
  */
 @Stable
 class SessionCardsModel internal constructor(val handle: SessionHandle, val sessionId: String, val actions: CardActions,
-    private val reviewKey: MutableState<String?>) {
+    private val reviewKey: MutableState<String?>, private val scope: CoroutineScope) {
     var watches by mutableStateOf<List<InteractionCard>>(emptyList()); internal set
     var created by mutableStateOf<JsonObject?>(null); internal set
     var merged by mutableStateOf<List<JsonObject>>(emptyList()); internal set
@@ -70,9 +73,25 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
      * in a DeepSeek Harness session offers no remember (A07-5). */
     var engine by mutableStateOf<String?>(null); internal set
 
+    /** A08-13: the answers this window sent, by item, each as the record the read will publish — drawn in its question's place from
+     * the press until the read carries it (`CoordinatorQuestions.answeredHere`). */
+    var answered by mutableStateOf<Map<String, JsonObject>>(emptyMap()); internal set
+
+    /** Every press of this conversation's cards: through the doors, and an answer to the coordinator's question kept as its record
+     * once the door took it. */
+    fun submit(card: InteractionCard, verb: CardVerb, input: CardInput) {
+        val press = actions.submit(handle, card, verb, input)
+        if (verb != CardVerb.OWNER_ANSWER) return
+        scope.launch {
+            press.join()
+            val taken = actions.state.value[card.key]?.takeIf { it.binding == card.binding && it.settled && it.response != null } ?: return@launch
+            answered = answered + (card.objectId to CoordinatorQuestions.answeredHere(card.source, input.option, input.text, taken.response))
+        }
+    }
+
     /** The server's cards now, and the watches this conversation observes. */
     fun current(session: SessionState): List<InteractionCard> = session.snapshot?.let { snapshot ->
-        CardCatalog.session(session.id, snapshot, engine = snapshot.detail.text("engine") ?: engine)
+        CardCatalog.session(session.id, snapshot, engine = snapshot.detail.text("engine") ?: engine, answered = answered)
     }.orEmpty() + watches
     /** What the rail draws: the current cards, then the ones it saw that the server stopped publishing, kept to say so. Absence is
      * not success. While reconnecting it is what it last saw. */
@@ -93,7 +112,7 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
 @Composable
 fun rememberSessionCards(app: OrbitApplication, handle: SessionHandle, sessionId: String): SessionCardsModel {
     val review = rememberSaveable(sessionId) { mutableStateOf<String?>(null) }
-    return remember(handle, sessionId) { SessionCardsModel(handle, sessionId, CardActions(app.session, app.realtime, app.processScope), review) }
+    return remember(handle, sessionId) { SessionCardsModel(handle, sessionId, CardActions(app.session, app.realtime, app.processScope), review, app.processScope) }
 }
 
 /** The signed-in session the cards belong to, or null while another account, another session or no access is showing. */
@@ -175,6 +194,8 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
         val focus = CardFocus.pending(session.id)
         // A merge that happened is its record's line below, not a candidate that is no longer on offer (iOS closes its card).
         val mergedIds = cards.merged.mapNotNull { it.text("promotionId") }.toSet()
+        // The merge candidate whose line this conversation draws: an exception's Review goes to it, and is drawn only while it is here.
+        val mergeCard = shown.firstOrNull { it.family == CardFamily.PROMOTION && it.status != CardPreviews.stale }?.objectId
         shown.filterNot { it.family == CardFamily.PROMOTION && it.status == CardPreviews.stale && it.objectId in mergedIds }.forEach { card -> key(cards.handle, card.key, card.binding) {
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
             val requester = remember { BringIntoViewRequester() }
@@ -190,8 +211,10 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 var decidingMyself by rememberSaveable { mutableStateOf(false) }
                 val drawn = (if (decidingMyself) CoordinatorQueue.decideMyself(card) else null) ?: card
                 val submit = { verb: CardVerb, input: CardInput ->
-                    if (verb == CardVerb.DECIDE_MYSELF) decidingMyself = true else cards.actions.submit(cards.handle, drawn, verb, input); Unit }
+                    if (verb == CardVerb.DECIDE_MYSELF) decidingMyself = true else cards.submit(drawn, verb, input) }
                 when {
+                    // A08-13: a question that has ended is the record it became, replayed in its review.
+                    card.family == CardFamily.QUESTION_RECORD -> QuestionRecordCard(card) { cards.open(card.key) }
                     // A11-9: the merge into main is one line where it happened; its card is on the project's sessions page, and the line
                     // opens the same review (iOS `PromotionEventLine`, 6b4bef713) — the conversation's way into a review, as a preview is.
                     card.family == CardFamily.PROMOTION -> PromotionEventLine(card.source.takeUnless { card.status == CardPreviews.stale },
@@ -201,6 +224,9 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     // A11b hook: the coordinator's request draws the start card (iOS `StartProjectCardView`), not the generic card.
                     card.family == CardFamily.START -> CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit)
                     CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
+                    // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
+                    card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
+                        review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, submit = submit)
                     else -> BusinessCard(drawn, fresh, result, open, discuss, submit)
                 }
             }
@@ -337,8 +363,10 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
                     val fresh = cards.fresh(session, card)
                     // A hand-off to the composer closes the review first: the reply is typed under the conversation.
                     val talk = discuss?.let { into -> { context: String -> cards.close(); into(context) } }
-                    val submit = { verb: CardVerb, input: CardInput -> cards.pressed = verb; cards.actions.submit(cards.handle, card, verb, input); Unit }
-                    if (card.family == CardFamily.START) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                    val submit = { verb: CardVerb, input: CardInput -> cards.pressed = verb; cards.submit(card, verb, input) }
+                    // A question answered with its review open is its record now: the review replays it.
+                    if (card.family == CardFamily.QUESTION_RECORD) QuestionRecordReview(card, open)
+                    else if (card.family == CardFamily.START) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                         CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, talk, submit)
                     } else if (card.family == CardFamily.PROMOTION) PromotionCardReview(cards, session, card, fresh, result)
                     else BusinessCard(card, fresh, result, open, talk, submit, review = true)
@@ -349,7 +377,8 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
 }
 
 /** The merge review as the conversation opens it (A11-9; iOS `PromotionReviewSheet` with the console as its source): the candidate as
- * this conversation last read it, the project's criteria and open items beside it, and its presses through this conversation's
+ * this conversation last read it, the project's criteria and open items beside it — and, for a blocked one, the landing in front of it,
+ * off the integration read the session read makes while it is blocked (iOS befc9694c) — and its presses through this conversation's
  * doors. A decline that went through closes it. */
 @Composable
 private fun PromotionCardReview(cards: SessionCardsModel, session: SessionState, card: InteractionCard, fresh: Boolean, result: CardActionState) {
@@ -362,10 +391,12 @@ private fun PromotionCardReview(cards: SessionCardsModel, session: SessionState,
         if (verb == CardVerb.DECLINE_MERGE) declined = true
         cards.actions.submit(cards.handle, card, verb, CardInput())
     }
-    PromotionReview(card.source.takeUnless { card.status == CardPreviews.stale }, met, PromotionCards.holder(card.objectId, standing["openItems"] as? JsonObject),
+    val view = card.source.takeUnless { card.status == CardPreviews.stale }
+    PromotionReview(view, met, PromotionCards.holder(card.objectId, standing["openItems"] as? JsonObject),
         acting = result.busy, error = result.message?.takeIf { !result.busy && !result.settled }, tag = card.key,
         enabled = fresh && !result.uncertain && !result.settled,
-        confirm = { press(CardVerb.CONFIRM_MERGE) }, decline = { press(CardVerb.DECLINE_MERGE) }, cancel = { press(CardVerb.CANCEL_MERGE) })
+        confirm = { press(CardVerb.CONFIRM_MERGE) }, decline = { press(CardVerb.DECLINE_MERGE) }, cancel = { press(CardVerb.CANCEL_MERGE) },
+        blockedBy = view?.let { ProjectMergeCard.blockedByLine(it, standing["integration"] as? JsonObject) })
 }
 
 /** The receipt a merge's line in this conversation opens (A11-9), hosted beside the review so the rail's rows cannot dismiss it. */

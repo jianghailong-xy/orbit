@@ -408,7 +408,7 @@ final class AgentsModel {
         // callback-based; task cancellation doesn't reach URLSession), so its late reply lands here
         // after the switch. Only the load still named by `lastSessionQuery` may write — an older
         // one returns without touching the list, the spinner, or the error of its replacement.
-        let isCurrent = { lastSessionQuery.map { $0.agentID == agentID && $0.view == view } ?? false }
+        let isCurrent = { self.lastSessionQuery.map { $0.agentID == agentID && $0.view == view } ?? false }
         if reset && !sameList {
             // With the app's Open snapshot in hand an Open list has its rows already: show them and
             // let the fetch below refresh them in place.

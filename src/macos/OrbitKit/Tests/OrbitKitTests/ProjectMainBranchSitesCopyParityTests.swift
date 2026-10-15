@@ -317,7 +317,18 @@ final class ProjectMainBranchSitesCopyParityTests: XCTestCase {
         let console = try web(Self.console)
         let word = try XCTUnwrap(NeedsYouLogic.kindWord(.promotionApproval, main: Self.branch))
         assertSays(console, "({ ...OWNER_ITEM_WORDS, PROMOTION_APPROVAL: `\(Self.asWeb(word))` });", in: Self.console)
-        assertSays(console, "const word = ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];", in: Self.console)
+        // The row's lookup, as the FALLBACK arm of the browser's ternary now that an escalated item
+        // takes the arm above it (T9's `need`, `OwnerItemCardsTests` holds the two constants).
+        assertSays(console, ": ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];",
+                   in: Self.console)
+        assertSays(console, "? `${OWNER_ITEM_ESCALATED}${OWNER_ITEM_NEED_SEPARATOR}${item.need}`",
+                   in: Self.console)
+        // …and this end says the same sentence for the same row: the word, then the reason.
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([SessionOwnerItem(
+            itemId: "i", kind: .escalated, title: "t", since: "2026-09-13T10:00:00Z",
+            need: "the check failed")]),
+                       NeedsYouLogic.kindWord(.escalated)!
+                       + NeedsYouLogic.needSeparator + "the check failed")
     }
 
     // MARK: the sessions page

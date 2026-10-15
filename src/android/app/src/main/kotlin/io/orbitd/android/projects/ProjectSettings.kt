@@ -301,7 +301,7 @@ private fun OwnerStartCard(doc: JsonObject, digest: String, state: ProjectPageSt
                 }
             }
         }, onViewTasks = viewTasks, branches = ProjectMainBranch.branches(state.integration), lastChoice = ProjectMainBranch.lastChoice(state.integration),
-        trailing = cancel)
+        graph = graph, trailing = cancel)
 }
 
 /** "Review and start" — the coordinator's request to start, over the project's sessions page (`RequestedStartProjectSheet`, A05-7):
@@ -354,8 +354,9 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
                     val itemId = row.text("itemId").orEmpty()
                     val criteria = doc.objects("acceptanceCriteriaItems").sortedBy { it.number("ordinal") ?: 0 }
                         .map { StartCriterion(it.number("ordinal") ?: 0, it.text("text").orEmpty()) }
+                    val parsed = graph?.let(DependencyGraph::of)
                     StartProjectCard(id, doc.text("title").orEmpty(), asked = true, askedAgo = ProjectTime.ago(row.text("waitingSince"), Instant.now()),
-                        request = request, criteria = criteria, plan = StartProjectCopy.planView(graph?.let(DependencyGraph::of), ProjectDoc.taskCount(doc)),
+                        request = request, criteria = criteria, plan = StartProjectCopy.planView(parsed, ProjectDoc.taskCount(doc)),
                         hasCoordinator = true, escalationSeconds = doc.obj("integration")?.number("escalationSeconds") ?: StartProjectCopy.defaultEscalationSeconds,
                         draft = draft, onDraft = { edited = it },
                         standing = if (starting) StartProjectCopy.Standing.LIVE else StartProjectCopy.standing(itemId, request, openItems, confirmation, ProjectDoc.started(doc)),
@@ -369,7 +370,7 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
                                 }
                             }
                         }, onViewTasks = viewTasks, branches = ProjectMainBranch.branches(integration), lastChoice = ProjectMainBranch.lastChoice(integration),
-                        trailing = cancel)
+                        graph = parsed, trailing = cancel)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("▶ ${StartProjectCopy.title}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,

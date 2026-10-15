@@ -19,7 +19,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -35,152 +34,34 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.composer.ProviderEngines
-import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
-
-/** The account's providers as iOS's Providers page reads them: runners, own and shared pools, API keys. */
-@Stable
-private class ProvidersModel(private val api: ManagementApi) {
-    var runners by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    var keys by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    var own by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    var shared by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    var access by mutableStateOf<Map<String, JsonObject>>(emptyMap()); private set
-    /** The account's own providers (GET providers/mine), with the ids and endpoints the catalogue leaves out: what tells a DeepSeek
-     * key, and what its balance is asked by. */
-    var mine by mutableStateOf<List<JsonObject>>(emptyList()); private set
-    /** Each DeepSeek key's account balance by provider id, as the server last answered — or why it didn't; absent while asked. */
-    var balances by mutableStateOf<Map<String, DeepSeekBalance.Reading>>(emptyMap()); private set
-    var loaded by mutableStateOf(false); private set
-    var error by mutableStateOf<String?>(null); private set
-    suspend fun load() {
-        try {
-            runners = providerObjects(api.get("runners"))
-            keys = providerObjects(api.get("providers"))
-            own = providerObjects(api.get("providers/pools"))
-            shared = providerObjects(api.get("providers/shared-pools"))
-            loaded = true; error = null
-        } catch (e: CancellationException) { throw e } catch (e: Exception) { error = personalFailure(e); return }
-        coroutineScope {
-            launch { loadBalances() }
-            // A Codex pool of one's own is drawn with its people and keys, read pool by pool.
-            access = own.filter { it.str("engine") == "codex" }.mapNotNull { pool ->
-                try { pool.text("id") to api.get("providers/shared-pools/${pool.text("id")}").jsonObject }
-                catch (e: CancellationException) { throw e } catch (_: Exception) { null }
-            }.toMap()
-        }
-    }
-    /** The account's own keys read again, then each DeepSeek key's balance among them, side by side (iOS 96e1a1536). A failed read
-     * of the keys leaves the rows as they were: plain keys, no balance. */
-    private suspend fun loadBalances() {
-        val read = try { providerObjects(api.get("providers/mine")) } catch (e: CancellationException) { throw e } catch (_: Exception) { return }
-        mine = read
-        readDeepSeekBalances(api, read) { id, reading -> balances = balances + (id to reading) }
-    }
-}
 
 @Composable
 private fun rememberReload(resumed: Boolean, revision: Long, load: suspend () -> Unit) {
     LaunchedEffect(resumed, revision) { if (resumed) load() }
 }
 
-/** ProvidersSettingsPage, or one pool's page when the route names it (own:<id> / shared:<id>). */
+/** Infrastructure (Settings' Machines & models row), or one of its pages when the route names it: a pool (own:<id> / shared:<id>) or a
+ * DeepSeek key (key:<id>). */
 @Composable
-fun ProviderManagement(api: ManagementApi, revision: Long, record: String?, open: (OrbitRoute) -> Unit, back: () -> Unit) {
+fun InfrastructureSettings(api: ManagementApi, revision: Long, record: String?, open: (OrbitRoute) -> Unit, back: () -> Unit) {
     when {
         record?.startsWith("own:") == true -> PoolScreen(api, revision, ownId = record.removePrefix("own:"), sharedId = null, back = back)
         record?.startsWith("shared:") == true -> PoolScreen(api, revision, ownId = null, sharedId = record.removePrefix("shared:"), back = back)
         record?.startsWith("key:") == true -> DeepSeekKeyPage(api, revision, record.removePrefix("key:"))
-        else -> ProvidersOverview(api, revision, open)
+        else -> InfrastructurePage(api, revision, open)
     }
 }
 
-@Composable
-private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit) {
-    val model = remember(api) { ProvidersModel(api) }
-    val now = rememberNow()
-    val scope = rememberCoroutineScope()
-    rememberReload(rememberResumed(), revision) { model.load() }
-    fun pool(record: String) = open(OrbitRoute(Destination.SETTINGS, "providers", recordId = record))
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-        model.error?.let { error ->
-            Text(error, color = Ink.red, style = MaterialTheme.typography.labelMedium)
-            TextButton(onClick = { scope.launch { model.load() } }) { Text("Retry") }
-        }
-        if (!model.loaded) { if (model.error == null) Text("Loading…", Modifier.padding(16.dp), color = Ink.muted); return@Column }
-        FormSection("On your runners", footer = "Use subscriptions signed in on your machines.") {
-            model.runners.forEachIndexed { index, runner ->
-                if (index > 0) HorizontalDivider()
-                Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(OrbitRoute(Destination.RUNNER, runner.text("id"))) }.padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(RunnerPage.displayName(runner))
-                        Text(ProviderPools.runnerSummary(runner), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                    }
-                    Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
-                }
-            }
-        }
-        if (model.own.isNotEmpty() || model.shared.isNotEmpty()) FormSection("Account pools", footer = "Several accounts under one name.") {
-            val rows = model.shared.map { "shared:${it.text("id")}" to ProviderPools.shared(it, now) } +
-                model.own.filter { own -> model.shared.none { ObjectId.same(it.text("id"), own.text("id")) } }.map { json ->
-                    val pool = ProviderPools.own(json, now)
-                    "own:${pool.id}" to (model.access[pool.id]?.let { ProviderPools.withAccess(pool, it, now) } ?: pool)
-                }
-            rows.forEachIndexed { index, (record, pool) ->
-                if (index > 0) HorizontalDivider()
-                Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { pool(record) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (ProviderPools.runsCodex(pool)) {
-                        val value = ProviderPools.codexPoolValue(pool, now)
-                        Column(Modifier.weight(1f)) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(pool.label, Modifier.align(Alignment.CenterVertically), maxLines = 1)
-                                if (ProviderPools.isShared(pool)) Chip("SHARED", Modifier.align(Alignment.CenterVertically), brand = true)
-                            }
-                            Text(ProviderPools.codexPoolLine(pool, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                        }
-                        value?.let { Text(it.label, color = poolTone(it.tone), style = MaterialTheme.typography.bodySmall) }
-                    } else {
-                        Text(pool.label, Modifier.weight(1f), maxLines = 1)
-                        Text(ProviderPools.poolSummary(pool, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                    }
-                    Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
-                }
-            }
-        }
-        FormSection("Your API keys", footer = "On your account and usable from every runner — billed per token. Adding or changing a key happens on the web.") {
-            if (model.keys.isEmpty()) Text("No keys yet", Modifier.padding(vertical = 8.dp), color = Ink.muted)
-            KeyEngines.byVendor(model.keys).forEachIndexed { index, key ->
-                if (index > 0) HorizontalDivider()
-                // A DeepSeek key's row ends with its account's balance and opens the key's page (iOS 936ebbd3c).
-                val deepSeek = DeepSeekBalance.key(key, model.mine)?.str("id")
-                Row(Modifier.fillMaxWidth().then(if (deepSeek != null) Modifier.clickable(role = Role.Button) { pool("key:$deepSeek") } else Modifier)
-                    .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text(key.str("label") ?: key.text("slug"))
-                        providerKeyLine(key)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
-                        // Every engine it runs on (board 1 ③④): one key, under each engine that can spend it.
-                        KeyEngines.line(key)?.let { Text(it, Modifier.testTag("key-engines"), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
-                    }
-                    if (deepSeek != null) {
-                        DeepSeekBalance.rowValue(DeepSeekBalance.state(model.balances[deepSeek]))?.let {
-                            Text(it.label, color = poolTone(it.tone), style = MaterialTheme.typography.bodySmall)
-                        }
-                        Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(48.dp))
-    }
-}
+/** The names the pool pages have read, so the shell's title is the pool's, as iOS titles the page. */
+private val poolNames = mutableStateMapOf<String, String>()
+
+internal fun poolTitle(id: String): String? = poolNames[ObjectId.canonical(id) ?: id]
 
 /**
  * What the API keys list and a key's page say about the engines a key runs on (boards 1 ③④ and 2): the server's answer, each key's
@@ -275,6 +156,7 @@ private fun PoolScreen(api: ManagementApi, revision: Long, ownId: String?, share
                     catch (e: CancellationException) { throw e } catch (e: Exception) { accessError = personalFailure(e) }
                 else access = null
             } else access = api.get("providers/shared-pools/$sharedId").jsonObject
+            (own?.let { it.str("label") ?: it.str("slug") } ?: access?.str("label"))?.let { poolNames[ObjectId.canonical(accessId) ?: accessId] = it }
             loaded = true; error = null
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
