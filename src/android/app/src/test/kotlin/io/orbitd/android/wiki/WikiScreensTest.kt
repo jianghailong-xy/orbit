@@ -117,9 +117,14 @@ class WikiScreensTest {
         assertTrue(sent.any { it.first == "GET wiki/spaces/$space/entries" })
         assertTrue(sent.none { it.first == "GET wiki/spaces/$space/timeline" })
         compose.onNodeWithText("A clock never starts agent work").performClick()
-        // The bar: Contents, Activity — with the number waiting on the owner — and Settings.
+        // The bar: Contents, Activity — with the number waiting on the owner — Share, and Settings. The space's link was
+        // read; that read failed here (404), which leaves the globe as it is with no link.
         compose.onNodeWithTag("wiki-bar-contents").assertExists()
         compose.onNodeWithTag("wiki-bar-activity").assert(hasStateDescription("3 waiting on you")).performClick()
+        compose.waitUntil(60_000) { sent.any { it.first == "GET wiki/spaces/$space/share" } }
+        compose.waitForIdle()
+        compose.onNodeWithTag("wiki-bar-share").assert(hasContentDescription("Share…"))
+            .assert(SemanticsMatcher.keyNotDefined(androidx.compose.ui.semantics.SemanticsProperties.StateDescription))
         compose.onNodeWithTag("wiki-bar-settings").performClick()
         assertEquals(listOf(OrbitRoute(Destination.WIKI_ENTRY, WikiFixtures.principleID), OrbitRoute(Destination.WIKI_ACTIVITY),
             OrbitRoute(Destination.WIKI_SETTINGS)), opened)

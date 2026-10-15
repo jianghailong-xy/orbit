@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.LoadingMessage
@@ -35,9 +37,15 @@ import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.taskprojects.SharePanel
+import io.orbitd.android.taskprojects.SharePanelCopy
+import io.orbitd.android.taskprojects.ShareRootKind
+import io.orbitd.android.taskprojects.ShareSheet
+import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
 /** The maintenance workspace as this client holds it, and whether its runner is online — nil when unknown. */
@@ -71,6 +79,9 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
     var contentsShown by rememberSaveable { mutableStateOf(false) }
+    /** The Share panel, and the space's public link as last read or saved — what the bar's globe says. */
+    var sharing by rememberSaveable { mutableStateOf(false) }
+    var shareRead by remember { mutableStateOf<JsonObject?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     /** When the reader last looked, read as the home opens, before its look moves it: what the dots mark. */
     var seen by remember { mutableStateOf<Double?>(null) }
@@ -116,13 +127,17 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
         WikiHomePlaceholder(state) { scope.launch { store.loadSpaces() } }
         return
     }
+    // The space's public link: read as each space opens, so the globe says whether it has one. A read that failed leaves
+    // the globe as it is when there is none.
+    LaunchedEffect(store, space.id) { shareRead = optional { store.client.share(space.id) } }
     // The page's own header carries the title; the bar takes it once the header scrolls away (iOS's large title). The
-    // bar's actions are the web head's — Contents, Activity, Settings — and Activity wears the drawer's number.
+    // bar's actions are the web head's — Contents, Activity, Share, Settings — and Activity wears the drawer's number.
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val headerOnScreen by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     PageBar.Bind(route, title = if (headerOnScreen) "" else WikiCopy.title) {
         BarIcon(R.drawable.ic_contents, WikiArticleCopy.contents, "wiki-bar-contents") { contentsShown = true }
         WikiActivityButton(state.waiting) { nav.open(OrbitRoute(Destination.WIKI_ACTIVITY)) }
+        WikiShareButton(live = SharePanel.open(shareRead) != null) { sharing = true }
         BarIcon(R.drawable.ic_settings, WikiModeCopy.settings, "wiki-bar-settings") { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }
     }
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = {
@@ -136,6 +151,9 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
         // The home is where the reader already is; the rest open as pages.
         if (pick != WikiContentsPick.Home) wikiGo(pick, nav)
     }
+    // The one Share panel, on the space; each answer it hears is what the globe says next.
+    if (sharing) ShareSheet(LocalContext.current.applicationContext as OrbitApplication, store.handle, ShareRootKind.WIKI, space.id,
+        close = { sharing = false }) { shareRead = it }
 }
 
 /** The home's reads, and the plan's beside them — the count on the Contents' Plan row. */
@@ -458,6 +476,17 @@ internal fun WikiActivityButton(waiting: Int, onClick: () -> Unit) {
                     contentColor = Color.White) { Text("$waiting") }
             }
         }) { Icon(painterResource(R.drawable.ic_history), WikiCopy.activity) }
+    }
+}
+
+/** The bar's way to the space's public link (share-links §10): a globe, green while the space has a link open — the colour
+ * the web head's `Shared · Live` pill wears, the theme's green here where iOS draws the system one. TalkBack says "Share…",
+ * and "Live link" while one is open. */
+@Composable
+internal fun WikiShareButton(live: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.testTag("wiki-bar-share")
+        .semantics { if (live) stateDescription = SharePanelCopy.liveLink }) {
+        Icon(painterResource(R.drawable.ic_globe), SharePanelCopy.share, tint = if (live) LocalOrbitColors.current.success else LocalContentColor.current)
     }
 }
 
