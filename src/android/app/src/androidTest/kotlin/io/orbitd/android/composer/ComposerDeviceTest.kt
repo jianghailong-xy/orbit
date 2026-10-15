@@ -585,6 +585,56 @@ class ComposerDeviceTest {
         assertEquals("deepseek-chat", created["model"]!!.jsonPrimitive.content)
     }
 
+    /** A07-19's open question (iOS 0ae7ec209 found "DeepSeek Harness" cut to "DeepSeek Har…" beside its model and tick on a 402-point
+     * phone): the new session's Engine list in this script's narrow window — every engine's name read whole beside its model, DeepSeek
+     * Harness's both where a pick of it lands on its key's model and once it is the draft's own engine, ticked. Each name's width and
+     * the width it needs whole are read off the device and written out before anything is asserted: a name narrower than it is whole
+     * is cut. (The layout's ellipsis and overflow flags are written beside them: the overflow flag also flags a line laid out at
+     * exactly its own width, which the captures show whole.) */
+    @Test fun a07eEngineListKeepsEveryEnginesNameWhole() = journey("a07e-engine-list") {
+        login("""{"runnerExtra":{"capabilities":["codex-account-move/v1","provider:dsh"],"runtimeDefaultModels":{"dsh":"deepseek-v4-pro"},
+            "modelCatalog":{"codex":[{"value":"fixture-model","label":"Fixture One"}],"claude":[{"value":"claude-model","label":"Claude model"}],
+              "dsh":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro"},{"value":"deepseek-v4-flash","label":"DeepSeek V4 Flash"}]},
+            "engines":[{"engine":"codex","installed":true,"auth":"yes"},{"engine":"claude","installed":true,"auth":"yes"},
+              {"engine":"opencode","installed":true},{"engine":"dsh","installed":true,"dsh":{"versionCompatible":true}}]},
+            "providers":[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],
+              "models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro"}]}]}""")
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
+        fun engineList() {
+            compose.onNodeWithTag("new-session-engine").performClick()
+            compose.waitUntil(15000) { compose.onAllNodesWithTag("engine:dsh").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitForIdle()
+        }
+        val names = listOf("claude" to "Claude Code", "codex" to "Codex", "opencode" to "OpenCode", "dsh" to "DeepSeek Harness")
+        val report = StringBuilder("screenWidthDp=${app.resources.configuration.screenWidthDp} densityDpi=${app.resources.configuration.densityDpi} " +
+            "fontScale=${app.resources.configuration.fontScale}\n")
+        /** Whether each engine's name is cut, as its own text layout says. */
+        fun read(step: String): Map<String, Boolean> = names.associate { (engine, name) ->
+            val row = compose.onNodeWithTag("engine:$engine").fetchSemanticsNode()
+            val text = compose.onNode(hasText(name) and hasAnyAncestor(hasTestTag("engine:$engine")), useUnmergedTree = true).fetchSemanticsNode()
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            text.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            val layout = layouts.single()
+            val whole = kotlin.math.ceil(layout.multiParagraph.intrinsics.maxIntrinsicWidth).toInt()
+            val cut = text.size.width < whole
+            val texts = row.config.getOrNull(SemanticsProperties.Text)?.joinToString(" | ") { it.text }
+            report.appendLine("$step $engine: cut=$cut nameWidthPx=${text.size.width} wholeNamePx=$whole rowWidthPx=${row.size.width} " +
+                "layoutEllipsized=${layout.isLineEllipsized(layout.lineCount - 1)} layoutOverflow=${layout.hasVisualOverflow} row=[$texts]")
+            engine to cut
+        }
+        engineList()
+        val landing = read("landing")
+        capture("a07e-engine-list")
+        compose.onNodeWithTag("engine:dsh").performClick(); awaitText("DeepSeek Harness ⌄")
+        engineList()
+        val ticked = read("ticked")
+        capture("a07e-engine-list-dsh-ticked")
+        File(evidence, "a07e-engine-list.txt").writeText(report.toString())
+        assertEquals("no engine's name is cut where a pick of it lands: $report", emptyList<String>(), landing.filterValues { it }.keys.toList())
+        assertEquals("no engine's name is cut with Harness ticked: $report", emptyList<String>(), ticked.filterValues { it }.keys.toList())
+    }
+
     /** The auto-retry card (baseline): a spent quota counts down to its reset, and its switch turns the armed retry off. */
     @Test fun a07cAutoRetryCardCountsDownAndItsSwitchTurnsItOff() = journey("a07c-auto-retry") {
         login("""{"rows":[{"seq":1,"type":"user","payload":{"text":"Ship the release notes"}},

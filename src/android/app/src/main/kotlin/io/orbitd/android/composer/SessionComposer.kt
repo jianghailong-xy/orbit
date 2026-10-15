@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
@@ -593,9 +594,11 @@ internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: J
                         Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     } else {
-                        Text(option.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        // The engine's name is the row: it keeps its width and the model beside it gives way first (iOS 0ae7ec209). Half
+                        // the row each cut "DeepSeek Harness" beside its model and tick on a 360 dp phone.
+                        Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             color = if (option.unavailable == null) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(secondary, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        Text(secondary, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (option.engine == current) Text("✓", color = MaterialTheme.colorScheme.primary)
