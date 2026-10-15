@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.projects.LandingCard
 import io.orbitd.android.projects.LandingLine
 import io.orbitd.android.projects.ProjectApi
 import io.orbitd.android.projects.ProjectDoc
@@ -28,8 +29,8 @@ object ProjectMergeCard {
         CHECKING, ASKING, MERGING, BLOCKED
     }
 
-    /** The two job kinds that are about main. Their live line belongs to the merge card; a task landing on the project branch keeps
-     * the progress card's line. */
+    /** The two job kinds that are about main. Their live line belongs to the merge card; a task landing on the project branch is the
+     * landing card's. */
     val mergeJobKinds = setOf("CHECK_PROMOTION", "LAND_PROMOTION")
 
     fun isMergeJob(inFlight: JsonObject?) = inFlight?.text("kind") in mergeJobKinds
@@ -41,13 +42,36 @@ object ProjectMergeCard {
         PromotionStage.MERGED, null -> if (isMergeJob(integration?.obj("inFlight"))) Shape.CHECKING else null
     }
 
-    /** The progress card's landing line, minus a merge job: that one is drawn in the merge card. */
-    fun progressLandingLine(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean): LandingLine? =
-        if (isMergeJob(view.obj("inFlight"))) null else ProjectPage.landingLine(view, now, updatedAt, refreshFailed)
+    /** A task landing on the project branch, as the card the sessions page draws under its progress card (iOS `taskLandingCard`, owner
+     * decision 2026-10-11) — [ProjectPage.landingCard], minus a merge job: that one is drawn in the merge card. */
+    fun taskLandingCard(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean): LandingCard? =
+        if (isMergeJob(view.obj("inFlight"))) null else ProjectPage.landingCard(view, now, updatedAt, refreshFailed)
 
     /** The merge job's live line, for the merge card — null when the job in flight is not one. */
     fun mergeLandingLine(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean): LandingLine? =
         if (isMergeJob(view.obj("inFlight"))) ProjectPage.landingLine(view, now, updatedAt, refreshFailed) else null
+
+    /** The word the blocked card and the review print before [blockedByLine]'s sentence (OrbitKit `PromotionCards.blockedByLabel`). */
+    const val blockedByLabel = "Blocked by"
+
+    /** Who is in front of a blocked merge, when the project's own line is busy (OrbitKit `PromotionCards.blockedByLine`, web's
+     * `promotionBlockedBy`): the landing among the project's current ones (`integration.landTasks`) that is queued or running on the
+     * branch the candidate merges from or into, and the server's own sentence about what holds THAT one — "“<task>” is landing on the
+     * project line · queued · <blockingReason.summary>". Null when the line is doing nothing on those branches, or the read has no
+     * landings to name: a card with nothing to name says nothing rather than inventing a step. */
+    fun blockedByLine(view: JsonObject, integration: JsonObject?): String? {
+        val same = { a: String?, b: String? -> a != null && b != null && PromotionCards.shortRef(a) == PromotionCards.shortRef(b) }
+        val (holding, job) = integration?.objects("landTasks").orEmpty().firstNotNullOfOrNull { landing ->
+            landing.obj("integration")?.obj("landTask")?.takeIf { job ->
+                job.text("state") in setOf("QUEUED", "RUNNING") &&
+                    (same(job.text("targetRef"), view.text("sourceRef")) || same(job.text("targetRef"), view.text("upstreamRef")))
+            }?.let { landing to it }
+        } ?: return null
+        // The step in the same words as the landing line, a sync named by the branch the candidate merges into.
+        val state = if (job.text("state") == "RUNNING") ProjectPage.phaseWords(PromotionCards.mainBranch(view))[job.text("phase")] ?: "running" else "queued"
+        return listOfNotNull("“${holding.text("taskTitle").orEmpty()}” is landing on the project line", state,
+            job.obj("blockingReason")?.text("summary")?.takeIf { it.isNotEmpty() }).joinToString(" · ")
+    }
 }
 
 /** One recency section of a project's sessions page: its member sessions, with the merges into main made in the same bucket drawn

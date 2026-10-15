@@ -32,6 +32,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.directory.ProjectMergeCard
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.CoordinatorDoneCard
@@ -376,7 +377,8 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
 }
 
 /** The merge review as the conversation opens it (A11-9; iOS `PromotionReviewSheet` with the console as its source): the candidate as
- * this conversation last read it, the project's criteria and open items beside it, and its presses through this conversation's
+ * this conversation last read it, the project's criteria and open items beside it — and, for a blocked one, the landing in front of it,
+ * off the integration read the session read makes while it is blocked (iOS befc9694c) — and its presses through this conversation's
  * doors. A decline that went through closes it. */
 @Composable
 private fun PromotionCardReview(cards: SessionCardsModel, session: SessionState, card: InteractionCard, fresh: Boolean, result: CardActionState) {
@@ -389,10 +391,12 @@ private fun PromotionCardReview(cards: SessionCardsModel, session: SessionState,
         if (verb == CardVerb.DECLINE_MERGE) declined = true
         cards.actions.submit(cards.handle, card, verb, CardInput())
     }
-    PromotionReview(card.source.takeUnless { card.status == CardPreviews.stale }, met, PromotionCards.holder(card.objectId, standing["openItems"] as? JsonObject),
+    val view = card.source.takeUnless { card.status == CardPreviews.stale }
+    PromotionReview(view, met, PromotionCards.holder(card.objectId, standing["openItems"] as? JsonObject),
         acting = result.busy, error = result.message?.takeIf { !result.busy && !result.settled }, tag = card.key,
         enabled = fresh && !result.uncertain && !result.settled,
-        confirm = { press(CardVerb.CONFIRM_MERGE) }, decline = { press(CardVerb.DECLINE_MERGE) }, cancel = { press(CardVerb.CANCEL_MERGE) })
+        confirm = { press(CardVerb.CONFIRM_MERGE) }, decline = { press(CardVerb.DECLINE_MERGE) }, cancel = { press(CardVerb.CANCEL_MERGE) },
+        blockedBy = view?.let { ProjectMergeCard.blockedByLine(it, standing["integration"] as? JsonObject) })
 }
 
 /** The receipt a merge's line in this conversation opens (A11-9), hosted beside the review so the rail's rows cannot dismiss it. */

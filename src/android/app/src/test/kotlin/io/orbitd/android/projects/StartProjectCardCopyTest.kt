@@ -37,6 +37,7 @@ class StartProjectCardCopyTest {
     @Test fun theCardsFixedWordsAreDeclaredUnderTheirSwiftNames() {
         listOf("title" to StartProjectCopy.title, "readyToStart" to StartProjectCopy.readyToStart, "doneWhen" to StartProjectCopy.doneWhen,
             "plan" to StartProjectCopy.plan, "howItRuns" to StartProjectCopy.howItRuns, "viewTasks" to StartProjectCopy.viewTasks,
+            "taskGraph" to StartProjectCopy.taskGraph,
             "action" to StartProjectCopy.action, "nobodyAsked" to StartProjectCopy.nobodyAsked, "noCoordinatorYet" to StartProjectCopy.noCoordinatorYet,
             "coordinator" to StartProjectCopy.coordinator, "more" to StartProjectCopy.more, "less" to StartProjectCopy.less,
             "notRecorded" to StartProjectCopy.notRecorded, "requestGone" to StartProjectCopy.requestGone, "opensCoordinator" to StartProjectCopy.opensCoordinator,

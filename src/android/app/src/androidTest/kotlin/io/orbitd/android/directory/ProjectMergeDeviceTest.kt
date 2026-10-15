@@ -84,7 +84,7 @@ class ProjectMergeDeviceTest {
                 compose.onNodeWithTag("project-merge-card:confirm").performClick()
                 await { exists(hasTestTag("project-merge-card:merging")) && inCard("confirmed — fetching the branches") }
                 assertEquals("""{"sourceSha":"5e5bfca23aa1"}""", bodies["POST /api/projects/$launch/promotions/pr-1/confirm"])
-                await { exists(hasText("Merge to main", substring = true) and hasAnyAncestor(hasTestTag("landing-row")), unmerged = true) }
+                await { exists(hasText("Merge to main", substring = true) and hasAnyAncestor(hasTestTag("landing-head")), unmerged = true) }
                 capture("03-merging")
 
                 // D · blocked: why, who has it, the coordinator one press away.
