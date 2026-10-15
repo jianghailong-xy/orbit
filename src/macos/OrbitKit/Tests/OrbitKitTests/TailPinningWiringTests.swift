@@ -102,6 +102,23 @@ final class TailPinningWiringTests: XCTestCase {
                       "macOS still infers the reader from the fall, so this is the iOS branch")
     }
 
+    /// On a phone the question shows only while the reader is off the live tail — scrolled up into
+    /// the history, or reading a window opened at a record: at the tail they are following the answer
+    /// to what they just asked (the owner, 2026-10-15). It reads the pin the jump-to-latest disc
+    /// reads, so the two can't disagree about where the tail is. The Mac keeps web's band, which
+    /// shows at the tail too.
+    func testThePhonesQuestionShowsOnlyOffTheLiveTail() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let phone = try section(source, from: "ToolbarItem(placement: .principal) {", to: "#else")
+        XCTAssertTrue(phone.contains("stickyQuestion(q, proxy: proxy)"), "this is the phone's question")
+        XCTAssertTrue(phone.contains("!atBottom || console.detached"),
+                      "the phone's question must wait for the reader to leave the live tail")
+        let mac = try section(source, from: ".safeAreaInset(edge: .top, spacing: 0) {\n            if #available(iOS 18, macOS 15, *)",
+                              to: "#endif")
+        XCTAssertTrue(mac.contains("stickyQuestion(q, proxy: proxy)"), "this is the Mac's band")
+        XCTAssertFalse(mac.contains("atBottom"), "the Mac's band shows at the tail too, as web's does")
+    }
+
     /// The jump-to-latest button answers "is the tail out of view?", not only "did the reader scroll
     /// up?". The pin un-pins on a scroll UP alone — on purpose, see `TailPinning` — so while the
     /// button read the pin alone it stayed hidden whenever the tail left the view any other way: a
