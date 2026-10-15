@@ -14,6 +14,8 @@ import io.orbitd.android.directory.DirectoryApi
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastHost
 import org.junit.After
@@ -54,13 +56,14 @@ class WorktreeBarTest {
             {"path":"old/logo.png","additions":-1,"deletions":-1,"status":"D"}]"""),
     ) + fields)
 
-    private fun show() {
+    /** [sending] stands for the composer's message on its way (A06-14). */
+    private fun show(sending: State<Boolean> = mutableStateOf(false)) {
         server.respond = { api -> answer(api) }
         val handle = runBlocking { server.signIn() }
         model = WorktreeModel(DirectoryApi(server.auth, handle), id, scope)
         runBlocking { model.loadDetail() }
         // The bar's outcomes are the app's toasts (A05-4): the shell's host draws them, here under the bar so neither covers the other.
-        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { Column { WorktreeBar(model) { opened += it }; ToastHost({}, {}, {}) } } } }
+        compose.runOnUiThread { compose.activity.setContent { MaterialTheme { Column { WorktreeBar(model, sending.value) { opened += it }; ToastHost({}, {}, {}) } } } }
         compose.waitForIdle()
     }
 
@@ -155,6 +158,43 @@ class WorktreeBarTest {
         compose.onNodeWithText("Merge to main").assertDoesNotExist()
         settle(session("isolationStatus" to JsonPrimitive("shared-nogit")))
         compose.onNodeWithText("⚠ Shared workDir — not isolated").assertIsDisplayed()
+    }
+
+    /**
+     * A06-14 (iOS f759d743e): Merge waits for a queued turn, a message on its way and a parked session's running sub-agents —
+     * not only for RUNNING — and an ended session holds nothing back, whatever is still on its way.
+     */
+    @Test fun aSendInFlightAQueuedTurnAndParkedSubagentsHoldMerge() {
+        val sending = mutableStateOf(false)
+        show(sending)
+        compose.onNodeWithText("Merge to main").assertIsDisplayed()
+        sending.value = true; compose.waitForIdle()
+        compose.onNodeWithText("Merge to main").assertDoesNotExist()
+        sending.value = false; compose.waitForIdle()
+        compose.onNodeWithText("Merge to main").assertIsDisplayed()
+        settle(session("runningSubagents" to JsonArray(listOf(JsonPrimitive("toolu_agent")))))
+        compose.onNodeWithText("Merge to main").assertDoesNotExist()
+        settle(session("status" to JsonPrimitive("PENDING")))
+        compose.onNodeWithText("Merge to main").assertDoesNotExist()
+        settle(session("status" to JsonPrimitive("SUCCEEDED"), "runningSubagents" to JsonArray(listOf(JsonPrimitive("toolu_agent")))))
+        sending.value = true; compose.waitForIdle()
+        compose.onNodeWithText("Merge to main").assertIsDisplayed()
+    }
+
+    /** A06-14: the merge recovery's review reads the bar's own gate, so a message on its way holds its steps back too. */
+    @Test fun aSendInFlightHoldsTheMergeRecoverySteps() {
+        val sending = mutableStateOf(false)
+        detail = session("mergeRecoverySupported" to JsonPrimitive(true),
+            "mergeRecovery" to buildJsonObject { put("code", "FETCH_FAILED"); put("targetBranch", "main") })
+        show(sending)
+        compose.onNodeWithText("Could not check the remote").performClick()
+        compose.onNode(hasText("Check and repair") and hasClickAction()).assertIsEnabled()
+        sending.value = true; compose.waitForIdle()
+        compose.onNode(hasText("Check and repair") and hasClickAction()).assertIsNotEnabled()
+        sending.value = false; compose.waitForIdle()
+        compose.onNode(hasText("Check and repair") and hasClickAction()).assertIsEnabled()
+        settle(JsonObject(detail + ("status" to JsonPrimitive("PENDING"))))
+        compose.onNode(hasText("Check and repair") and hasClickAction()).assertIsNotEnabled()
     }
 
     /** A06-8: the coordinator's bar names the project's integration line and merges where the server resolved. */
