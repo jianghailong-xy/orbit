@@ -56,6 +56,11 @@ internal object ProjectShell {
     @Volatile var pressStatus = 200
     /** Whether the coordinator's row says a merge into main waits on the owner (its owner item). */
     @Volatile var mergeWaiting = false
+    // A11-11 / A11-13: the project's current landings and the plan the start card draws.
+    /** `integration.landTasks`, as a JSON array; null leaves the field out, as a server before it does. */
+    @Volatile var landTasks: String? = null
+    /** The dependency graph `projects/:id/dependency-graph` answers, with a confirmation the start card can seal; null answers `{}`. */
+    @Volatile var plan: String? = null
     /** Every write's body, by `METHOD path`. */
     val bodies = java.util.concurrent.ConcurrentHashMap<String, String>()
 
@@ -71,6 +76,7 @@ internal object ProjectShell {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true
         promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
+        landTasks = null; plan = null
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
     }
@@ -104,7 +110,8 @@ internal object ProjectShell {
         {"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{},"attention":{},"startedAt":"2026-10-02T00:00:00Z"}]"""
     private val integration get() = """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":1,"queuedCount":0,
         "inFlight":${if (mergeCheck) """{"kind":"CHECK_PROMOTION","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
-            else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}}"""
+            else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}${
+            landTasks?.let { ""","landTasks":$it""" }.orEmpty()}}"""
     private val openItems get() = if (!startRequest) """{"needsYou":[],"withCoordinator":[${holder.orEmpty()}]}""" else """{"needsYou":[],"withCoordinator":[],
         "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Everything is filed.",
         "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
@@ -114,7 +121,8 @@ internal object ProjectShell {
         "ON_PROJECT_BRANCH":0,"NOTHING_TO_LAND":0,"NO_RECEIPT":0,"CODELESS":1}},""" else ""}"status":"DONE","done":true,"withheld":[],
         "confirmation":"CONFIRMED","criteria":[${(1..5).joinToString(",") { """{"definitionId":"c$it","satisfied":true,"landing":"LANDED","landingReason":null}""" }},
         {"definitionId":"c6","satisfied":true,"landing":"LANDED","landingReason":"CODELESS"}]}"""
-    private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"${if (done) "DONE" else "OPEN"}","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8}${
+    private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"${if (done) "DONE" else "OPEN"}","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8},
+        "startedAt":${if (started) "\"2026-10-02T00:00:00Z\"" else "null"}${
         if (done) ""","doneBy":"$doneBy","derivedDone":$projection""" else ""}${criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}${
         attention?.let { ""","attention":$it""" }.orEmpty()}}"""
 
@@ -165,6 +173,9 @@ internal object ProjectShell {
             path == "projects/$LAUNCH/open-items" -> ok(openItems)
             path == "projects/$LAUNCH/promotions/current" -> promotion?.let(::ok) ?: ApiResponse(200, ByteArray(0))
             path == "projects/$LAUNCH/promotions/merged" -> ok(merged)
+            path == "projects/$LAUNCH/dependency-graph" && plan != null -> ok(plan!!)
+            path == "projects/$LAUNCH/acceptance/confirmation" && plan != null ->
+                ok("""{"state":"UNCONFIRMED","confirmed":false,"currentVersion":{"digest":"digest-1","material":[]}}""")
             method == "POST" && path.startsWith("projects/$LAUNCH/promotions/") -> press(path.substringAfterLast('/'))
             path.startsWith("projects/") -> ok("{}")
             path.startsWith("wiki/") -> ApiResponse(404, """{"code":"WIKI_DISABLED","message":"The wiki is off."}""".encodeToByteArray())
