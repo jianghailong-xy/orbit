@@ -84,7 +84,7 @@ class MainActivityTest {
         compose.onNodeWithText("Server").assertIsDisplayed()
         compose.onNodeWithText("Server address").assert(hasText("orbitd.io"))
         compose.onNodeWithText("For self-hosted Orbit. Leave as orbitd.io unless your admin gave you another address.").assertIsDisplayed()
-        compose.onNodeWithText("Server address").performTextReplacement("http://remote.example")
+        compose.onNodeWithText("Server address").performTextReplacement("ftp://remote.example")
         compose.onNodeWithText("Save").performClick()
         compose.onNodeWithText("Enter a valid server address.").assertIsDisplayed()
         compose.onNodeWithText("Reset to orbitd.io").performClick()
@@ -97,6 +97,12 @@ class MainActivityTest {
         assertFalse(app().requests.any { it.server.value.startsWith("http://") })
         compose.onNodeWithContentDescription("Orbit").performCustomAccessibilityActionWithLabel("Change server")
         compose.onNodeWithText("Server address").assert(hasText("example.test"))
+        // http:// on any host is kept, as on iOS: the account owner's decision of 2026-10-15 (card 34g6JcZwpKTUcwc5WvuVx).
+        compose.onNodeWithText("Server address").performTextReplacement("http://192.168.1.5:2086")
+        compose.onNodeWithText("Save").performClick()
+        compose.waitUntil(60_000) { app().requests.any { it.api.path == listOf("auth", "methods") && it.server == ServerAddress.parse("http://192.168.1.5:2086") } }
+        compose.onNodeWithContentDescription("Orbit").performCustomAccessibilityActionWithLabel("Change server")
+        compose.onNodeWithText("Server address").assert(hasText("http://192.168.1.5:2086"))
     }
 
     /** The brand folds into one row only above the keyboard (the device journey shows that); focus alone, as from a hardware

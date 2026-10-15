@@ -91,7 +91,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.orbitd.android.BuildConfig
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SignOutReason
@@ -108,7 +107,7 @@ private val SignInBlue = Color(0xFF2E6BFF)
 /** The Build information link under the form, and as much space above it, so the form itself sits in the middle. */
 private val BuildLinkHeight = 48.dp
 
-/** How the page writes a server: an HTTPS one as it is typed (orbitd.io), a loopback fixture's HTTP in full. */
+/** How the page writes a server: an HTTPS one as it is typed (orbitd.io), an HTTP one in full. */
 internal fun displayAddress(server: ServerAddress?): String =
     server?.value?.removePrefix("https://")?.removeSuffix("/") ?: DEFAULT_INSTANCE
 
@@ -480,7 +479,7 @@ private fun ServerDialog(current: String, choose: (String) -> Unit, dismiss: () 
     val field = remember { FocusRequester() }
     fun save() {
         try {
-            ServerAddress.parse(draft.text, allowLoopbackHttp = BuildConfig.DEBUG)
+            ServerAddress.parse(draft.text)
         } catch (_: InvalidServerAddress) {
             invalid = true
             return

@@ -48,6 +48,7 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.DshRuntime
+import io.orbitd.android.core.cards.WatchWakeQueue
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.EngineAccounts
@@ -86,6 +87,8 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     var models by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<StagedAttachment?>(null) }
     var queued by remember { mutableStateOf(false) }
+    // The watch's wake the queue's Withdraw is asking about first (A08-14).
+    var withdrawingWake by remember { mutableStateOf<String?>(null) }
     var slashScope by remember { mutableStateOf<String?>(null) }
     var selectionNotice by remember { mutableStateOf<String?>(null) }
     val usable = state.loaded && session.canCompose()
@@ -287,12 +290,21 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             waiting.forEach { turn ->
                 Text(turn.event.fields.text("text") ?: "Message")
                 // As the tail's Cancel: a steer is on its way into the running turn, and a turn with no id is nobody's to name yet.
+                // A watch's wake asks first, as its line at the transcript's end does (A08-14).
                 if (turn.cancelable) TextButton(enabled = usable && !state.busy, onClick = {
-                    model.control("turns/${turn.turnId}", HttpMethod.DELETE)
+                    if (turn.watch != null) withdrawingWake = turn.turnId else model.control("turns/${turn.turnId}", HttpMethod.DELETE)
                 }) { Text("Withdraw") }
             }
         }
     }, confirmButton = { TextButton(onClick = { queued = false }) { Text("Close") } })
+    withdrawingWake?.let { turnId ->
+        AlertDialog(onDismissRequest = { withdrawingWake = null }, title = { Text(WatchWakeQueue.confirmTitle) },
+            text = { Text(WatchWakeQueue.consequence) },
+            confirmButton = { TextButton(onClick = { withdrawingWake = null; model.control("turns/$turnId", HttpMethod.DELETE) }) {
+                Text(WatchWakeQueue.withdraw, color = MaterialTheme.colorScheme.error)
+            } },
+            dismissButton = { TextButton(onClick = { withdrawingWake = null }) { Text(WatchWakeQueue.keep) } })
+    }
 }
 
 /** The engine's guess in the empty box (docs/prompt-suggestions-design.md §4.3): the words, cut at the end, and "Double-tap to use"

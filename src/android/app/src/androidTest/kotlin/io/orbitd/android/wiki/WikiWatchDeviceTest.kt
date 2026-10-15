@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Process
 import android.util.Log
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -426,6 +427,76 @@ class WikiWatchDeviceTest {
         compose.waitForIdle()
         assertTrue("no Wiki row", compose.onAllNodes(hasText("Wiki") and hasClickAction()).fetchSemanticsNodes().isEmpty())
         capture("wiki-off-drawer")
+    }
+
+    // MARK: A12f — a wiki space's public link (A12-5, iOS 2ba6765d9)
+
+    /** The bar's globe, read as the home opens, says "Share…" in the bar's colour; it opens Share wiki, where Anyone with the
+     * link makes the link with the defaults — the space's Documents, always, and Footnotes, off — and Footnotes turns on with
+     * one PUT of that layer. Closed, the globe is green and says "Live link". Settings → Shared links names every kind it
+     * draws, WIKI with them, and lists the link as "Wiki", with no status. */
+    @Test fun a12fTheGlobeSharesTheSpaceAndSharedLinksSaysWiki() = journey("a12f-share", { "orbit://wiki/${it.string("space")}" }) { _, ids ->
+        val share = "/api/wiki/spaces/${ids.string("space")}/share"
+        awaitTag("wiki-home-line")
+        compose.waitUntil(15_000) { requests("GET", share).isNotEmpty() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("wiki-bar-share").assert(hasContentDescription("Share…"))
+            .assert(SemanticsMatcher.keyNotDefined(androidx.compose.ui.semantics.SemanticsProperties.StateDescription))
+        val quiet = globe("quiet")
+        capture("a12f-home-quiet")
+        press("wiki-bar-share")
+        awaitTag("share-sheet")
+        await("Share wiki")
+        compose.onNode(hasText("Anyone with the link") and isSelectable()).performClick()
+        await("486 footnotes")
+        compose.onNodeWithText("The wiki’s home and every document written so far").assertExists()
+        compose.onNodeWithText("12 documents").assertExists()
+        val footnotes = hasText("Footnotes") and isToggleable()
+        compose.onNode(footnotes).assert(hasText("The quotes and code each sentence cites, with file paths and lines. Can include command output and file contents."))
+            .assertIsOff()
+        capture("a12f-share-wiki-footnotes-off")
+        compose.onNode(footnotes).performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(footnotes and isOn()).fetchSemanticsNodes().isNotEmpty() }
+        capture("a12f-share-wiki-footnotes-on")
+        assertEquals(listOf("{}", """{"include":{"footnotes":true}}"""), requests("PUT", share).map { it.getValue("body").toString() })
+        compose.onNode(hasText("Done") and hasClickAction()).performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("wiki-bar-share") and hasStateDescription("Live link")).fetchSemanticsNodes().isNotEmpty() }
+        val live = globe("live")
+        capture("a12f-home-live")
+        assertEquals("no green without a link", 0, quiet)
+        assertTrue("green with a link ($live px)", live > 20)
+        // Every request on the link, in order: the home's read, the panel's own read, its two PUTs.
+        File(output, "a12f-share-requests.txt").writeText(journal().filter { it.string("path").substringBefore('?') == share }
+            .joinToString("\n") { "${it.string("method")} ${it.string("path")} ${it["body"] ?: ""}" } + "\n")
+        // Settings → Shared links: the list names the kinds, and the wiki's row is its title and "Wiki".
+        compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Settings") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Settings") and hasClickAction()).performClick()
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Shared links") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Shared links") and hasClickAction()).performScrollTo().performClick()
+        await("A12 controlled Wiki")
+        // The row's line, not the closed drawer's Wiki row (which stays composed, and presses).
+        compose.onNode(hasText("Wiki") and !hasClickAction()).assertExists()
+        assertTrue(compose.onAllNodesWithText("WIKI", substring = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("Wiki ·", substring = true).fetchSemanticsNodes().isEmpty())
+        capture("a12f-shared-links")
+        val listed = journal().filter { it.string("method") == "GET" && it.string("path").substringBefore('?') == "/api/share-links" }
+        File(output, "a12f-shared-links-requests.txt").writeText(listed.joinToString("\n") { it.string("path") } + "\n")
+        assertTrue(listed.isNotEmpty())
+        listed.forEach { assertEquals("kind=SESSION,TASK,PROJECT,WIKI", java.net.URLDecoder.decode(it.string("path").substringAfter('?', ""), "UTF-8")) }
+    }
+
+    /** The globe's own pixels as the device draws them: how many are the theme's green, written down beside the captures. */
+    private fun globe(name: String): Int {
+        compose.waitForIdle()
+        val bitmap = compose.onNodeWithTag("wiki-bar-share").captureToImage().asAndroidBitmap()
+        val pixels = IntArray(bitmap.width * bitmap.height).also { bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height) }
+        fun rgb(p: Int) = Triple(p shr 16 and 0xFF, p shr 8 and 0xFF, p and 0xFF)
+        val inked = pixels.count { rgb(it).let { (r, g, b) -> r + g + b < 600 } }
+        val green = pixels.count { rgb(it).let { (r, g, b) -> g - r > 30 && g - b > 20 } }
+        File(output, "a12f-globe-$name.txt").writeText("size=${bitmap.width}x${bitmap.height}\ninked=$inked\ngreen=$green\n")
+        assertTrue("$name: the globe is drawn ($inked inked px)", inked > 20)
+        return green
     }
 
     // MARK: Watch

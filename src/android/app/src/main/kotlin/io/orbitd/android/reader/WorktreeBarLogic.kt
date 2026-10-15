@@ -40,6 +40,23 @@ internal object WorktreeBarLogic {
         return when { showCommit -> Primary.COMMIT; mergeReady && !turnActive -> Primary.MERGE; else -> Primary.NONE }
     }
 
+    /**
+     * Whether a turn is in flight: what holds Merge back and keeps Commit and the merge recovery's steps disabled (iOS
+     * `WorktreeBarLogic.turnActive`, f759d743e). A queued turn counts as much as a running one — the server refuses to merge
+     * or commit during either. So does a message on its way ([sending]): the send queues the turn before the record says
+     * so, and a Merge pressed in that gap came back "wait for the current turn to finish before merging". A parked session
+     * whose sub-agents still run is still writing to the worktree. An ended session holds nothing back.
+     */
+    fun turnActive(status: String?, runningSubagents: Int?, sending: Boolean): Boolean = when (status) {
+        "PENDING", "RUNNING" -> true
+        "AWAITING_INPUT", "INTERRUPTED" -> sending || (runningSubagents ?: 0) > 0
+        else -> false
+    }
+
+    /** The sub-agents still at work: the detail's `runningSubagents` ids, or the session list row's `runningSubagentCount`. */
+    fun runningSubagents(detail: JsonObject): Int? =
+        (detail["runningSubagents"] as? JsonArray)?.size ?: (detail["runningSubagentCount"] as? JsonPrimitive)?.intOrNull
+
     /** The agent's remembered target if still offered, else main, else master, else the first; null lets the runner detect it. */
     fun defaultTarget(targets: List<String>, agentDefaultTarget: String?): String? = when {
         agentDefaultTarget != null && agentDefaultTarget in targets -> agentDefaultTarget

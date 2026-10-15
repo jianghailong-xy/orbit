@@ -51,16 +51,18 @@ internal object StickySummary {
     private fun RunEvent.card(cards: List<InteractionCard>, field: String) = cards.firstOrNull { it.key == "record:$seq:$field" }?.source
 
     /**
-     * Whether the bar may point back at this turn at all: every user turn may, but a background job's news
-     * or a wakeup coming due — a line inside the answer, not the head of one — unless somebody also typed words on it.
+     * Whether the bar may point back at this turn at all: every user turn may, but a watch's wake, a background job's news or a
+     * wakeup coming due — each a line inside the answer, not the head of one (A08-14) — unless somebody also typed words on a
+     * background wake. A watch's wake is the whole of its turn's words, so nobody's are there.
      */
     fun isAnchor(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Boolean {
-        if (listOf("sessionMessage", "openItemDelivery", "taskStart", "projectStarted", "watch").any { event.card(cards, it) != null }) return true
+        if (listOf("sessionMessage", "openItemDelivery", "taskStart", "projectStarted").any { event.card(cards, it) != null }) return true
+        if (event.card(cards, "watch") != null) return false
         if (event.card(cards, "wake") == null) return true
         return event.personWords().isNotBlank()
     }
 
-    /** The label and line for one turn, in the transcript's order: another session, an item, a task's run, a project's start, a watch, the person. */
+    /** The label and line for one turn, in the transcript's order: another session, an item, a task's run, a project's start, the person. */
     fun of(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Pair<String, String> {
         event.card(cards, "sessionMessage")?.let { from ->
             return "${ARROW}From ${from.text("fromTitle")?.trim()?.ifEmpty { null } ?: "Untitled session"}" to event.personWords()
@@ -74,7 +76,6 @@ internal object StickySummary {
         event.card(cards, "projectStarted")?.let { started ->
             return ARROW + (if (started.text("by") == "CONFIRMATION") "Project started" else "Project switched on") to started.text("projectTitle").orEmpty()
         }
-        event.card(cards, "watch")?.let { wake -> return ARROW + watchTitle(wake.text("state")) to watchWhy(wake.text("state"), wake.text("reason")) }
         return YOUR_QUESTION to event.personWords()
     }
 
@@ -83,34 +84,6 @@ internal object StickySummary {
         "INTEGRATION_ERROR" -> "Integration error"; "TASK_FAILED" -> "Task failed"
         "PROMOTION_APPROVAL" -> "Merge approval"; "COORDINATOR_QUESTION" -> "Question"
         "FUSE_PAUSED" -> "Project paused"; else -> "Exception item"
-    }
-
-    private fun watchTitle(state: String?) = when (state) {
-        "MATCHED" -> "Watch triggered"; "EXPIRED" -> "Watch expired"
-        "REVOKED" -> "Watch stopped: access lost"; else -> "Watch stopped: every target is gone"
-    }
-
-    /** Why the watch queued this turn (OrbitKit `WatchWakeCard.why`). */
-    private fun watchWhy(state: String?, reason: String?) = when (state) {
-        "MATCHED" -> if (reason.isNullOrEmpty()) "Its condition held." else describeReason(reason)
-        "EXPIRED" -> "Its deadline passed before its condition held. It will not wake this session again."
-        "REVOKED" -> "This account can no longer read one of its targets, so it reports nothing about them."
-        else -> "Every target it watched was deleted, so its condition can never be decided."
-    }
-
-    /** A Match's `ALL TASK_DONE 2/2` in words: "2 of 2 done". */
-    internal fun describeReason(reason: String): String {
-        val parts = mutableListOf<String>()
-        for (match in Regex("\\b(?:ALL|ANY) ([A-Z_]+) (\\d+)/(\\d+)").findAll(reason)) {
-            val word = when (match.groupValues[1]) {
-                "SESSION_TURN_SETTLED" -> "finished their turn"; "SESSION_RUN_TERMINAL" -> "ended"
-                "SESSION_LIFECYCLE_TERMINAL" -> "filed away"; "SESSION_NEEDS_ATTENTION" -> "asked for approval"
-                "TASK_TERMINAL" -> "finished"; "TASK_DONE" -> "done"; "TASK_FAILED" -> "failed"
-                else -> return reason
-            }
-            parts += "${match.groupValues[2]} of ${match.groupValues[3]} $word"
-        }
-        return if (parts.isEmpty()) reason else parts.joinToString(" · ")
     }
 }
 

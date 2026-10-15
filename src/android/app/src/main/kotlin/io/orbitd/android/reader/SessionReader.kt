@@ -12,7 +12,14 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -37,7 +44,10 @@ import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionNeedsYouBar
 import io.orbitd.android.cards.SessionRunStartCard
 import io.orbitd.android.cards.SessionTasksCard
+import io.orbitd.android.cards.LocalWatchTargetNames
+import io.orbitd.android.cards.watchTargetName
 import io.orbitd.android.watch.SessionWatches
+import io.orbitd.android.watch.rememberSessionTitles
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerReview
@@ -107,7 +117,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val listed = remember(state.session?.snapshot?.detail) {
         state.session?.snapshot?.detail?.let { runCatching { Wire.json.decodeFromJsonElement(DirectorySession.serializer(), it) }.getOrNull() }
     }
-    val actions = remember(api) { SessionActions(api, app.processScope) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
+    val actions = remember(api) { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
     val currentRows by rememberUpdatedState(rows)
     val nested = remember { object : NestedScrollConnection {
@@ -143,10 +153,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val transcript = state.session?.transcript
     val snapshotDetail = state.session?.snapshot?.detail
+    // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
+    val cards = rememberSessionCards(app, handle, route.id!!)
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
-    // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it.
-    val belowRows = remember(state.session?.snapshot) {
-        state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it) }.orEmpty()
+    // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
+    // answered here stops counting with the press, not with the read after it (A08-13).
+    val belowRows = remember(state.session?.snapshot, cards.answered) {
+        state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it, cards.answered) }.orEmpty()
     }
     // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet.
     val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
@@ -208,13 +221,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             positioning = false
         }
     }
+    // A06-13 (iOS `TailPinning.followsGeometry`, 900e1810d and 66c42e852): rows that grow under a still, pinned list — a running
+    // agent's line arriving, a picture or a row measured again — push the tail out of view, and nothing else would bring it back.
+    // Only within the rule's slack and never after a scroll; the card rail, which arrives whole at any height, follows by its own size.
+    FollowsTailGeometry(list, model, pinned = { placed && follow && !dragging && state.window.newerAfter == null && !state.loading },
+        moving = { positioning }) { positioning = it }
+    val rail = remember(model) { RailHeight() }
     // Background agents' and workflows' progress, as their cards and the background list read it.
     val background = state.session?.snapshot?.background
     val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
         TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
     }
-    // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
-    val cards = rememberSessionCards(app, handle, route.id!!)
     LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
     val reviewStates = rememberSaveableStateHolder()
     val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
@@ -231,8 +248,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         state.window.events.filter { it.type == "user_delivery" }
             .mapNotNull { event -> event.fields.string("turnId")?.let { turn -> event.fields.string("delivery")?.let { turn to it } } }.toMap()
     }
+    // A08-14: what a watch's wake line calls the targets that moved — the watches this conversation observes, the session list,
+    // and its own Tasks card.
+    val sessionTitles = rememberSessionTitles(app, handle)
+    val targetNames = remember(cards.watches, cards.created, sessionTitles) {
+        { watchId: String, target: JsonObject -> watchTargetName(watchId, target, cards.watches.map { it.source }, { sessionTitles(it) }, cards.created) }
+    }
     CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
-        LocalSessionConsole provides console) {
+        LocalSessionConsole provides console, LocalWatchTargetNames provides targetNames) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
@@ -298,14 +321,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val targetSeq = state.targetSeq
                 // Folds away while a phone's composer holds the keyboard, with the rest of the chrome.
                 StickyQuestion(displayedRows, list, hidden = foldsChrome) { row -> model.show(row.event.seq) }
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().onSizeChanged {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth().fadesIntoComposerBand().onSizeChanged {
                     if (viewport.resized(it.height, placed && follow && state.window.newerAfter == null)) repin++
                 }.nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
                     // A touch pauses following so a live update cannot move text under a selection.
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
                 }.testTag("transcript-list"), state = list,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // No room under the rows but the tail row's own: every follow and jump lands on it (iOS 9d3751ec2).
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
@@ -328,16 +352,22 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
-                    item(key = "interaction-cards") { SessionCards(cards, openLink, discuss = discussCard) }
+                    item(key = "interaction-cards") {
+                        Box(Modifier.onSizeChanged { if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
+                            SessionCards(cards, openLink, discuss = discussCard)
+                        }
+                    }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
                     if (live != null) items(queued, key = { it.key }) { turn ->
                         QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy) { turnId ->
                             composer.control("turns/$turnId", HttpMethod.DELETE)
                         }
                     }
-                    item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
+                    // A06-12: the room the fade lies over, so a list at its tail has nothing in it — and the 1 dp anchor it always was.
+                    item(key = "tail") { Spacer(Modifier.height(COMPOSER_BAND_FADE + 1.dp).testTag("transcript-tail")) }
                 }
-                if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                // Android's jump stays a row under the list (iOS floats a disc 6 pt above the fade): below the list, so never in its fade.
+                if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth().testTag("transcript-jump"), horizontalArrangement = Arrangement.SpaceEvenly) {
                     TextButton(onClick = {
                         val last = rows.lastOrNull { it.event.type == "user" }
                         if (last != null) model.show(last.event.seq)
@@ -368,7 +398,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // phone's composer holds the keyboard (iOS `TypingFold`), so an open list or a sheet comes back as it was.
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
-                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Box(Modifier.padding(horizontal = 16.dp)) { WorktreeBar(worktree, openLink) } }
+                // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Box(Modifier.padding(horizontal = 16.dp)) {
+                    WorktreeBar(worktree, sending = composerState.waiting || composerState.busy, open = openLink) } }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
@@ -403,14 +435,29 @@ private fun sessionLabel(session: SessionState?, row: DirectorySession? = null):
 
 @Composable
 private fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
+    // A06-11: reasoning still being written is open and held to a few self-scrolling lines (iOS 471b2afbb).
+    if (label == "Thinking") return LiveThinking(parent, text, open)
     Column { Text(if (parent.isEmpty()) "$label · Live" else "Subagent · $label · Live", style = MaterialTheme.typography.labelMedium)
-        if (label == "Thinking") {
-            var expanded by rememberSaveable { mutableStateOf(false) }
-            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide thinking" else "Show thinking") }
-            if (expanded) StreamingText(text, open)
-        } else StreamingText(text, open)
+        StreamingText(text, open)
     }
 }
+
+/** How far the transcript fades out above the band under it, and the room its tail row keeps clear (iOS `composerBandFade`). */
+internal val COMPOSER_BAND_FADE = 20.dp
+
+/**
+ * A06-12 (iOS 9d3751ec2 `fadesIntoComposerBand`): the transcript's bottom edge dissolves into the band under it — the cards
+ * above the composer and the composer's own band — instead of slicing a row through, and its tail row keeps [COMPOSER_BAND_FADE]
+ * of room, so only rows on their way out of view are in the fade. Drawn offscreen so the gradient (DstIn) masks the list's own
+ * pixels, not the page under it. On the list alone: the jump row under it stays solid.
+ */
+internal fun Modifier.fadesIntoComposerBand(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val fade = COMPOSER_BAND_FADE.toPx()
+        drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent), startY = size.height - fade, endY = size.height),
+            topLeft = Offset(0f, size.height - fade), size = Size(size.width, fade), blendMode = BlendMode.DstIn)
+    }
 
 /** Every picture a reader can page through: image attachments, and `[label](orbit-attachment:id "name.png")` links. */
 internal fun sessionImages(events: List<RunEvent>): List<String> {
