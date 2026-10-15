@@ -70,7 +70,10 @@ internal class RealtimeRest(private val api: OrbitApi) {
             // drawn with it rather than drawn on main and moved. A read that fails draws no row, and the start keeps the main
             // branch the project stands on.
             val document = standing["project"] as? JsonObject
-            if (document != null && document["startedAt"] is JsonNull) try {
+            // And for a candidate a check BLOCKED, what the line is doing about its branch (iOS befc9694c): one of the project's current
+            // landings may be holding the merge, and the review names it — "Blocked by". The same read, failing the same way.
+            val blocked = (standing["promotion"] as? JsonObject)?.text("state") == "BLOCKED"
+            if ((document != null && document["startedAt"] is JsonNull) || blocked) try {
                 standing["integration"] = get(handle, listOf("projects", project, "integration"))
             } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
         }
