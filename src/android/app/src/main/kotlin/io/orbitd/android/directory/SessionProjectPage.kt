@@ -216,6 +216,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     val state = remember(handle, projectId) {
         ProjectSessionsState(SessionProjectMembers.members(projectId, data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()))
     }
+    val trashing = app.trashing
+    val hidden by trashing.ids.collectAsState()
     val sidebar by rememberProjectSidebar(api, revision)
     val project = sidebar.firstOrNull { it.text("id")?.let(SessionProjectGrouping::key) == SessionProjectGrouping.key(projectId) }
     val currentData by rememberUpdatedState(data)
@@ -234,12 +236,17 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
 
     suspend fun read(view: String): List<DirectorySession> =
         api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view, "projectId" to projectId))
-    /** Both lists; an older server may ignore projectId, so only the project's members are kept, and never one in Trash. */
+    /** Both lists; an older server may ignore projectId, so only the project's members are kept, and never one in Trash — nor one on
+     * its way there (A05-9). A read that a session's release overlapped may be from before that session's move, so it is read again. */
     suspend fun loadMembers() {
         state.loading = true
         try {
-            val rows = coroutineScope { val open = async { read("open") }; val completed = async { read("completed") }; open.await() + completed.await() }
-            state.members = SessionProjectMembers.members(projectId, rows)
+            var rows: List<DirectorySession>
+            do {
+                val releases = trashing.releases
+                rows = coroutineScope { val open = async { read("open") }; val completed = async { read("completed") }; open.await() + completed.await() }
+            } while (trashing.releases != releases)
+            state.members = SessionProjectMembers.members(projectId, trashing.without(rows) { it.id })
             state.completed = state.members.filter { it.effectiveLifecycleState != "OPEN" }
             state.readAt = Instant.now(); state.error = null
         } catch (cancel: CancellationException) { throw cancel }
@@ -247,16 +254,21 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         finally { state.loading = false }
     }
     /** One poll that asks for neither list again unless something moved: the Open members are the app's Open list's, kept current by
-     * its control stream; the Completed ones are read again when an Open member left that list, or a minute after the last read. */
+     * its control stream; the Completed ones are read again when an Open member left that list, or a minute after the last read. A
+     * Completed read that a release overlapped is dropped, and the next poll reads again. */
     suspend fun pollMembers() {
         val readAt = state.readAt
         if (state.error != null || readAt == null || !currentData.ready) return loadMembers()
         val openList = currentData.sessions["open"].orEmpty()
-        val (members, moved) = SessionProjectMembers.poll(state.members, projectId, openList, state.completed)
+        val (members, moved) = SessionProjectMembers.poll(trashing.without(state.members) { it.id }, projectId, openList,
+            trashing.without(state.completed) { it.id })
         if (members != state.members) state.members = members
         if (!moved && Instant.now().toEpochMilli() - readAt.toEpochMilli() < SessionProjectMembers.completedRefreshMs) return
         try {
-            val completed = SessionProjectMembers.members(projectId, read("completed"))
+            val releases = trashing.releases
+            val rows = read("completed")
+            if (trashing.releases != releases) return
+            val completed = SessionProjectMembers.members(projectId, trashing.without(rows) { it.id })
             state.completed = completed; state.readAt = Instant.now()
             val next = SessionProjectMembers.members(projectId, currentData.sessions["open"].orEmpty() + completed)
             if (next != state.members) state.members = next
@@ -286,6 +298,19 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         if (doc != null) state.done = doc
     }
     LaunchedEffect(handle, projectId) {
+        // A member on its way to Trash leaves the page on the press, wherever it was pressed, and what the page holds of it goes too
+        // (iOS `hideTrashedSession`): once the move has settled nothing would take it out again.
+        launch {
+            var held = trashing.ids.value
+            trashing.ids.collect { ids ->
+                val gone = ids - held
+                held = ids
+                if (gone.isNotEmpty()) {
+                    state.members = TrashingSessions.without(state.members, gone) { it.id }
+                    state.completed = TrashingSessions.without(state.completed, gone) { it.id }
+                }
+            }
+        }
         launch { loadMembers(); while (true) { delay(4_000); pollMembers() } }
         launch { while (true) { loadIntegration(); delay(4_000) } }
         launch { while (true) { merge.load(); delay(4_000) } }
@@ -301,7 +326,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     // The project's page, over this one: back returns here.
     fun openProject() = open(OrbitRoute(Destination.PROJECT, projectId))
 
-    val members = state.members
+    val members = TrashingSessions.without(state.members, hidden) { it.id }
     val coordinator = members.firstOrNull { it.projectMembership?.isCoordinator == true }
     PageBar.Bind(route, project?.text("title") ?: members.firstOrNull()?.projectMembership?.projectTitle ?: "Project",
         // No count while no member is known yet: "0 sessions" would be a claim nobody checked.

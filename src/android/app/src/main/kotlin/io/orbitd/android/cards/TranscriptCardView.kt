@@ -30,6 +30,12 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
             BackgroundWakeCard.steerState(fields?.get("steer") == JsonPrimitive(true), delivery, undelivered)), undelivered)
         return
     }
+    // So is a turn a watch queued (A08-14): the same grammar, the watch's own words.
+    if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":watch")) {
+        val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: event?.fields?.text("delivery")
+        WatchWakeLine(card.source, ts, open, undelivered = delivery == "failed")
+        return
+    }
     val resources = LocalReaderResources.current
     val app = LocalContext.current.applicationContext as? OrbitApplication
     val live = app?.realtime?.state?.collectAsState()?.value

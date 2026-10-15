@@ -65,8 +65,9 @@ class WikiTalkBackWordsTest {
         assertTrue("$where: presses TalkBack reads twice: $twice", twice.isEmpty())
     }
 
-    /** The home and Activity: the space picker, the bar's Activity with its number, and the review banner say each of their
-     * words once (TalkBack read the banner twice, and the space's slug as a state and again as its text). */
+    /** The home and Activity: the space picker, the bar's Activity with its number, its Share with the space's live link, and
+     * the review banner say each of their words once (TalkBack read the banner twice, and the space's slug as a state and
+     * again as its text). */
     @Test fun theHomesPressesSayTheirWordsOnce() {
         val space = WikiFixtures.spaceID
         val rig = WikiTestRig { api ->
@@ -76,6 +77,8 @@ class WikiTalkBackWordsTest {
                 "wiki/spaces/$space/entries" -> 200 to WikiFixtures.entries
                 "wiki/spaces/$space/timeline" -> 200 to WikiFixtures.timeline
                 "wiki/spaces/$space/docs" -> 200 to wikiDocsFixture().obj("docs").obj("directory").obj("read").toString()
+                "wiki/spaces/$space/share" -> 200 to """{"link":{"id":"L5","token":"t","kind":"WIKI","state":"ACTIVE","include":{"footnotes":false},
+                    "root":{"id":"$space","title":"orbit","slug":"orbit"},"viewCount":0},"counts":{"documents":12,"footnotes":486}}"""
                 "wiki/review" -> 200 to WikiFixtures.review
                 else -> null
             }
@@ -93,6 +96,8 @@ class WikiTalkBackWordsTest {
         // The documents' rows, their folded row and All 4: words, never a bare glyph (the blue dots are silent).
         compose.onNodeWithTag("wiki-home-principles-all").assert(hasContentDescription("All 4"))
         compose.onNodeWithTag("wiki-bar-activity").assert(hasContentDescription(WikiCopy.activity)).assert(hasStateDescription("3 waiting on you"))
+        compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("wiki-bar-share") and hasStateDescription("Live link")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("wiki-bar-share").assert(hasContentDescription("Share…"))
         assertTalkBackReadsWords("home")
         page = OrbitRoute(Destination.WIKI_ACTIVITY)
         compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-banner").fetchSemanticsNodes().isNotEmpty() }

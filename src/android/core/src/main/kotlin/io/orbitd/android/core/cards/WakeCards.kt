@@ -16,6 +16,8 @@ internal fun watchWake(text: String): JsonObject? {
         put("watchId", head.groupValues[1]); put("generation", head.groupValues[2].toIntOrNull()?.let(::JsonPrimitive) ?: JsonNull)
         put("reason", head.groupValues[3]); put("state", if (head.groupValues[2].isNotEmpty()) "MATCHED" else head.groupValues[4].ifEmpty { "EXPIRED" })
         put("changedTargets", payload["changedTargets"] ?: JsonArray(emptyList()))
+        // Exactly what the agent received, for the line's fold (A08-14).
+        put("text", text)
     }
 }
 

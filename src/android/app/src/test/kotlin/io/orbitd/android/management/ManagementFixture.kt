@@ -51,6 +51,8 @@ object ManagementFixture {
     @Volatile var poolLabel = "Team Codex"
     @Volatile var theme = "system"
     @Volatile var shareFails = false
+    /** The account also has a wiki space's link, which GET share-links lists only to a client that names WIKI. */
+    @Volatile var wikiLinks = false
     @Volatile var accessFails = false
     /** The viewer's place in the pool: ADMIN and creator (its owner), ADMIN, or MEMBER. */
     @Volatile var viewerRole = "ADMIN"
@@ -86,6 +88,7 @@ object ManagementFixture {
 
     fun reset() {
         calls.clear(); workspaceName = "Alpha"; runnerAlias = "Old alias"; runnerCapacity = 2; poolLabel = "Team Codex"; theme = "system"; shareFails = false; accessFails = false
+        wikiLinks = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         runnerEngines = "[]"; runnerExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
@@ -131,6 +134,14 @@ object ManagementFixture {
         "agentId":"$WORKSPACE","createdAt":"${now.minusSeconds(600)}","lastTurnAt":"${now.minusSeconds(300)}","pendingApprovals":0}"""
     private fun link() = """{"id":"L1","token":"fixture-token","kind":"SESSION","state":"ACTIVE","root":{"id":"$SESSION","title":"Fixture session"},
         "include":{"toolOutput":true},"viewCount":0}"""
+    /** A wiki space's link as the server's owner view lists it: its root has a slug and no status. */
+    private fun wikiLink() = """{"id":"L5","token":"wiki-token","kind":"WIKI","state":"ACTIVE","root":{"id":"w1","title":"orbit wiki","slug":"orbit"},
+        "include":{"footnotes":false},"viewCount":3}"""
+    /** `share-links.service.ts` list: the kinds named in `kind`, else the three every shipped client knows. */
+    private fun links(query: List<Pair<String, String>>): String {
+        val kinds = query.firstOrNull { it.first == "kind" }?.second?.split(",") ?: listOf("SESSION", "TASK", "PROJECT")
+        return listOfNotNull(link().takeIf { "SESSION" in kinds }, wikiLink().takeIf { wikiLinks && "WIKI" in kinds }).joinToString(",", """{"links":[""", "]}")
+    }
     private fun login() = """{"state":"$loginState","email":"me@example.test","plan":"plus","fingerprint":"…AB12","userId":"$ME","next":true}"""
     private fun pools() = """[{"id":"$POOL","slug":"team-codex","label":"$poolLabel","engine":"codex","logins":[${login()}]}]"""
     private fun access() = """{"id":"$POOL","slug":"team-codex","label":"$poolLabel","engine":"codex","shared":false,"logins":[${login()}],
@@ -193,7 +204,7 @@ object ManagementFixture {
                 else -> ok(link())
             }
             "providers/pools" -> ok(pools())
-            "share-links" -> ok("""{"links":[${link()}]}""")
+            "share-links" -> ok(links(api.query))
             "providers/shared-pools" -> ok("[]")
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
             else -> when {
