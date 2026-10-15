@@ -172,6 +172,22 @@ internal object EngineAccounts {
         else -> "codex-account-move/v1"
     }
 
+    /** CodexAccounts.automaticOffered (web `automaticOfferedOn`): Automatic is on offer for [engine] where the workspace picked
+     * none of its accounts ([pick]), its [env] selects no other config directory and no key of its own — for Kimi Code, no model of
+     * its own either, which only both of its variables together are — and the runner has two accounts or more to choose between. */
+    fun automaticOffered(engine: String, pick: String?, env: JsonObject?, accounts: Int): Boolean {
+        if (accounts < 2 || !pick.isNullOrEmpty()) return false
+        fun set(key: String) = (env?.get(key) as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
+        if (engine == "kimi" && set("KIMI_MODEL_NAME") && set("KIMI_MODEL_API_KEY")) return false
+        val deciding = when (engine) {
+            "claude" -> listOf("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN")
+            "antigravity" -> listOf("ORBIT_ANTIGRAVITY_GOOGLE_DIR", "GEMINI_API_KEY")
+            "kimi" -> listOf("KIMI_CODE_HOME")
+            else -> listOf("CODEX_HOME", "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")
+        }
+        return deciding.none(::set)
+    }
+
     /** One Antigravity bucket as the window it names, for weighing quota against quota: what agy says is left, as the
      * share used every other window speaks in. What a page shows stays agy's remaining fraction (usageRows). */
     fun bucketWindow(bucket: JsonObject): JsonObject = buildJsonObject {

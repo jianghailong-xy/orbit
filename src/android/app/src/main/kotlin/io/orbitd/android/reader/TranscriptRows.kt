@@ -28,10 +28,12 @@ internal fun contentImages(value: JsonElement?): List<String> = when (value) {
     else -> emptyList()
 }
 
+/** [folded] is the later `thinking` blocks folded into this one's row (A06-11): the row keeps the first block's identity. */
 @Immutable
-internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList()) {
+internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList(),
+    val folded: List<RunEvent> = emptyList()) {
     val key: String get() = "event:${event.seq}"
-    fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || children.any { it.contains(seq) }
+    fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) }
 }
 
 /** Project only durable changes. Live text and tool snapshots are passed to their own row. */
@@ -68,6 +70,9 @@ internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
             }))
             if (e.seq in engine.rows) return@mapNotNull engine.rows[e.seq]?.let(::TranscriptRow)
             if (e.type in setOf("turn_end", "status", "user_delivery", "init", "system", "result")) return@mapNotNull null
+            // A block the provider closed empty, with nothing this device streamed into it, draws no row (iOS 471b2afbb): a cold
+            // read of claude's transcript would otherwise be a wall of blank "Thinking" lines.
+            if (e.type == "thinking" && e.body().isEmpty()) return@mapNotNull null
             if (e.type == "tool_result" && e.seq in usedResults) return@mapNotNull null
             val result = if (e.type == "tool_use") engine.toolFailures[e.toolId()]?.takeIf { e.parent().isNullOrEmpty() }
                 ?: results[parent to e.toolId()] else null
@@ -75,7 +80,7 @@ internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
             val id = e.toolId()
             val children = if (e.type == "tool_use" && id != null && id !in visited) rows(id, visited + id) else emptyList()
             TranscriptRow(e, result, children)
-        }
+        }.let(::foldThinking)
     }
     // Results may precede calls in a restored partial window; suppress matched results independent of order.
     events.filter { it.type == "tool_use" }.forEach { e -> results[parent(e) to e.toolId()]?.let { usedResults += it.seq } }
@@ -208,6 +213,18 @@ internal class EngineReading(events: List<RunEvent>) {
 /** A signed-out engine's own words (OrbitKit `EngineAuth.isAuthErrorText`): a sign-in remedy, not an API error. */
 internal object EngineAuth {
     fun isAuthErrorText(text: String?): Boolean = text != null && text.trimStart().startsWith("Failed to authenticate")
+}
+
+/**
+ * A run of adjacent `thinking` rows as one row that counts them (A06-11; OrbitKit `foldIntoPrecedingThinking`, web `buildNodes`).
+ * A provider closes a block per tool call — a DeepSeek turn closes 10 at the median, 51 at p90 — and a row each was a stack of
+ * identical lines. Only ADJACENT rows fold: a block either side of a tool call keeps its own row, where it explains that call.
+ */
+private fun foldThinking(rows: List<TranscriptRow>): List<TranscriptRow> = rows.fold(ArrayList(rows.size)) { out, row ->
+    val previous = out.lastOrNull()
+    if (row.event.type == "thinking" && previous?.event?.type == "thinking") out[out.lastIndex] = previous.copy(folded = previous.folded + row.event + row.folded)
+    else out += row
+    out
 }
 
 internal fun anchorRow(rows: List<TranscriptRow>, seq: Long): TranscriptRow? =

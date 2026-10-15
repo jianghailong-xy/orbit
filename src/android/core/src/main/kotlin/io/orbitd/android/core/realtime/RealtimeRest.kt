@@ -47,7 +47,9 @@ internal class RealtimeRest(private val api: OrbitApi) {
     suspend fun session(handle: SessionHandle, id: String): SessionSnapshot = coroutineScope {
         val base = listOf("sessions", id)
         val approvals = async { objects(handle, base + "approvals", listOf("status" to "PENDING")) }
-        val queue = async { objects(handle, base + "turns") }
+        // The active view (A07-14; iOS 0588fe262, web `listQueuedTurns`): the bare one is the queue alone and leaves out the head a
+        // runner has taken but not echoed yet, so that turn vanished from the reader until its echo.
+        val queue = async { objects(handle, base + "turns", listOf("view" to "active")) }
         val background = async { objects(handle, base + "background") }
         val evidence = async { get(handle, listOf("tasks", "evidence-decisions", "pending"), listOf("decidingSessionId" to id)) }
         val detail = get(handle, base) as? JsonObject ?: throw ProtocolException()

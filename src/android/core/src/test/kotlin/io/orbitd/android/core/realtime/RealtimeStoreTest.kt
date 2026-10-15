@@ -143,6 +143,17 @@ class RealtimeStoreTest {
         assertEquals("null", store.state.value.session!!.snapshot!!.standing["ownerConfirmation"].toString())
     }
 
+    /** A07-14 (iOS 0588fe262): the snapshot reads the turns in their active view, which lists the head a runner has taken beside the
+     * queue — the bare view leaves it out — and every read of it does, a re-read included. */
+    @Test fun theTurnsAreReadInTheirActiveView() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        store.refreshSession(); runCurrent()
+        val turns = rig.reads.filter { it.api.path == listOf("sessions", "s1", "turns") }
+        assertTrue(turns.size >= 2)
+        assertTrue(turns.all { it.api.query == listOf("view" to "active") })
+    }
+
     /** A project nobody has started has no promotion: the server's null for it is a read like any other, and the
      * conversation stays fresh with its cards (the coordinator's start request among them). */
     @Test fun aReadAnsweredWithNoBodyIsNullNotAFailedSnapshot() = runTest {
