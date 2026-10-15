@@ -33,8 +33,18 @@ internal fun sharingPath(kind: String, id: String): String = when (kind) {
     "SESSION" -> "sessions"
     "TASK" -> "tasks"
     "PROJECT" -> "projects"
+    "WIKI" -> "wiki/spaces"
     else -> throw IllegalArgumentException("Unknown share kind")
 } + "/$id/share"
+
+/** The kinds of link Shared links draws, named in its read: a server lists only the kinds a client names (and SESSION, TASK and
+ * PROJECT when it names none), so a kind added later never reaches a build that cannot draw it (iOS `APIClient.shareLinks`). */
+internal val sharingKinds = listOf("SESSION", "TASK", "PROJECT", "WIKI")
+
+/** `GET share-links?kind=…`: every link this account has made, of each kind in [sharingKinds] — what Settings' row counts and its
+ * page lists. */
+internal suspend fun sharingLinks(api: ManagementApi): List<JsonObject> =
+    sharingList(api.get("share-links", listOf("kind" to sharingKinds.joinToString(",")))).list("links")
 
 /** A malformed success must not become "Only you" or an empty shared-links list. */
 internal fun sharingRead(value: JsonElement, kind: String, id: String): JsonObject {
@@ -79,6 +89,8 @@ internal object ShareCopy {
     const val turnOffTitle = "Turn off this link?"
     const val turnOffDetail = "Anyone who has it loses access right away."
     const val conversationsRisk = "Can include command output and file contents."
+    /** What a wiki's Footnotes are, said before that risk. */
+    const val footnotesDetail = "The quotes and code each sentence cites, with file paths and lines."
     const val live = "Live — viewers see changes as they happen"
     const val notCurrent = "Not up to date — sharing can’t be changed until Orbit reconnects."
     const val privateDetail = "Only you can open it, signed in. Choose “Anyone with the link” to make a public link."
@@ -105,10 +117,10 @@ internal object ShareCopy {
         lastViewedAt ?: return "Viewed $times"
         return "Viewed $times · last ${ago(lastViewedAt, nowMs) ?: "unknown"}"
     }
-    fun kindWord(kind: String) = when (kind) { "SESSION" -> "Session"; "TASK" -> "Task"; "PROJECT" -> "Project"; else -> kind }
+    fun kindWord(kind: String) = when (kind) { "SESSION" -> "Session"; "TASK" -> "Task"; "PROJECT" -> "Project"; "WIKI" -> "Wiki"; else -> kind }
     private val taskStatus = mapOf("DONE" to "Done", "IN_PROGRESS" to "In progress", "OPEN" to "Open", "FAILED" to "Failed", "CANCELLED" to "Cancelled")
     private val projectStatus = mapOf("OPEN" to "Open", "DONE" to "Completed", "CANCELLED" to "Cancelled")
-    /** SharedLinksList.whereLine: where the shared thing stands, or why the link stopped. */
+    /** SharedLinksList.whereLine: where the shared thing stands, or why the link stopped. A wiki has no status: "Wiki". */
     fun whereLine(link: JsonObject): String {
         val kind = kindWord(link.text("kind"))
         val root = link.obj("root") ?: JsonObject(emptyMap())
@@ -118,7 +130,7 @@ internal object ShareCopy {
                 val word = if (link.str("stateReason") == "EXPIRED") "Expired" else "Turned off"
                 "$kind · " + (shortDate(link.str("revokedAt") ?: link.str("expiresAt"))?.let { "$word $it" } ?: word)
             }
-            else -> "$kind · " + when (link.text("kind")) {
+            else -> if (link.text("kind") == "WIKI") kind else "$kind · " + when (link.text("kind")) {
                 "TASK" -> root.text("status").let { taskStatus[it] ?: it }
                 "PROJECT" -> root.text("status").let { projectStatus[it] ?: it }
                 else -> {
@@ -147,6 +159,9 @@ internal object ShareCopy {
             "TASK" -> listOf(Layer(null, "Overview", "Description, acceptance, dependencies and runs", counts?.let { "Always" }, true, false, false, false),
                 Layer("commentsAndFiles", "Comments & files", "Written by agents and people", comments, true, false, false, false),
                 Layer("conversations", "Conversations", conversationsRisk, count("transcripts", "transcript"), true, false, false, true))
+            // The home and its documents, always; Footnotes says what a footnote shows, then the fixed risk sentence.
+            "WIKI" -> listOf(Layer(null, "Documents", "The wiki’s home and every document written so far", count("documents", "document"), true, false, false, false),
+                Layer("footnotes", "Footnotes", "$footnotesDetail $conversationsRisk", count("footnotes", "footnote"), true, false, false, true))
             else -> {
                 val runs = counts?.int("runs") ?: 0
                 val coordinator = if ((counts?.int("transcripts") ?: 0) > runs) " and the coordinator" else ""
@@ -177,7 +192,7 @@ fun SharingSettings(api: ManagementApi, revision: Long) {
     var tab by rememberSaveable { mutableStateOf("ACTIVE") }
     var turnOff by remember { mutableStateOf<JsonObject?>(null) }
     suspend fun load() {
-        try { links = sharingList(api.get("share-links")).list("links"); failure = null }
+        try { links = sharingLinks(api); failure = null }
         catch (e: CancellationException) { throw e } catch (e: Exception) { failure = personalFailure(e) }
     }
     LaunchedEffect(api, revision, rememberResumed()) { load() }

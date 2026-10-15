@@ -205,6 +205,31 @@ class ManagementPanelTest {
         compose.onAllNodes(hasText("Only you") and isSelectable() and isEnabled()).assertCountEquals(0)
     }
 
+    /** Shared links names every kind it draws, so the server lists a wiki space's link too, and its row says "Wiki" and nothing
+     * after it: a wiki has no status (iOS 2ba6765d9). Settings' row counts the same answer. Unnamed, the server lists no wiki
+     * link, and one would have read "WIKI · Open". */
+    @Test fun sharedLinksListsAWikisLinkAsWikiWithNoStatus() {
+        fixture.wikiLinks = true
+        val api = api()
+        var page by mutableStateOf<String?>(null)
+        compose.setContent {
+            SettingsScreen(api, io.orbitd.android.navigation.OrbitRoute(io.orbitd.android.navigation.Destination.SETTINGS, page), revision, {}, {},
+                logout = {}, changed = {}, workspaceDeleted = {}, deviceAlerts = { true }, notifications = {}, about = {})
+        }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText("Shared links") and hasText("2 active") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        page = "sharing"
+        await("orbit wiki")
+        compose.onNodeWithText("Active 2").assertExists()
+        compose.onNodeWithText("Wiki").assertExists()
+        compose.onAllNodesWithText("WIKI", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Wiki ·", substring = true).assertCountEquals(0)
+        // Every read of the list — the row's and the page's — named the kinds.
+        val listed = fixture.queries.filter { it.startsWith("GET share-links") }
+        assertEquals(setOf("GET share-links?kind=SESSION,TASK,PROJECT,WIKI"), listed.toSet())
+        assertEquals(fixture.calls.count { it == "GET share-links" }, listed.size)
+        assertTrue(listed.size >= 2)
+    }
+
     /** A page that hosts the panel (a task's or a project's ⋯ → Share…) hears the server's answer to each read and change,
      * in the shape its menu reads: what the menu then says is what the server last said. */
     @Test fun theSharePanelReportsEachAnswerInTheShapeTheMenuReads() {

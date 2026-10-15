@@ -138,7 +138,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
         launch {
-            try { sharedLinks = settingsSharedLinksValue(sharingList(api.get("share-links")).list("links").count { it.text("state") == "ACTIVE" }) }
+            try { sharedLinks = settingsSharedLinksValue(sharingLinks(api).count { it.text("state") == "ACTIVE" }) }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
         launch {

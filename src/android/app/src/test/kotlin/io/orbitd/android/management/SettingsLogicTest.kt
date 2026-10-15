@@ -90,6 +90,41 @@ class SettingsLogicTest {
         assertEquals("Sep 30", ShareCopy.shortDate("2026-09-30T23:00:00Z", ZoneOffset.UTC))
     }
 
+    /** A wiki space's link (iOS 2ba6765d9, SharePanelTests / SharedLinksList): its own path, the kinds the list asks for, the
+     * word "Wiki" and no status, and its two layers — Documents always, Footnotes off until it is turned on, its risk said
+     * only then. */
+    @Test fun aWikiLinkIsSharedAndListedAsIosSaysIt() {
+        assertEquals("wiki/spaces/w1/share", sharingPath("WIKI", "w1"))
+        assertEquals("SESSION,TASK,PROJECT,WIKI", sharingKinds.joinToString(","))
+        assertEquals("Share wiki", ShareCopy.title("WIKI"))
+        assertEquals("Share wiki", io.orbitd.android.taskprojects.SharePanelCopy.title(io.orbitd.android.taskprojects.ShareRootKind.WIKI))
+        assertEquals("Anyone with the link can view — no sign-in. They can’t change anything.", ShareCopy.publicDetail("WIKI"))
+        assertEquals("Wiki", ShareCopy.kindWord("WIKI"))
+        fun link(state: String, reason: String? = null) = buildJsonObject {
+            put("kind", "WIKI"); put("state", state); reason?.let { put("stateReason", it) }; put("revokedAt", "2026-10-07T12:00:00Z")
+            put("root", buildJsonObject { put("id", "w1"); put("title", "orbit"); put("slug", "orbit") })
+        }
+        assertEquals("A wiki has no status", "Wiki", ShareCopy.whereLine(link("ACTIVE")))
+        assertTrue(ShareCopy.whereLine(link("ENDED", "TURNED_OFF")).startsWith("Wiki · Turned off "))
+
+        val counts = buildJsonObject { put("documents", 12); put("footnotes", 486) }
+        val off = ShareCopy.layers("WIKI", buildJsonObject { put("footnotes", false) }, counts)
+        assertEquals(listOf("Documents", "Footnotes"), off.map { it.name })
+        assertEquals(listOf("12 documents", "486 footnotes"), off.map { it.count })
+        assertEquals(listOf(null, "footnotes"), off.map { it.key })
+        assertEquals(listOf(true, false), off.map { it.on })
+        assertEquals("Documents is always included", listOf(false, true), off.map { it.editable })
+        assertEquals(listOf(false, false), off.map { it.warns })
+        assertEquals(listOf(false, false), off.map { it.nested })
+        assertEquals("The wiki’s home and every document written so far", off[0].detail)
+        assertEquals("The quotes and code each sentence cites, with file paths and lines. Can include command output and file contents.", off[1].detail)
+        val on = ShareCopy.layers("WIKI", buildJsonObject { put("footnotes", true) }, counts)
+        assertEquals(listOf(true, true), on.map { it.on })
+        assertEquals(listOf(false, true), on.map { it.warns })
+        assertEquals("1 document", ShareCopy.layers("WIKI", JsonObject(emptyMap()), buildJsonObject { put("documents", 1) })[0].count)
+        assertEquals("No count before the read", listOf(null, null), ShareCopy.layers("WIKI", JsonObject(emptyMap()), null).map { it.count })
+    }
+
     /** The API keys list (board 1 ③④): under each key's default model, every engine it runs on — the server's `engines`, its default
      * first — a Claude subscription token saying why Claude Code is its only one; the keys of one vendor together, a Harness key's
      * with DeepSeek's. A key's page says what turning it off stops (board 2). */
