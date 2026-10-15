@@ -2,10 +2,11 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
 /**
  * Which door a request came in through (docs/personal-access-token-design.md §6.1): a login — the
- * JWT the Web and App sign in for — or one of the user's personal access tokens.
+ * JWT the Web and App sign in for — or one of the user's personal access tokens. A login names its
+ * login session (docs/push-login-session-design.md) unless its JWT was signed before sessions.
  */
 export type AuthCredential =
-  | { kind: 'LOGIN' }
+  | { kind: 'LOGIN'; loginSessionId?: string }
   | { kind: 'PAT'; tokenId: string; scopes: string[]; workspaceIds: string[] };
 
 export interface AuthUser {

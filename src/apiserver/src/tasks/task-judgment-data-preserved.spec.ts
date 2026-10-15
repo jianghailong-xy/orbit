@@ -2276,7 +2276,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // The session-delete, Trash-purge, task-delete and promotion paths it unblocks are asserted
       // in `session-delete-integration-job.pg.spec.ts` and
       // `promotion-delete-integration-job.pg.spec.ts`.
-      '0424_integration_job_session_and_promotion_history_refs'],
+      '0424_integration_job_session_and_promotion_history_refs',
+      // A push registration ends with the login session that made it (0425,
+      // `docs/push-login-session-design.md`): one nullable UUID column with no default and no
+      // constraint on `refresh_token` and on `device_token` (`login_session_id`), catalog-only, and
+      // one CREATE INDEX on `refresh_token`(`login_session_id`). Only those two tables are named: no
+      // `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions, and no function, trigger, type or constraint is created, replaced or
+      // dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every
+      // stored token and registration reads NULL.
+      '0425_login_session_push_binding'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

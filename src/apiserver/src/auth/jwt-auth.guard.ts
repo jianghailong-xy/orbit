@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PUBLIC_ID_FIELDS, toUuid } from '@orbit/shared';
-import type { AuthUser } from '../common/current-user.decorator';
+import type { AuthCredential, AuthUser } from '../common/current-user.decorator';
 import { visitorAddress } from '../shared/public-surface.guard';
 import { ALLOW_QUERY_TOKEN } from './allow-query-token.decorator';
 import { DisabledAccounts } from './disabled-accounts';
@@ -101,7 +101,7 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     }
 
-    let payload: { sub: string; email: string };
+    let payload: { sub: string; email: string; sid?: string };
     try {
       payload = await this.jwt.verifyAsync(token);
     } catch {
@@ -110,7 +110,9 @@ export class JwtAuthGuard implements CanActivate {
     // A disabled account's access token is a 401, not ACCOUNT_DISABLED (§5.5): the client answers it
     // by refreshing, the refresh is refused 403 ACCOUNT_DISABLED, and the client signs out on that.
     if (this.disabled?.has(payload.sub)) throw new UnauthorizedException('account disabled');
-    const user: AuthUser = { userId: payload.sub, email: payload.email, credential: { kind: 'LOGIN' } };
+    // The login session is read from the token, not looked up: an access token outlives its session.
+    const credential: AuthCredential = { kind: 'LOGIN', ...(payload.sid ? { loginSessionId: payload.sid } : {}) };
+    const user: AuthUser = { userId: payload.sub, email: payload.email, credential };
     req.user = user;
     return true;
   }
