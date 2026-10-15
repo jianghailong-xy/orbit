@@ -25,7 +25,8 @@ import org.robolectric.annotation.Config
  * progress card at each of its four moments, pressed there, and the merges already made among the sessions, each opening its receipt
  * — and the coordinator conversation keeps one line per moment, opening the same review and the same receipt. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [29], application = ProjectShellApplication::class, qualifiers = "w411dp-h891dp")
+// Taller than a phone: with the landing card (A11-11) the page's cards and its timeline no longer all compose at 891 dp.
+@Config(sdk = [29], application = ProjectShellApplication::class, qualifiers = "w411dp-h1400dp")
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ProjectMergeShellTest {
     @get:Rule(order = 0)
@@ -54,7 +55,8 @@ class ProjectMergeShellTest {
         ProjectShell.promotion = candidate("READY"); ProjectShell.criteria = criteria
         openPage()
         await { exists(hasTestTag("project-merge-card:asking")) }
-        assertEquals(listOf("progress", "merge", "coordinator"), pageOrder())
+        // The task landing on the project branch is its own card, between the progress card and the merge card (A11-11).
+        assertEquals(listOf("progress", "landing", "merge", "coordinator"), pageOrder())
         title("Merge into main?")
         inCard("Needs you"); inCard("project/launch · 7 commits ahead of main"); inCard("4 tasks · 10 files")
         assertEquals(listOf("Fix D1", "Logs off by default", "P6 end to end"), texts("project-merge-card:task"))
@@ -96,14 +98,21 @@ class ProjectMergeShellTest {
         compose.onNodeWithTag("project-merge-card:asking").assertExists()
     }
 
-    /** Before anything is asked, the merge check's live line is the card — grey — and no longer the progress card's. */
+    /** Before anything is asked, the merge check's live line is the card — grey — wearing the timeline's "Merged into main" row (iOS
+     * 3b23aa163): the ring, the word, the live clock at the right and the state under it; and it is not a landing card. */
     @Test fun theMergeCheckRunningIsTheCardsLineNotTheProgressCards() {
         ProjectShell.mergeCheck = true
         openPage()
         await { exists(hasTestTag("project-merge-card:checking")) }
-        await { exists(hasText("Merge check", substring = true) and hasAnyAncestor(hasTestTag("landing-row")) and
-            hasAnyAncestor(hasTestTag("project-merge-card:checking")), unmerged = true) }
-        compose.onAllNodes(hasTestTag("landing-row") and hasAnyAncestor(hasTestTag("project-sessions-progress"))).assertCountEquals(0)
+        val head = hasAnyAncestor(hasTestTag("project-merge-card:checking"))
+        await { exists(hasTestTag("landing-head:title") and hasText("Merge check") and head, unmerged = true) }
+        compose.onNode(hasTestTag("landing-head:detail") and hasText("checking · updated just now") and head, useUnmergedTree = true).assertExists()
+        // The live clock at the right: the check started seven minutes before the read, in minutes and seconds.
+        compose.onNode(hasTestTag("landing-head:right") and head, useUnmergedTree = true).assert(SemanticsMatcher("a live clock near 7m") { node ->
+            node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text?.matches(Regex("[67]m \\d{1,2}s")) == true })
+        compose.onNode(hasTestTag("landing-ring:running") and head, useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithTag("landing-card").assertCountEquals(0)
+        compose.onAllNodes(hasTestTag("landing-head") and hasAnyAncestor(hasTestTag("project-sessions-progress"))).assertCountEquals(0)
     }
 
     /** B while its job runs: the step it reached, the job's live line in the card, and a Cancel that goes dead at the push. */
@@ -137,6 +146,48 @@ class ProjectMergeShellTest {
         compose.onNodeWithTag("project-merge-card:coordinator").performClick()
         await { ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}") }
     }
+
+    /** iOS befc9694c: a blocked candidate says who is in front of it when the project's own line is busy — the landing on its branch, and
+     * the server's sentence about what holds THAT one — on the card and in the review its Details opens, off the page's landing read. */
+    @Test fun theBlockedCardAndItsReviewSayWhatTheMergeIsBehind() {
+        ProjectShell.promotion = candidate("BLOCKED", conflicts = """["src/a.go"]""")
+        ProjectShell.landTasks = landTasks()
+        openPage()
+        await { exists(hasTestTag("project-merge-card:blocked-by")) }
+        compose.onNodeWithTag("project-merge-card:blocked-by").assert(hasText("Blocked by: $behind"))
+        compose.onNodeWithTag("project-merge-card:details").performClick()
+        await { exists(hasTestTag("project-merge-review:blocked-by")) }
+        listOf("Blocked by", behind).forEach { line ->
+            compose.onNode(hasText(line) and hasAnyAncestor(hasTestTag("project-merge-review:blocked-by")), useUnmergedTree = true).assertExists()
+        }
+        compose.onNodeWithTag("project-merge-review:close").performClick()
+        // A line doing nothing on the candidate's branches names nothing.
+        ProjectShell.landTasks = landTasks(target = "refs/heads/orbit/elsewhere")
+        await { !exists(hasTestTag("project-merge-card:blocked-by")) }
+        compose.onNodeWithTag("project-merge-card:why").assert(hasText("1 file conflict with main: src/a.go"))
+    }
+
+    /** The coordinator conversation's review of the same blocked candidate says it too: its session read reads the project's line while
+     * the candidate is blocked (the coordinator's decision for A11-11, one more read of projects/:id/integration). */
+    @Test fun theConversationsReviewOfABlockedCandidateSaysWhatItIsBehind() {
+        ProjectShell.promotion = candidate("BLOCKED", conflicts = """["src/a.go"]""")
+        ProjectShell.landTasks = landTasks()
+        openPage()
+        await { exists(hasText("Coordinate launch") and hasClickAction()) }
+        compose.onNode(hasText("Coordinate launch") and hasClickAction()).performClick()
+        await { exists(hasTestTag("promotion:pr-1:preview"), unmerged = true) }
+        compose.onNodeWithTag("promotion:pr-1:preview").performClick()
+        await { exists(hasTestTag("card-review")) && exists(hasTestTag("promotion:pr-1:blocked-by")) }
+        listOf("Blocked by", behind).forEach { line ->
+            compose.onNode(hasText(line) and hasAnyAncestor(hasTestTag("promotion:pr-1:blocked-by")), useUnmergedTree = true).assertExists()
+        }
+    }
+
+    private val behind = "“Sync the project line with main” is landing on the project line · queued · " +
+        "Waiting to land: the landing of “Fix the 11 Swift failures” is running on this branch first"
+    private fun landTasks(target: String = "refs/heads/project/launch") = """[{"taskId":"t9","taskTitle":"Sync the project line with main",
+        "integration":{"state":"PENDING_INTEGRATION","landTask":{"jobId":"job-9","state":"QUEUED","phase":null,"targetRef":"$target",
+        "blockingReason":{"code":"WAITING_SERIAL_SLOT","summary":"Waiting to land: the landing of “Fix the 11 Swift failures” is running on this branch first"}}}}]"""
 
     /** Main's 8297b18a3: a blocked candidate nobody holds does not name the coordinator. */
     @Test fun aBlockedCandidateNobodyHoldsHasNoResolvingPress() {
@@ -242,13 +293,15 @@ class ProjectMergeShellTest {
     }
     private fun texts(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
         .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
-    /** The page's first three blocks, top to bottom. */
+    /** The page's first blocks, top to bottom: the landing card only while one is drawn. */
     private fun pageOrder(): List<String> {
         fun top(matcher: SemanticsMatcher) = compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
         val progress = top(hasTestTag("project-sessions-progress"))!!
+        val landing = top(hasTestTag("landing-card"))
         val merge = top(hasTestTagPrefix("project-merge-card:asking"))!!
         val coordinator = top(hasText("Coordinator") and hasAnyAncestor(hasTestTag("project-sessions")))!!
-        return listOf("progress" to progress, "merge" to merge, "coordinator" to coordinator).sortedBy { it.second }.map { it.first }
+        return listOfNotNull("progress" to progress, landing?.let { "landing" to it }, "merge" to merge, "coordinator" to coordinator)
+            .sortedBy { it.second }.map { it.first }
     }
     /** The timeline under the coordinator: section titles, members, and MERGE for a merge's row. */
     private fun timeline(): List<String> = compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions-list")) or hasTestTagPrefix("project-merge-row:"))

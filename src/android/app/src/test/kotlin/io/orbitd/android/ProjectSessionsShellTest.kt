@@ -68,9 +68,10 @@ class ProjectSessionsShellTest {
         assertTrue(ProjectShell.calls.any { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}" })
         assertEquals(listOf("Coordinator", "Coordinate launch", "Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), pageLines())
         compose.onNode(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")).assertExists()
-        // A task landing on the project branch is the progress card's landing row.
-        await { exists(hasTestTag("landing-row")) }
-        compose.onNode(hasTestTag("landing-row") and hasText("Landing · Wire the page", substring = true)).assertExists()
+        // A task landing on the project branch is a card of its own under the progress card (A11-11), no longer a row of it.
+        await { exists(hasTestTag("landing-card")) }
+        compose.onNode(hasTestTag("landing-card:what") and hasText("Wire the page"), useUnmergedTree = true).assertExists()
+        compose.onAllNodes(hasTestTag("landing-card") and hasAnyAncestor(hasTestTag("project-sessions-progress"))).assertCountEquals(0)
         // No page search and no New session on the page.
         compose.onAllNodes(hasText("Search sessions") and hasAnyAncestor(hasTestTag("project-sessions"))).assertCountEquals(0)
         compose.onAllNodes(hasText("New session") and hasAnyAncestor(hasTestTag("project-sessions"))).assertCountEquals(0)
@@ -78,6 +79,56 @@ class ProjectSessionsShellTest {
         await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
         compose.onAllNodesWithTag("project-sessions").assertCountEquals(0)
     }
+
+    /** A11-11 (iOS 749d995c5, owner decision 2026-10-11): the landing in flight is a card of its own under the progress card, in the
+     * merged line's anatomy — the ring turning, "Landing", the live clock, the state and the freshness under it — then the task, and
+     * the sentence that takes the reader off the hook. From a server that lists no jobs its press opens the project's page. */
+    @Test fun theLandingInFlightIsACardOfItsOwnUnderTheProgressCard() {
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("landing-card")) }
+        val progress = compose.onNodeWithTag("project-sessions-progress").fetchSemanticsNode().boundsInRoot
+        val card = compose.onNodeWithTag("landing-card").fetchSemanticsNode().boundsInRoot
+        assertTrue("the card is under the progress card: $progress / $card", card.top >= progress.bottom)
+        compose.onNode(hasTestTag("landing-head:title") and hasText("Landing"), useUnmergedTree = true).assertExists()
+        compose.onNode(hasTestTag("landing-head:detail") and hasText("checking · updated just now"), useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("landing-ring:running", useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("Nothing to do — it lands on its own.") and hasAnyAncestor(hasTestTag("landing-card")), useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("landing-card:body").performClick()
+        await { exists(hasTestTag("project-detail")) }
+    }
+
+    /** A11-13: both start sheets of this page draw the plan by the card's rule — the task graph while it fits at 0.7, the levels and a
+     * "Task graph" press otherwise — off the dependency graph they read as they open. */
+    @Test fun theCoordinatorsStartSheetListsAWidePlanByLevelWithTheTaskGraphAPressAway() {
+        ProjectShell.started = false; ProjectShell.startRequest = true
+        ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server", "c" to "C · Web", "d" to "D · Android"), listOf("a" to "b", "a" to "c", "a" to "d"))
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-review-start")) }
+        compose.onNodeWithTag("project-sessions-review-start").performClick()
+        await { exists(hasTestTag("project-start-request-task-graph")) }
+        compose.onNodeWithTag("project-start-request-plan-graph").assertDoesNotExist()
+        compose.onNodeWithTag("project-start-request-level:2").assertExists()
+        compose.onNodeWithTag("project-start-request-task-graph").performScrollTo().performClick()
+        await { exists(hasTestTag("project-graph-fullscreen")) }
+    }
+
+    @Test fun theOwnersStartSheetDrawsAPlanThatFitsAsTheTaskGraph() {
+        ProjectShell.started = false
+        ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-start-own")) }
+        compose.onNodeWithTag("project-sessions-start-own").performClick()
+        await { exists(hasTestTag("project-start-plan-graph")) }
+        compose.onNodeWithTag("project-start-task-graph").assertDoesNotExist()
+        compose.onNode(hasText("PLAN · 2 TASKS") and hasAnyAncestor(hasTestTag("project-start-sheet"))).assertExists()
+    }
+
+    private fun graph(tasks: List<Pair<String, String>>, edges: List<Pair<String, String>>) = """{"marks":[${tasks.joinToString(",") { (id, title) ->
+        """{"kind":"TASK","id":"$id","taskId":"$id","title":"$title","status":"OPEN","completionCriterion":"EVIDENCE_JUDGMENT","autoRunWhenReady":true}""" }}],
+        "edges":[${edges.joinToString(",") { (s, t) -> """{"sourceMarkId":"$s","targetMarkId":"$t"}""" }}],"taskCount":${tasks.size},"truncated":false}"""
 
     @Test fun theRowsMenuOpensTheSessionItSpeaksForItsSessionsAndItsProject() {
         signIn(); openAlpha()

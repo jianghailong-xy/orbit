@@ -42,6 +42,8 @@ class RealtimeStoreTest {
         var project = false
         /** The server's own null: a 200 with no body, as `promotions/current` answers for a project asking nothing. */
         var emptyPromotion = false
+        /** `promotions/current` answering a candidate in this state instead. */
+        var promotionState: String? = null
         /** The project document's `startedAt` as raw JSON — `null` for a project nobody has started — or no document of its own. */
         var projectStartedAt: String? = null
         /** How `projects/p1/integration` answers. */
@@ -87,6 +89,8 @@ class RealtimeStoreTest {
                     response("""{"id":"${path.last()}","status":"RUNNING"${if (project) ",\"taskId\":\"t1\",\"projectId\":\"p1\"" else ""}}""")
                 }
                 emptyPromotion && path.takeLast(2) == listOf("promotions", "current") -> ApiResponse(200, ByteArray(0))
+                promotionState != null && path.takeLast(2) == listOf("promotions", "current") ->
+                    response("""{"promotionId":"pr-1","state":"$promotionState","sourceRef":"refs/heads/project/p1","upstreamRef":"refs/heads/main"}""")
                 projectStartedAt != null && path == listOf("projects", "p1") -> response("""{"id":"p1","startedAt":$projectStartedAt}""")
                 path == listOf("projects", "p1", "integration") -> if (integrationStatus != 200) ApiResponse(integrationStatus, "{}".encodeToByteArray())
                     else response("""{"repository":"acme/payments-api","upstreamRef":null,"lastMainBranch":{"branch":"master"}}""")
@@ -179,6 +183,26 @@ class RealtimeStoreTest {
         assertTrue(store.state.value.session!!.fresh)
         assertNull(store.state.value.session!!.snapshot!!.standing["integration"])
         assertFalse(rig.reads.any { it.api.path == listOf("projects", "p1", "integration") })
+    }
+
+    /** A started project's conversation reads its line while its merge candidate is BLOCKED (A11-11, iOS befc9694c): the review names
+     * the landing in front of the candidate off it. A candidate in any other state reads nothing more (below). */
+    @Test fun aBlockedCandidatesConversationReadsTheLineItIsBehind() = runTest {
+        val rig = Rig(this)
+        rig.project = true; rig.pending = false; rig.projectStartedAt = "\"2026-10-10T00:00:00Z\""; rig.promotionState = "BLOCKED"
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.session!!.fresh)
+        assertTrue(rig.reads.any { it.api.path == listOf("projects", "p1", "integration") })
+        assertTrue(store.state.value.session!!.snapshot!!.standing["integration"] is kotlinx.serialization.json.JsonObject)
+    }
+
+    @Test fun aCandidateThatIsNotBlockedReadsNoLine() = runTest {
+        val rig = Rig(this)
+        rig.project = true; rig.pending = false; rig.projectStartedAt = "\"2026-10-10T00:00:00Z\""; rig.promotionState = "READY"
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.session!!.fresh)
+        assertFalse(rig.reads.any { it.api.path == listOf("projects", "p1", "integration") })
+        assertNull(store.state.value.session!!.snapshot!!.standing["integration"])
     }
 
     /** A read of it that fails costs the conversation nothing: the snapshot is fresh without it, and the card draws no row. */

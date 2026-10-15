@@ -37,9 +37,26 @@ enum class Glyph { DISC, TRIANGLE, SQUARE, HOURGLASS, CHECK, CROSS, SLASH, SPINN
 enum class TagTone { NEUTRAL, BRAND, WARNING, DANGER, SUCCESS, VERIFICATION }
 data class OverviewCell(val key: String, val label: String, val value: Int, val footnote: String, val glyph: Glyph)
 /** `timedOut`: the server judged the job's runner silent past its limit — the row says so in the warning ink, a triangle where
- * the ring was, and nothing spins. */
+ * the ring was, and nothing spins. `wait`: what a claimed job waited for a runner before its clock began, "2m 24s". */
 data class LandingLine(val word: String, val what: String?, val running: Boolean, val state: String, val clock: String, val clockLabel: String, val updated: String?,
-    val timedOut: Boolean = false)
+    val wait: String? = null, val timedOut: Boolean = false) {
+    /** The head's two slots ([ProjectPage.landingHead]), from this line's own facts. */
+    val head: LandingHead get() = ProjectPage.landingHead(state, timedOut, clockLabel, clock, wait, updated)
+}
+/** The two slots under a landing head's title (iOS 3b23aa163, board docs/mocks/project-merge-check-row): `right` is the live clock —
+ * or, for a job with no clock left that moves, its state — and `detail` the one line under the title: the state, the wait and the
+ * freshness, "checking · waited 1m 20s · updated just now". */
+data class LandingHead(val right: String, val isClock: Boolean, val detail: String)
+/** The landing in flight as a card of its own (iOS 749d995c5, docs/mocks/project-landing-card): the landing line's head, then what is
+ * landing — one task's title, or a row per job — the branch the lead job lands on, and where a timed-out runner stopped. */
+data class LandingCard(val word: String, val title: String, val state: String, val running: Boolean, val timedOut: Boolean, val what: String?,
+    val jobs: List<Job>, val target: String?, val clock: String, val clockLabel: String, val wait: String?, val updated: String?, val detail: String?,
+    val retryJobId: String?) {
+    /** One job in flight, as the card's body draws it: its task's title (null for a job that lands no task) and its own state. */
+    data class Job(val jobId: String, val taskId: String?, val title: String?, val state: String, val running: Boolean, val timedOut: Boolean,
+        val retryable: Boolean, val detail: String?)
+    val head: LandingHead get() = ProjectPage.landingHead(state, timedOut, clockLabel, clock, wait, updated)
+}
 /** One job of the list the landing row opens, drawn as the row itself: `taskId` is what a press opens, `detail` what a timed-out or
  * retried job adds under it, and Retry is offered on the server's `retryable`, never inferred from `timedOut`. */
 data class LandingJobLine(val jobId: String, val taskId: String?, val line: LandingLine, val detail: String?, val retryable: Boolean)
@@ -112,6 +129,20 @@ object ProjectPage {
     const val landingMayHaveBeenPushed = "may have been pushed"
     const val landingRetriedByOwner = "retried by you"
     const val landingRetriedByCoordinator = "retried by the coordinator"
+    // The card's own three (iOS 749d995c5): the branch the work lands on, the sentence that takes the reader off the hook while it
+    // lands, and the way into the jobs from the card that also offers Retry.
+    const val landingOnto = "onto"
+    const val landingNothingToDo = "Nothing to do — it lands on its own."
+    const val landingAllJobs = "All jobs"
+    /** "waited 1m 20s": the wait as a clause of the head's one line (iOS 3b23aa163). */
+    const val landingWaited = "waited"
+    /** The state of a job whose runner has stopped reporting (iOS befc9694c): a fact about the REPORTS — never "timed out", which is
+     * the job's own verdict and the server's to word, and never "Update unavailable", which is this app failing to read the server. */
+    const val landingNoReport = "No report"
+    /** The same fact with its age, in the line's freshness slot: "No report for 11m". */
+    fun landingNoReportFor(minutes: Int) = "$landingNoReportFor ${minutes}m"
+    /** …and for a claimed job whose runner has never reported at all. */
+    const val landingNoReportYet = "No report yet"
     /** Minutes and seconds always: this number is watched while it moves. */
     fun landingClock(seconds: Double): String { val whole = max(0.0, seconds).toInt(); return "${whole / 60}m ${whole % 60}s" }
     /** The name slot when more than one job is in flight: "2 jobs", or "2 jobs · 1 timed out". */
@@ -126,9 +157,11 @@ object ProjectPage {
     /** Every job the two counts count, in `inFlight`'s order; null from a server that does not list them — which is not none in flight. */
     fun inFlightJobs(view: JsonObject): List<JsonObject>? = (view["inFlightJobs"] as? JsonArray)?.takeIf { jobs -> jobs.all { it is JsonObject } }?.map { it as JsonObject }
 
-    /** The landing in flight, or null when nothing is (`landingLine`). A server that lists its jobs judges a silent runner itself, so
-     * the row no longer guesses from the heartbeat's age: "Update unavailable" is then only this app unable to read the server, and a
-     * job the server judged timed out says so. An older server keeps the row as it was. */
+    /** The landing in flight, or null when nothing is (`landingLine`). "Update unavailable" is only ever this app unable to read the
+     * server — its last read failed or is more than 90 s old — and it outranks what the last read said. A server that lists its jobs
+     * judges a silent runner itself, and a job it judged timed out says so. An older server leaves the reading of the reports here: a
+     * claimed job whose runner has said nothing since the claim lease reads "No report" (iOS befc9694c), its clock frozen at the last
+     * report. A claimed job also says what it waited for a runner before its clock began (`inFlight.waitMs`). */
     fun landingLine(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean): LandingLine? {
         val inFlight = view.obj("inFlight") ?: return null
         val running = inFlight.text("state") == "RUNNING"
@@ -136,15 +169,50 @@ object ProjectPage {
         val listed = inFlightJobs(view)
         val timedOutJobs = listed?.count { it.flag("timedOut") } ?: 0
         val heartbeatAt = inFlight.text("heartbeatAt")?.let(ProjectTime::parse)
-        val heartbeatStale = listed == null && running && heartbeatAt?.let { seconds(it, now) > 600 } == true
-        val unavailable = cannotRead(now, updatedAt, refreshFailed) || heartbeatStale
+        // No report at all, or none since the claim lease the server itself uses — read only where the server gives no verdict of its own.
+        val silent = listed == null && running && (heartbeatAt?.let { seconds(it, now) > 600 } ?: true)
+        val unavailable = cannotRead(now, updatedAt, refreshFailed)
         val main = mainOf(view)
         val word = jobWords(main)[inFlight.text("kind")] ?: "Integration"
         val what = if (jobs > 1) landingJobsCount(jobs, timedOutJobs) else inFlight.text("taskTitle")
+        // Only a claimed job has a wait to show: a queued job's whole clock is that wait, which "Queued for" says.
+        val wait = if (running) inFlight.number("waitMs")?.takeIf { it > 0 }?.let { landingClock(it / 1000.0) } else null
         val lead = listed?.firstOrNull()
-        if (!unavailable && lead != null && lead.flag("timedOut")) return timedOutLine(lead, word, what, now)
-        return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main)
+        if (!unavailable && lead != null && lead.flag("timedOut")) return timedOutLine(lead, word, what, now, wait)
+        return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main,
+            silent, wait)
     }
+
+    /** The head's two slots (iOS `landingHead`): the clock at the right, and under the title the state, the wait and the freshness —
+     * the freshness's capital folded away, as the line reads as one sentence. A timed-out job has no clock that moves, so its state
+     * takes the right slot and its line measures the silence against its limit; an older server's "No report" is said once. */
+    fun landingHead(state: String, timedOut: Boolean, clockLabel: String, clock: String, wait: String?, updated: String?): LandingHead {
+        if (timedOut) return LandingHead(state, false, listOfNotNull("$clockLabel $clock", updated).joinToString(" · "))
+        if (state == landingNoReport) return LandingHead(clock, true, updated ?: state)
+        return LandingHead(clock, true, listOfNotNull(state, wait?.let { "$landingWaited $it" }, updated?.replaceFirstChar { it.lowercase() }).joinToString(" · "))
+    }
+
+    /** The card, or null when nothing is landing (iOS `landingCard`). Its head is the landing line's; what it adds — the several jobs,
+     * the branch the lead job lands on, where a timed-out lead's runner stopped and whether a Retry takes it — is read off the same
+     * integration read, so the card can never say what the line could not. */
+    fun landingCard(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean, zone: ZoneId = ZoneId.systemDefault()): LandingCard? {
+        val line = landingLine(view, now, updatedAt, refreshFailed) ?: return null
+        val jobs = landingJobLines(view, now, updatedAt, refreshFailed, zone).map { job ->
+            LandingCard.Job(job.jobId, job.taskId, job.line.what, job.line.state, job.line.running, job.line.timedOut, job.retryable, job.detail)
+        }
+        // The line's own rule for the name slot, one row down: several jobs are a count in the head and a row each in the body.
+        val several = view.n("integratingCount") + view.n("queuedCount") > 1
+        val lead = jobs.firstOrNull()
+        return LandingCard(line.word, if (several) listOfNotNull(line.word, line.what).joinToString(" ") else line.word, line.state, line.running,
+            line.timedOut, if (several) null else line.what, jobs, lead?.let { landingTarget(view, it.jobId) }, line.clock, line.clockLabel, line.wait,
+            line.updated, if (line.timedOut) lead?.detail else null, lead?.takeIf { it.retryable }?.jobId)
+    }
+
+    /** The branch a job lands on, short, off the project's own landings (`landTasks[].integration.landTask`) — the task page's Target
+     * row. Null when the job is not one of them (a merge, a merge check, a server that lists none) or names no branch. */
+    private fun landingTarget(view: JsonObject, jobId: String): String? = view.objects("landTasks")
+        .firstNotNullOfOrNull { landing -> landing.obj("integration")?.obj("landTask")?.takeIf { it.text("jobId") == jobId } }
+        ?.text("targetRef")?.takeIf { it.isNotEmpty() }?.let(PromotionCards::shortRef)
 
     /** Every job in flight, one line each in `inFlightJobs`' order; none from a server that does not list them. Each is the landing row's
      * own rendering of that job, its task's title in the name slot, on the row's terms: this app unable to read the server first, then
@@ -164,22 +232,28 @@ object ProjectPage {
     /** Whether this app has lost the server: its last read failed, or is more than 90 s old. */
     private fun cannotRead(now: Instant, updatedAt: Instant?, refreshFailed: Boolean) = refreshFailed || updatedAt?.let { seconds(it, now) > 90 } == true
 
-    /** A job running or waiting its turn. `unavailable` freezes the clock at the last update the app had and stops the row claiming activity. */
+    /** A job running or waiting its turn. `unavailable` freezes the clock at the last update the app had and stops the row claiming
+     * activity; `silent` freezes it at the last REPORT instead — the same freeze, reached from the runner's silence rather than this
+     * app's read — and the freshness slot then says where the reports stand rather than a false "Updated". */
     private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
-        updatedAt: Instant?, unavailable: Boolean, main: String): LandingLine {
+        updatedAt: Instant?, unavailable: Boolean, main: String, silent: Boolean = false, wait: String? = null): LandingLine {
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
-        val lastUpdate = if (running) heartbeatAt?.let(ProjectTime::parse) ?: updatedAt else updatedAt
-        val elapsedAt = if (unavailable) minOf(now, lastUpdate ?: now) else now
+        val reported = heartbeatAt?.let(ProjectTime::parse)
+        val lastUpdate = if (running) reported ?: updatedAt else updatedAt
+        val elapsedAt = if (unavailable || silent) minOf(now, lastUpdate ?: now) else now
         val age = lastUpdate?.let { (max(0.0, seconds(it, now)) / 60).toInt() }
         val elapsed = startedAt?.let(ProjectTime::parse)?.let { seconds(it, elapsedAt) } ?: 0.0
-        return LandingLine(word, what, running && !unavailable, if (unavailable) "Update unavailable" else if (running) phaseWords(main)[phase] ?: "running" else "queued",
-            landingClock(elapsed), if (running) "Elapsed" else "Queued for", age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" })
+        val report = if (silent) (if (reported != null) age?.let { landingNoReportFor(it) } else null) ?: landingNoReportYet
+            else age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" }
+        val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
+        return LandingLine(word, what, running && !unavailable && !silent, state, landingClock(elapsed), if (running) "Elapsed" else "Queued for", report, wait)
     }
 
     /** A job the server judged timed out: how long its runner has said nothing, in whole minutes, against the limit it went past. */
-    private fun timedOutLine(job: JsonObject, word: String, what: String?, now: Instant): LandingLine {
+    private fun timedOutLine(job: JsonObject, word: String, what: String?, now: Instant, wait: String? = null): LandingLine {
         val minutes = (job.text("heartbeatAt") ?: job.text("startedAt"))?.let(ProjectTime::parse)?.let { max(0, (seconds(it, now) / 60).toInt()) } ?: 0
-        return LandingLine(word, what, false, landingTimedOut, "${minutes}m", landingNoReportFor, landingLimit(job.number("limitSeconds") ?: 600), timedOut = true)
+        return LandingLine(word, what, false, landingTimedOut, "${minutes}m", landingNoReportFor, landingLimit(job.number("limitSeconds") ?: 600), wait,
+            timedOut = true)
     }
 
     /** The line under a job: what a timed-out job's runner did, or which generation a retried job is and who asked for it. Whether a
@@ -654,6 +728,8 @@ object StartProjectCopy {
     const val plan = "Plan"
     const val howItRuns = "How it runs"
     const val viewTasks = "View tasks ›"
+    /** Beside it, while the plan is listed by level: the project page's task graph, full screen. */
+    const val taskGraph = "Task graph"
     const val action = "Start the project"
     const val nobodyAsked = "Nobody asked yet"
     const val noCoordinatorYet = "no coordinator yet"
@@ -826,6 +902,22 @@ object StartProjectCopy {
                 task.completionCriterion == "OWNER_CONFIRMED")
         }
         return levels.filter { it.isNotEmpty() }
+    }
+    /** The shrink below which the card lists the plan by level rather than drawing it (iOS `planGraphMinFit`, the browser's
+     * `MIN_FIT_ZOOM`; docs/mocks/start-card-web-width, board 02). */
+    const val planGraphMinFit = 0.7
+    /** The plan drawn as the project page's task graph: its layout, the edges it routes and the shrink it is drawn at. */
+    data class PlanGraph(val layout: ProjectGraphLayout.Layout, val edges: List<GraphEdge>, val scale: Double)
+    /** The plan as the task graph, top to bottom, for a card [availableWidth] dp wide (iOS `planGraph`) — or null, and the card lists
+     * the plan by level with the graph one press away, when the whole of it would have to shrink below [planGraphMinFit], or the read
+     * folded or cut the plan short: those marks stand for more tasks than a picture shows. */
+    fun planGraph(graph: DependencyGraph?, availableWidth: Double): PlanGraph? {
+        if (graph == null || availableWidth <= 0 || graph.truncated || graph.marks.any { it.kind != MarkKind.TASK }) return null
+        val (marks, edges) = ProjectGraphLayout.prepare(graph, emptySet())
+        if (marks.isEmpty()) return null
+        val layout = ProjectGraphLayout.layout(marks, edges, ProjectGraphLayout.Direction.TOP_TO_BOTTOM, availableWidth)
+        val scale = layout.fit(availableWidth)
+        return if (scale >= planGraphMinFit) PlanGraph(layout, edges, scale) else null
     }
     /** The plan as the card reads it: `levels` null when the graph came back folded (a plan too big to list). */
     data class PlanView(val count: Int, val levels: List<List<LevelTask>>?, val ownerConfirmed: List<NamedTask> = emptyList(),
