@@ -264,10 +264,12 @@ class CardsDeviceTest {
             capture("$mode-owner-round-$round")
             if (round == 1) { press(send); await("Request accepted"); compose.onNodeWithTag(send).assertIsNotEnabled() }
         }
+        // The owner's own ending asks for its reason in place, and its confirm waits for one (A08-17).
+        val confirm = "item:x1:mark-handled-confirm"
         press(resolve)
-        compose.onNodeWithTag(resolve).assertIsNotEnabled()
+        compose.onNodeWithTag(confirm).assertIsNotEnabled()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Reviewed the second assignment")
-        press(resolve); await("Request accepted")
+        press(confirm); await("Request accepted")
         val stats = http("/__stats")
         assertEquals(before + 3, stats.objects("journal").size)
         assertFalse(stats.flag("pending")); assertEquals("RESOLVED", stats.obj("final")?.text("state"))

@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.cards.BackgroundWakeLine
 import io.orbitd.android.cards.QueuedFoot
 import io.orbitd.android.cards.TranscriptCardView
+import io.orbitd.android.cards.WatchWakeLine
 import io.orbitd.android.cards.dashedBorder
 import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.objects
@@ -26,7 +27,7 @@ import kotlinx.serialization.json.*
  * card, not the blocks they are delivered with. A steer and a turn the server has not named yet take no Cancel.
  */
 internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val event: RunEvent, val cards: List<InteractionCard>,
-    val wake: JsonObject?) {
+    val wake: JsonObject?, val watch: JsonObject? = null) {
     val cancelable: Boolean get() = turnId != null && !steer
     val key: String get() = "queued:" + (turnId?.let { ObjectId.canonical(it) ?: it } ?: event.fields.text("text").hashCode().toString())
 }
@@ -56,7 +57,9 @@ internal fun queuedTail(rows: List<JsonObject>, events: List<RunEvent>): List<Qu
             if (row.text("kind") == "steer") put("steer", true)
         }
         val event = RunEvent("user", 0, payload, turnId)
-        QueuedTurn(turnId, row.text("kind") == "steer", event, transcriptCards(event), io.orbitd.android.core.cards.queuedWake(content))
+        val cards = transcriptCards(event)
+        QueuedTurn(turnId, row.text("kind") == "steer", event, cards, io.orbitd.android.core.cards.queuedWake(content),
+            cards.firstOrNull { it.key.endsWith(":watch") }?.source)
     }
 }
 
@@ -70,6 +73,8 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
         when {
             turn.wake != null -> BackgroundWakeLine(turn.wake, null, steerState = if (turn.steer) "Sending…" else null, queued = turn.cancelable,
                 onCancelQueued = withdraw)
+            // A watch's wake waiting for a runner (A08-14): its line, dashed, and the queue's own line, which asks before it withdraws.
+            turn.watch != null -> WatchWakeLine(turn.watch, null, open, queued = turn.cancelable, onWithdraw = withdraw)
             turn.cards.any { it.key.contains(":reply:") } -> {
                 // A session's reply: its reply cards, solid, and one queue line under them all.
                 turn.cards.forEach { TranscriptCardView(it, open, turn.event) }

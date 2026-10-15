@@ -21,7 +21,6 @@ import io.orbitd.android.text.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.*
-import java.util.UUID
 
 /** The same component and commands can be embedded in Tasks/Projects and Wiki when routed there. [review] draws it as a review's
  * page (A08-2; iOS `ApprovalReviewLayout`'s review path): its words scroll, its buttons stay pinned under them, and its heading is
@@ -56,7 +55,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             }
             put("title", editTitle.trim()); put("summary", editSummary.trim())
         }, reason = reason)
-    fun send(verb: CardVerb) { submit(verb, if (verb == CardVerb.RETRY_TASK) input.copy(triggerId = UUID.randomUUID().toString()) else input) }
+    fun send(verb: CardVerb) = submit(verb, input)
     val body: @Composable ColumnScope.() -> Unit = {
         // A revision waiting for the coordinator says when it was submitted, beside its title (`CoordinatorQueue`).
         val submitted = card.source.text("submittedAt")?.takeIf { card.family == CardFamily.COORDINATOR_QUEUE || CoordinatorQueue.isDecidingMyself(card) }
@@ -114,9 +113,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         }
         if (noteAction != null) {
             Text(noteAction!!.label, style = MaterialTheme.typography.labelMedium)
-            if (noteAction == CardVerb.MARK_HANDLED) Text("The task, its branch and history stay where they are. Your reason records why this item is no longer open.")
-            OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), enabled = enabled,
-                label = { Text(if (noteAction == CardVerb.MARK_HANDLED) "Why is it no longer open?" else "Say what to do instead…") })
+            OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Say what to do instead…") })
             TextButton(onClick = { noteAction = null }, enabled = enabled) { Text("Back") }
         }
     }
@@ -128,9 +125,9 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         // Reopen task is pressed in the review's box (iOS `OwnerConfirmationReviewBarView`), not among the card's buttons.
         card.actions.filter { it != CardVerb.REOPEN_TASK }.forEach { verb ->
-            val requiresNote = verb in setOf(CardVerb.SEND_BACK, CardVerb.CHAT, CardVerb.MARK_HANDLED)
+            val requiresNote = verb in setOf(CardVerb.SEND_BACK, CardVerb.CHAT)
             // Decide it myself sends nothing: it opens the waiting revision's decision here (`CoordinatorQueue.decideMyself`).
-            val valid = verb == CardVerb.DECIDE_MYSELF || runCatching { CardRequests.build(card, verb, input.copy(triggerId = "validation")) }.isSuccess
+            val valid = verb == CardVerb.DECIDE_MYSELF || runCatching { CardRequests.build(card, verb, input) }.isSuccess
             val label = if (verb == CardVerb.REMEMBER) {
                 val rules = ApprovalRules.remember(card.source.text("toolName") ?: "", card.source.obj("input") ?: JsonObject(emptyMap()))
                 "Allow & remember " + rules.joinToString(", ") { it.ruleContent?.removeSuffix(":*") ?: it.toolName }
@@ -141,7 +138,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             OutlinedButton(onClick = {
                 when {
                     requiresNote && noteAction != verb -> noteAction = verb
-                    verb in setOf(CardVerb.CANCEL_TASK, CardVerb.CONFIRM_MERGE, CardVerb.WIKI_REVERT, CardVerb.WATCH_CANCEL) -> confirming = verb
+                    verb in setOf(CardVerb.CONFIRM_MERGE, CardVerb.WIKI_REVERT, CardVerb.WATCH_CANCEL) -> confirming = verb
                     else -> send(verb)
                 }
             }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${card.key}:${verb.name}"),
@@ -165,7 +162,6 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             // The task panel's own question (`TaskReopen`): a receipt's reopen is a second place to press the one door.
             CardVerb.REOPEN_TASK -> TaskReopen.paragraphs(buildJsonObject { (card.context.obj("view")?.text("projectId"))?.let { put("projectId", it) } })
                 .joinToString("\n\n")
-            CardVerb.CANCEL_TASK -> "This ends the task's attempt and closes its exceptions. Its branch and history remain."
             CardVerb.CONFIRM_MERGE -> "Merge the displayed source revision into ${card.source.text("upstreamRef")}. The server checks this exact revision again."
             CardVerb.WIKI_REVERT -> "Take back the changes shown in this run's revert plan."
             else -> "Stop this watch. It will no longer wait for its condition."

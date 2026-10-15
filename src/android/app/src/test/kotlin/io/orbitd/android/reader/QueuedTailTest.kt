@@ -36,6 +36,18 @@ class QueuedTailTest {
         assertNull(turn.wake)
     }
 
+    /** A08-14: a watch's wake waiting for a runner is the watch's line, read off its own content, and it can be withdrawn. */
+    @Test fun aQueuedWatchWakeIsItsLine() {
+        val wake = "Orbit Watch w1 matched at generation 1: ALL TASK_DONE 1/1\nThis turn was queued by the watch, not typed by a person.\n" +
+            "```json\n{\"watchId\":\"w1\",\"changedTargets\":[{\"kind\":\"TASK\",\"id\":\"t-1\",\"observed\":{\"status\":\"DONE\"}}]}\n```"
+        val turn = queuedTail(rows("""[{"turnId":"t9","kind":"message","content":${JsonPrimitive(wake)},"attachments":[]}]"""), emptyList()).single()
+        assertEquals("w1", turn.watch?.text("watchId"))
+        assertEquals("MATCHED", turn.watch?.text("state"))
+        assertNull("not a background job's wake", turn.wake)
+        assertTrue(turn.cancelable)
+        assertNull(queuedTail(rows("""[{"turnId":"t8","kind":"message","content":"just words","attachments":[]}]"""), emptyList()).single().watch)
+    }
+
     @Test fun aQueuedTaskStartIsItsCard() {
         val turn = queuedTail(rows("""[{"turnId":"t2","kind":"message","content":"the brief","attachments":[],"taskStart":$taskStart,
             "authoredByOrbit":true}]"""), emptyList()).single()
