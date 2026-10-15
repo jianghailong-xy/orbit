@@ -89,6 +89,14 @@ public enum StickySummary {
         }
         return (yourQuestion, text)
     }
+
+    /// The label as the iPhone draws it, in a capsule between the nav bar's back and menu buttons
+    /// (`ConsoleView.stickyQuestion`): the arrow alone over the person's own words — the capsule has
+    /// no room to say whose they are, and needs none — and a card's title as it stands over anything
+    /// else, so the capsule can't pass a card off as something the reader typed.
+    public static func compactLabel(_ label: String) -> String {
+        label == yourQuestion ? arrow.trimmingCharacters(in: .whitespaces) : label
+    }
 }
 
 /// Which turn the sticky bar names for each place the reader can be, read off the items once.
