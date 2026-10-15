@@ -16,6 +16,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.navigation.Destination
+import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.taskprojects.SharePanel
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
@@ -31,7 +33,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The pool page and the share panel over the controlled server: what they say after a failed read, and what they offer each role. */
+/** The pool page, Infrastructure's machines and the share panel over the controlled server: what they say after a failed read, and what
+ * they offer each role. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class)
 class ManagementPanelTest {
@@ -55,7 +58,7 @@ class ManagementPanelTest {
     }
     private fun pool(record: String) {
         val api = api()
-        compose.setContent { ProviderManagement(api, revision, record, {}, {}) }
+        compose.setContent { InfrastructureSettings(api, revision, record, {}, {}) }
     }
     private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun reread() { revision++; compose.waitForIdle() }
@@ -111,24 +114,29 @@ class ManagementPanelTest {
         compose.onNode(hasText("Leave pool") and hasClickAction()).performScrollTo().assertIsNotEnabled()
     }
 
-    /** Settings → Providers' two footers say what the web's redesigned page says (iOS d3441c702, A13-13). */
-    @Test fun theProvidersFootersSayWhatTheWebSaysNow() {
+    /** Infrastructure's footers say what the web's page says (iOS 33e0e2e09): the machines' line and the keys' replace the Providers
+     * page's, whose "On your runners" section is gone with it (A13-17). */
+    @Test fun infrastructuresFootersSayWhatTheWebSaysNow() {
         val api = api()
-        compose.setContent { ProviderManagement(api, revision, null, {}, {}) }
+        compose.setContent { InfrastructureSettings(api, revision, null, {}, {}) }
         await("Account pools")
-        compose.onNodeWithText("Use subscriptions signed in on your machines.").assertExists()
+        compose.onNodeWithText("Subscriptions signed in here are spent only by sessions on that machine.").performScrollTo()
         compose.onNodeWithText("Several accounts under one name.").assertExists()
-        compose.onAllNodesWithText("nothing to paste", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("On your account and usable from every machine — billed per token. Adding or changing a key happens on the web.").assertExists()
+        listOf("On your runners", "Use subscriptions signed in on your machines.", "Your API keys", "nothing to paste").forEach {
+            compose.onAllNodesWithText(it, substring = true).assertCountEquals(0)
+        }
     }
 
     /** No Edit mode (iOS 91316c246, A13-11): a row is dragged by its handle at any time, and the order goes out once. */
     @Test fun aRunnerIsMovedByDraggingItsHandleWithNoEditMode() {
         fixture.secondRunner = true
         val api = api()
-        compose.setContent { RunnersList(api, revision) {} }
+        compose.setContent { InfrastructureSettings(api, revision, null, {}, {}) }
         await("Spare box")
         compose.onAllNodes(hasText("Edit") and hasClickAction()).assertCountEquals(0)
-        compose.onNodeWithTag("runner-handle:${fixture.RUNNER}").performTouchInput {
+        // The machines sit under what needs you and what each engine runs on: the handle is brought on screen first.
+        compose.onNodeWithTag("runner-handle:${fixture.RUNNER}").performScrollTo().performTouchInput {
             down(center)
             repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, 20f)) }
             up()
@@ -144,8 +152,8 @@ class ManagementPanelTest {
     @Test fun aRunnerRowOpensMovesForTalkBackAndRemovesFromItsMenu() {
         fixture.secondRunner = true
         val api = api()
-        val opened = mutableListOf<String>()
-        compose.setContent { RunnersList(api, revision) { opened += it } }
+        val opened = mutableListOf<OrbitRoute>()
+        compose.setContent { InfrastructureSettings(api, revision, null, { opened += it }, {}) }
         await("Spare box")
         compose.onNode(hasText("Old alias") and hasClickAction()).assert(hasCustomAction("Move down")).assert(!hasCustomAction("Move up"))
         compose.onNode(hasText("Spare box") and hasClickAction()).assert(hasCustomAction("Move up")).assert(!hasCustomAction("Move down"))
@@ -153,15 +161,15 @@ class ManagementPanelTest {
             .first { it.label == "Move down" }
         compose.runOnIdle { down.action() }
         compose.waitUntil(60_000) { fixture.runnerOrder == listOf(fixture.RUNNER_TWO, fixture.RUNNER) }
-        compose.onNode(hasText("Spare box") and hasClickAction()).performClick()
-        compose.runOnIdle { assertEquals(listOf(fixture.RUNNER_TWO), opened) }
-        compose.onNodeWithContentDescription("More for Spare box").performClick()
+        compose.onNode(hasText("Spare box") and hasClickAction()).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.RUNNER, fixture.RUNNER_TWO)), opened) }
+        compose.onNodeWithContentDescription("More for Spare box").performScrollTo().performClick()
         compose.onNode(hasText("Remove…") and hasClickAction()).performClick()
         compose.onNodeWithText("Remove “Spare box”?").assertExists()
         compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         compose.waitForIdle()
         assertTrue("Cancel removes nothing", fixture.removedRunners.isEmpty())
-        compose.onNodeWithContentDescription("More for Spare box").performClick()
+        compose.onNodeWithContentDescription("More for Spare box").performScrollTo().performClick()
         compose.onNode(hasText("Remove…") and hasClickAction()).performClick()
         compose.onNode(hasText(RunnerCopy.REMOVE) and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         compose.waitUntil(60_000) { fixture.removedRunners == setOf(fixture.RUNNER_TWO) }
@@ -262,14 +270,14 @@ class ManagementPanelTest {
                 when (page) {
                     "links" -> SharingSettings(api, revision)
                     "share" -> ShareResourcePanel(api, revision, "SESSION", fixture.SESSION)
-                    else -> ProviderManagement(api, revision, null, {}, {})
+                    else -> InfrastructureSettings(api, revision, null, {}, {})
                 }
             }
         }
         val broken = mutableListOf<String>()
         await("Turn off"); listOf("Copy Link", "Share Link…", "Turn off").forEach { broken += lines(it) }
         page = "share"; await("Tool calls and output"); listOf("Copy Link", "Share Link…").forEach { broken += lines(it) }
-        page = "providers"; await("SHARED"); broken += lines("SHARED")
+        page = "infrastructure"; await("SHARED"); broken += lines("SHARED")
         assertEquals("Broken across lines at 200%", emptyList<String>(), broken)
     }
 
@@ -295,19 +303,19 @@ class ManagementPanelTest {
         fixture.secondRunner = true
         val api = api()
         var round by mutableStateOf(0)
-        compose.setContent { key(round) { RunnersList(api, revision) {} } }
+        compose.setContent { key(round) { InfrastructureSettings(api, revision, null, {}, {}) } }
         val names = mapOf(fixture.RUNNER to "Old alias", fixture.RUNNER_TWO to "Spare box")
         for (order in listOf(listOf(fixture.RUNNER, fixture.RUNNER_TWO), listOf(fixture.RUNNER_TWO, fixture.RUNNER))) {
             fixture.runnerOrder = order; fixture.removedRunners = emptySet()
             round++
             val next = order[1]
             await(names.getValue(next)); compose.waitForIdle()
-            compose.onNodeWithContentDescription("More for ${names.getValue(order[0])}").performClick()
+            compose.onNodeWithContentDescription("More for ${names.getValue(order[0])}").performScrollTo().performClick()
             compose.onNode(hasText("Remove…") and hasClickAction()).performClick()
             compose.onNode(hasText(RunnerCopy.REMOVE) and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
             compose.waitUntil(60_000) { fixture.removedRunners.size == 1 && compose.onAllNodes(hasTestTag("runner-handle:", substring = true)).fetchSemanticsNodes().size == 1 }
             compose.waitForIdle()
-            compose.onNodeWithTag("runner-handle:$next").performTouchInput {
+            compose.onNodeWithTag("runner-handle:$next").performScrollTo().performTouchInput {
                 down(center)
                 repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, 20f)) }
                 up()

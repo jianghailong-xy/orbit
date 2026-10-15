@@ -28,7 +28,7 @@ import java.net.URI
 import java.util.Locale
 
 /**
- * The DeepSeek account balance behind one of the account's own DeepSeek keys, as Settings → Providers and the key's page draw it —
+ * The DeepSeek account balance behind one of the account's own DeepSeek keys, as Infrastructure's API keys and the key's page draw it —
  * OrbitKit DeepSeekBalance (web DeepSeekBalance.tsx and lib/deepseekBalance.ts). The server asks DeepSeek with the stored key, which
  * never reaches this client, and answers with the balance of the whole account, not what Orbit or a session spent.
  *
@@ -50,7 +50,7 @@ internal object DeepSeekBalance {
     const val BALANCE = "Balance"
     const val UNKNOWN = "Unknown"
     const val CHECKING = "Checking balance…"
-    /** A DeepSeek key's row on Settings → Providers when there is no balance to put at its end. */
+    /** A DeepSeek key's row on Infrastructure when there is no balance to put at its end. */
     const val UNAVAILABLE = "Unavailable"
     const val FAILED_TITLE = "Couldn't get the balance"
     const val LOW_TITLE = "Balance too low — DeepSeek calls will fail"
@@ -83,8 +83,8 @@ internal object DeepSeekBalance {
         return host.lowercase(Locale.ROOT) == "api.deepseek.com"
     }
 
-    /** The account's own DeepSeek key a row of Settings → Providers stands for. The key list is the pickers' catalogue (GET
-     * providers), which carries no id or endpoint, so the row is matched by slug among the account's own providers. */
+    /** The account's own DeepSeek key a row of Infrastructure's API keys stands for: matched by slug among the account's own providers
+     * (GET providers/mine), which carry its id and endpoint. */
     fun key(row: JsonObject, mine: List<JsonObject>): JsonObject? =
         mine.firstOrNull { it.str("slug") == row.str("slug") && !it.str("id").isNullOrEmpty() && applies(it) }
 

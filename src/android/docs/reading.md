@@ -81,11 +81,13 @@ reading/cache APIs; auth, wire DTOs, the unified destination and A07/A08 interfa
   Success/completed, absent subtype, authoritative status and already explained outcomes do not
   add that notice. A page starting mid-turn does not infer that an off-page reply was missing.
 - Authenticated attachment and same-session legacy artifact images use the existing API. Other
-  HTTPS images use a separate client with no auth or redirects. Images are sampled to at most
-  1440×2560 within a fixed preview area to avoid late layout shifts; a dialog allows zoom/pan.
-  File links use Android's document destination chooser. Images/downloads are bounded to the
-  server's 25 MiB upload limit; opt-in full-event responses are bounded to 40 MiB. These bounds
-  do not alter default REST/auth requests.
+  HTTP and HTTPS images, from any host as on iOS (the account owner's decision of 2026-10-15,
+  card 34g6JcZwpKTUcwc5WvuVx), use a separate client with no auth. Unlike iOS, that client
+  follows no redirects, and an address carrying credentials is refused. Images are sampled to at
+  most 1440×2560 within a fixed preview area to avoid late layout shifts; a dialog allows
+  zoom/pan. File links use Android's document destination chooser. Images/downloads are bounded
+  to the server's 25 MiB upload limit; opt-in full-event responses are bounded to 40 MiB. These
+  bounds do not alter default REST/auth requests.
 
 Compatibility observation for A01: web also accepts old `payload.images`; the referenced iOS
 reducer uses `attachments` and does not establish that legacy format as a confirmed iOS requirement.

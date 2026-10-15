@@ -136,9 +136,6 @@ class PoolLogicTest {
         assertEquals("0 of 1 available", ProviderPools.poolSummary(claude, now))
         assertEquals("5h", ProviderPools.compactWindowLabel("5-hour limit"))
         assertEquals("Weekly", ProviderPools.compactWindowLabel("Weekly · all models"))
-        assertEquals("Offline · 1 of 3 signed in", ProviderPools.runnerSummary(buildJsonObject {
-            put("online", false); put("engines", buildJsonArray { add(buildJsonObject { put("engine", "claude"); put("auth", "yes") }) })
-        }))
     }
 
     @Test fun ownPoolWithPeopleNamesTheNextForYouAndItsKeys() {
