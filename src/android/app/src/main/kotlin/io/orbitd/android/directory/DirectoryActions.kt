@@ -49,7 +49,7 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
     // went (A05-4), so their requests run in the app's scope rather than this dialog's.
     val app = LocalContext.current.applicationContext as OrbitApplication
     val changed by rememberUpdatedState(onChanged)
-    val actions = remember(api) { SessionActions(api, app.processScope) { changed() } }
+    val actions = remember(api) { SessionActions(api, app) { changed() } }
     var draft by remember { mutableStateOf(when (dialog) {
         is DirectoryDialog.Rename -> dialog.session.title.orEmpty()
         is DirectoryDialog.EditFolder -> dialog.folder.name
