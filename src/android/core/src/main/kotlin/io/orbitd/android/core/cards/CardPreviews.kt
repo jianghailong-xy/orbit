@@ -231,7 +231,7 @@ object CardPreviews {
                 val count = response.number("criteriaCount") ?: card.context.objects("acceptanceCriteriaItems").size
                 val seal = response.text("criteriaDigest") ?: card.source.obj("startRequest")?.text("criteriaDigest")
                 CardRecord(decisionRecorded, CardRecord.Icon.CHECK, byYou("Started", response.text("startedAt")),
-                    seal?.let { "On $count criteria at seal ${shortSeal(it)}" })
+                    seal?.let { "On ${criteriaCount(count)} at seal ${shortSeal(it)}" })
             }
             CardFamily.ACCEPTANCE -> {
                 val version = response.obj("currentVersion")
@@ -239,7 +239,7 @@ object CardPreviews {
                 // What changed is the card's as it was asked: once confirmed, the server has nothing changed left to say.
                 val changes = changesLine(card.source.obj("changesSinceConfirmed")?.takeIf { card.source.text("state") == "STALE" })
                 CardRecord(decisionRecorded, CardRecord.Icon.CHECK, byYou("Confirmed", response.obj("confirmation")?.text("confirmedAt")),
-                    "$count criteria at seal ${shortSeal(version?.text("digest") ?: card.binding)}" + (changes?.let { " — $it" } ?: ""))
+                    "${criteriaCount(count)} at seal ${shortSeal(version?.text("digest") ?: card.binding)}" + (changes?.let { " — $it" } ?: ""))
             }
             // The criteria decision ("Weaken this ruler?"): its two answers, and the seals the server says they left.
             else -> {
@@ -252,11 +252,14 @@ object CardPreviews {
         }
     }
 
-    /** "1 new, 1 stricter": what moved since the criteria were last confirmed, by kind. */
+    /** "1 new, 1 stricter": what moved since the criteria were last confirmed, by kind (OrbitKit `CriteriaChanges.summary`). */
     private fun changesLine(changes: JsonObject?): String? = changes?.let { moved ->
-        listOf("added" to "new", "stricter" to "stricter", "revised" to "revised")
+        listOf("added" to "new", "stricter" to "stricter", "revised" to "changed", "removed" to "removed")
             .mapNotNull { (key, word) -> moved.objects(key).size.takeIf { it > 0 }?.let { "$it $word" } }.joinToString(", ").ifEmpty { null }
     }
+
+    /** "1 criterion", "3 criteria" (OrbitKit `ReviewRecords`). */
+    private fun criteriaCount(count: Int) = "$count ${if (count == 1) "criterion" else "criteria"}"
 
     /** A seal as the cards name it (`StartProjectCopy.shortSeal`, OrbitKit `CriteriaDecisions.shortSeal`). */
     private fun shortSeal(seal: String) = if (seal.isEmpty()) "(unreadable)" else seal.take(12)

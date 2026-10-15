@@ -143,7 +143,7 @@ class CardPreviewsTest {
             "seal1:plan1", listOf(CardVerb.START), context = document)
         assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Started by you · 14:06", "On 3 criteria at seal a1b2c3d4e5f6"),
             record(start, CardVerb.START, buildJsonObject { put("startedAt", "2026-10-04T14:06:00.000Z"); put("criteriaDigest", "a1b2c3d4e5f6a7b8"); put("criteriaCount", 3) }))
-        assertEquals("without an answer to read, the card's own seal and count", "On 1 criteria at seal seal1", record(start, CardVerb.START).detail)
+        assertEquals("without an answer to read, the card's own seal and count", "On 1 criterion at seal seal1", record(start, CardVerb.START).detail)
         val acceptance = cards.single { it.key.startsWith("acceptance:") }
         val confirmed = buildJsonObject {
             put("state", "CONFIRMED")
