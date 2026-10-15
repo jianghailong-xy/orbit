@@ -874,6 +874,9 @@ final class AppModel {
         linkCards?.removeAll()
         linkCards = nil
         managedRunner?.reset()
+        #if os(iOS)
+        disablePush()   // reads the access token, so before the store is cleared below
+        #endif
         // Best-effort server-side revoke of the refresh token before we drop it locally. Capture the
         // token by value and hand it to the async call so clearing the store below can't race the read.
         if let baseURL, let api, let refreshToken = tokenStore.refreshToken(for: baseURL) {

@@ -145,9 +145,14 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("push/register", body: req)
     }
 
-    /// Drop this device's token (e.g. on sign-out) so it stops receiving pushes.
-    public func unregisterDeviceToken(token: String) async throws {
-        _ = try await postRaw("push/unregister", body: ["token": token])
+    /// Drop this device's token on sign-out so it stops receiving pushes. Best-effort; like
+    /// `revokeRefreshToken` it takes its credential — the signed-out session's access token —
+    /// explicitly, so the caller can clear local storage at once. A 401 is not refreshed: by then the
+    /// store may hold the next sign-in's session, whose registration this must not touch.
+    public func unregisterDeviceToken(token: String, accessToken: String) async {
+        guard var req = try? makeRequest("push/unregister", method: "POST", body: ["token": token]) else { return }
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        _ = try? await rawResponse(req, cancellationAware: false)
     }
 
     // MARK: admin (role-gated; non-admins get 403)
