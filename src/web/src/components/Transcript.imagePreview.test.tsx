@@ -193,6 +193,25 @@ describe('the viewer', () => {
     expect(shown()).toBe('blob:local-wide');
     expect(position()).toBeNull();
   });
+
+  it('opens an image attachment link as a preview instead of downloading it', async () => {
+    await draw([{
+      seq: 1,
+      type: 'assistant',
+      turnId: 't1',
+      ts: at,
+      payload: { text: 'Screenshot: [01-skill-test.png](orbit-attachment:linked "01-skill-test.png")' },
+    }]);
+    const chip = container.querySelector<HTMLButtonElement>('button.chat-file')!;
+    expect(chip.getAttribute('title')).toBe('Preview 01-skill-test.png');
+    expect(resolver).not.toHaveBeenCalled();
+
+    await click(chip);
+    expect(chip.dataset.previewState).toBe('loading');
+    await land('linked');
+    expect(shown()).toBe('blob:linked');
+    expect(document.querySelector<HTMLAnchorElement>('a[download]')).toBeNull();
+  });
 });
 
 describe('the saved HTML file', () => {

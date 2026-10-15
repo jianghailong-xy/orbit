@@ -119,7 +119,7 @@ export const ArtifactResolverContext =
 // signed out: the page's resolver answers for every AppLink and SameOriginLink in the tree.
 export { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
 import Markdown from 'react-markdown';
-import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
+import { orbitLinkRemarkPlugin, targetForReference, targetHref, type OrbitLinkRef } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { dshRepair, type DshRepair } from '../lib/dshRuntime';
@@ -2785,6 +2785,74 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   );
 }
 
+// An image linked as an attachment in a reply stays a compact filename chip, but opens the same
+// full-screen viewer as an inline image. Fetch only on click: a reply may list many screenshots,
+// and none of their bytes are needed until the reader chooses one.
+function AttachmentImageLink({ id, name }: { id: string; name: string }) {
+  const resolve = useContext(AttachmentResolverContext);
+  const exp = useContext(ExportCtx);
+  const [url, setUrl] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const alive = useRef(true);
+  const made = useRef<string | null>(null);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (made.current) URL.revokeObjectURL(made.current);
+    };
+  }, []);
+  if (exp) {
+    return (
+      <span className="chat-file" title={name}>
+        <PaperClipOutlined />
+        <span className="chat-file-name">{name}</span>
+      </span>
+    );
+  }
+  const preview = async (): Promise<void> => {
+    if (busy) return;
+    if (url) {
+      setOpen(true);
+      return;
+    }
+    setFailed(false);
+    setBusy(true);
+    try {
+      const objUrl = await resolveFileObjectUrl(resolve, id);
+      if (!alive.current) {
+        URL.revokeObjectURL(objUrl);
+        return;
+      }
+      made.current = objUrl;
+      setUrl(objUrl);
+      setOpen(true);
+    } catch {
+      if (alive.current) setFailed(true);
+    } finally {
+      if (alive.current) setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className={`chat-file${failed ? ' is-error' : ''}`}
+        onClick={preview}
+        title={failed ? `Retry preview ${name}` : `Preview ${name}`}
+        aria-label={failed ? `Retry preview ${name}` : `Preview ${name}`}
+        data-preview-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+      >
+        {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
+        <span className="chat-file-name">{name}</span>
+      </button>
+      {url && <ImagePreview open={open} onClose={() => setOpen(false)} items={[{ src: url, alt: name }]} />}
+    </>
+  );
+}
+
 // A user-sent image: click to open the full-screen preview (zoom/rotate, ESC to close).
 // The displayed src is already the full-resolution image (just CSS-constrained to 220px),
 // so the lightbox shows it at native size with no extra fetch. The hover mask is the
@@ -2920,6 +2988,7 @@ function attachmentIdFromSrc(src: unknown): string | null {
 function transcriptUrlTransform(url: string): string {
   const trimmed = url.trim();
   if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX)) return trimmed;
+  if (targetForReference(trimmed)?.kind === 'wiki') return trimmed;
   return referenceUrlTransform(url);
 }
 
@@ -3106,6 +3175,7 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
+    if (name && looksLikeImagePath(name)) return <AttachmentImageLink id={id} name={name} />;
     return <AttachmentFile id={id} name={name} />;
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
@@ -3132,11 +3202,39 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
       </span>
     );
   }
+  if (typeof href === 'string' && targetForReference(href)?.kind === 'wiki') {
+    return (
+      <WikiReferenceLink reference={href} title={title}>
+        {children}
+      </WikiReferenceLink>
+    );
+  }
   // A `#`-reference routes to the thing it names; anything else is an ordinary link.
   return (
     <ReferenceLink {...rest} href={href} title={title}>
       {children}
     </ReferenceLink>
+  );
+}
+
+/** A wiki reference kept inline (for example in a list) still opens its entry once the preview names its space. */
+function WikiReferenceLink({ reference, title, children }: { reference: string; title?: string; children: ReactNode }) {
+  const cards = useContext(OrbitLinkCardsCtx);
+  const link = useMemo<OrbitLinkRef | null>(() => {
+    const target = targetForReference(reference);
+    return target?.kind === 'wiki' ? { target, source: { kind: 'ref', ref: reference } } : null;
+  }, [reference]);
+  useEffect(() => {
+    if (link) cards?.register(link);
+  }, [cards, link]);
+  const preview = link ? cards?.previewFor(link) : undefined;
+  const wiki = preview?.state === 'ok' && preview.kind === 'wiki' ? preview.wiki : undefined;
+  const href = link && wiki ? targetHref(link.target, wiki) : null;
+  if (!href) return <span title={title}>{children}</span>;
+  return (
+    <AppLink className="md-reference" to={href} title={title ?? 'Wiki'}>
+      {children}
+    </AppLink>
   );
 }
 

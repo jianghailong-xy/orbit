@@ -499,6 +499,23 @@ describe('a conversation page', () => {
     });
   });
 
+  it('keeps a wiki reference in a list inline and links it to the entry instead of the current session', async () => {
+    fetchMock = answers();
+    vi.stubGlobal('fetch', fetchMock);
+    await act(async () => {
+      root.render(view([userTurn(`- [A clock never starts agent work](orbit-wiki:${WIKI})`)], 1, queryClient()));
+    });
+    await settle();
+
+    expect(container.querySelectorAll('.orbit-link-card')).toHaveLength(0);
+    expect(container.querySelector('.chat-user a')?.getAttribute('href')).toBe(`/wiki/orbit/e/${WIKI}`);
+    expect(container.querySelector('.chat-user a')?.textContent).toBe('A clock never starts agent work');
+    expect(linkRequests()).toHaveLength(1);
+    expect(JSON.parse(String(linkRequests()[0][1].body))).toEqual({
+      refs: [{ kind: 'wiki', id: decodeId(WIKI) }],
+    });
+  });
+
   it('asks again when the conversation’s own data is re-read, and never on a timer', async () => {
     fetchMock = answers();
     vi.stubGlobal('fetch', fetchMock);
