@@ -19,11 +19,13 @@ import kotlinx.serialization.json.*
 import java.time.Instant
 import java.time.ZoneId
 
+/** [recorded]: drawn in a review as the record this window's press made of it — what the press made past is left out. */
 @Composable
-internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: OwnerForm? = null, reopen: (() -> Unit)? = null) {
+internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: OwnerForm? = null, reopen: (() -> Unit)? = null,
+    recorded: Boolean = false) {
     val row = card.source
     // The owner-confirmation card draws its question, its receipt and a reviewer's return itself (A08-1).
-    if (card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") != null) { OwnerCardBody(card, open, owner, reopen); return }
+    if (card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") != null) { OwnerCardBody(card, open, owner, reopen, recorded); return }
     if (card.key.startsWith("receipt:")) {
         CardFields(row, listOf("title", "decision", "decidedAt", "decidedByType", "note", "report", "review", "answers", "reason", "problems", "resultingSeal"), open)
         return
@@ -84,7 +86,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let { CardFields(it, listOf("refusal", "requiredAction"), open) }
             row.obj("independence")?.takeIf { !it.flag("independent") }?.let { CardFields(it, listOf("disqualification", "requiredAction"), open) }
         }
-        CardFamily.OWNER_CONFIRMATION -> OwnerCardBody(card, open, owner, reopen)
+        CardFamily.OWNER_CONFIRMATION -> OwnerCardBody(card, open, owner, reopen, recorded)
         CardFamily.CRITERIA_CHANGE -> {
             CardFields(row, listOf("filedAt", "baselineSeal", "currentSeal"), open)
             row.obj("diff")?.objects("entries")?.forEach { entry ->
@@ -117,7 +119,8 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             }
             row.obj("currentVersion")?.text("digest")?.let { Text("Seal ${it.take(8)}", style = MaterialTheme.typography.labelMedium) }
             CardFields(row, listOf("changesSinceConfirmed"), open)
-            row.obj("confirmation")?.let { recorded ->
+            // The confirmation before this one is not what its record says.
+            if (!recorded) row.obj("confirmation")?.let { recorded ->
                 Field("Confirmed at", recorded["confirmedAt"], open)
                 DetailFold("confirmed criteria") { CardFields(recorded, listOf("criteriaMaterial", "startedWith"), open) }
             }
