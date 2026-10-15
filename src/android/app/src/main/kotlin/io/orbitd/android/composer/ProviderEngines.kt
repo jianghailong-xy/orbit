@@ -127,6 +127,20 @@ object ProviderEngines {
 
     fun defaultEngineOf(provider: String?, rows: List<JsonObject>): String? = providerEngines(provider, rows).firstOrNull()
 
+    /** A vendor's name, as its keys are called in a sentence: one key runs on several engines, so it is never named after one. */
+    private val KEY_VENDORS = mapOf("anthropic" to "Anthropic", "openai" to "OpenAI", "gemini" to "Google Gemini", "deepseek" to "DeepSeek",
+        "deepseek-harness" to "DeepSeek", "moonshot" to "Moonshot", "glm" to "Z.AI", "minimax" to "MiniMax", "qwen" to "Qwen")
+
+    /** A key as a sentence names it, for the middle of one: `the DeepSeek key “DeepSeek 2”` — its vendor and the name its owner gave
+     * it, never its slug; a custom endpoint is DeepSeek's when DeepSeek Harness runs it (`engines`, which only the server can tell).
+     * OrbitKit `SessionProviderChoices.keyName`, web `keyName`. */
+    fun keyName(row: JsonObject): String {
+        val preset = row.text("presetSlug")
+        val vendor = if (!preset.isNullOrEmpty()) KEY_VENDORS[preset] else KEY_VENDORS["deepseek"]?.takeIf { DSH in row.strings("engines") }
+        val label = row.text("label") ?: row.text("slug").orEmpty()
+        return if (vendor != null) "the $vendor key “$label”" else "the key “$label”"
+    }
+
     /** An account pool read as a provider row: it runs on the engine it was made on and nowhere else — Claude Code for one's own
      * unless it says otherwise, Codex for a shared one ([fallback]) — with that engine's catalogue as its model space. [shared]
      * marks one shared with the account, whose members are keys picked for it rather than its own accounts. */

@@ -690,7 +690,8 @@ class ComposerDeviceTest {
     @Test fun a07cRetryCarriesTheProviderPick() = journey("a07c-retry-provider") {
         login("""{"status":"FAILED"}""")
         appClick("fixture-model"); awaitText("Custom account"); appClick("Custom account")
-        awaitText("Applies when this session resumes.")
+        // What the pick will do, and when (A07-19 (a)): the session has ended, so its next message.
+        awaitText("Your next message uses Custom account.")
         compose.onNodeWithText("Close").performClick()
         compose.onNodeWithText("+").performClick(); awaitText("Retry last failed message"); appClick("Retry last failed message")
         compose.waitUntil(10000) { controls().any { it["action"]?.jsonPrimitive?.content == "retry-message" } }

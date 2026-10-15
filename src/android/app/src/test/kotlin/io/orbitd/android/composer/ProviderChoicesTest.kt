@@ -1,6 +1,7 @@
 package io.orbitd.android.composer
 
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.management.RunnerCopy
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -55,8 +56,29 @@ class ProviderChoicesTest {
         assertEquals(listOf("kimi", "moonshot"), catalog.credentials(catalog.engineOf(obj("""{"provider":"kimi"}"""))).map { it.id })
         assertTrue("a removed key still renders as the session's own", catalog.credentials("claude").none { it.id == "gone" })
         assertEquals("gone" to CredentialKind.KEY, catalog.current("claude", "gone").let { it.id to it.kind })
-        assertTrue("an OpenCode this runner doesn't report runs nothing here", catalog.credentials("opencode").isEmpty())
+        assertEquals("an OpenCode this runner doesn't report is not installed here (A07-15)", listOf(RunnerCopy.NOT_INSTALLED),
+            catalog.credentials("opencode").map { it.unavailable }.distinct())
         assertEquals(EngineCopy.OPENCODE_OWN, catalog.current("opencode", "opencode").label)
+    }
+
+    /** A07-15 (iOS 82d7003fc; SessionProviderChoicesTests.testKeepsOpenCodeListedWithItsReasonUntilTheRunnerReportsItInstalled):
+     * OpenCode — which Orbit installs — is listed whether or not the runner has it. A runner that reports its engines without it, or
+     * with it not installed, has not got it: the row and every key it would spend say "Not installed" and are fixed on OpenCode's
+     * engine page, behind the bare arrow that names no sign-in. A runner that has reported nothing claims nothing. */
+    @Test fun openCodeIsListedWhetherOrNotTheRunnerHasIt() {
+        val providers = list("""[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"]}]""")
+        for (engines in listOf("""[{"engine":"claude","installed":true,"auth":"yes"}]""",
+                """[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"opencode","installed":false}]""")) {
+            val openCode = catalog(engines, providers).engines().single { it.engine == ProviderEngines.OPENCODE }
+            assertEquals("OpenCode", openCode.label)
+            assertEquals(RunnerCopy.NOT_INSTALLED, openCode.unavailable)
+            assertEquals(ProviderEngines.OPENCODE, openCode.fixEngine)
+            assertEquals(listOf("opencode", "deepseek"), openCode.providers.map { it.id })
+            assertTrue(openCode.providers.all { it.unavailable == RunnerCopy.NOT_INSTALLED && it.fixEngine == ProviderEngines.OPENCODE })
+            assertEquals("Not installed →", openCode.unavailable + ProviderChoices.fixSuffix(openCode.fixEngine, openCode.unavailable))
+        }
+        assertNull(ComposerCatalog(obj("""{"id":"r"}"""), providers).engines().single { it.engine == ProviderEngines.OPENCODE }.unavailable)
+        assertNull(catalog("""[{"engine":"opencode","installed":true}]""", providers).credentials("opencode").first().unavailable)
     }
 
     private val deepseek = obj("""{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek"}""")
@@ -129,8 +151,8 @@ class ProviderChoicesTest {
     }
 
     /** Every key the server says OpenCode runs (`engines`, or `runsOnOpenCode` on an older payload) is listed under OpenCode after
-     * its own config, with the key's models; an OpenCode session moves between them, and no key is listed under an OpenCode the
-     * runner doesn't have. */
+     * its own config, with the key's models; an OpenCode session moves between them, and under an OpenCode the runner doesn't have
+     * each waits with it, not installed (A07-15). */
     @Test fun theKeysOpenCodeMaySpendFollowItsOwnConfigWithTheirModels() {
         val providers = list("""[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","runsOnOpenCode":true,
             "models":[{"value":"deepseek-chat","label":"DeepSeek Chat"}]},
@@ -140,8 +162,9 @@ class ProviderChoicesTest {
         assertEquals(listOf(EngineCopy.OPENCODE_OWN, "DeepSeek"), catalog.credentials("opencode").map { it.label })
         assertEquals(listOf("deepseek-chat" to "DeepSeek Chat"),
             catalog.models("opencode", "deepseek").map { it.text("value") to it.text("label") })
-        assertFalse("no key is listed under an OpenCode the runner doesn't have",
-            catalog("""[{"engine":"claude","installed":true,"auth":"yes"}]""", providers).engines().any { it.engine == "opencode" })
+        assertEquals("a key waits with an OpenCode the runner doesn't have", listOf(RunnerCopy.NOT_INSTALLED),
+            catalog("""[{"engine":"claude","installed":true,"auth":"yes"}]""", providers).engines().single { it.engine == "opencode" }
+                .providers.map { it.unavailable }.distinct())
     }
 
     /** A07-4 with A13-3's composer part (iOS d2737d665, cd8e8a41a; GeminiEntryParityTests) under Antigravity CLI: its sign-in is
