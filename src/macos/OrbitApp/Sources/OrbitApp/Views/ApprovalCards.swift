@@ -2943,9 +2943,12 @@ struct StartProjectCard: View {
 
         StartSectionHead(title: StartProject.doneWhenHead(criteria.count))
         criteriaList
-        Text(StartProject.explanation(criteria.count))
-            .font(.orbitLabel).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        // What the start would commit the project to — said before the press, not on its record.
+        if record == nil {
+            Text(StartProject.explanation(criteria.count))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
         if record != nil, let started = recordSettings {
             StartSectionHead(title: StartProject.howItRuns)
             StartPanel {
