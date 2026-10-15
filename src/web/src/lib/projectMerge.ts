@@ -35,6 +35,10 @@ export const DETAILS = 'Details';
 /** B's sentence on the page card, where it stands alone rather than as the `You` row's value. */
 export const PAGE_NOTHING_TO_DO =
   'Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t.';
+/** The checking card's last line when a pass is merged by the project's Automatic setting. */
+export const ON_PASS_MERGES = 'Merges on its own when it passes.';
+/** The checking card's last line when a pass puts the asking card in front of the reader. */
+export const ON_PASS_ASKS = 'Asks you when it passes.';
 
 type Stage = 'asking' | 'merging' | 'merged' | 'blocked';
 
@@ -73,6 +77,20 @@ export function mergeCardShape(
   const at = stage(promotion);
   if (at === 'asking' || at === 'merging' || at === 'blocked') return at;
   return isMergeJob(inFlight) ? 'checking' : null;
+}
+
+/**
+ * What the merge check running now leads to when it passes, under its live line (owner decision
+ * 2026-10-15, from the 2026-10-06 board docs/mocks/project-merge-sessions-page/02-card-states.html):
+ * merged by the project's Automatic setting, or the asking card. The server's answer (`onPass`), as
+ * the project stands; null for a candidate that is not being checked, and from a server that does
+ * not say.
+ */
+export function promotionOnPassLine(promotion: ProjectPromotionView | null | undefined): string | null {
+  if (promotion?.state !== 'CHECKING') return null;
+  if (promotion.onPass === 'MERGE') return ON_PASS_MERGES;
+  if (promotion.onPass === 'ASK') return ON_PASS_ASKS;
+  return null;
 }
 
 /** The card's heading on the sessions view. The branch is the line under it — the view is the

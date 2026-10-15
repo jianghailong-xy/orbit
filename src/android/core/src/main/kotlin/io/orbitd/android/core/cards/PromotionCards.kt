@@ -80,6 +80,10 @@ object PromotionCards {
     const val details = "Details"
     /** B's sentence on the page card, where it stands alone rather than as the `You` row's value. */
     const val pageNothingToDo = "Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t."
+    /** The checking card's last line when the project's Automatic setting merges a candidate that passes: no card will ask. */
+    const val onPassMerges = "Merges on its own when it passes."
+    /** The same line when a candidate that passes becomes the card that asks. */
+    const val onPassAsks = "Asks you when it passes."
 
     /** `refs/heads/x` and `x` are the same branch. */
     fun shortRef(ref: String) = ref.removePrefix("refs/heads/")
@@ -301,6 +305,18 @@ object PromotionCards {
             PromotionStage.MERGED -> title(view)
             PromotionStage.BLOCKED -> "Can’t merge into $into yet"
             null -> supersededTitle
+        }
+    }
+
+    /** The checking card's last line, what a passing check leads to (web's `promotionOnPassLine`, OrbitKit `PromotionCards.onPassLine`;
+     * owner decision 2026-10-15, from the 2026-10-06 board docs/mocks/project-merge-sessions-page/02-card-states.html): the server's
+     * `onPass`, which it says only while the candidate is CHECKING. A server older than `onPass` says nothing, and neither does the card. */
+    fun onPassLine(view: JsonObject?): String? {
+        if (view?.text("state") != "CHECKING") return null
+        return when (view.text("onPass")) {
+            "MERGE" -> onPassMerges
+            "ASK" -> onPassAsks
+            else -> null
         }
     }
 

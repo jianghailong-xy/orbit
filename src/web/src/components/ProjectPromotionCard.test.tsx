@@ -32,6 +32,7 @@ import {
 import { ProjectMergeStrip } from './ProjectMergeStrip';
 import { SHORTCUT_HINT } from './CardHotkey';
 import { CHAT_ABOUT_THIS } from '../lib/coordinatorChat';
+import { ON_PASS_ASKS, ON_PASS_MERGES } from '../lib/projectMerge';
 import { CriteriaDecisionCard, type PendingCriteriaDecisionRow } from './CriteriaDecisionCard';
 import { FROM_ORBIT } from './ProjectProgressStatus';
 
@@ -1101,6 +1102,53 @@ describe('the merge, by the project’s main branch', () => {
     expect(card(merged('master', true))).toContain('✓ Merged into master automatically</span>');
     expect(markup(<ProjectPromotionReceipt promotion={merged('master', true)} now={NOW} />))
       .toContain('✓ Merged into master automatically');
+  });
+});
+
+/**
+ * The merge check on the sessions view, and the line under it that says what a pass leads to (owner
+ * decision 2026-10-15): the Automatic setting's merge, or the asking card — the server's answer.
+ */
+describe('the merge check says what a pass leads to', () => {
+  const checking = (onPass: ProjectPromotionView['onPass']) =>
+    promotion({ state: 'CHECKING', askedAt: null, onPass });
+  function strip(view: ProjectPromotionView): string {
+    const qc = client();
+    qc.setQueryData(['project', PROJECT_ID, 'promotion'], view);
+    qc.setQueryData(['project', PROJECT_ID, 'integration'], {
+      upstreamRef: 'main',
+      integratingCount: 1,
+      queuedCount: 0,
+      inFlight: {
+        taskTitle: null, state: 'RUNNING', kind: 'CHECK_PROMOTION', phase: 'CHECK',
+        startedAt: at(2 * MINUTE), heartbeatAt: at(MINUTE),
+      },
+    });
+    return renderToStaticMarkup(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ProjectMergeStrip projectId={PROJECT_ID} onOpenCoordinator={null} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it('merges on its own when Automatic will, and asks the reader when it will not', () => {
+    const merges = strip(checking('MERGE'));
+    expect(merges).toContain('data-shape="checking"');
+    expect(merges).toContain('Merge check');
+    expect(merges).toContain(ON_PASS_MERGES);
+    expect(merges).not.toContain(ON_PASS_ASKS);
+    const asks = strip(checking('ASK'));
+    expect(asks).toContain(ON_PASS_ASKS);
+    expect(asks).not.toContain(ON_PASS_MERGES);
+  });
+
+  it('draws the check alone for a server that does not say', () => {
+    const silent = strip(checking(undefined));
+    expect(silent).toContain('Merge check');
+    expect(silent).not.toContain(ON_PASS_MERGES);
+    expect(silent).not.toContain(ON_PASS_ASKS);
   });
 });
 

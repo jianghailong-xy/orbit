@@ -745,6 +745,27 @@ public enum PromotionCards {
     /// B's sentence on the page card, where it stands alone rather than as the `You` row's value.
     public static let pageNothingToDo =
         "Nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t."
+    /// The checking card's last line, under the merge job's row, when the project's Automatic
+    /// setting will merge a passing check into main itself — no card asks anything. Web's
+    /// `ON_PASS_MERGES`.
+    public static let onPassMerges = "Merges on its own when it passes."
+    /// The same line when a passing check becomes the orange "Merge into main?" card. Web's
+    /// `ON_PASS_ASKS`.
+    public static let onPassAsks = "Asks you when it passes."
+
+    /// What a passing check leads to, said while the check still runs: the reader learns now whether
+    /// to wait for a question or walk away (owner decision 2026-10-15, on the 2026-10-06 board
+    /// docs/mocks/project-merge-sessions-page/02-card-states.html). Nil unless the candidate is being
+    /// checked and the server said which — a server older than `onPass` says nothing, and neither
+    /// does the card. Web's `promotionOnPassLine`.
+    public static func onPassLine(_ view: ProjectPromotionView?) -> String? {
+        guard let view, view.state == .checking else { return nil }
+        switch view.onPass {
+        case "MERGE": return onPassMerges
+        case "ASK": return onPassAsks
+        default: return nil
+        }
+    }
 
     /// How the conversation's line is drawn: orange only while it waits on the reader, which is
     /// the one state the needs-you bar counts.

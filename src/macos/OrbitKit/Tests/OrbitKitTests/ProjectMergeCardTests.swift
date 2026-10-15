@@ -19,12 +19,13 @@ final class ProjectMergeCardTests: XCTestCase {
     private func candidate(_ state: PromotionState, conflicts: [String] = [], taskIds: [String] = ["t1", "t2"],
                            merged: ProjectPromotionView.Merged? = nil,
                            execution: ProjectPromotionView.Execution? = nil,
-                           files: Int? = 10, commits: Int? = 5) -> ProjectPromotionView {
+                           files: Int? = 10, commits: Int? = 5,
+                           onPass: String? = nil) -> ProjectPromotionView {
         ProjectPromotionView(promotionId: "pr-1", state: state,
                              sourceRef: "refs/heads/project/34ZurCP3bv9yLXGVyUGnx", sourceSha: "5e5bfca23aa1",
                              upstreamRef: "refs/heads/main", commitsAhead: commits, filesChanged: files,
                              taskIds: taskIds, conflicts: conflicts, askedAt: "2026-10-06T03:31:00Z",
-                             merged: merged, execution: execution)
+                             merged: merged, execution: execution, onPass: onPass)
     }
 
     private func merge(_ id: String, at: String, automatic: Bool? = nil) -> PromotionCards.Receipt {
@@ -82,6 +83,33 @@ final class ProjectMergeCardTests: XCTestCase {
         XCTAssertNil(ProjectMergeCard.mergeLandingLine(task, now: now, updatedAt: now))
         // An older server names no kind: the card stays where it always was.
         XCTAssertNotNil(ProjectMergeCard.taskLandingCard(integration(kind: nil), now: now, updatedAt: now))
+    }
+
+    /// The checking card's last line (owner decision 2026-10-15, board
+    /// docs/mocks/project-merge-sessions-page/02-card-states.html): whether a passing check merges on
+    /// its own under the Automatic setting or comes back as the card that asks.
+    func testTheCheckingCardSaysWhatAPassingCheckLeadsTo() {
+        XCTAssertEqual(PromotionCards.onPassLine(candidate(.checking, onPass: "MERGE")),
+                       "Merges on its own when it passes.")
+        XCTAssertEqual(PromotionCards.onPassLine(candidate(.checking, onPass: "ASK")),
+                       "Asks you when it passes.")
+        // A server older than the field, or a word this client does not know, says nothing.
+        XCTAssertNil(PromotionCards.onPassLine(candidate(.checking)))
+        XCTAssertNil(PromotionCards.onPassLine(candidate(.checking, onPass: "LATER")))
+        // Only while the check runs: once it passed, the card is the question itself.
+        XCTAssertNil(PromotionCards.onPassLine(candidate(.ready, onPass: "MERGE")))
+        XCTAssertNil(PromotionCards.onPassLine(nil))
+    }
+
+    func testOnPassIsReadOffTheWireAndAbsentFromAnOlderServer() throws {
+        func decode(_ wire: String) throws -> ProjectPromotionView {
+            try JSONDecoder().decode(ProjectPromotionView.self, from: Data(wire.utf8))
+        }
+        let checking = try decode(#"{"promotionId":"pr","state":"CHECKING","sourceRef":"p","sourceSha":"s","upstreamRef":"main","onPass":"MERGE"}"#)
+        XCTAssertEqual(checking.onPass, "MERGE")
+        XCTAssertEqual(PromotionCards.onPassLine(checking), PromotionCards.onPassMerges)
+        XCTAssertNil(try decode(#"{"promotionId":"pr","state":"CHECKING","sourceRef":"p","sourceSha":"s","upstreamRef":"main"}"#).onPass)
+        XCTAssertNil(try decode(#"{"promotionId":"pr","state":"READY","sourceRef":"p","sourceSha":"s","upstreamRef":"main","onPass":null}"#).onPass)
     }
 
     func testThePageCardSaysWhatIsAskedOfMainWithTheBranchUnderIt() {

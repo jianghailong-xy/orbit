@@ -938,6 +938,14 @@ export interface ProjectPromotionView<Instant = string> {
    * able to say "2m so far" when the platform has neither rather than print a zero it made up.
    */
   recheck: { upstreamMovedBy: number | null; startedAt: Instant; typicalMs: number | null } | null;
+  /**
+   * What the check in flight leads to when it passes (§3.6): `MERGE` when the project's Automatic
+   * setting will merge it into main by itself (§3.3 M-T11), `ASK` when the owner will get the card.
+   * Read as the project stands now, so a project whose Automatic is switched while the check runs
+   * reads the other answer on its next poll. Null on every state but `CHECKING`; absent from a server
+   * older than the field.
+   */
+  onPass?: 'MERGE' | 'ASK' | null;
   /** The active job for this candidate's own confirmed merge, never another project job.
    * Confirmation authorizes a merge; it does not mean a runner has started it. */
   execution?: {
