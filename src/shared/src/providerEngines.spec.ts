@@ -31,6 +31,7 @@ describe('engines', () => {
       antigravity: 'Antigravity CLI',
       opencode: 'OpenCode',
       dsh: 'DeepSeek Harness',
+      cursor: 'Cursor CLI',
     });
     for (const engine of ALL_ENGINES) expect(isEngine(engine)).toBe(true);
     expect(isEngine('deepseek-harness')).toBe(false);

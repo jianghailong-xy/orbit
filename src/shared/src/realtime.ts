@@ -137,7 +137,7 @@ export interface ControlSessionSummary {
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
-   *  `antigravity`, `opencode`, `dsh`); null when it was never recorded and its credential is gone.
+   *  `antigravity`, `opencode`, `dsh`, `cursor`); null when it was never recorded and its credential is gone.
    *  Absent from an older control plane. */
   engine?: string | null;
   agentId: string | null;

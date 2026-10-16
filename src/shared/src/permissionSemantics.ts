@@ -1,5 +1,6 @@
-import { AgentProvider, DSH_PERMISSION_MODES, PermissionMode } from './enums';
+import { AgentProvider, CURSOR_PERMISSION_MODES, DSH_PERMISSION_MODES, PermissionMode } from './enums';
 import { runnerCatalogRow } from './models';
+import { ENGINE_CLI_NAMES } from './providerEngines';
 import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from './dto';
 
 /**
@@ -36,6 +37,11 @@ import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from '.
  *                       sandboxed commands never ask; subagent tools are removed because their
  *                       escalations never reach ACP. Default, Auto and Don't Ask are enforced
  *                       (DSH_PERMISSION_MODES); the rest are refused.
+ *  - CURSOR   partial — measured on 2026.10.14-941492e (docs/cursor-runtime-contract.md §5): an ACP
+ *                       permission request comes for a command not on its allowlist, an MCP tool or a
+ *                       web fetch, and Orbit answers it from the card. A write inside the workspace
+ *                       never asks, in any mode. Accept Edits, Plan, Don't Ask and Bypass are kept
+ *                       (CURSOR_PERMISSION_MODES); Default and Auto are refused.
  *
  * Shared rather than server-only so the composer can describe a session it has not created yet
  * with the same table the server will apply to it. Update it together with the runner; this is
@@ -49,6 +55,7 @@ export function runtimeApprovalSupport(provider: string): ApprovalSupport {
     case AgentProvider.KIMI:
     case AgentProvider.CODEX:
     case AgentProvider.DSH:
+    case AgentProvider.CURSOR:
       return 'partial';
     default:
       return 'none';
@@ -107,6 +114,8 @@ export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  * `on-request` ("the model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode,
  * and Antigravity runs it as `--dangerously-skip-permissions`, on any model it lists.
  * DeepSeek Harness runs it as its workspace-write sandbox, on any model.
+ * Cursor CLI has none Orbit can rely on: its `--auto-review` does nothing over ACP and `--force` lets
+ * everything through, so Auto is refused there (CURSOR_PERMISSION_MODES).
  * Claude alone makes it model-specific, and the assigned runner's catalogue is where that answer
  * comes from — its row lists the modes the CLI that will run the model accepts. Only a model that
  * row does not cover falls back to the static list above. A configured (BYOK) provider's model
@@ -124,6 +133,7 @@ export function autoAvailable(
   customProvider = false,
   modelCatalog?: RunnerModelCatalog | null,
 ): boolean {
+  if (runtime === AgentProvider.CURSOR) return false;
   if (runtime !== AgentProvider.CLAUDE) return true;
   if (customProvider) return true;
   const reported = runnerCatalogRow(runtime, model, modelCatalog)?.permissionModes;
@@ -257,6 +267,66 @@ export function derivePermissionSemantics(
       honored: true,
       note:
         'Files are read-only and every write is refused without asking. ' + beyondFiles('are refused'),
+    };
+  }
+
+  // Cursor CLI over ACP (docs/cursor-runtime-contract.md §5): a write inside the workspace never asks,
+  // whatever the mode; a command off its allowlist, an MCP tool or a web fetch asks. A mode that needs
+  // more than that is refused by API admission. Root is no concern: `--force` runs as root.
+  if (provider === AgentProvider.CURSOR) {
+    const cursor = ENGINE_CLI_NAMES[AgentProvider.CURSOR];
+    const supported = 'use Accept Edits, Plan, Don’t Ask or Bypass.';
+    if (!(CURSOR_PERMISSION_MODES as readonly string[]).includes(mode)) {
+      return {
+        mode,
+        unapproved: 'deny',
+        approvalSupport,
+        honored: false,
+        note:
+          mode === PermissionMode.DEFAULT
+            ? `${cursor} cannot ask before it edits a file: it writes inside the workspace without ` +
+              `asking in every mode. Session configuration is rejected; ${supported}`
+            : mode === PermissionMode.AUTO
+              ? `${cursor} has no Auto that Orbit can enforce: its own review does nothing in the mode ` +
+                `Orbit runs it in. Session configuration is rejected; ${supported}`
+              : `${cursor} does not support this permission mode. Session configuration is rejected; ${supported}`,
+        shortNote: `unsupported on ${cursor}; session configuration is rejected`,
+      };
+    }
+    if (mode === PermissionMode.BYPASS) {
+      return { mode, unapproved: 'allow', approvalSupport, honored: true };
+    }
+    if (mode === PermissionMode.ACCEPT_EDITS) {
+      return {
+        mode,
+        unapproved: 'ask',
+        approvalSupport,
+        honored: true,
+        note:
+          'Edits inside the workspace run without asking. Commands, MCP tools and web fetches ask you ' +
+          `first, except the few ${cursor} allows on its own, such as \`ls\`.`,
+      };
+    }
+    if (mode === PermissionMode.PLAN) {
+      return {
+        mode,
+        unapproved: 'deny',
+        approvalSupport,
+        honored: true,
+        note:
+          `${cursor} plans without writing files, and every command, MCP tool and web fetch it asks ` +
+          'to run is refused without asking.',
+      };
+    }
+    return {
+      mode,
+      unapproved: 'deny',
+      approvalSupport,
+      honored: false,
+      note:
+        `Commands, MCP tools and web fetches that would ask are refused without asking, but ${cursor} ` +
+        'edits files inside the workspace without asking in every mode, so those edits still run.',
+      shortNote: 'partly enforced, edits inside the workspace still run',
     };
   }
 

@@ -35,12 +35,12 @@ import {
 // (ModelProvider) or an account pool — that an engine runs on (docs/provider-engine-contract.md §1.3).
 /** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
  * `providerBuiltin` fences configured `kimi` / `dsh` slugs during rolling
- * deployment; Claude/Codex predate the discriminator, and migrations 0080 and 0367 move any
- * pre-existing custom `opencode` / `antigravity` row (0367: or account pool) aside, so all four
- * remain unambiguous. */
+ * deployment; Claude/Codex predate the discriminator, and migrations 0080, 0367 and 0426 move any
+ * pre-existing custom `opencode` / `antigravity` / `cursor` row (0367: or account pool; 0426: or
+ * retired name) aside, so all five remain unambiguous. */
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
-  if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY) return true;
+  if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY || slug === AgentProvider.CURSOR) return true;
   if (slug === AgentProvider.KIMI || slug === AgentProvider.DSH) return providerBuiltin;
   return false;
 }
@@ -48,8 +48,8 @@ export function isBuiltinProvider(slug?: string | null, providerBuiltin = true):
 /**
  * The engine a built-in provider slug names, or null when the slug needs a lookup (a key, a pool, or a
  * configured identity named `kimi`/`dsh`): docs/provider-engine-contract.md §5.4 steps 1–2. `claude`,
- * `codex`, `opencode` and `antigravity` are unambiguous (isBuiltinProvider); `kimi` and `dsh` are the
- * engine only when the row says it is the built-in one. No provider at all is the column default.
+ * `codex`, `opencode`, `antigravity` and `cursor` are unambiguous (isBuiltinProvider); `kimi` and `dsh`
+ * are the engine only when the row says it is the built-in one. No provider at all is the column default.
  */
 export function builtinSessionEngine(
   provider: string | null | undefined,
@@ -60,7 +60,8 @@ export function builtinSessionEngine(
     provider === AgentProvider.CLAUDE ||
     provider === AgentProvider.CODEX ||
     provider === AgentProvider.OPENCODE ||
-    provider === AgentProvider.ANTIGRAVITY
+    provider === AgentProvider.ANTIGRAVITY ||
+    provider === AgentProvider.CURSOR
   ) {
     return provider;
   }
