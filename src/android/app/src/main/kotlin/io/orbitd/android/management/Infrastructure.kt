@@ -151,11 +151,12 @@ internal object Infrastructure {
 
     /** Every engine, and what can pay for it now: the machines online signed in to it, by how many of their accounts ("Mac Studio ×2");
      * each enabled key under every engine the server says it runs on (`engines`), with the model a session on it starts on there; its
-     * pools that can start a session (one that is unavailable is in Needs you instead). */
+     * pools that can start a session (one that is unavailable is in Needs you instead). Not an engine this app does not draw yet
+     * (ProviderEngines.androidShowsEngine). */
     fun engineCards(runners: List<JsonObject>, keys: List<JsonObject>, pools: List<Pool>): List<EngineCard> {
         val online = runners.filter { it.bool("online") == true }
         val harness = harnessModel(online)
-        return ProviderEngines.ALL_ENGINES.map { engine ->
+        return ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).map { engine ->
             // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
             val machines = if (engine == ProviderEngines.DSH) emptyList() else online.mapNotNull { runner ->
                 val count = logins(runner, engine)
