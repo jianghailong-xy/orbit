@@ -1133,9 +1133,11 @@ export interface CodexRateLimitResetResultRefusal {
 /**
  * Engines a runner signs in with on its own machine, rather than using a configured API key.
  * Antigravity signs in a Google account, and only on a runner that declares
- * `antigravity-google-login/v1` (RunnerAntigravityState.googleLogin).
+ * `antigravity-google-login/v1` (RunnerAntigravityState.googleLogin). Cursor CLI's sign-in is its own
+ * `agent login` (docs/cursor-runtime-contract.md §9); the relay that starts one on a runner is not
+ * offered for it yet, so a runner is never sent one.
  */
-export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
+export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity' | 'cursor';
 
 /**
  * Kimi Code's two sign-in sites, as `kimi login --region` names them: `mainland-cn` is kimi.com,

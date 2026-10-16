@@ -279,6 +279,25 @@ export const DSH_PERMISSION_MODES: readonly PermissionMode[] = [
   PermissionMode.DONT_ASK,
 ];
 
+/**
+ * The permission modes Cursor CLI can be held to over ACP, measured on 2026.10.14-941492e
+ * (docs/cursor-runtime-contract.md §5.4, §16.5). In every mode a write inside the workspace runs
+ * without asking. Accept Edits is its default allowlist, with commands, MCP tools and web fetches
+ * asking through Orbit's card; Plan adds Cursor's own plan mode and Orbit refuses every request; Don't
+ * Ask refuses every request too; Bypass is `--force`. Default (ask before an edit) cannot be kept and
+ * Auto has no review Orbit can rely on over ACP, so both are refused.
+ */
+export const CURSOR_PERMISSION_MODES: readonly PermissionMode[] = [
+  PermissionMode.ACCEPT_EDITS,
+  PermissionMode.PLAN,
+  PermissionMode.DONT_ASK,
+  PermissionMode.BYPASS,
+];
+
+/** What a new Cursor CLI session runs in when its caller named no mode and the account default is one
+ *  Cursor CLI refuses: its own default allowlist. */
+export const CURSOR_DEFAULT_PERMISSION_MODE = PermissionMode.ACCEPT_EDITS;
+
 /** Normalized run-event types streamed from runner → control plane → UI. */
 export enum RunEventType {
   SYSTEM = 'system',
@@ -460,4 +479,7 @@ export enum AgentProvider {
   /** DeepSeek Harness, driven through ACP. An engine like the rest: it runs on a DeepSeek key, which
    *  Claude Code and OpenCode can run as well (providerEngines.ts). */
   DSH = 'dsh',
+  /** Cursor CLI, driven through its own ACP server (`agent acp`); see docs/cursor-runtime-contract.md.
+   *  Migration 0426 moved any configured provider, pool or retired name that held the slug aside. */
+  CURSOR = 'cursor',
 }

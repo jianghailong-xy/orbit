@@ -123,6 +123,7 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { cursorDefaultPermissionMode } from '../common/permission-semantics';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -234,7 +235,11 @@ import {
   type ManagedRunnerDemandAnswer,
 } from '../managed-runners/managed-runner-demand';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
-import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
+import {
+  CURSOR_RUNNER_UPGRADE_ERROR,
+  DSH_RUNNER_UPGRADE_ERROR,
+  dshRuntimeUnavailable,
+} from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -1050,9 +1055,16 @@ export class SessionsService {
     //                           and must not make every session on one runner unstartable.
     //
     // The lookup sits behind the mode test, so no caller that named a runnable mode pays for it.
+    // DeepSeek Harness and Cursor CLI are not Claude Code: dsh keeps its own sandbox, and Cursor CLI's
+    // `--force` runs as root (docs/cursor-runtime-contract.md §5).
     let rootRefusedFallback: PermissionMode | undefined;
     const requestedMode = dto.permissionMode ?? accountPermissionMode;
-    if (runtime !== AgentProvider.DSH && requestedMode && ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)) {
+    if (
+      runtime !== AgentProvider.DSH &&
+      runtime !== AgentProvider.CURSOR &&
+      requestedMode &&
+      ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)
+    ) {
       const target = await this.prisma.runner.findUnique({
         where: { id: assignedRunnerId },
         select: { name: true, runsAsRoot: true },
@@ -1154,6 +1166,15 @@ export class SessionsService {
       const unavailable = dshRuntimeUnavailable(targetRunner.engines);
       if (unavailable) throw new ConflictException(unavailable);
     }
+    // Cursor CLI likewise only on a runner whose heartbeat declares it (migration 0426), refused here
+    // rather than left waiting for one. A mode the caller named has to be one it keeps; a session nobody
+    // named one for starts in one it does (cursorDefaultPermissionMode, below).
+    if (runtime === AgentProvider.CURSOR) {
+      if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:cursor')) {
+        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+      }
+      if (dto.permissionMode) normalizeBuiltinPermissionMode(runtime, model ?? '', dto.permissionMode as PermissionMode);
+    }
     // The Codex, Claude, Antigravity or Kimi account this session runs on: the one picked for it —
     // which pins it there — else, when its workspace leaves the account to Orbit, the runner's account
     // whose quota resets soonest (automaticAccount), which Orbit may move it off when that account's
@@ -1248,7 +1269,9 @@ export class SessionsService {
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
         // distinguish their legacy null-model inheritance from new Runtime-default semantics.
         usesRuntimeDefaultModel: true,
-        permissionMode: rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode,
+        permissionMode: runtime === AgentProvider.CURSOR
+          ? (dto.permissionMode ?? cursorDefaultPermissionMode(accountPermissionMode))
+          : (rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode),
         effort: normalizeEffortForProvider(runtime, dto.effort ?? accountEffort),
         // Stored as asked rather than clamped here, unlike effort above: whether this session
         // has a fast lane depends on the MODEL it ends up running (and for Codex on that model's
@@ -7894,6 +7917,16 @@ export class SessionsService {
       });
       // The engine it revives on is its own, whichever credential it now takes.
       const resumeRuntime = next.engine;
+      if (resumeRuntime === AgentProvider.CURSOR) {
+        if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:cursor')) {
+          throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+        }
+        normalizeBuiltinPermissionMode(
+          resumeRuntime,
+          next.model ?? current.model ?? '',
+          resolvePermissionMode(dto.permissionMode ?? current.permissionMode, null),
+        );
+      }
       if (resumeRuntime === AgentProvider.DSH) {
         if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:dsh')) {
           throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
@@ -8431,6 +8464,10 @@ export class SessionsService {
       if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
         !session.assignedRunner.capabilities?.includes('provider:dsh'))) {
         throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      }
+      if (exec.provider === AgentProvider.CURSOR && (!session.assignedRunner?.capabilitiesReportedAt ||
+        !session.assignedRunner.capabilities?.includes('provider:cursor'))) {
+        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
       }
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??

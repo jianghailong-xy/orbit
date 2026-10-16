@@ -368,6 +368,7 @@ import {
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
   ADVERTISED_RUNTIMES,
+  CURSOR_RUNNER_UPGRADE_ERROR,
   DSH_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
@@ -634,18 +635,24 @@ async function acceptanceBudgetSeconds(
   return task?.acceptanceTimeoutSeconds ?? null;
 }
 
-async function persistedDshSupport(db: Prisma.TransactionClient, runnerId: string): Promise<boolean> {
+/** Whether the runner's persisted heartbeat declares `provider`, which DeepSeek Harness (migration 0377)
+ *  and Cursor CLI (0426) need beside the request's own declaration. */
+async function persistedProviderSupport(
+  db: Prisma.TransactionClient,
+  runnerId: string,
+  provider: AgentProvider,
+): Promise<boolean> {
   const snapshot = await db.runner.findUnique({
     where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true },
   });
-  return !!snapshot?.capabilitiesReportedAt && snapshot.capabilities.includes('provider:dsh');
+  return !!snapshot?.capabilitiesReportedAt && snapshot.capabilities.includes(`provider:${provider}`);
 }
 
 /**
  * What a claim from a runner whose request names dsh must withhold dsh sessions for: the upgrade
  * notice when its persisted heartbeat does not declare dsh (P1b), else the install state its engine
  * report gives (dshRuntimeUnavailable), null when it can start one. Reclaim and lease takeover ask
- * only persistedDshSupport: they hand back sessions this runner already runs.
+ * only persistedProviderSupport: they hand back sessions this runner already runs.
  */
 async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: string): Promise<string | null> {
   const snapshot = await db.runner.findUnique({
@@ -656,27 +663,38 @@ async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: strin
 }
 
 /**
- * Whether the session runs on DeepSeek Harness — by its recorded engine, whatever key it spends —
- * which a runner may only lease when both its request and its persisted heartbeat declare Harness
- * (migration 0377); that declaration is made here for the lease write to come.
+ * Whether the session runs on DeepSeek Harness or Cursor CLI — by its recorded engine, whatever
+ * credential it spends — which a runner may only lease when both its request and its persisted
+ * heartbeat declare that engine (migrations 0377 and 0426); that declaration is made here for the lease
+ * write to come. Answers the notice a lease write on it that still does not land is refused with, and
+ * null for a session on any other engine.
  */
-async function assertDshLeaseSupport(
+async function assertDeclaredLeaseSupport(
   tx: Prisma.TransactionClient,
   runnerId: string,
   session: SessionEngineFacts,
   providerHeader?: string,
-): Promise<boolean> {
-  if (!session.provider || (await sessionEngine(tx, session)) !== AgentProvider.DSH) return false;
-  if (!runnerAdvertisesProvider(providerHeader, AgentProvider.DSH) || !await persistedDshSupport(tx, runnerId)) {
-    throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+): Promise<string | null> {
+  if (!session.provider) return null;
+  const engine = await sessionEngine(tx, session);
+  const upgradeError = engine === AgentProvider.DSH
+    ? DSH_RUNNER_UPGRADE_ERROR
+    : engine === AgentProvider.CURSOR ? CURSOR_RUNNER_UPGRADE_ERROR : null;
+  if (!engine || !upgradeError) return null;
+  if (!runnerAdvertisesProvider(providerHeader, engine) || !await persistedProviderSupport(tx, runnerId, engine)) {
+    throw new ConflictException(upgradeError);
   }
-  await tx.$executeRaw`SELECT set_config('orbit.runner_supports_dsh', '1', true)`;
-  return true;
+  if (engine === AgentProvider.DSH) {
+    await tx.$executeRaw`SELECT set_config('orbit.runner_supports_dsh', '1', true)`;
+  } else {
+    await tx.$executeRaw`SELECT set_config('orbit.runner_supports_cursor', '1', true)`;
+  }
+  return upgradeError;
 }
 
-/** A lease write that did not land on a session that is not Harness's. The row is locked and the
- *  transaction declared what the database asks of it, so only a guard refusing it gets here; the
- *  runner retries as it does every refused takeover. */
+/** A lease write that did not land on a session that is neither Harness's nor Cursor CLI's. The row is
+ *  locked and the transaction declared what the database asks of it, so only a guard refusing it gets
+ *  here; the runner retries as it does every refused takeover. */
 const LEASE_WRITE_REFUSED = 'the inbox lease was not written; retry';
 
 export function runnerSupportsCapability(
@@ -2549,6 +2567,13 @@ export class RunnerApiController {
     if (dshRefusal === DSH_RUNNER_UPGRADE_ERROR) {
       supportedProviders.splice(supportedProviders.indexOf(AgentProvider.DSH), 1);
     }
+    // Cursor CLI likewise only on a runner whose persisted heartbeat declares it too (migration 0426).
+    if (
+      supportedProviders.includes(AgentProvider.CURSOR) &&
+      !(await persistedProviderSupport(this.prisma, runner.id, AgentProvider.CURSOR))
+    ) {
+      supportedProviders.splice(supportedProviders.indexOf(AgentProvider.CURSOR), 1);
+    }
     // Declared but not startable on this machine (not installed, or a platform or version the
     // runner rejects). The declaration stays as sent; the queue holds the dsh rows instead, and
     // they wait with that notice until a heartbeat reports the CLI ready, rather than failing.
@@ -2671,14 +2696,20 @@ export class RunnerApiController {
       },
     });
     const supportsDsh = runnerAdvertisesProvider(providerHeader, AgentProvider.DSH)
-      && await persistedDshSupport(this.prisma, runner.id);
+      && await persistedProviderSupport(this.prisma, runner.id, AgentProvider.DSH);
+    const supportsCursor = runnerAdvertisesProvider(providerHeader, AgentProvider.CURSOR)
+      && await persistedProviderSupport(this.prisma, runner.id, AgentProvider.CURSOR);
     // The engine each session runs on: its own, else — for a row an older replica wrote — the old
     // rules'. Everything below that asks which CLI rebuilds a session asks this, never its slug.
     const engines = new Map<string, AgentProvider | null>();
     for (const session of sessions) engines.set(session.id, await sessionEngine(this.prisma, session));
     const undrivable = new Set<string>();
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
-      if (provider === AgentProvider.DSH ? supportsDsh : runnerAdvertisesProvider(providerHeader, provider)) continue;
+      if (
+        provider === AgentProvider.DSH ? supportsDsh
+          : provider === AgentProvider.CURSOR ? supportsCursor
+            : runnerAdvertisesProvider(providerHeader, provider)
+      ) continue;
       // Every session on the runtime, whatever credential it spends: this runner would rebuild a
       // Gemini key's session — or a DeepSeek key's Harness one — as Claude just the same.
       const onProvider = sessions.filter((session) => engines.get(session.id) === provider);
@@ -3097,7 +3128,7 @@ export class RunnerApiController {
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
       }
-      const onDsh = await assertDshLeaseSupport(tx, runner.id, owned[0], providerHeader);
+      const declared = await assertDeclaredLeaseSupport(tx, runner.id, owned[0], providerHeader);
       if (!OPEN.includes(owned[0].status)) {
         throw new ConflictException('session is no longer open');
       }
@@ -3174,7 +3205,7 @@ export class RunnerApiController {
       // Checked on every engine, not only Harness: a refused write that this transaction then
       // committed around — the generation retired, the in-flight turn expired, the approvals reaped —
       // would leave the session naming the previous owner, and its runner letting go of it.
-      if (acquired !== 1) throw new ConflictException(onDsh ? DSH_RUNNER_UPGRADE_ERROR : LEASE_WRITE_REFUSED);
+      if (acquired !== 1) throw new ConflictException(declared ?? LEASE_WRITE_REFUSED);
       await tx.$executeRaw`
         UPDATE "conversation_turn"
         SET "lease_deadline_at" = now() - interval '1 second'
@@ -3237,6 +3268,7 @@ export class RunnerApiController {
     if (
       preflight &&
       preflightEngine !== AgentProvider.DSH &&
+      preflightEngine !== AgentProvider.CURSOR &&
       OPEN.includes(preflight.status) &&
       preflight.inboxLeaseOwner === leaseOwner &&
       preflight.inboxLeaseGeneration === generation
@@ -3272,7 +3304,7 @@ export class RunnerApiController {
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
       }
-      const onDsh = await assertDshLeaseSupport(tx, runner.id, owned[0], providerHeader);
+      const declared = await assertDeclaredLeaseSupport(tx, runner.id, owned[0], providerHeader);
       if (!OPEN.includes(owned[0].status)) {
         throw new ConflictException('session is no longer open');
       }
@@ -3331,7 +3363,7 @@ export class RunnerApiController {
       // A legacy NULL poll or a predecessor may have leased after reclaim but before this
       // activation acquired the Session lock. Make every non-current executable turn visible
       // now, rather than letting it block the new engine for the normal five-minute deadline.
-      if (acquired !== 1) throw new ConflictException(onDsh ? DSH_RUNNER_UPGRADE_ERROR : LEASE_WRITE_REFUSED);
+      if (acquired !== 1) throw new ConflictException(declared ?? LEASE_WRITE_REFUSED);
       await tx.$executeRaw`
         UPDATE "conversation_turn"
         SET "lease_deadline_at" = now() - interval '1 second'

@@ -134,7 +134,7 @@ export function sessionEngineUnknown(): ConflictException {
 }
 
 /**
- * An engine a request named: one of the six, or absent (`undefined`, `null` and `''` all name none).
+ * An engine a request named: one of the seven, or absent (`undefined`, `null` and `''` all name none).
  * Anything else is ENGINE_UNKNOWN — the DTOs only check that it is a string (§6.2).
  */
 export function requestedEngine(value: unknown): AgentProvider | null {
@@ -194,8 +194,9 @@ export async function keyRowForSlug(
 /**
  * What `slug` names for `ownerId`, in the order of §3.1, for a door about to write it:
  *
- *  1. `claude`, `codex`, `kimi`, `antigravity` — the engine's sign-in; `opencode` — OpenCode's own
- *     configuration. A named `kimi` is never looked up as a configured row (0077).
+ *  1. `claude`, `codex`, `kimi`, `antigravity`, `cursor` — the engine's sign-in; `opencode` — OpenCode's
+ *     own configuration. A named `kimi` is never looked up as a configured row (0077), nor `cursor`,
+ *     which migration 0426 reserved.
  *  2. a key they may use (usableProviderScope): disabled, it is refused in the door's words.
  *  3. one of their account pools, refused with its reason when it can take no session.
  *  4. a retired name whose key they may use.
@@ -214,7 +215,8 @@ export async function classifyProvider(
   builtin?: boolean,
 ): Promise<ResolvedCredential> {
   const { db } = deps;
-  if (slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX || slug === AgentProvider.ANTIGRAVITY) {
+  if (slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX || slug === AgentProvider.ANTIGRAVITY
+    || slug === AgentProvider.CURSOR) {
     return { kind: 'login', engine: slug };
   }
   if (slug === AgentProvider.KIMI && builtin !== false) return { kind: 'login', engine: AgentProvider.KIMI };
@@ -545,7 +547,8 @@ export async function storedCredential(
 ): Promise<ResolvedCredential | null> {
   const slug = session.provider || AgentProvider.CLAUDE;
   const builtin = session.providerBuiltin ?? true;
-  if (slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX || slug === AgentProvider.ANTIGRAVITY) {
+  if (slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX || slug === AgentProvider.ANTIGRAVITY
+    || slug === AgentProvider.CURSOR) {
     return { kind: 'login', engine: slug };
   }
   if (slug === AgentProvider.OPENCODE) return { kind: 'opencode' };
@@ -605,7 +608,7 @@ export async function taskPinCredential(
   slug: string,
 ): Promise<ResolvedCredential | null> {
   if (slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX || slug === AgentProvider.ANTIGRAVITY
-    || slug === AgentProvider.KIMI) {
+    || slug === AgentProvider.KIMI || slug === AgentProvider.CURSOR) {
     return { kind: 'login', engine: slug };
   }
   if (slug === AgentProvider.OPENCODE) return { kind: 'opencode' };
@@ -625,7 +628,7 @@ export interface TaskPinWrite {
   model?: string | null;
 }
 
-/** The engine a task write names: absent (`undefined`), cleared (`null` or `''`), or one of the six. */
+/** The engine a task write names: absent (`undefined`), cleared (`null` or `''`), or one of the seven. */
 function pinnedEngine(value: unknown): AgentProvider | null | undefined {
   if (value === undefined) return undefined;
   return requestedEngine(value);
