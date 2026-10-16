@@ -355,7 +355,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let agentId: String?
     public let assignedRunnerId: String?
     /// The engine the session runs on for good — the CLI on the runner that produced its runtime
-    /// session (`claude`, `codex`, `kimi`, `antigravity`, `opencode` or `dsh`). Nil from an older
+    /// session (`claude`, `codex`, `kimi`, `antigravity`, `opencode`, `dsh` or `cursor`). Nil from an older
     /// server, and for a session whose engine nobody can tell; read it with
     /// `ProviderEngines.sessionEngine`, which places such a row by its provider.
     public let engine: String?
