@@ -20704,13 +20704,18 @@ div.landing-jobs-open {
   flex: none;
   font-size: 12px;
 }
+/* The label hugs what the line says — the native row's HStack has no Spacer either. On auto margin it
+   floated to the trailing edge, a thousand pixels from the job it names on a wide window, reading as a
+   column of its own; hover brightens it a step, with the row's background under the pointer. */
 .bgwake-details-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: none;
-  margin-left: auto;
   font-size: 12px;
+}
+.bgwake-row:hover .bgwake-details-label {
+  color: var(--text-2);
 }
 .bgwake-caret {
   flex: none;
