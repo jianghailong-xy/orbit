@@ -209,6 +209,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── admin/*: an administrator acts on other accounts by design; a member is refused ─────────────
   'GET /admin/users/:id/access-tokens': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // Before the role and disabled cases below: the subject is still an enabled member, whom an administrator may view.
+  'POST /admin/users/:id/impersonate': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { reason: 'the census' } }) },
   'DELETE /admin/users/:id/access-tokens/:tokenId': {
     request: (of) => ({ params: { id: of.adminSubjectId, tokenId: of.adminSubjectTokenId } }),
   },

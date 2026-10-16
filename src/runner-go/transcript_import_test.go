@@ -107,7 +107,7 @@ func TestParseImportTranscriptRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "sample.jsonl")
 	tr.write(t, path)
 
-	gotCwd, gotTitle, events, err := parseImportTranscript(path)
+	gotCwd, gotTitle, events, err := parseImportTranscript(path, nil)
 	if err != nil {
 		t.Fatalf("parseImportTranscript: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestParseImportTranscriptLastTitleWins(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.jsonl")
 	tr.write(t, path)
-	_, title, _, err := parseImportTranscript(path)
+	_, title, _, err := parseImportTranscript(path, nil)
 	if err != nil {
 		t.Fatalf("parseImportTranscript: %v", err)
 	}
@@ -159,17 +159,24 @@ func TestParseImportTranscriptRefuses(t *testing.T) {
 		tr.add(map[string]interface{}{"type": "ai-title", "aiTitle": "Title only"})
 		tr.add(importMsgRow("assistant", "/ws", "2026-09-15T10:00:00Z", map[string]interface{}{"type": "text", "text": "nobody asked"}))
 		path := writeImportFixture(t, &tr)
-		if _, _, _, err := parseImportTranscript(path); err == nil || !strings.Contains(err.Error(), "holds no conversation") {
+		if _, _, _, err := parseImportTranscript(path, nil); err == nil || !strings.Contains(err.Error(), "holds no conversation") {
 			t.Errorf("err = %v, want the no-conversation refusal", err)
 		}
 	})
-	t.Run("not JSON", func(t *testing.T) {
+	// A line that is not JSON is skipped rather than refused, so a file with nothing else in it
+	// has no conversation left — and the refusal says why.
+	t.Run("not JSON at all", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "t.jsonl")
-		if err := os.WriteFile(path, []byte("this is not json\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte("this is not json\n{\"neither\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, _, err := parseImportTranscript(path); err == nil || !strings.Contains(err.Error(), "not JSON") {
-			t.Errorf("err = %v, want the not-JSON refusal", err)
+		var skipped []int
+		_, _, _, err := parseImportTranscript(path, func(line int) { skipped = append(skipped, line) })
+		if err == nil || !strings.Contains(err.Error(), "holds no conversation (none of its lines is JSON)") {
+			t.Errorf("err = %v, want the no-conversation refusal saying no line is JSON", err)
+		}
+		if !reflect.DeepEqual(skipped, []int{1, 2}) {
+			t.Errorf("skipped lines %v, want [1 2]", skipped)
 		}
 	})
 }
@@ -367,7 +374,7 @@ func writeImportFixture(t *testing.T, tr *importTestTranscript) string {
 
 func mustParseEvents(t *testing.T, path string) []StoredEvent {
 	t.Helper()
-	_, _, events, err := parseImportTranscript(path)
+	_, _, events, err := parseImportTranscript(path, nil)
 	if err != nil {
 		t.Fatalf("parseImportTranscript(%s): %v", path, err)
 	}
@@ -463,6 +470,119 @@ func TestRunTranscriptImportTildeWorkDir(t *testing.T) {
 		}
 		if len(events) != 0 {
 			t.Errorf("replayed %s, want nothing from a refused transcript", dumpEvents(events))
+		}
+	})
+}
+
+// Claude Code now and then runs two writes together on one transcript line. That one line used to
+// refuse the whole conversation, and the imported session went to Trash with "holds a line that is
+// not JSON". The line is skipped now, before either side of the replay self-check reads it: every
+// record before and after it imports, and the copy --resume reads still holds it as it was.
+func TestImportSkipsACorruptLine(t *testing.T) {
+	const (
+		uuid  = "4e453ab7-f37c-494d-8017-bb4e9beffeef"
+		title = "Ship the build"
+		t1    = "2026-09-15T10:00:01Z"
+		t2    = "2026-09-15T10:00:02Z"
+		t3    = "2026-09-15T10:00:03Z"
+		t5    = "2026-09-15T10:00:05Z"
+		t6    = "2026-09-15T10:00:06Z"
+		t7    = "2026-09-15T10:00:07Z"
+		// As one was found on a runner host: a hook record cut off mid-key, the next record (an
+		// assistant message) run straight onto it.
+		corrupt = `{"type":"attachment","attachment":{"type":"hook_success","hookName":"PreToolUse:Bash"},"uui` +
+			`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Running the build."}]},"timestamp":"2026-09-15T10:00:04Z"}`
+	)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	work := filepath.Join(home, "proj")
+
+	var tr importTestTranscript
+	tr.add(map[string]interface{}{"type": "ai-title", "aiTitle": title, "timestamp": "2026-09-15T10:00:00Z"})
+	tr.add(importMsgRow("user", work, t1, map[string]interface{}{"type": "text", "text": "check the build"}))
+	tr.add(importMsgRow("assistant", work, t2, map[string]interface{}{
+		"type": "tool_use", "id": "t1", "name": "Bash", "input": map[string]interface{}{"command": "make"},
+	}))
+	tr.add(importMsgRow("user", work, t3, map[string]interface{}{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}))
+	tr.lines = append(tr.lines, corrupt) // line 5
+	tr.add(importMsgRow("assistant", work, t5, map[string]interface{}{"type": "text", "text": "The build passes."}))
+	tr.add(importMsgRow("user", work, t6, map[string]interface{}{"type": "text", "text": "ship it"}))
+	tr.add(importMsgRow("assistant", work, t7, map[string]interface{}{"type": "text", "text": "Shipped."}))
+	src := filepath.Join(home, ".claude", "projects", claudeProjectSlug(work), uuid+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tr.write(t, src)
+	// Nothing of line 5, not even its timestamp: the reply after it is stamped with its own.
+	want := []StoredEvent{
+		{Seq: 1, Type: evUser, Payload: map[string]interface{}{"text": "check the build"}, Ts: mustParseTs(t, t1)},
+		{Seq: 2, Type: evToolUse, Payload: map[string]interface{}{"id": "t1", "name": "Bash", "input": map[string]interface{}{"command": "make"}}, Ts: mustParseTs(t, t2)},
+		{Seq: 3, Type: evToolResult, Payload: map[string]interface{}{"toolUseId": "t1", "content": "ok", "isError": false}, Ts: mustParseTs(t, t3)},
+		{Seq: 4, Type: evAssistant, Payload: map[string]interface{}{"text": "The build passes."}, Ts: mustParseTs(t, t5)},
+		{Seq: 5, Type: evUser, Payload: map[string]interface{}{"text": "ship it"}, Ts: mustParseTs(t, t6)},
+		{Seq: 6, Type: evAssistant, Payload: map[string]interface{}{"text": "Shipped."}, Ts: mustParseTs(t, t7)},
+	}
+
+	t.Run("the parse skips that line and keeps the rest", func(t *testing.T) {
+		var skipped []int
+		cwd, gotTitle, events, err := parseImportTranscript(src, func(line int) { skipped = append(skipped, line) })
+		if err != nil {
+			t.Fatalf("parseImportTranscript: %v", err)
+		}
+		if !reflect.DeepEqual(skipped, []int{5}) {
+			t.Errorf("skipped lines %v, want [5]", skipped)
+		}
+		if cwd != work || gotTitle != title {
+			t.Errorf("cwd, title = %q, %q, want %q, %q", cwd, gotTitle, work, title)
+		}
+		if !reflect.DeepEqual(events, want) {
+			t.Errorf("events mismatch:\n got %s\nwant %s", dumpEvents(events), dumpEvents(want))
+		}
+	})
+
+	t.Run("the import step stores the conversation", func(t *testing.T) {
+		var posted ImportResultRequest
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Errorf("decoding the import result: %v", err)
+			}
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"applied":true}`))
+		}))
+		defer srv.Close()
+
+		job := &ClaimedSession{SessionID: "s1", SessionUUID: uuid, WorkDir: work, ImportSourceCwd: &work}
+		var events []StoredEvent
+		emit := func(eventType string, payload map[string]interface{}) {
+			events = append(events, StoredEvent{Type: eventType, Payload: payload})
+		}
+		execDir := t.TempDir()
+		transport := &Transport{baseURL: srv.URL, client: srv.Client()}
+		if err := runTranscriptImport(context.Background(), transport, job, execDir, emit, func(context.Context) error { return nil }); err != nil {
+			t.Fatalf("runTranscriptImport: %v", err)
+		}
+		if !posted.Ok || posted.Title != title {
+			t.Errorf("import result = %+v, want ok with the transcript's title", posted)
+		}
+		if len(events) != len(want) {
+			t.Fatalf("replayed %s, want %s", dumpEvents(events), dumpEvents(want))
+		}
+		for i := range want {
+			if events[i].Type != want[i].Type || !reflect.DeepEqual(events[i].Payload, want[i].Payload) {
+				t.Errorf("event %d = %s %v, want %s %v", i+1, events[i].Type, events[i].Payload, want[i].Type, want[i].Payload)
+			}
+		}
+		dst, err := claudeTranscriptPathIn(filepath.Join(home, ".claude"), execDir, uuid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(dst)
+		if err != nil {
+			t.Fatalf("the copy --resume reads: %v", err)
+		}
+		if !strings.Contains(string(raw), "\n"+corrupt+"\n") {
+			t.Errorf("the copy --resume reads does not hold line 5 as it was:\n%s", raw)
 		}
 	})
 }

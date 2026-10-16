@@ -139,5 +139,8 @@ final class ApprovalReviewCloseWiringTests: XCTestCase {
                      ".acceptance(asked, criteria:", ".started(asked, at: Date())", ".criteriaChange(standing, criteria:"] {
             XCTAssertTrue(console.contains(kind), "a press no longer keeps the card it answered: \(kind)")
         }
+        let cards = code(try source("Views/ApprovalCards.swift"))
+        XCTAssertTrue(cards.contains("if record == nil { Text(StartProject.explanation(criteria.count))"),
+                      "the start's record still says what starting would commit the project to")
     }
 }

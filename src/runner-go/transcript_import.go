@@ -49,7 +49,11 @@ type importRecord struct {
 // replaying the events through replayMessagesFromEvents would not reproduce the transcript.
 // Images in tool results are left out of the events and an oversized record is clipped, so the
 // replay can be stored however long the conversation ran.
-func parseImportTranscript(path string) (cwd, title string, events []StoredEvent, err error) {
+//
+// A line that is not JSON is skipped, and skipped (unless nil) is told its number: Claude Code now
+// and then runs two writes together on one line, and one bad record must not refuse a whole
+// conversation.
+func parseImportTranscript(path string, skipped func(line int)) (cwd, title string, events []StoredEvent, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", "", nil, err
@@ -88,13 +92,20 @@ func parseImportTranscript(path string) (cwd, title string, events []StoredEvent
 	}
 
 	r := bufio.NewReaderSize(f, transcriptReadBuffer)
-	for {
+	parsed, notJSON := 0, 0
+	for lineNo := 1; ; lineNo++ {
 		line, readErr := r.ReadString('\n')
 		if strings.TrimSpace(line) != "" {
 			var rec importRecord
 			if json.Unmarshal([]byte(line), &rec) != nil {
-				return "", "", nil, fmt.Errorf("transcript %s holds a line that is not JSON", path)
+				// Skipped before either side of the self-check reads it, so the two stay in step.
+				notJSON++
+				if skipped != nil {
+					skipped(lineNo)
+				}
+				continue
 			}
+			parsed++
 			if rec.IsSidechain {
 				continue
 			}
@@ -226,7 +237,11 @@ func parseImportTranscript(path string) (cwd, title string, events []StoredEvent
 		}
 	}
 	if !hasConversation {
-		return "", "", nil, fmt.Errorf("transcript %s holds no conversation (no user messages)", path)
+		why := "no user messages"
+		if parsed == 0 && notJSON > 0 {
+			why = "none of its lines is JSON"
+		}
+		return "", "", nil, fmt.Errorf("transcript %s holds no conversation (%s)", path, why)
 	}
 	replayed, _, _ := replayMessagesFromEvents(out)
 	if len(replayed) != len(direct) {
@@ -350,8 +365,8 @@ func insideDir(dir, p string) bool {
 // copyTranscriptRewritingCwd copies the transcript into the session's own project directory,
 // rewriting each record's recorded cwd to the session checkout, so `--resume` (which reads
 // only the directory for the engine's own cwd) finds the conversation. Lines that fail to
-// parse are copied verbatim — the import already refused unreadable transcripts, and a
-// bookkeeping record we don't understand is not ours to edit.
+// parse are copied verbatim — the import's events skip them, and a record we don't
+// understand is not ours to edit.
 func copyTranscriptRewritingCwd(src, dst, newCwd string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -439,7 +454,9 @@ func runTranscriptImport(ctx context.Context, t *Transport, job *ClaimedSession,
 			continue
 		}
 		seen[cand] = true
-		cwd, title, events, err := parseImportTranscript(cand)
+		cwd, title, events, err := parseImportTranscript(cand, func(line int) {
+			logln("import of", job.SessionID+": line", line, "of", cand, "is not JSON; skipped")
+		})
 		if err != nil {
 			lastErr = err
 			continue

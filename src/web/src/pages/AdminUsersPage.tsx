@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, listUserAccessTokens, revokeUserAccessToken, type AccessToken } from '../api';
+import { api, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
 import { AdminNav } from '../components/AdminNav';
 import { Badge } from '../components/ui/Badge';
@@ -12,6 +12,7 @@ import { Input } from '../components/ui/Input';
 import { Popconfirm } from '../components/ui/Popconfirm';
 import { Spinner } from '../components/ui/Spinner';
 import { TableEmptyRow, TableFrame } from '../components/ui/Table';
+import { Textarea } from '../components/ui/Textarea';
 import { fullDate } from '../lib/accessTokens';
 import { authMethodsQuery } from '../lib/googleLink';
 import { meQuery, type SignInMethods } from '../lib/queries';
@@ -38,6 +39,8 @@ export const GOOGLE_SIGN_IN_ONLY = 'Google sign-in only';
 export const UNLINK_GOOGLE = 'Unlink Google';
 export const DISABLE_USER = 'Disable';
 export const ENABLE_USER = 'Enable';
+export const VIEW_AS = 'View as';
+export const START_VIEWING = 'Start viewing';
 /**
  * What the Add-user dialog says under **Google sign-in only** (design §5.2): only a Gmail or Google
  * Workspace address is one Google vouches for, so only that address can be linked by it. Any other
@@ -91,6 +94,8 @@ export function AdminUsersPage() {
   const [name, setName] = useState('');
   const [googleOnly, setGoogleOnly] = useState(false);
   const [tokensOf, setTokensOf] = useState<AdminUser | null>(null);
+  const [viewAs, setViewAs] = useState<AdminUser | null>(null);
+  const [reason, setReason] = useState('');
   const [confirm, confirmation] = useConfirm();
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin', 'users'] });
@@ -193,6 +198,25 @@ export function AdminUsersPage() {
       { onError: (e: Error) => message.error("Couldn't enable the account", e.message) },
     );
 
+  /**
+   * View Orbit as the user, read-only, to debug what they see: the server answers a token for 30
+   * minutes and records the reason. The app loads again as them, so nothing read as the administrator
+   * stays on screen; the banner over every page brings the administrator back.
+   */
+  const viewAsMut = useMutation({
+    mutationFn: ({ user, why }: { user: AdminUser; why: string }) =>
+      api<{ accessToken: string }>(`/admin/users/${user.id}/impersonate`, { method: 'POST', body: { reason: why } }),
+    onSuccess: ({ accessToken }) => {
+      startImpersonation(accessToken);
+      location.href = '/';
+    },
+    onError: (e: Error, { user }) => message.error(`Couldn't view Orbit as ${user.email}`, e.message),
+  });
+  const openViewAs = (u: AdminUser) => {
+    setReason('');
+    setViewAs(u);
+  };
+
   const columns: { key: string; title: string; end?: boolean; cell: (u: AdminUser) => ReactNode }[] = [
     { key: 'email', title: 'Email', cell: (u) => u.email },
     { key: 'name', title: 'Name', cell: (u) => u.name },
@@ -218,6 +242,12 @@ export function AdminUsersPage() {
       // A row of actions that wraps rather than widening the table past the page.
       cell: (u) => (
         <div className="admin-user-actions">
+          {/* Never one's own account, another administrator's or a disabled one: the server refuses those. */}
+          {u.id !== meId && u.role !== 'ADMIN' && !u.disabledAt && (
+            <Button size="small" onClick={() => openViewAs(u)}>
+              {VIEW_AS}
+            </Button>
+          )}
           <Popconfirm
             title={`Reset ${u.email}'s password?`}
             onConfirm={() => createMut.mutate({ email: u.email, force: true })}
@@ -345,6 +375,41 @@ export function AdminUsersPage() {
         </div>
       </Dialog>
       {confirmation}
+
+      <Dialog
+        className="admin-user-dialog"
+        title={viewAs ? `View Orbit as ${viewAs.email}?` : VIEW_AS}
+        open={viewAs !== null}
+        onClose={() => setViewAs(null)}
+        footer={
+          <>
+            <Button onClick={() => setViewAs(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              disabled={!reason.trim()}
+              loading={viewAsMut.isPending}
+              onClick={() => viewAs && viewAsMut.mutate({ user: viewAs, why: reason.trim() })}
+            >
+              {START_VIEWING}
+            </Button>
+          </>
+        }
+      >
+        <div className="admin-user-form">
+          <div>
+            You see Orbit as they see it, read-only, for 30 minutes: nothing can be changed. Starting is recorded
+            with your reason.
+          </div>
+          <Textarea
+            aria-label="Reason"
+            placeholder="Reason, e.g. the support request you are looking into"
+            value={reason}
+            maxLength={500}
+            autoSize={{ minRows: 2, maxRows: 6 }}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
+      </Dialog>
 
       <Dialog
         className="admin-user-dialog"

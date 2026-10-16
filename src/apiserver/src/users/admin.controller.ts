@@ -16,13 +16,14 @@ import type { Prisma } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import { DisabledAccounts } from '../auth/disabled-accounts';
 import { GoogleLoginService } from '../auth/google-login.service';
+import { Impersonation, USER_IMPERSONATED_ACTIVITY } from '../auth/impersonation';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { PatService } from '../auth/pat.service';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminRoleGuard } from './admin-role.guard';
-import { CreateUserDto, SetDisabledDto, UpdateRoleDto } from './dto';
+import { CreateUserDto, ImpersonateDto, SetDisabledDto, UpdateRoleDto } from './dto';
 import { SIGN_IN_METHODS_SELECT, signInMethodsOf } from './sign-in-methods';
 import { createOrResetUser } from './users.util';
 
@@ -51,6 +52,8 @@ export class AdminController {
     private readonly google: GoogleLoginService,
     // AuthModule provides it everywhere. Without it (a test harness) there is no set to read again.
     @Optional() private readonly disabledAccounts?: DisabledAccounts,
+    // AuthModule provides it everywhere. A test harness without it never views another account.
+    @Optional() private readonly impersonation?: Impersonation,
   ) {}
 
   /**
@@ -153,6 +156,34 @@ export class AdminController {
     });
     await this.disabledAccounts?.reload();
     return user;
+  }
+
+  /**
+   * View Orbit as another account, to debug what it sees (auth/impersonation.ts): an access token that
+   * reads as that account and writes nothing, for IMPERSONATION_TTL_SECONDS, with no refresh token.
+   * Never the administrator's own account, another administrator's or a disabled one. The reason is
+   * required, and recorded in Activity with the account as this administrator's before the token is
+   * answered.
+   */
+  @Post('users/:id/impersonate')
+  async impersonate(@CurrentUser() admin: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: ImpersonateDto) {
+    const reason = dto.reason.trim();
+    if (!reason) throw new BadRequestException('a reason is required');
+    if (id === admin.userId) throw new BadRequestException('you cannot view Orbit as yourself');
+    const target = await this.prisma.user.findUnique({ where: { id }, select: { id: true, email: true, name: true, role: true, disabledAt: true } });
+    if (!target) throw new NotFoundException('user not found');
+    if (target.role === 'ADMIN') throw new BadRequestException('you cannot view Orbit as another administrator');
+    if (target.disabledAt !== null) throw new BadRequestException('this account is disabled');
+    const { accessToken, expiresAt } = await this.impersonation!.issue(admin.userId, target);
+    await this.prisma.activity.create({
+      data: {
+        actorId: admin.userId,
+        type: USER_IMPERSONATED_ACTIVITY,
+        payload: { userId: id, email: target.email, reason, expiresAt: expiresAt.toISOString() },
+        credentialKind: 'LOGIN',
+      },
+    });
+    return { accessToken, expiresAt, user: { id: target.id, email: target.email, name: target.name } };
   }
 
   /** A user's personal access tokens, as their own list shows them (§11.4). Never the token itself:
