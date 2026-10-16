@@ -1601,10 +1601,10 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		return stFailed, true, false
 	}
 	provider := runtimeProvider(job)
-	// An engine this runner knows but has no session driver for — Cursor CLI, until its ACP driver
-	// lands — gets no engine either: nothing is installed or started for a session it cannot run. The
-	// control plane hands one only to a runner that declares it (cursorDeclared), so this is the two
-	// of them disagreeing, and it is said rather than run as some other engine.
+	// An engine this runner knows but has no session driver for gets no engine either: nothing is
+	// installed or started for a session it cannot run. The control plane hands a Cursor CLI session
+	// only to a runner that declares it (cursorDeclared), so this is the two of them disagreeing, and it
+	// is said rather than run as some other engine.
 	if providerRuntimeFor(provider).run == nil {
 		name := provider
 		if spec, ok := specFor(provider); ok {

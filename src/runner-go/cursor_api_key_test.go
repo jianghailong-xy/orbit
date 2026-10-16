@@ -353,9 +353,10 @@ func TestCursorAPIKeyCheckReachesTheControlPlaneByFingerprint(t *testing.T) {
 	}
 }
 
-// A session on a Cursor login brings no key: nothing is checked, none is handed to the CLI — not even a
-// CURSOR_API_KEY typed into the workspace — and nothing is reported. A session that brings one is past the
-// runner's sign-in preflight, which the key makes irrelevant; a workspace's own CURSOR_API_KEY is not one.
+// Only a key Orbit dispatched is checked and reported. A CURSOR_API_KEY typed into the workspace is the
+// workspace's own: it reaches the CLI as the workspace's other variables do (cursor_launch.go), unchecked
+// and unreported, and like a dispatched one it makes the runner's sign-in irrelevant — the control plane's
+// sign-in preflight counts it the same way.
 func TestCursorAPIKeyOnlyWhenDispatchedOne(t *testing.T) {
 	useCursorRealHome(t)
 	r := newFakeCursorRelease(t)
@@ -366,11 +367,11 @@ func TestCursorAPIKeyOnlyWhenDispatchedOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := envMap(spec.Env)["CURSOR_API_KEY"]; ok {
-		t.Fatal("a login session was handed a key")
+	if key := envMap(spec.Env)["CURSOR_API_KEY"]; key != "key_typed-into-the-workspace" {
+		t.Fatalf("the CLI runs on CURSOR_API_KEY %q, want the workspace's own", key)
 	}
 	if models := callsWith(r.calls(t), "models"); len(models) != 0 || len(reports.all()) != 0 {
-		t.Fatalf("a login session's start checked a key: %v %v", models, reports.all())
+		t.Fatalf("a workspace's own key was checked or reported: %v %v", models, reports.all())
 	}
 	for _, c := range []struct {
 		env  map[string]string
@@ -378,7 +379,9 @@ func TestCursorAPIKeyOnlyWhenDispatchedOne(t *testing.T) {
 	}{
 		{map[string]string{cursorAPIKeyVar: cursorTestKey}, true},
 		{map[string]string{cursorAPIKeyVar: "  "}, false},
-		{map[string]string{"CURSOR_API_KEY": "key_typed-into-the-workspace"}, false},
+		{map[string]string{"CURSOR_API_KEY": "key_typed-into-the-workspace"}, true},
+		{map[string]string{"CURSOR_AUTH_TOKEN": "a-token-typed-into-the-workspace"}, true},
+		{map[string]string{"CURSOR_API_KEY": " "}, false},
 		{map[string]string{"ANTHROPIC_API_KEY": "sk-ant-api"}, false},
 		{nil, false},
 	} {
