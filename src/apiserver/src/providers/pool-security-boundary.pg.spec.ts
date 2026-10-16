@@ -1275,6 +1275,9 @@ exec sleep 300
       await ask(bearer, 'DELETE', 'admin/providers/:id', at, undefined, 403);
       await ask(runner, 'PATCH', 'runner/providers/:slug', { slug: pool.slug }, { label: 'Renamed' }, 404);
       await ask(runner, 'DELETE', 'runner/providers/:slug', { slug: pool.slug }, undefined, 404);
+      // A runner's answer about the Cursor key a session of its own runs on, about no session of theirs:
+      // refused before anything is read.
+      await ask(runner, 'POST', 'runner/sessions/:id/cursor-key-check', { id: randomUUID() }, { state: 'VALID', keyFingerprint: '0123456789abcdef' }, 403);
 
       // What each of them makes of their own.
       await ask(bearer, 'POST', 'providers/test', {}, { baseUrl: ANTHROPIC, apiKey: subscription(), model: 'claude-opus-5', runtime: 'claude' }, 201);
