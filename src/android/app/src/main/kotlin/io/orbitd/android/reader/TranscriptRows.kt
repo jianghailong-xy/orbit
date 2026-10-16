@@ -36,8 +36,11 @@ internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = n
     fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) }
 }
 
-/** Project only durable changes. Live text and tool snapshots are passed to their own row. */
-internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
+/** Project only durable changes. Live text and tool snapshots are passed to their own row. [holdsSteers]: a window that reaches the
+ * live tail draws the reader's steers where their delivery settled and leaves out the ones nothing has read yet, which the tray above
+ * the composer holds ([SteerDelivery.place], settled by the queue's [receipts] too). A window short of the tail cannot see how a steer
+ * near its end came out, so it draws each where it was sent, as history always was. */
+internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> = emptyList(), holdsSteers: Boolean = true): List<TranscriptRow> {
     // Project an unexplained end as a readable error with the original anchor. A bounded page
     // starting mid-turn cannot prove there was no earlier reply, so wait for an ordinary user or boundary.
     // A steer joins the current turn; it cannot establish the start of a truncated one.
@@ -62,7 +65,8 @@ internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
     val results = events.filter { it.type == "tool_result" && it.toolId() != null }
         .associateBy { parent(it) to it.toolId() }
     val usedResults = mutableSetOf<Long>()
-    val grouped = events.groupBy(::parent)
+    // Only where rows stand moves: what each event says about its turn is still read in the order it happened.
+    val grouped = (if (holdsSteers) SteerDelivery.place(events, receipts).drawn else events).groupBy(::parent)
     fun rows(parent: String?, visited: Set<String>): List<TranscriptRow> {
         return grouped[parent].orEmpty().mapNotNull { e ->
             if (e.seq in unexplained) return@mapNotNull TranscriptRow(e.copy(type = "error", payload = buildJsonObject {
