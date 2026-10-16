@@ -7430,13 +7430,44 @@ export function WorkspaceView({
       !sameSessionSendBlocked &&
       !selectedMissing &&
       !loadingSession;
-  // The single send button morphs into a Stop while a turn is generating AND the composer
-  // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
+  // The single send button morphs into a Stop while the session has something to stop AND the
+  // composer is empty — interrupting it. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
   // and the reaper recycles an idle/finished session's slot on its own.
+  //
+  // "Something to stop" reads the same two predicates the header draws the session with, off the
+  // same row (`selectedSession ?? selected`), so the glyph and this button cannot disagree:
+  //
+  //   - `isGenerating` — the dispatched turn (RUNNING), or a turn the engine started for itself
+  //     (AWAITING_INPUT + engineTurnActive: a background task reporting in, a scheduled wake-up).
+  //     The latter never reaches /turn-complete, so the status stays parked for its whole
+  //     duration while the engine streams; the runner asks the engine to interrupt
+  //     unconditionally for exactly this case (src/runner-go/session.go), so a predicate reading
+  //     the raw status left it unstoppable — no Stop, and no other way to reach the turn.
+  //   - `outlivingSessionWork` — a sub-agent or background process still running under a parked
+  //     turn. DELIBERATE, and the reason this is not a "generating" predicate: a session parked
+  //     with only that work left also gets a Stop. Making the press stop the background work as
+  //     well is a separate piece of work; until it lands, the stop still reaches the engine and
+  //     what it found is reported in the transcript. Do not narrow this back as though the
+  //     background case were an oversight.
+  //
+  // Only a genuinely idle session — nothing generating, nothing left running — keeps Send.
+  //
+  // This deliberately loosens the review fix in docs/interactive-claude-runner-design.md
+  // ("disable Stop the moment turn_end arrives to close the race"): that kept Stop off a parked
+  // session because a Stop clicked as the turn ended could file a stale interrupt onto it, where
+  // it might land on the NEXT turn. The server holds that race itself now, which is why the
+  // button can stay: `interrupt` drops every queued message/shell/steer turn in the same
+  // transaction that files the interrupt (src/apiserver/src/sessions/sessions.service.ts), so
+  // nothing queued is left to fire behind the stop; the interrupt takes its place in the turn
+  // order, so a message sent after it is delivered after it; and the runner asks the engine and
+  // waits for that request's answer (src/runner-go/session.go), so a stop is never left pending
+  // for whatever turn comes next: what the engine answered — confirmed, or nothing to interrupt —
+  // is written into the transcript.
   const showStop =
     !!selected &&
-    sessionRunStatusOf(selectedSession ?? selected) === 'RUNNING' &&
+    (isGenerating(selectedSession ?? selected, sessionRunStateOf(selectedSession ?? selected)) ||
+      outlivingSessionWork(selectedSession ?? selected) !== null) &&
     !text.trim() &&
     readyImages.length === 0 &&
     !replyTo;
