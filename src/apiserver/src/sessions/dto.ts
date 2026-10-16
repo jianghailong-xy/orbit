@@ -63,6 +63,8 @@ export interface CreateSessionDto {
   antigravityAccount?: string;
   /** The Kimi Code account, the same again for a session on the built-in Kimi engine. */
   kimiAccount?: string;
+  /** The Cursor CLI account, the same again for a session on the built-in Cursor CLI engine. */
+  cursorAccount?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
    *  session/turn — they're scoped to this session on create, then linked to the initial

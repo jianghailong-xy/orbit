@@ -105,6 +105,7 @@ import {
   InstallCommand,
   InstallResult,
   KIMI_LOGIN_REGION_V1,
+  LOGIN_FAILURE_REASONS,
   LoginCommand,
   LoginEngine,
   LoginResult,
@@ -404,6 +405,17 @@ import {
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
 export const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
+
+// Cursor CLI's `agent login` waits on the one link it prints for about 27 minutes (1,632 s and 1,636 s
+// measured, docs/cursor-runtime-contract.md §9) and then gives up by itself, which is what tells the
+// runner the link expired. Its sign-in is not swept before that: this must stay >= the runner's own
+// wait for it.
+export const CURSOR_LOGIN_RELAY_TIMEOUT_MS = 30 * 60_000;
+
+/** How long a sign-in of `engine` may stay in flight before it is swept as timed out. */
+export function loginRelayTimeoutMs(engine: string | null | undefined): number {
+  return engine === 'cursor' ? CURSOR_LOGIN_RELAY_TIMEOUT_MS : LOGIN_RELAY_TIMEOUT_MS;
+}
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
@@ -528,7 +540,24 @@ export const ANTIGRAVITY_ACCOUNT_REMOVE_V1 = 'antigravity-account-remove/v1';
  *  machine's one Kimi login. */
 export const KIMI_ACCOUNT_LOGIN_V1 = 'kimi-account-login/v1';
 export const KIMI_ACCOUNT_REMOVE_V1 = 'kimi-account-remove/v1';
-export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+/** Cursor CLI's, the same two again (docs/cursor-runtime-contract.md §16.1): a runner that declares them
+ *  signs in, and removes, a Cursor CLI account named by the control plane — its own directory, signed in
+ *  with `agent login` and the link it prints. Unlike any other engine's, Cursor CLI's sign-in goes only
+ *  to a runner that declares cursor-account-login/v1, Default's included: an older one signs Claude Code
+ *  in for an engine it does not know (src/runner-go/login.go). */
+export const CURSOR_ACCOUNT_LOGIN_V1 = 'cursor-account-login/v1';
+export const CURSOR_ACCOUNT_REMOVE_V1 = 'cursor-account-remove/v1';
+export {
+  CLAUDE_ACCOUNT_MOVE_V1,
+  CODEX_ACCOUNT_MOVE_V1,
+  CURSOR_ACCOUNT_MOVE_V1,
+  KIMI_ACCOUNT_MOVE_V1,
+} from '../providers/account-move-capability';
+
+/** The refusal of a sign-in of Cursor CLI's own account, Default, to a runner that does not declare
+ *  cursor-account-login/v1 — from the start (RunnersService.startLogin) and from the heartbeat alike.
+ *  A named account's is the one every engine's is (accountLoginTooOld). */
+export const CURSOR_LOGIN_TOO_OLD = 'This runner is too old to sign in to Cursor CLI — update it, then try again.';
 
 /** What a runner declares before it is handed a sign-in, or a removal, of a named account of each
  *  engine that keeps accounts — and what that engine is called when it is too old to. */
@@ -537,19 +566,28 @@ const ACCOUNT_LOGIN_CAPABILITY = {
   claude: CLAUDE_ACCOUNT_LOGIN_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_V1,
   kimi: KIMI_ACCOUNT_LOGIN_V1,
+  cursor: CURSOR_ACCOUNT_LOGIN_V1,
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_REMOVE_CAPABILITY = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
   kimi: KIMI_ACCOUNT_REMOVE_V1,
+  cursor: CURSOR_ACCOUNT_REMOVE_V1,
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_ENGINE_LABEL = {
   codex: 'Codex',
   claude: 'Claude',
   antigravity: 'Antigravity',
   kimi: 'Kimi',
+  cursor: 'Cursor',
 } as const satisfies Record<AccountEngine, string>;
+
+/** What a runner too old to sign in a named account of `engine` is told, from the start and the
+ *  heartbeat alike. */
+export function accountLoginTooOld(engine: AccountEngine): string {
+  return `This runner is too old to sign in another ${ACCOUNT_ENGINE_LABEL[engine]} account — update it, then try again.`;
+}
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -2157,7 +2195,7 @@ export class RunnerApiController {
       return count > 0 ? { action: 'cancel', engine: r.loginEngine as LoginEngine, attempt } : undefined;
     }
     const started = r.loginAt?.getTime() ?? 0;
-    if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
+    if (started && Date.now() - started > loginRelayTimeoutMs(r.loginEngine)) {
       loginCodeRelay.drop(runnerId);
       if (r.loginStatus === 'pending' || r.loginStatus === 'awaiting_code' || r.loginStatus === 'awaiting_approval') {
         await this.prisma.runner.update({
@@ -2187,18 +2225,20 @@ export class RunnerApiController {
       const signsInAccounts = runnerSupportsCapability(capabilities, ACCOUNT_LOGIN_CAPABILITY[accountEngine]);
       // Antigravity's Google sign-in is judged again on the process polling now — the relay it
       // declares and the OS it names — which the start (RunnersService.startLogin) could only
-      // check against the last heartbeat's.
+      // check against the last heartbeat's. So is Cursor CLI's, Default's included: a process that
+      // does not declare it signs Claude Code in for an engine it does not know.
       // A process that does not declare the site choice would ignore it and run a bare `kimi login`,
       // which goes wherever the CLI decides — perhaps the very site the user just turned away from.
       const refusal =
         !signsInAccounts && (accountName || (account && account !== 'default'))
-          ? `This runner is too old to sign in another ${ACCOUNT_ENGINE_LABEL[accountEngine]} account — ` +
-            'update it, then try again.'
+          ? accountLoginTooOld(accountEngine)
           : region && !runnerSupportsCapability(capabilities, KIMI_LOGIN_REGION_V1)
             ? 'This runner is too old to choose a Kimi site — update it, then try again.'
             : engine === 'antigravity'
               ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
-              : null;
+              : engine === 'cursor' && !signsInAccounts
+                ? CURSOR_LOGIN_TOO_OLD
+                : null;
       if (refusal) {
         await this.prisma.runner.update({
           where: { id: runnerId },
@@ -2420,6 +2460,11 @@ export class RunnerApiController {
       throw new BadRequestException('attempt must be the start this reports on');
     }
     const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
+    // When the link stops working, and why a sign-in failed: only what each can be is kept — a real
+    // instant, and a reason this control plane knows — and nothing else rides on them. A runner newer
+    // than this has its report taken all the same, without them.
+    const expiresAt = typeof body.expiresAt === 'string' ? new Date(body.expiresAt) : null;
+    const reason = LOGIN_FAILURE_REASONS.find((known) => known === body.reason) ?? null;
     const { count } = await this.prisma.runner.updateMany({
       where: { id: runner.id, ...(attempt ? { loginAt: attempt, loginStatus: { not: 'cancelling' } } : {}) },
       data: {
@@ -2431,6 +2476,9 @@ export class RunnerApiController {
         loginUserCode: status === 'awaiting_approval' ? (body.userCode ?? null) : null,
         loginCode: null,
         loginMessage: body.message ?? null,
+        // How long the link at loginUrl lasts, kept while it waits and dropped with it.
+        loginExpiresAt: waiting && expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null,
+        loginReason: status === 'failed' ? reason : null,
         // Which account is signing in. For a new one this is the first the control plane hears of
         // the slot the runner added for it.
         ...(body.account ? { loginAccount: body.account } : {}),
@@ -2839,6 +2887,7 @@ export class RunnerApiController {
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
           kimiAccount: s.kimiAccount ?? workspace?.kimiAccount,
+          cursorAccount: s.cursorAccount ?? workspace?.cursorAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec: ReturnType<typeof resolveExec>;
@@ -3790,7 +3839,11 @@ export class RunnerApiController {
           const session = await tx.session.findUniqueOrThrow({
             where: { id: sessionId },
             include: {
-              workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+              workspace: {
+                select: {
+                  env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+                },
+              },
               assignedRunner: { select: { engines: true, accountPauses: true } },
             },
           });
@@ -4254,7 +4307,13 @@ export class RunnerApiController {
         claudeAccount: true,
         antigravityAccount: true,
         kimiAccount: true,
-        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+        cursorAccount: true,
+        workspace: {
+          select: {
+            model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
+            cursorAccount: true,
+          },
+        },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
@@ -4296,6 +4355,7 @@ export class RunnerApiController {
       claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
       kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
+      cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the

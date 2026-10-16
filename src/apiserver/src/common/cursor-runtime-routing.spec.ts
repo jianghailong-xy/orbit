@@ -44,10 +44,11 @@ test('P1 cursor is a built-in engine slug, unambiguous since migration 0426, and
   assert.deepEqual(reclaimRuntimeIds({ provider: AgentProvider.CURSOR, sessionId: 'orbit-1', runtimeSessionId: null }), {
     sessionUuid: 'orbit-1', runtimeSessionId: undefined,
   });
-  // Its health is accepted from a runner that reports it; its sign-in and install are not relayed yet.
+  // Its health is accepted from a runner that reports it, and its sign-in relayed to a runner that
+  // declares cursor-account-login/v1 (runner-login-account.spec.ts); its install is not relayed yet.
   assert.equal(REPORTED_ENGINES.at(-1), 'cursor');
   assert.equal(isReportedEngine('cursor'), true);
-  assert.equal(isLoginEngine('cursor'), false);
+  assert.equal(isLoginEngine('cursor'), true);
   assert.equal(isInstallEngine('cursor'), false);
 });
 
