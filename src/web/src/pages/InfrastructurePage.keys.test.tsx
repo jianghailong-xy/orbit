@@ -271,6 +271,8 @@ describe('API keys after the provider/engine split', () => {
       ['Custom', 'Manual endpoint'],
     ]);
     expect(document.body.querySelector('a[href="/providers/new/deepseek-harness"]')).toBeNull();
+    // Nor for Cursor: its keys run on Cursor CLI alone, which the web does not draw yet (webShowsEngine).
+    expect(document.body.querySelector('a[href="/providers/new/cursor-api"]')).toBeNull();
   });
 
   it('asks before deleting a key what uses it on every engine it works with', async () => {

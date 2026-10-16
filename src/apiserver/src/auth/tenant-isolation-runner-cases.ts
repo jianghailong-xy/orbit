@@ -319,6 +319,11 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { replaces: 'not its title', title: 'named by the census' } }),
   },
+  // A session not on a Cursor key: its own runner is answered `recorded: false`, and nothing is written.
+  'POST /runner/sessions/:id/cursor-key-check': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { state: 'INVALID', keyFingerprint: '0123456789abcdef' } }),
+  },
   'POST /runner/sessions/:id/turns/:turnId/suggestion': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.turnSessionId, turnId: of.runner.shellTurnId } }),

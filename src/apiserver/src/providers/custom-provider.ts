@@ -10,6 +10,7 @@ import {
   modelForProvider,
   OPENCODE_DIALECT_NPM,
   openCodeBaseUrl,
+  openCodeDialect,
   openCodeKeyModel,
   openCodeKeyOf,
   openCodeKeyProvider,
@@ -76,6 +77,7 @@ const KEY_ROW_ENGINES: ReadonlySet<string> = new Set([
   AgentProvider.KIMI,
   AgentProvider.ANTIGRAVITY,
   AgentProvider.DSH,
+  AgentProvider.CURSOR,
 ]);
 
 /** The engine a key's row ran its sessions on before the split — its runtime, when that is one — and
@@ -172,6 +174,7 @@ function runtimeOf(row: ModelProviderRow): AgentProvider {
   if (row.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
   if (row.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (row.runtime === AgentProvider.DSH) return AgentProvider.DSH;
+  if (row.runtime === AgentProvider.CURSOR) return AgentProvider.CURSOR;
   throw new BadRequestException(`provider runtime not available: "${row.runtime}"`);
 }
 
@@ -305,19 +308,29 @@ function isAnthropicEndpoint(baseUrl: string): boolean {
   }
 }
 
+/** The variable a Cursor key reaches the runner in. */
+export const CURSOR_KEY_VAR = 'ORBIT_CURSOR_API_KEY';
+
 // Env injected so the engine's CLI talks to the key's endpoint, in the variables THAT engine reads
 // (docs/provider-engine-contract.md §4.2) — the engine is the session's, and the key only says where
 // to send it: Claude Code → the Anthropic-compatible vars (Phase 1); Codex → OpenAI-compatible (Phase
 // 2); Kimi Code → the Kimi CLI's own KIMI_MODEL_* provider; Antigravity → agy's GEMINI_API_KEY /
-// GOOGLE_GEMINI_BASE_URL; DeepSeek Harness → its own pair. The same DeepSeek key on Claude Code and on
-// DeepSeek Harness is one endpoint, its baseUrl, read by each in its own names. OpenCode is not here:
-// its key travels in its config (openCodeKeyConfig).
+// GOOGLE_GEMINI_BASE_URL; DeepSeek Harness → its own pair; Cursor CLI → ORBIT_CURSOR_API_KEY. The same
+// DeepSeek key on Claude Code and on DeepSeek Harness is one endpoint, its baseUrl, read by each in its
+// own names. OpenCode is not here: its key travels in its config (openCodeKeyConfig).
 function injectedEnv(
   engine: AgentProvider,
   row: ModelProviderRow,
   model: string,
   apiKey: string,
 ): Record<string, string> {
+  if (engine === AgentProvider.CURSOR) {
+    // The runner reads this and starts the CLI with the key as CURSOR_API_KEY, its credentials held in
+    // memory only (docs/cursor-runtime-contract.md §8.2, §16.3); the variable itself never reaches the
+    // CLI. No endpoint: the CLI trades the key for a token at Cursor's own API, and the row's baseUrl
+    // only names it. The model is the session's ACP selection, which the driver sets.
+    return { [CURSOR_KEY_VAR]: apiKey };
+  }
   if (engine === AgentProvider.DSH) {
     // P2 fixes these in the session overlay, including apiKeyEnv=ORBIT_DSH_API_KEY. A Harness
     // session never falls through to Claude credentials or the project's ambient DeepSeek key.
@@ -483,12 +496,12 @@ export function engineIncompatible(
 
 /**
  * Whether an OpenCode session may spend this configured key (shared `openCodeKeys`): enabled, on a
- * dialect OpenCode speaks — every one a configured key can speak — and holding an API key rather than
- * a Claude subscription token. A pool's members are rows too and answer the same way; the pool itself
+ * dialect OpenCode speaks — every one a configured key can speak but a Cursor key's — and holding an API
+ * key rather than a Claude subscription token. A pool's members are rows too and answer the same way; the pool itself
  * holds no key to hand over, so it is not one.
  */
 export function runsOnOpenCode(row: Pick<ModelProviderRow, 'runtime' | 'enabled' | 'apiKeyEnc'>): boolean {
-  if (!row.enabled || !keyDialect(row.runtime)) return false;
+  if (!row.enabled || !openCodeDialect(row.runtime)) return false;
   try {
     return !decryptSecret(row.apiKeyEnc).trim().startsWith(SUBSCRIPTION_TOKEN_PREFIX);
   } catch {
@@ -519,7 +532,7 @@ export async function openCodeKeyRows(
  * permission config over this in turn (runner-go openCodeConfigContent).
  */
 function openCodeKeyConfig(row: OpenCodeKeyRow, model: string, base?: string, apiKey?: string): string {
-  const dialect = keyDialect(row.runtime)!;
+  const dialect = openCodeDialect(row.runtime)!;
   let config: Record<string, unknown> = {};
   try {
     const parsed: unknown = base ? JSON.parse(base) : {};
@@ -706,10 +719,15 @@ export function resolveProviderExec(args: {
   const accountId = isAccountEngine(provider) ? args[ACCOUNT_CHOICE[provider]] : undefined;
   const account = accountOnRunner(provider, accountId, args.runnerEngines);
   const dirVar = accountEnvVar(provider);
-  const env =
+  let env =
     account && dirVar
       ? { ...(workspaceEnv ?? {}), [dirVar]: accountDir(account) }
       : (workspaceEnv ?? undefined);
+  // A Cursor CLI session on its sign-in spends no key: the variable a Cursor key reaches the runner in is
+  // dispatch's alone to set (injectedEnv), never one typed into the workspace's env.
+  if (provider === AgentProvider.CURSOR && env && CURSOR_KEY_VAR in env) {
+    env = Object.fromEntries(Object.entries(env).filter(([name]) => name !== CURSOR_KEY_VAR));
+  }
   const pin = nonBlankModel(provider, sessionModel);
   const retired = retiredPin(null, provider, args, pin);
   const explicitSessionModel = retired ? undefined : pin;
