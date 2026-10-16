@@ -56,6 +56,10 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeCursorAgentEnv); dir != "" {
 		os.Exit(runFakeCursorAgent(dir))
 	}
+	// A Cursor CLI `agent acp` replaying a P0 recording (fake_cursor_acp_test.go).
+	if dir := os.Getenv(fakeCursorACPDirEnv); dir != "" {
+		os.Exit(runFakeCursorACP(dir))
+	}
 	// The one-shot `claude -p` that `orbit wiki verify` runs (wiki_verify_test.go).
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
 		os.Exit(runFakeVerifyClaude(dir))

@@ -504,8 +504,10 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 	case providerAntigravity:
 		keys = []string{"GEMINI_API_KEY"}
 	case providerCursor:
-		// A Cursor API key saved in Orbit, which the session's CLI runs on (cursor_launch.go).
-		keys = []string{cursorAPIKeyVar}
+		// A Cursor API key saved in Orbit, or a key or token of the workspace's own, which the session's
+		// CLI runs on (cursor_launch.go cursorLaunchCredential) — the control plane's sign-in preflight
+		// counts the same two.
+		keys = []string{cursorAPIKeyVar, "CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"}
 	}
 	for _, k := range keys {
 		if strings.TrimSpace(agentEnv[k]) != "" {
