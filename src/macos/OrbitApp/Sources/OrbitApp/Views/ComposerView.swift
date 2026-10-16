@@ -40,7 +40,7 @@ struct ComposerBand<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) { content }
             .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+            .padding(.bottom, .composerBandFoot)
             // NO surface of its own (web parity: `.workspace-composer` has none). A `.bar` fill here
             // reads as a grey panel behind the tray and the git bar, which web has nowhere; the two
             // cards and the composer box each already carry their own fill + border, so they stand on
@@ -109,6 +109,8 @@ extension CGFloat {
     /// How far a scroll view fades out above the composer band — and the room it keeps clear under
     /// its last row, so at rest nothing sits in the fade. See `fadesIntoComposerBand`.
     static let composerBandFade: CGFloat = 20
+    /// The band's foot: the room it keeps under its last member, the composer or its folded bar.
+    static let composerBandFoot: CGFloat = 10
 }
 
 extension View {

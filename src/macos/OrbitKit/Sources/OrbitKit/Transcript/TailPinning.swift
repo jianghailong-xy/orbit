@@ -186,4 +186,33 @@ public enum TailPinning {
         let carried = current.offset - previous.offset + pushed
         return abs(carried) <= slop || current.bottomGap <= pushed + slop
     }
+
+    /// Room past the pin's slack a folded band leaves the reader, so a rounding error at the
+    /// boundary can't pin them again.
+    public static let foldMargin: Double = 16
+
+    /// Whether a phone's composer band folds to its one-line bar: the reader has gone back through
+    /// the history (the owner, 2026-10-16: the parking strip and the composer give the conversation
+    /// their room while it is being read back).
+    ///
+    /// Not as soon as the pin lets go, which is the first point of a scroll up: the band floats over
+    /// the list, so folding it lowers the floor the tail rests on by everything it gives back. A
+    /// reader still that close to the tail is then past the end — the list springs back into the
+    /// room, under their finger — or back inside the pin's slack, which pins them again and opens the
+    /// band again, and so on while they scroll. So the band folds once the reader is far enough back
+    /// for the folded band to leave them clear of the pin: once the last row has gone below the
+    /// list's bottom edge, give or take what the folded band keeps there. That reading is the rows
+    /// against the list's own frame, whatever floats over it, so the band folding or opening cannot
+    /// answer its own question; and it is the same line on the way back, where the band opens as the
+    /// tail comes up to the bottom edge and the reader carries on into it.
+    ///
+    /// `foldedInset` is the bottom inset the list has with the band folded: the bar and its foot,
+    /// over the screen's own bottom inset.
+    public static func foldsBand(pinned: Bool, sample: TailScrollSample, foldedInset: Double) -> Bool {
+        guard !pinned else { return false }
+        // How far the last row sits below the list's bottom edge: the gap the pin reads, without
+        // whatever floats over the list.
+        let depth = sample.bottomGap - sample.bottomInset
+        return depth + foldedInset > nearBottom + foldMargin
+    }
 }

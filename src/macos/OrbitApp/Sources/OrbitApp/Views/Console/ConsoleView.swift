@@ -30,6 +30,14 @@ struct ConsoleView: View {
     @State private var promotionReceipt: PromotionReceiptTarget?
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
+    /// Whether the reader has gone back far enough through the history for a phone's composer band to
+    /// fold to its bar (`foldsBand`): written by the transcript's scroll tracker, off the same reading
+    /// as the pin (`TailPinning.foldsBand`). Never set on the Mac.
+    @State private var readingBack = false
+    /// The folded bar was tapped: the band stays open where the reader is until their next drag.
+    @State private var bandOpened = false
+    /// Bumped by the folded bar's ↓, which the transcript answers with the floating disc's jump.
+    @State private var jumpRequest = 0
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -119,6 +127,20 @@ struct ConsoleView: View {
         #endif
     }
 
+    /// Whether a phone's composer band folds to its one-line bar (`FoldedBandBar`; the owner,
+    /// 2026-10-16): the reader has gone back through the history — far enough that the folded band
+    /// leaves them clear of the tail (`readingBack`), or into a window opened at a record — the
+    /// composer doesn't hold the keyboard, and the bar wasn't just tapped open. Only where the band
+    /// floats over the transcript, iOS 26 at a compact width; the wide shells and the Mac never fold.
+    private func foldsBand(_ console: ConsoleModel) -> Bool {
+        #if os(iOS)
+        guard #available(iOS 26.0, *), hSize == .compact else { return false }
+        return !console.composerEditing && !bandOpened && (readingBack || console.detached)
+        #else
+        false
+        #endif
+    }
+
     /// The transcript and the composer band. Pending approvals (incl. the AskUserQuestion form)
     /// render inline at the tail of the transcript — as the agent's latest turn, web-style — not in a
     /// fixed panel here. See TranscriptView.
@@ -134,7 +156,9 @@ struct ConsoleView: View {
     private func transcriptAndBand(_ console: ConsoleModel, navTitleWidth: CGFloat) -> some View {
         let transcript = TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
                                         reviewingCard: approvalReview != nil || promotionReview != nil,
-                                        questionWidth: navTitleWidth)
+                                        questionWidth: navTitleWidth,
+                                        readingBack: $readingBack, bandFolded: foldsBand(console),
+                                        bandOpened: $bandOpened, jumpRequest: jumpRequest)
         #if os(iOS)
         if #available(iOS 26.0, *) {
             transcript.safeAreaBar(edge: .bottom, spacing: 0) {
@@ -154,7 +178,27 @@ struct ConsoleView: View {
         #endif
     }
 
+    /// The band under the transcript: its members, or — folded while the reader goes back through the
+    /// history (`foldsBand`) — the one bar they stand behind (`ComposerBandFold`), in the band's gutter
+    /// and on its foot. A tap on the bar opens the band where the reader is.
     private func composerBand(_ console: ConsoleModel) -> some View {
+        let folded = foldsBand(console)
+        return ZStack(alignment: .bottom) {
+            bandMembers(console)
+                .modifier(ComposerBandFold(folded: folded))
+            #if os(iOS)
+            if #available(iOS 26.0, *), folded {
+                FoldedBandBar(console: console, open: { bandOpened = true }, jump: { jumpRequest &+= 1 })
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, .composerBandFoot)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94, anchor: .bottom)))
+            }
+            #endif
+        }
+        .animation(.smooth(duration: 0.3), value: folded)
+    }
+
+    private func bandMembers(_ console: ConsoleModel) -> some View {
         // Error, background tray, git bar, composer — web's order (`workspace-composer`).
         // Staged attachments are not a member: they sit inside the composer's card, above
         // the text they go out with. The band owns the gutter and the gaps; members only
@@ -299,6 +343,8 @@ struct ConsoleView: View {
             promotionReceipt = nil
             approvalReview = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
+            readingBack = false
+            bandOpened = false
         }
         #if os(iOS)
         // "Another session needs you", below the nav bar and above the transcript. Compact only:
@@ -541,6 +587,16 @@ struct TranscriptView: View {
     /// The nav bar's centre slot on iOS, which the sticky question's capsule truncates within — a
     /// `.principal` item is otherwise sized to its ideal width (`ConsoleView.body`). Unused on macOS.
     var questionWidth: CGFloat = 0
+    /// Written for `ConsoleView.foldsBand`: whether the reader has gone back far enough through the
+    /// history for a phone's composer band to fold to its bar (`TailPinning.foldsBand`).
+    var readingBack: Binding<Bool> = .constant(false)
+    /// The band is folded to its bar (`FoldedBandBar`), which carries the jump to the latest in the
+    /// floating disc's place.
+    var bandFolded = false
+    /// The bar was tapped open; the reader's next drag folds the band again.
+    var bandOpened: Binding<Bool> = .constant(false)
+    /// Bumped by the bar's ↓: the floating disc's jump (`jumpToLatest`).
+    var jumpRequest = 0
     @State private var reviewSessionID: String?
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
@@ -590,7 +646,8 @@ struct TranscriptView: View {
     private func tracker(ruler: QuestionRuler) -> some ViewModifier {
         #if os(iOS)
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll)
+                             recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll,
+                             readingBack: readingBack, dragged: { bandOpened.wrappedValue = false })
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
                              recompute: recomputeStuck, follow: repinAfterResize)
@@ -853,11 +910,14 @@ struct TranscriptView: View {
         // Floating jump-to-latest button (web's `.scroll-to-bottom`): shown while scrolled up, and
         // while the tail is out of view for any other reason (`stranded`).
         .overlay(alignment: .bottom) {
-            if !atBottom || console.detached || stranded {
+            // While the composer band is folded its bar carries the jump, at its right end.
+            if !bandFolded, !atBottom || console.detached || stranded {
                 scrollToBottomButton(proxy: proxy)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
+        // The folded band's ↓, pressed: the disc's jump.
+        .onChange(of: jumpRequest) { jumpToLatest(proxy) }
         // Whether a pinned transcript is stranded off its tail, decided once it has sat that way for
         // a moment. A publish restarts the wait: the follow it triggers lands a frame or two after
         // the rows grew, and the gap read in between — the normal state while a reply streams (see
@@ -1147,25 +1207,7 @@ struct TranscriptView: View {
     // the composer.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
-            // A window opened at a record ends at a gap: the latest message is past it, so reaching it
-            // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
-            if console.detached {
-                atBottom = true
-                Task { await console.jumpToLatest() }
-                return
-            }
-            #if os(iOS)
-            // Two steps, because neither alone reaches the true bottom while coasting: (1) cancel the
-            // momentum in place via UIKit — otherwise `proxy.scrollTo` is swallowed by the deceleration —
-            // then (2) on the next runloop scroll to the real bottom *row*. Target `bottomID`, not a
-            // computed offset: a lazy List's `contentSize` is only an estimate, so an offset undershoots
-            // the end (it scrolled, but stopped short of the bottom).
-            transcriptScroll.halt()
-            DispatchQueue.main.async { holdScroll(to: bottomID, anchor: .bottom) }
-            #else
-            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
-            #endif
-            atBottom = true
+            jumpToLatest(proxy)
         } label: { pressed in
             Image(systemName: "arrow.down")
                 // A 15pt arrow, close in weight to web's `ArrowDownOutlined`. Fixed size (like
@@ -1194,6 +1236,29 @@ struct TranscriptView: View {
         .padding(.bottom, CGFloat.composerBandFade + 6)
         .accessibilityLabel(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
         .help(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
+    }
+
+    /// The jump to the latest: the floating disc's, and the folded composer band's ↓ (`jumpRequest`).
+    private func jumpToLatest(_ proxy: ScrollViewProxy) {
+        // A window opened at a record ends at a gap: the latest message is past it, so reaching it
+        // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
+        if console.detached {
+            atBottom = true
+            Task { await console.jumpToLatest() }
+            return
+        }
+        #if os(iOS)
+        // Two steps, because neither alone reaches the true bottom while coasting: (1) cancel the
+        // momentum in place via UIKit — otherwise `proxy.scrollTo` is swallowed by the deceleration —
+        // then (2) on the next runloop scroll to the real bottom *row*. Target `bottomID`, not a
+        // computed offset: a lazy List's `contentSize` is only an estimate, so an offset undershoots
+        // the end (it scrolled, but stopped short of the bottom).
+        transcriptScroll.halt()
+        DispatchQueue.main.async { holdScroll(to: bottomID, anchor: .bottom) }
+        #else
+        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
+        #endif
+        atBottom = true
     }
 
     #if os(macOS)
@@ -1571,6 +1636,11 @@ private struct ScrollTracker: ViewModifier {
     /// The List's own `UIScrollView`, for the one fact UIKit knows better than any geometry: whether
     /// a finger is on it. See `readerIsMoving`.
     let scroll: TranscriptScroll
+    /// Whether the reader has gone back far enough for a phone's composer band to fold to its bar
+    /// (`TailPinning.foldsBand`), decided off the same reading as the pin.
+    var readingBack: Binding<Bool> = .constant(false)
+    /// A finger put on the list: a band its bar opened folds again.
+    var dragged: () -> Void = {}
     #endif
     /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
     /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
@@ -1611,6 +1681,9 @@ private struct ScrollTracker: ViewModifier {
                 .onScrollPhaseChange { _, phase in
                     readerDriven = phase != .idle && phase != .animating
                     scrolling = phase != .idle
+                    #if os(iOS)
+                    if phase == .interacting { dragged() }
+                    #endif
                 }
                 .onScrollGeometryChange(for: TailScrollSample.self) { geo in
                     // The gap is to the bottom of what the reader can see, net of the content's
@@ -1631,6 +1704,14 @@ private struct ScrollTracker: ViewModifier {
                                                     evidence: Self.evidence)
                     atBottom = pinned
                     tailOutOfView = now.bottomGap > TailPinning.nearBottom
+                    #if os(iOS)
+                    // What the folded band keeps over the list: its bar and its foot, over the screen's
+                    // own bottom inset — the window's, which no bar or keyboard moves.
+                    let foldedInset = CGFloat.foldedBandBar + .composerBandFoot
+                        + (scroll.view?.window?.safeAreaInsets.bottom ?? 0)
+                    let back = TailPinning.foldsBand(pinned: pinned, sample: now, foldedInset: Double(foldedInset))
+                    if readingBack.wrappedValue != back { readingBack.wrappedValue = back }
+                    #endif
                     ruler.contentOffset = CGFloat(now.offset)
                     recompute()
                     if TailPinning.followsGeometry(pinned: pinned, from: was, to: now,
