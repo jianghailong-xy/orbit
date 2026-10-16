@@ -80,7 +80,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(state.window.seeded, state.loading, state.targetSeq) {
         if (route.recordId != null && state.window.seeded && !state.loading && state.targetSeq != null) recordOpened = true
     }
-    val rows = remember(state.window.events) { transcriptRows(state.window.events) }
+    // The reader's steers nothing has read yet wait in the tray above the composer, and each is drawn where its delivery settled — a
+    // receipt in the queue's listing settles one no runner will speak for. Only a window at the live tail can see how they came out.
+    val listedTurns = state.session?.snapshot?.queuedTurns.orEmpty()
+    val atTail = state.window.newerAfter == null
+    val rows = remember(state.window.events, listedTurns, atTail) { transcriptRows(state.window.events, listedTurns, holdsSteers = atTail) }
+    // What the tray holds, off the same events the rows leave them out of — or the live transcript's, while the reader is in history.
+    val steerEvents = if (atTail) state.window.events else state.session?.transcript?.events.orEmpty()
+    val unreadSteers = remember(steerEvents, listedTurns) { SteerDelivery.place(steerEvents, listedTurns).unread }
     val readable by rememberUpdatedState(!state.denied)
     val attachmentMetadata by rememberUpdatedState(state.window.events.flatMap { event ->
         (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
@@ -161,9 +168,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val belowRows = remember(state.session?.snapshot, cards.answered) {
         state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it, cards.answered) }.orEmpty()
     }
-    // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet.
+    // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet — but the reader's own
+    // messages still on their way, which the tray above the composer holds; what Orbit queued keeps its card here.
     val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
-        queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
+        queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events).filterNot { it.inTray }
     }
     // A07-14: the turn the runner has taken, until its echo or its end — drawn where the echo will land, as the echo will be.
     val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
@@ -406,7 +414,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
-                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }) }
+                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
+                    unreadSteers = unreadSteers) }
             }
         }
         }

@@ -25,19 +25,22 @@ import kotlinx.serialization.json.*
  * f350ee7a1, 52819d05c `UserTurnRow` with `QueuedControls`): its event is the echo it will be delivered as — the listing's `content`
  * as its text, and every card the listing carries — so a session reply is its reply cards and a resumed task's brief its task-start
  * card, not the blocks they are delivered with. A steer and a turn the server has not named yet take no Cancel.
+ *
+ * [inTray]: the reader's own words still on their way — queued for the next turn, or a steer no runner has taken yet — which the tray
+ * above the composer holds instead of the tail (docs/mocks/steer-tray; web `inPendingTray`, OrbitKit `PendingTray.holds`). What Orbit
+ * queued — a brief, a delivery, another session's message, a wake — keeps its card in the tail. [shell] is a `!cmd`, [createdAt] when
+ * the server filed it.
  */
 internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val event: RunEvent, val cards: List<InteractionCard>,
-    val wake: JsonObject?, val watch: JsonObject? = null) {
+    val wake: JsonObject?, val watch: JsonObject? = null, val shell: Boolean = false, val createdAt: String? = null,
+    val inTray: Boolean = false) {
     val cancelable: Boolean get() = turnId != null && !steer
     val key: String get() = "queued:" + (turnId?.let { ObjectId.canonical(it) ?: it } ?: event.fields.text("text").hashCode().toString())
 }
 
-/** The card keys a queued turn carries, the same ones its echo will (`TurnCards`). */
-private val cardKeys = listOf("openItemDelivery", "taskStart", "projectStarted", "confirmationReviewRequest", "confirmationReturn",
-    "sessionMessage", "sessionReplies")
-
-/** The queue as the transcript's tail draws it: every row still waiting, in the listing's order, except one whose echo the window
- * already holds (delivered between the echo and the queue's own re-read) and a receipt or an accepted head. */
+/** The queue as the composer's list holds it: every row still waiting, in the listing's order, except one whose echo the window
+ * already holds (delivered between the echo and the queue's own re-read) and a receipt or an accepted head. The transcript's tail
+ * draws the ones the tray does not hold ([QueuedTurn.inTray]). */
 internal fun queuedTail(rows: List<JsonObject>, events: List<RunEvent>): List<QueuedTurn> {
     val delivered = events.filter { it.type == "user" }.mapNotNull { it.turnId }
     return rows.mapNotNull { row ->
@@ -47,8 +50,11 @@ internal fun queuedTail(rows: List<JsonObject>, events: List<RunEvent>): List<Qu
         val content = row.text("content").orEmpty()
         val event = RunEvent("user", 0, echoPayload(row), turnId)
         val cards = transcriptCards(event)
-        QueuedTurn(turnId, row.text("kind") == "steer", event, cards, io.orbitd.android.core.cards.queuedWake(content),
-            cards.firstOrNull { it.key.endsWith(":watch") }?.source)
+        val wake = io.orbitd.android.core.cards.queuedWake(content)
+        val orbits = row["authoredByOrbit"] == JsonPrimitive(true) || SteerDelivery.cardKeys.any { row[it] != null && row[it] != JsonNull }
+        QueuedTurn(turnId, row.text("kind") == "steer", event, cards, wake, cards.firstOrNull { it.key.endsWith(":watch") }?.source,
+            shell = row.text("kind") == "shell", createdAt = row.text("createdAt"),
+            inTray = turnId != null && !orbits && cards.isEmpty() && wake == null)
     }
 }
 
@@ -81,7 +87,7 @@ private fun echoPayload(row: JsonObject) = buildJsonObject {
             attachment.text("name")?.let { put("name", it) }
         } }
     }
-    cardKeys.forEach { key -> row[key]?.takeIf { it != JsonNull }?.let { put(key, it) } }
+    SteerDelivery.cardKeys.forEach { key -> row[key]?.takeIf { it != JsonNull }?.let { put(key, it) } }
     if (row.text("kind") == "steer") put("steer", true)
 }
 

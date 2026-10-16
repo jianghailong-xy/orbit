@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
 import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.DshRuntime
@@ -57,16 +59,21 @@ import io.orbitd.android.management.LocalRememberModel
 import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
+import io.orbitd.android.reader.SteerDelivery
+import io.orbitd.android.reader.UnreadSteer
 import io.orbitd.android.reader.queuedTail
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.ui.typingFold
 import kotlinx.serialization.json.*
 
+/** [unreadSteers]: the reader's steers nothing has read yet, which the conversation leaves to the tray above this box
+ * ([SteerDelivery.place]). */
 @Composable
-fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
+internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
     inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
-    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
+    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
+    unreadSteers: List<UnreadSteer> = emptyList()) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -119,6 +126,12 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
         queuedTail(session?.snapshot?.queuedTurns.orEmpty(), session?.transcript?.events.orEmpty())
     }
     val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
+    // The engine this session's turns run on, which no pick here changes: whether a message can go into a running one — the tray's
+    // Steer, and Send's other way — and who it was that read one too late to withdraw.
+    val engine = ProviderChoices.engine(detail, state.catalog?.providers.orEmpty())
+    val midTurn = SteerDelivery.runtimeTakesMidTurnSteer(engine)
+    // The tray above the box (docs/mocks/steer-tray): the reader's steers nothing has read yet and their messages still on the queue.
+    val trayRows = if (target != null) emptyList() else PendingTray.rows(unreadSteers, waiting, state, steerOffered = usable && running && midTurn)
     // DeepSeek Harness takes no ! command, and picks its own model until the runner reports one (A07-5).
     val dsh = ProviderChoices.engine(effective, state.catalog?.providers.orEmpty()) == DshRuntime.ENGINE
     // The decision behind this task run, while the chip still shows the model it picked (A11-1).
@@ -132,7 +145,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     val suggestion = if (target != null || standing == spent) null else offeredPromptSuggestion(standing, detail,
         draftEmpty = draft.text.isEmpty() && draft.attachments.isEmpty() && draft.pending == null,
         usable = usable && !state.busy && !state.waiting)
-    val send = { spent = standing; model.send(seed) }
+    val send = { queueForNextTurn: Boolean -> spent = standing; model.send(seed, queueForNextTurn) }
     var inputFocused by remember { mutableStateOf(false) }
     // Android hides its keyboard without taking the field's focus with it, where iOS's first responder resigns. The
     // reader's chrome fold (iOS `ConsoleView.foldsChrome`) reads this box's editing state, so the keyboard going
@@ -152,6 +165,11 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             focusField()
         }
     }
+    Column {
+    // Directly above the box, and not folded while a phone types: it is about the messages being typed into. It takes what room the
+    // box leaves, scrolling past about four rows.
+    PendingTrayCard(trayRows, enabled = usable, steer = { model.steer(it.turnId) },
+        withdraw = { model.withdraw(it.turnId, it.restores, it.steer, engine) }, modifier = Modifier.weight(1f, fill = false))
     Surface(tonalElevation = 2.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -203,7 +221,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                         .semantics { if (suggestion != null) customActions = listOf(CustomAccessibilityAction("Use suggestion") { useSuggestion(); true }) }
                         .onPreviewKeyEvent {
                             if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
-                                send(); true
+                                send(false); true
                             } else false
                         }, enabled = state.loaded,
                     placeholder = {
@@ -247,15 +265,32 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                     models = true; model.loadCatalog()
                 }
                 val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
-                Button(enabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (running && !hasDraft) true else hasDraft && draft.pending == null),
-                    onClick = { if (running && !hasDraft) model.control("interrupt") else send() }, modifier = Modifier.testTag("composer-send")) {
-                    Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (running && !hasDraft) "Stop" else "Send")
+                val sendEnabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (running && !hasDraft) true else hasDraft && draft.pending == null)
+                // Held while a turn runs, Send offers the other way to send it: queued for the next turn instead of into this one (decided
+                // 2026-10-16, docs/mocks/steer-tray; iOS's context menu on Send, the web's ⌥Enter). Only where the engine would otherwise
+                // take it into the turn, and never for a `!cmd`, which always waits.
+                val queueOffered = target == null && running && hasDraft && midTurn && sendEnabled && !draft.text.trim().startsWith("!")
+                var queueMenu by remember { mutableStateOf(false) }
+                LaunchedEffect(queueOffered) { if (!queueOffered) queueMenu = false }
+                Box {
+                    Button(enabled = sendEnabled, onClick = { if (running && !hasDraft) model.control("interrupt") else send(false) },
+                        modifier = Modifier.testTag("composer-send").holdToOffer(queueOffered) { queueMenu = true }.semantics {
+                            if (queueOffered) customActions = listOf(CustomAccessibilityAction(PendingTray.QUEUE_FOR_NEXT_TURN) { send(true); true })
+                        }) {
+                        Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (running && !hasDraft) "Stop" else "Send")
+                    }
+                    DropdownMenu(queueMenu, onDismissRequest = { queueMenu = false }) {
+                        DropdownMenuItem(text = { Text(PendingTray.QUEUE_FOR_NEXT_TURN) }, modifier = Modifier.testTag("composer-queue-next-turn"),
+                            leadingIcon = { Icon(painterResource(R.drawable.ic_queue_next), null, Modifier.size(16.dp)) },
+                            onClick = { queueMenu = false; send(true) })
+                    }
                 }
             }
             // A07-19 (a): what the provider picked here will do, and when — under the box, for as long as the pick stands.
             state.switchNote?.let { Text(it, Modifier.fillMaxWidth().padding(top = 4.dp).testTag("composer-switch-note"),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
+    }
     }
     preview?.let { att ->
         val images = draft.attachments.filter { it.mime.startsWith("image/") }; val index = images.indexOfFirst { it.id == att.id }
@@ -350,6 +385,22 @@ internal fun Modifier.doubleTapToUse(enabled: Boolean, use: () -> Unit): Modifie
             } ?: return@awaitEachGesture
             lift.consume()
             latestUse()
+        }
+    }
+}
+
+/** A press held past the long-press timeout runs [offer] instead of the press (Send's Queue for next turn): the lift that ends the hold
+ * is kept from the button, so it is not a send as well. A shorter press, or one that slides away, is the button's own. Watched in the
+ * Initial pass, ahead of the button's own gestures. */
+internal fun Modifier.holdToOffer(enabled: Boolean, offer: () -> Unit): Modifier = if (!enabled) this else composed {
+    val latestOffer by rememberUpdatedState(offer)
+    pointerInput(Unit) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { waitForUpOrCancellation(PointerEventPass.Initial); true }
+            if (ended == true) return@awaitEachGesture
+            latestOffer()
+            waitForUpOrCancellation(PointerEventPass.Initial)?.consume()
         }
     }
 }
