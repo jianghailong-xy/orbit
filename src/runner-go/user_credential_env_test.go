@@ -199,9 +199,10 @@ func userTokenEnvCases() []userTokenEnvCase {
 			},
 		},
 		{
-			// Built from an allowlist, so it inherits neither token; held to the rule all the same.
+			// Built from an allowlist with the agent's variables over it, so it inherits the runner's token
+			// from nowhere and drops the agent's itself.
 			name: "cursor", sites: []string{"cursor_launch.go prepareCursorLaunch"},
-			holds: []string{session, "AGENT_CLI_CREDENTIAL_STORE=memory"},
+			holds: []string{session, agent, "AGENT_CLI_CREDENTIAL_STORE=memory"},
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				spec, err := prepareCursorLaunch(job, dir, "/opt/cursor/cursor-agent", filepath.Join(dir, "cursor"))
 				if err != nil {

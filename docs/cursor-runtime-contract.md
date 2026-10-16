@@ -801,7 +801,7 @@ body: {}
 ```text
 argv: <固定版本目录>/cursor-agent acp [--force] [--disable-indexing] [--disable-project-configs] [--disable-codebase-ref?]
 cwd:  会话 execDir
-env:  白名单（PATH、LANG、TERM、Orbit 的变量）+
+env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、TERM、代理与 CA 变量）→ 会话的工作区环境变量 → 以下契约固定的变量与凭据
       CURSOR_CONFIG_DIR=<账号或会话>/config
       CURSOR_DATA_DIR=<账号或会话>/data
       AGENT_CLI_CREDENTIAL_STORE=memory
@@ -813,6 +813,22 @@ env:  白名单（PATH、LANG、TERM、Orbit 的变量）+
       HOME：D4 方案决定（A：<账号>/home + SHELL=<runner>/bin/orbit-bash；B：真 HOME）
 ```
 
+- **环境分三层，后面的覆盖前面的**【约定：协调会话 2026-10-16 裁定，P5a 实现于 `src/runner-go/cursor_launch.go`】：
+  1. runner 自己环境的白名单（`cursorBaseEnv`）。白名单以外，runner 的变量一个都不传。
+  2. 会话的 agent 环境（`job.Agent.Env`，即工作区环境变量），和其他 engine 一样传入。不传的只有：Orbit 的会话上下文变量、
+     `ORBIT_HOME`、个人凭据（`ORBIT_USER_TOKEN` 等），以及只给 runner 读的派发变量 `ORBIT_CURSOR_API_KEY`、`ORBIT_CURSOR_ACCOUNT_DIR`。
+  3. 契约固定的变量（HOME、SHELL、CURSOR_CONFIG_DIR、CURSOR_DATA_DIR、AGENT_CLI_CREDENTIAL_STORE=memory、NO_OPEN_BROWSER、DIRENV_DISABLE、
+     CURSOR_AGENT_DISABLE_DEBUG_LOG、Orbit 的会话变量），以及 Orbit 选定的凭据。工作区设了同名变量也以这一层为准。
+- **凭据的选法**，依次：
+  1. 派发的 key（P2：`ORBIT_CURSOR_API_KEY`，以 `CURSOR_API_KEY` 交给 CLI）；之后的账号 token（P4b）也在这一档。
+     Orbit 选了凭据时，工作区带来的 `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN` 都换掉。
+  2. 工作区环境变量里的 `CURSOR_API_KEY` 或 `CURSOR_AUTH_TOKEN`，原样经第 2 层传入。这与 server 的登录预检（`CREDENTIAL_ENV_KEYS.cursor`）
+     和 `OWN_CREDENTIAL_KEYS.cursor` 一致，runner 的 `hasInjectedCredentials(cursor)` 读的也是这三个变量。
+  3. 都没有时，用 Default 账号已存的登录（`<orbit home>/cursor/default/xdg-config/cursor/auth.json` 的 accessToken，以 `CURSOR_AUTH_TOKEN` 注入；
+     剩余不足 300 s 算过期，不用）。
+  4. 一个都没有：不启动 CLI，会话以「需要登录」（`Failed to authenticate: …`）结束。
+- agent 跑的命令经 orbit-bash（SHELL）执行：还原真 HOME，unset `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、`XDG_CONFIG_HOME`、`CURSOR_CONFIG_DIR`、
+  `CURSOR_DATA_DIR`；工作区的其他变量照常可见。
 - `initialize` 用 §2.2 的请求。`session/new` 或 `session/load` 一律带上 `mcpServers`（Orbit MCP 等），load 时重新给。
 - 模型用 `set_config_option`（参数化选择器），不用 `--model`。新会话默认 Auto（`default` / `default[]`）。
 - 健康检查（P3）：`--version` 等于固定版本；`agent models` 退出码 0，说明凭据有效、能联网。不要用 `status`（它不认 API key）。
