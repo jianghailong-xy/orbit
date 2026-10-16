@@ -23,8 +23,8 @@
 -- CHECK every stored row satisfies (both columns NULL), are catalog-only: no stored row is rewritten.
 -- Only `model_provider` is named; no trigger, function or type is created, replaced or dropped.
 --
--- 0428: the highest number on main, every project/* and pushed orbit/* branch was 0426
--- (0426_cursor_engine) when this was written (2026-10-17), and P4a's worktree holds 0427_cursor_account.
+-- 0428: the highest number on main, every project/* and pushed orbit/* branch and every session
+-- worktree was 0427 (0427_cursor_account, P4a) when this was written (2026-10-17).
 
 ALTER TABLE "model_provider" ADD COLUMN "key_check_state" TEXT;
 ALTER TABLE "model_provider" ADD COLUMN "key_checked_at" TIMESTAMP(3);
