@@ -17,20 +17,22 @@ import { runnerAccountPausedUntil } from './account-pause';
 
 /**
  * The engines Orbit signs a runner into, in the order they're shown. Only a runner that can relay
- * Antigravity's Google sign-in is asked to (antigravityGoogleLogin). Cursor CLI is a LoginEngine but
- * not one of these yet: no runner relays its sign-in, so none is sent one.
+ * Antigravity's Google sign-in is asked to (antigravityGoogleLogin), and only one that declares
+ * cursor-account-login/v1 is asked to sign Cursor CLI in, Default included: an older one signs Claude
+ * Code in for an engine it does not know (src/runner-go/login.go).
  */
-export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
+export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
 
 /**
  * The engines whose CLI keeps one login per config directory, so one machine can sign in several
  * accounts of them: a Codex CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google
- * sign-in's Gemini directory, a Kimi Code KIMI_CODE_HOME. Everything account-shaped — a per-account
- * sign-in, the account list on a report, a workspace pinning a session to one — is gated on this
- * rather than on the engine name, so the next engine is a line here and a descriptor on the runner
+ * sign-in's Gemini directory, a Kimi Code KIMI_CODE_HOME, a Cursor CLI account's directory
+ * (docs/cursor-runtime-contract.md §16.2). Everything account-shaped — a per-account sign-in, the
+ * account list on a report, a workspace pinning a session to one — is gated on this rather than on
+ * the engine name, so the next engine is a line here and a descriptor on the runner
  * (src/runner-go/account_slot.go).
  */
-export const ACCOUNT_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'antigravity', 'kimi'];
+export const ACCOUNT_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'antigravity', 'kimi', 'cursor'];
 
 export function engineKeepsAccounts(engine: unknown): engine is LoginEngine {
   return typeof engine === 'string' && ACCOUNT_ENGINES.includes(engine as LoginEngine);
@@ -45,7 +47,8 @@ export function isKimiRegion(value: unknown): value is KimiRegion {
 }
 
 export function isInstallEngine(value: unknown): value is InstallEngine {
-  return isLoginEngine(value) || value === 'dsh' || value === 'opencode';
+  // Cursor CLI is signed in through the relay, but its install is not relayed yet.
+  return (isLoginEngine(value) && value !== 'cursor') || value === 'dsh' || value === 'opencode';
 }
 
 /**

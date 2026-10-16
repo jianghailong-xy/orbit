@@ -96,8 +96,8 @@ export function runAccount(
 /**
  * Whether a workspace leaves its sessions' `engine` account to Orbit — Automatic: it picked none for
  * that engine, and its env selects no other config directory (CODEX_HOME, CLAUDE_CONFIG_DIR,
- * ORBIT_ANTIGRAVITY_GOOGLE_DIR, KIMI_CODE_HOME) and no key of its own. Otherwise its choice or its env
- * decides, and Orbit neither picks nor moves.
+ * ORBIT_ANTIGRAVITY_GOOGLE_DIR, KIMI_CODE_HOME, ORBIT_CURSOR_ACCOUNT_DIR) and no key of its own.
+ * Otherwise its choice or its env decides, and Orbit neither picks nor moves.
  */
 export function workspaceLeavesAccountToOrbit(
   engine: AccountEngine,
@@ -271,6 +271,7 @@ export function sessionAccountPausedUntil(
     claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
     antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
     kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
+    cursorAccount: session.cursorAccount ?? workspace?.cursorAccount,
   }, runner.engines);
   return runnerAccountPausedUntil(runner.accountPauses, engine, account, now);
 }
@@ -281,4 +282,5 @@ export interface WorkspaceAccountChoices {
   claudeAccount?: string | null;
   antigravityAccount?: string | null;
   kimiAccount?: string | null;
+  cursorAccount?: string | null;
 }
