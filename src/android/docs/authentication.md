@@ -70,7 +70,7 @@ Every response and storage mutation is checked against the current identity.
 Cleanup completes with cancellation masked; a cancelled caller cannot leave half a session.
 
 Refresh is never automatically retried. The server consumes a token once and replay can
-revoke the account's entire live refresh family. Even a network failure might mean the
+revoke the login session's entire live refresh family. Even a network failure might mean the
 rotation succeeded but its response was lost, so Android signs out on **any** failed refresh.
 A repeated 401 after the single explicit retry signs out only if the retry's token version
 is still current. A delayed rejection after another committed rotation fails only that
