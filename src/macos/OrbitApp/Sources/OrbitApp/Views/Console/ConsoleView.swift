@@ -137,7 +137,9 @@ struct ConsoleView: View {
                                         questionWidth: navTitleWidth)
         #if os(iOS)
         if #available(iOS 26.0, *) {
-            transcript.safeAreaBar(edge: .bottom, spacing: 0) { composerBand(console) }
+            transcript.safeAreaBar(edge: .bottom, spacing: 0) {
+                composerBand(console).environment(\.floatsOverTranscript, true)
+            }
         } else {
             VStack(spacing: 0) {
                 transcript

@@ -182,7 +182,8 @@ final class TailPinningWiringTests: XCTestCase {
         let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
         let layout = try section(source, from: "private func transcriptAndBand(", to: "private func composerBand(")
         XCTAssertTrue(layout.contains("if #available(iOS 26.0, *) {\n"
-                                      + "            transcript.safeAreaBar(edge: .bottom, spacing: 0) { composerBand(console) }"),
+                                      + "            transcript.safeAreaBar(edge: .bottom, spacing: 0) {\n"
+                                      + "                composerBand(console)"),
                       "on iOS 26 the band floats over the transcript")
         let tracker = try section(source, from: "private struct ScrollTracker",
                                   to: "/// Publishes the id of the item currently under")

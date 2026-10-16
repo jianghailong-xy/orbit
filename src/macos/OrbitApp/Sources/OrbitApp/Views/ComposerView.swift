@@ -69,6 +69,39 @@ extension EnvironmentValues {
     }
 }
 
+/// Whether a view stands in a composer band that floats over the transcript (iOS 26,
+/// `ConsoleView.transcriptAndBand`), with the rows passing behind it — where a card washed with a
+/// faint tint has to be glass instead (`composerBandWash`).
+private struct FloatsOverTranscriptKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var floatsOverTranscript: Bool {
+        get { self[FloatsOverTranscriptKey.self] }
+        set { self[FloatsOverTranscriptKey.self] = newValue }
+    }
+}
+
+private struct ComposerBandWash: ViewModifier {
+    @Environment(\.floatsOverTranscript) private var floats
+    let tint: Color
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10)
+        #if os(iOS)
+        if #available(iOS 26.0, *), floats {
+            content.glassEffect(.regular.tint(tint.opacity(0.22)), in: shape)
+        } else {
+            content.background(tint.opacity(opacity), in: shape)
+        }
+        #else
+        content.background(tint.opacity(opacity), in: shape)
+        #endif
+    }
+}
+
 extension CGFloat {
     /// The one vertical gap between `ComposerBand` members. Read it, don't retype it — the drift it
     /// replaces was four hand-written literals that stopped agreeing.
@@ -124,6 +157,16 @@ extension View {
         background(Color.primary.opacity(0.04), in: shape).clipShape(shape)
             .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
         #endif
+    }
+
+    /// A card the composer band shows now and then, washed with what it says — a run that never
+    /// started, an engine to repair, a hand-off, the managed runner's state. Where the band floats over
+    /// the transcript (`floatsOverTranscript`) it is glass tinted that colour, as the toasts are
+    /// (`ToastHost`), for the reason `composerBandCard` gives (the owner, 2026-10-16: these too).
+    /// Anywhere else — the Runners and Tasks pages, an error row in the transcript — it keeps the faint
+    /// wash it always had.
+    func composerBandWash(_ tint: Color, opacity: Double) -> some View {
+        modifier(ComposerBandWash(tint: tint, opacity: opacity))
     }
 
     /// The composer card's own surface, under its hairline: an elevated fill with a soft drop shadow

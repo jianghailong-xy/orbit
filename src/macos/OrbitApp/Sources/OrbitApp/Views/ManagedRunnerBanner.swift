@@ -58,8 +58,7 @@ struct ManagedRunnerBanner: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background((attention ? Color.orange : Color.accentColor).opacity(0.09),
-                    in: RoundedRectangle(cornerRadius: 10))
+        .composerBandWash(attention ? .orange : .accentColor, opacity: 0.09)
         .accessibilityElement(children: .contain)
     }
 }
