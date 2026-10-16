@@ -254,6 +254,7 @@ import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_INTERRUPTED_REASON,
   CURRENT_WORK_SESSION_ENDED,
+  stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
@@ -4774,9 +4775,9 @@ export class SessionsService {
     tx: Prisma.TransactionClient,
     sessionId: string,
     exactTurnId?: string,
-  ): Promise<{ id: string } | null> {
-    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT id FROM "conversation_turn"
+  ): Promise<{ id: string; seq: number } | null> {
+    const rows = await tx.$queryRaw<Array<{ id: string; seq: number }>>(Prisma.sql`
+      SELECT id, seq FROM "conversation_turn"
        WHERE "session_id" = ${sessionId}::uuid
          AND kind = 'message'
          AND status = 'IN_FLIGHT'
@@ -5343,6 +5344,16 @@ export class SessionsService {
             unusableLeaseTarget > 0
               ? 'the current turn lease expired before this message could enter it'
               : 'there is no live message turn to receive CURRENT_WORK',
+          );
+        }
+        // A turn somebody has already stopped is on its way out, and a message sent now is the next
+        // instruction rather than part of the work being stopped. Steered into that turn it would be
+        // written off with it (`stopOvertookTarget`); refused as there being no current work, it is
+        // sent again for the next turn and runs once the stopped one is over.
+        if (await stopOvertookTarget(tx, id, liveTarget.seq)) {
+          throw currentWorkUnavailable(
+            'NO_CURRENT_WORK',
+            'the current turn is being stopped, so there is no live message turn to receive CURRENT_WORK',
           );
         }
         if (!(await this.runtimeTakesSteer(tx, session))) {

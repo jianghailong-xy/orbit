@@ -15,6 +15,9 @@
  *     sends it: a current one reports it undelivered, and one older than this rule hands it back
  *     (`steer_requeue`), which the control plane no longer re-files once a Stop overtook its turn.
  *
+ * A message sent AFTER the Stop is the person's next instruction, not part of the stopped work: it is
+ * never steered into the stopping turn, and it runs as the next turn once that one is over.
+ *
  * The runner's side is played by hand: what it polls, the events it writes and what it reports.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/steer-interrupt.pg.spec.ts
@@ -25,6 +28,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
+import { ConflictException } from '@nestjs/common';
 import { type PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
 import {
   RunEventType,
@@ -335,6 +339,40 @@ test('a message waiting to be read when its turn is stopped is not delivered, an
     await notDelivered(steerId);
     await notDelivered(unheard);
     await nothingRunsAfterTheStop(w);
+  });
+
+  await t.test('a message sent after the Stop waits for the next turn instead of joining the stopping one', async () => {
+    // Typed after pressing Stop, while the stopped turn is still winding down: the composer sends it as
+    // CURRENT_WORK, and the turn it would join is the one being stopped.
+    const w = await world();
+    const target = await running(w);
+    await stop(w);
+
+    const clientTurnId = randomUUID();
+    const words = 'now write the release notes instead';
+    const refusal = await sessions.createTurn(ownerId, w.sessionId, {
+      clientTurnId, content: words, intent: 'CURRENT_WORK',
+    } as never).then(() => assert.fail('it was steered into the turn being stopped'), (error: unknown) => error);
+    assert.ok(refusal instanceof ConflictException);
+    const refused = refusal.getResponse() as { code?: string; reason?: string };
+    assert.deepEqual([refused.code, refused.reason], ['CURRENT_WORK_UNAVAILABLE', 'NO_CURRENT_WORK']);
+    // The web composer sends the same message again for the next turn (composerSendState.ts).
+    const sent = await sessions.createTurn(ownerId, w.sessionId, {
+      clientTurnId, content: words, intent: 'NEXT_TURN',
+    } as never) as { turnId: string; kind: string; placement: string };
+    assert.deepEqual([sent.kind, sent.placement], ['message', 'queued']);
+
+    await endInterrupted(w, target);
+
+    // It runs as the next turn, and nothing says it was not delivered.
+    const row = await turnRow(sent.turnId);
+    assert.deepEqual(
+      [row.kind, row.sendIntent, row.targetTurnId, row.status, row.deliveryStatus],
+      ['message', 'NEXT_TURN', null, 'PENDING', null],
+    );
+    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: w.sessionId } })).status, RunStatus.RUNNING);
+    assert.equal((await dequeue(w))?.turnId, sent.turnId, 'the message sent after the Stop is not the next turn');
+    assert.ok(!(await listed(w)).some((listedRow) => listedRow.turnId === sent.turnId && listedRow.delivery != null));
   });
 
   await t.test('without a Stop, a steer the runner hands back unread still runs as the next turn', async () => {
