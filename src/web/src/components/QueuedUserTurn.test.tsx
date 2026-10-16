@@ -699,8 +699,13 @@ describe('the console’s queued tail', { timeout: 60_000 }, () => {
     const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
     env.IS_REACT_ACT_ENVIRONMENT = false;
     try {
+      // Every card Orbit queued is in the tail; the reader's message and their `!cmd` wait in the
+      // tray above the composer instead (`inPendingTray`).
       await vi.waitFor(
-        () => expect(el.querySelectorAll('.chat-queued-meta')).toHaveLength(CASES.length + 1),
+        () => {
+          expect(el.querySelectorAll('.chat-queued-meta')).toHaveLength(CASES.length - 1);
+          expect(el.querySelectorAll('.pending-tray-row')).toHaveLength(2);
+        },
         { timeout: 20_000, interval: 20 },
       );
     } finally {
@@ -716,12 +721,14 @@ describe('the console’s queued tail', { timeout: 60_000 }, () => {
       expect(line.querySelector('.chat-queued-tag')?.textContent, c.name).toBe('Queued for next turn');
       expect([...line.querySelectorAll('a')].map((a) => a.textContent), c.name).toEqual(c.actions);
     }
-    // The two the reader typed are their own bubbles, exactly as the queue always drew them.
-    const bubbles = [...el.querySelectorAll<HTMLElement>('.chat-queued')];
-    expect(bubbles.map((b) => b.className)).toEqual(['chat-msg chat-user chat-queued', 'chat-msg chat-user chat-queued']);
-    expect(bubbles[0].querySelector('.md')?.textContent?.trim()).toBe(TYPED);
-    expect(bubbles[1].querySelector('.chat-queued-cmd')?.textContent).toBe('!npm test -w @orbit/web');
+    // The two the reader typed are rows of the tray, each with its way back, and the `!cmd` reads
+    // as the command it will run.
+    const rows = [...el.querySelectorAll<HTMLElement>('.pending-tray-row')];
+    expect(rows.map((r) => r.querySelector('.pending-tray-text')?.textContent)).toEqual([TYPED, '!npm test -w @orbit/web']);
+    expect(rows[1].querySelector('.pending-tray-text')?.classList.contains('is-shell')).toBe(true);
+    expect(rows.map((r) => r.querySelector('.pending-tray-state')?.textContent)).toEqual(['Queued for next turn', 'Queued for next turn']);
+    expect(rows.map((r) => r.querySelector('[aria-label="Withdraw"]') !== null)).toEqual([true, true]);
     // And nothing anybody else wrote is drawn as the reader's message.
-    expect(el.querySelectorAll('.chat-user')).toHaveLength(2);
+    expect(el.querySelectorAll('.chat-user')).toHaveLength(0);
   });
 });

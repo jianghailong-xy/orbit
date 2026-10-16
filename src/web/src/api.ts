@@ -701,6 +701,15 @@ export const fetchAvatarDataUrl = async (): Promise<string> => {
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
 
+/** Send a message queued for the next turn into the one running now (the tray's Steer). It becomes
+ *  the steer it would have been had it been sent that way; with no turn to join, or an engine or
+ *  runner that cannot take one, it stays queued and the refusal is CURRENT_WORK_UNAVAILABLE. */
+export const steerQueuedTurn = (sessionId: string, turnId: string) =>
+  api<{ turnId: string; seq: number; kind: ConversationTurnKind; placement: SessionTurnPlacement; targetTurnId?: string }>(
+    `/sessions/${sessionId}/turns/${turnId}/steer`,
+    { method: 'POST' },
+  );
+
 /** The cards a user turn is drawn as, under the names the runner's echo stores them by (apiserver
  *  `TurnCards`, sessions/turn-cards.ts): a queued row carries the same fields its echo will, each
  *  absent on every turn that is not that card. */

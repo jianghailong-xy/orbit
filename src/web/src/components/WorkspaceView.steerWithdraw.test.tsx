@@ -10,11 +10,17 @@ import type { Runner } from './TasksSidePanel';
 import type { RunEvent } from './Transcript';
 
 /**
- * Taking back a message sent into the running turn while nothing has read it (lib/steerDelivery,
- * WorkspaceView `withdrawSteer`). The bubble offers it beside "Waiting to be read" when its runner
- * said the engine can drop it unread; the press asks the server, which asks the engine; only its
- * answer removes the bubble, and then the words are back in the composer. Too late, it says so and
- * the bubble stays. A steer the runner has not taken yet is offered the same way from the queue.
+ * The tray above the composer (PendingTray, docs/mocks/steer-tray): the reader's messages nothing has
+ * read yet, one row each, out of the conversation until the engine reads them.
+ *
+ * Taking one back (lib/steerDelivery, WorkspaceView `withdrawSteer`): the row offers it beside
+ * "Waiting to be read" when its runner said the engine can drop it unread; the press asks the server,
+ * which asks the engine; only its answer removes the row, and then the words are back in the
+ * composer. Too late, it says so and the row stays. A steer the runner has not taken yet is offered
+ * the same way. Once read, the message leaves the tray and is drawn where it was read.
+ *
+ * Sending one the other way: a queued row's Steer sends it into the running turn; ⌥Enter, or holding
+ * Send, queues a message instead of sending it into the turn.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -25,6 +31,8 @@ vi.mock('../api', async (importOriginal) => {
     getSessionEventPage: vi.fn(),
     listQueuedTurns: vi.fn(),
     cancelQueuedTurn: vi.fn(),
+    steerQueuedTurn: vi.fn(),
+    sendTurn: vi.fn(),
   };
 });
 // jsdom has no IndexedDB, and a cached transcript would seed the window instead of the stub.
@@ -33,10 +41,14 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, ApiError, cancelQueuedTurn, getSessionEventPage, listQueuedTurns } = await import('../api');
+const { api, ApiError, cancelQueuedTurn, getSessionEventPage, listQueuedTurns, sendTurn, steerQueuedTurn } = await import('../api');
 const apiMock = vi.mocked(api);
 const cancelMock = vi.mocked(cancelQueuedTurn);
+const steerMock = vi.mocked(steerQueuedTurn);
+const sendMock = vi.mocked(sendTurn);
 const { WorkspaceView } = await import('./WorkspaceView');
+const { ToastViewport } = await import('./ToastViewport');
+const { clearToasts } = await import('../lib/toastStore');
 const { encodeId } = await import('../lib/idCodec');
 
 const RUNNER_ID = '0195c0de-0000-7000-8000-000000000041';
@@ -103,6 +115,9 @@ const mounted = (): HTMLDivElement => {
 const composer = (): HTMLTextAreaElement | null => mounted().querySelector<HTMLTextAreaElement>('.composer-field textarea');
 const steerBubble = (): HTMLElement | undefined =>
   [...mounted().querySelectorAll<HTMLElement>('.chat-user-wrap')].find((w) => w.textContent?.includes('push into main'));
+const trayRow = (words: string): HTMLElement | undefined =>
+  [...mounted().querySelectorAll<HTMLElement>('.pending-tray-row')].find((r) => r.textContent?.includes(words));
+const rowState = (row: HTMLElement | undefined) => row?.querySelector('.pending-tray-state')?.textContent;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
   const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
@@ -130,6 +145,10 @@ beforeEach(() => {
   queue = [];
   apiMock.mockReset();
   cancelMock.mockReset();
+  steerMock.mockReset();
+  sendMock.mockReset();
+  sendMock.mockImplementation(async (_session: string, content: string, _ids?: string[], _kind?: string, intent?: string) =>
+    ({ turnId: 'turn-sent', seq: 9, kind: intent === 'CURRENT_WORK' ? 'steer' : 'message', placement: intent === 'CURRENT_WORK' ? 'steer' : 'queued' }) as never);
   vi.mocked(listQueuedTurns).mockImplementation(async () => queue);
   vi.mocked(getSessionEventPage).mockImplementation(async () => ({ events, hasMore: false }) as never);
   apiMock.mockImplementation((path: string) => {
@@ -173,6 +192,7 @@ afterEach(async () => {
   client = null;
   container = null;
   try {
+    await act(async () => clearToasts());
     if (mountedRoot) await act(async () => mountedRoot.unmount());
   } finally {
     if (mountedClient) {
@@ -201,6 +221,7 @@ async function mountSession(ready: () => void): Promise<void> {
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
           <WorkspaceView runner={RUNNER} />
+          <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -209,21 +230,39 @@ async function mountSession(ready: () => void): Promise<void> {
 }
 
 const withdrawButton = (scope: Element | undefined): HTMLElement | undefined =>
-  [...(scope?.querySelectorAll<HTMLElement>('button, a') ?? [])].find((b) => b.textContent === 'Withdraw');
+  scope?.querySelector<HTMLElement>('[aria-label="Withdraw"]') ?? undefined;
+const steerButton = (scope: Element | undefined): HTMLElement | undefined =>
+  [...(scope?.querySelectorAll<HTMLElement>('button') ?? [])].find((b) => b.textContent === 'Steer');
+
+/** Types into the composer, as the reader does. */
+async function type(words: string): Promise<HTMLTextAreaElement> {
+  const box = composer()!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, words);
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  box.focus();
+  return box;
+}
 
 describe('a message sent into the running turn, taken back', { timeout: 60_000 }, () => {
-  it('goes when the engine drops it, and its words are back in the composer', async () => {
+  it('waits in the tray, not the conversation, and goes when the engine drops it — its words back in the composer', async () => {
     cancelMock.mockResolvedValue({ ok: true, withdrawn: true });
     await mountSession(() => {
-      expect(steerBubble()?.querySelector('.chat-steer-state')?.textContent).toBe('Waiting to be readWithdraw');
+      expect(rowState(trayRow('push into main'))).toBe('Waiting to be read');
+      expect(withdrawButton(trayRow('push into main'))).toBeDefined();
     });
+    // Nothing has read it, so the conversation has nothing of it, and it is headed into this turn.
+    expect(steerBubble()).toBeUndefined();
+    expect(trayRow('push into main')?.querySelector('.pending-tray-icon.is-current')).not.toBeNull();
+    expect(steerButton(trayRow('push into main'))).toBeUndefined();
 
-    await click(withdrawButton(steerBubble())!);
+    await click(withdrawButton(trayRow('push into main'))!);
 
     expect(cancelMock).toHaveBeenCalledTimes(1);
     expect(cancelMock.mock.calls[0][1]).toBe('turn-steer');
     await waitForUi(() => {
-      expect(steerBubble()).toBeUndefined();
+      expect(trayRow('push into main')).toBeUndefined();
       expect(composer()?.value).toBe(STEER);
     });
   });
@@ -233,21 +272,22 @@ describe('a message sent into the running turn, taken back', { timeout: 60_000 }
       new ApiError('Claude has already read this message, so it can no longer be withdrawn.', 409, STEER_WITHDRAW_ERRORS.ALREADY_READ),
     );
     await mountSession(() => {
-      expect(withdrawButton(steerBubble())).toBeDefined();
+      expect(withdrawButton(trayRow('push into main'))).toBeDefined();
     });
 
-    await click(withdrawButton(steerBubble())!);
+    await click(withdrawButton(trayRow('push into main'))!);
 
     await waitForUi(() => {
       expect(document.body.textContent).toContain('Too late to withdraw');
       expect(document.body.textContent).toContain('Claude has already read it.');
-      // The bubble is where it was, and the way out is back for whatever happens next.
-      expect(steerBubble()?.querySelector('.chat-steer-state')?.textContent).toBe('Waiting to be readWithdraw');
+      // The row is where it was, and the way out is back for whatever happens next.
+      expect(rowState(trayRow('push into main'))).toBe('Waiting to be read');
+      expect(withdrawButton(trayRow('push into main'))).toBeDefined();
     });
     expect(composer()?.value).toBe('');
   });
 
-  it('is offered from the queue too, while no runner has it yet', async () => {
+  it('is offered while no runner has it yet, and the words return under a draft', async () => {
     events = RUNNING.slice(0, 2);
     queue = [{ turnId: 'turn-queued', kind: 'steer', placement: 'steer', content: 'and the docs too', createdAt: '2026-10-15T09:43:00Z' }];
     cancelMock.mockImplementation(async (_session: string, turnId: string) => {
@@ -255,17 +295,150 @@ describe('a message sent into the running turn, taken back', { timeout: 60_000 }
       return { ok: true };
     });
     await mountSession(() => {
-      const row = mounted().querySelector('.chat-queued');
-      expect(row?.querySelector('.chat-queued-tag')?.textContent).toBe('Sending…');
-      expect([...(row?.querySelectorAll('a') ?? [])].map((a) => a.textContent)).toEqual(['Withdraw']);
+      expect(rowState(trayRow('and the docs too'))).toBe('Sending…');
     });
+    expect(mounted().querySelector('.chat-queued')).toBeNull();
+    await type('one more thing');
 
-    await click([...mounted().querySelectorAll('.chat-queued a')].find((a) => a.textContent === 'Withdraw')!);
+    await click(withdrawButton(trayRow('and the docs too'))!);
 
     expect(cancelMock.mock.calls[0][1]).toBe('turn-queued');
     await waitForUi(() => {
-      expect(mounted().querySelector('.chat-queued')).toBeNull();
-      expect(composer()?.value).toBe('and the docs too');
+      expect(trayRow('and the docs too')).toBeUndefined();
+      expect(composer()?.value).toBe('one more thing\n\nand the docs too');
     });
+  });
+
+  it('leaves the tray once read, drawn where it was read', async () => {
+    events = [
+      ...RUNNING,
+      { seq: 5, type: 'tool_result', turnId: 'turn-run', ts: '2026-10-15T09:58:00Z', payload: { toolUseId: 'b1', content: '412 passed' } },
+      { seq: 6, type: 'user_delivery', turnId: 'turn-steer', ts: '2026-10-15T09:58:01Z', payload: { turnId: 'turn-steer', delivery: 'acknowledged' } },
+    ];
+    await mountSession(() => {
+      expect(steerBubble()?.querySelector('.chat-steer-state')?.textContent).toBe('Read in this turn');
+    });
+    expect(mounted().querySelector('.pending-tray')).toBeNull();
+    // After the test run it was read at the end of, not before it.
+    const order = [...mounted().querySelectorAll('[data-seq]')].map((el) => el.getAttribute('data-seq'));
+    expect(order.indexOf('3')).toBeGreaterThan(order.indexOf('2'));
+  });
+});
+
+describe('a queued message, sent into the running turn', { timeout: 60_000 }, () => {
+  const queued = (): ActiveSessionTurn[] => [
+    { turnId: 'turn-next', kind: 'message', placement: 'queued', content: 'then update the changelog', createdAt: '2026-10-15T09:43:00Z' },
+  ];
+
+  it('is sent into it by Steer, and is on its way from then on', async () => {
+    events = RUNNING.slice(0, 2);
+    queue = queued();
+    steerMock.mockImplementation(async () => {
+      queue = [{ ...queued()[0], kind: 'steer', placement: 'steer', targetTurnId: 'turn-run' }];
+      return { turnId: 'turn-next', seq: 5, kind: 'steer', placement: 'steer', targetTurnId: 'turn-run' };
+    });
+    await mountSession(() => {
+      expect(rowState(trayRow('then update the changelog'))).toBe('Queued for next turn');
+      expect(steerButton(trayRow('then update the changelog'))).toBeDefined();
+    });
+
+    await click(steerButton(trayRow('then update the changelog'))!);
+
+    expect(steerMock).toHaveBeenCalledTimes(1);
+    expect(steerMock.mock.calls[0][1]).toBe('turn-next');
+    await waitForUi(() => {
+      expect(rowState(trayRow('then update the changelog'))).toBe('Sending…');
+      expect(trayRow('then update the changelog')?.querySelector('.pending-tray-icon.is-current')).not.toBeNull();
+      expect(steerButton(trayRow('then update the changelog'))).toBeUndefined();
+    });
+  });
+
+  it('stays queued when there is no turn left to join, and says so', async () => {
+    events = RUNNING.slice(0, 2);
+    queue = queued();
+    steerMock.mockRejectedValue(
+      new ApiError('there is no live message turn to receive CURRENT_WORK', 409, 'CURRENT_WORK_UNAVAILABLE', {
+        code: 'CURRENT_WORK_UNAVAILABLE', reason: 'NO_CURRENT_WORK',
+      }),
+    );
+    await mountSession(() => {
+      expect(steerButton(trayRow('then update the changelog'))).toBeDefined();
+    });
+
+    await click(steerButton(trayRow('then update the changelog'))!);
+
+    await waitForUi(() => {
+      expect(document.body.textContent).toContain("Couldn't send it into this turn");
+      expect(document.body.textContent).toContain('It stays queued for the next turn.');
+      expect(rowState(trayRow('then update the changelog'))).toBe('Queued for next turn');
+    });
+  });
+
+  it('is withdrawn with its words back under a draft', async () => {
+    events = RUNNING.slice(0, 2);
+    queue = queued();
+    cancelMock.mockImplementation(async () => {
+      queue = [];
+      return { ok: true };
+    });
+    await mountSession(() => {
+      expect(withdrawButton(trayRow('then update the changelog'))).toBeDefined();
+    });
+    await type('and the docs');
+
+    await click(withdrawButton(trayRow('then update the changelog'))!);
+
+    await waitForUi(() => {
+      expect(trayRow('then update the changelog')).toBeUndefined();
+      expect(composer()?.value).toBe('and the docs\n\nthen update the changelog');
+    });
+  });
+});
+
+describe('a message sent the other way while a turn runs', { timeout: 60_000 }, () => {
+  it('goes into the turn on Enter, and is queued for the next turn on ⌥Enter', async () => {
+    events = RUNNING.slice(0, 2);
+    await mountSession(() => {
+      expect(composer()).not.toBeNull();
+    });
+
+    const box = await type('then push it to main');
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => expect(sendMock).toHaveBeenCalledTimes(1));
+    expect(sendMock.mock.calls[0][4]).toBe('NEXT_TURN');
+
+    await type('and tag the release');
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => expect(sendMock).toHaveBeenCalledTimes(2));
+    expect(sendMock.mock.calls[1][4]).toBe('CURRENT_WORK');
+  });
+
+  it('is queued for the next turn from a held Send, and the hold sends nothing itself', async () => {
+    events = RUNNING.slice(0, 2);
+    await mountSession(() => {
+      expect(composer()).not.toBeNull();
+    });
+    await type('then push it to main');
+    const send = mounted().querySelector<HTMLElement>('.composer-send')!;
+
+    await act(async () => {
+      send.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    });
+    await waitForUi(() => expect(mounted().querySelector('.composer-queue-offer')).not.toBeNull());
+    await act(async () => {
+      send.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    });
+    await click(send);
+    expect(sendMock).not.toHaveBeenCalled();
+
+    await click([...mounted().querySelectorAll('.composer-queue-offer button')].find((b) => b.textContent === 'Queue for next turn')!);
+
+    await waitForUi(() => expect(sendMock).toHaveBeenCalledTimes(1));
+    expect(sendMock.mock.calls[0][4]).toBe('NEXT_TURN');
+    expect(mounted().querySelector('.composer-queue-offer')).toBeNull();
   });
 });

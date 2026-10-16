@@ -251,6 +251,7 @@ import {
   completeSession,
   cancelAutoRetry,
   cancelQueuedTurn,
+  steerQueuedTurn,
   adoptSessionBranch,
   commitSession,
   createMergeRepairSession,
@@ -299,7 +300,8 @@ import {
   type NeverStartedSession,
 } from './RunNeverStartedCard';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnAttachmentRef, type TurnImage, UndeliveredCtx, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
@@ -435,6 +437,7 @@ import {
   isAccountEngine,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
+  runtimeTakesMidTurnSteer,
   STEER_WITHDRAW_ERRORS,
   TRASH_RETENTION_DAYS,
   withEnginePlanUsage,
@@ -458,7 +461,7 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { deliveryFailureExplanation, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
+import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
 import { streamAnchorAfter } from '../lib/streamAnchor';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
@@ -1923,6 +1926,30 @@ function StopSquareIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Whether a row of the queue waits in the tray above the composer rather than at the transcript's
+ * tail: the reader's own words (`returnsToComposer`) still on their way — queued for the next turn,
+ * or a steer no runner has taken yet. A message whose delivery settled undelivered has an outcome,
+ * and stays in the conversation with it.
+ */
+export function inPendingTray(turn: QueuedTurn): boolean {
+  return turn.delivery == null && returnsToComposer(turn);
+}
+
+/** What a tray row shows of a message's attachments: this tab's previews, else the pictures' ids. */
+function trayPictures(
+  previews: readonly TurnImage[] | undefined,
+  refs: readonly { id: string; mime?: string }[] | undefined,
+): Pick<PendingTrayRow, 'previews' | 'imageIds' | 'files'> {
+  const all = refs ?? [];
+  const files = all.filter((r) => r.mime && !r.mime.startsWith('image/')).length;
+  if (previews?.length) return { previews: [...previews], imageIds: [], files };
+  return { previews: [], imageIds: all.filter((r) => !r.mime || r.mime.startsWith('image/')).map((r) => r.id), files };
+}
+
+/** How long Send is held before it offers to queue the message instead (a phone has no ⌥Enter). */
+const QUEUE_OFFER_HOLD_MS = 450;
+
 /** What withdrawing a queued wake costs, said when the action asks to confirm. */
 const WAKE_WITHDRAW_CONSEQUENCE =
   "If withdrawn, this session is not woken this time, and the watch won't send it again.";
@@ -1931,11 +1958,11 @@ const WAKE_WITHDRAW_CONSEQUENCE =
  * The line under a message in the queued tail — the one thing that says which of the two kinds
  * the server filed it as, and where the way out of it is offered.
  *
- * A queued message is waiting for its own turn: nothing has read it, so it can still be taken
- * back. A steer listed here has not been handed to anything yet either, so it can be withdrawn too —
- * by its own door (`onWithdraw`, the same one its bubble offers once the runner has it), which hands
- * a typed steer's words back the way "Put back in the composer" does. `placement` is the server
- * receipt, never a local guess.
+ * The reader's own messages still on their way are not here: the tray above the composer holds
+ * them, with their way back (`inPendingTray`). What this line is under is what Orbit queued — a turn
+ * nobody typed, waiting for its own turn and still cancellable, or one on its way into the running
+ * turn — and a message whose delivery settled. `placement` is the server receipt, never a local
+ * guess.
  *
  * Once delivery has settled undelivered, both of those stop being true. Nothing read the message
  * and nothing will; the row is a durable statement about a boundary that has passed. So it is the
@@ -1955,8 +1982,6 @@ export function QueuedTurnMeta({
   wake,
   onCancel,
   onPutBack,
-  onWithdraw,
-  withdrawing,
 }: {
   placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
   delivery?: 'failed' | 'unconfirmed';
@@ -1966,17 +1991,13 @@ export function QueuedTurnMeta({
   wake?: boolean;
   onCancel: () => void;
   onPutBack?: () => void;
-  /** Take back a steer the reader typed (WorkspaceView `withdrawSteer`); absent for anything else. */
-  onWithdraw?: () => void;
-  /** That withdrawal has been asked for and not yet answered. */
-  withdrawing?: boolean;
 }) {
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
       ? steerDeliveryState('unconfirmed').label
     : placement === 'steer'
-      ? withdrawing ? 'Withdrawing…' : steerDeliveryState(undefined).label
+      ? steerDeliveryState(undefined).label
       : 'Queued for next turn';
   const why = delivery != null ? deliveryFailureExplanation(deliveryCode, deliveryReason) : undefined;
   return (
@@ -1986,9 +2007,7 @@ export function QueuedTurnMeta({
       </span>
       {why && <span className="chat-queued-why">{why}</span>}
       {delivery == null
-        ? placement === 'queued'
-          ? <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
-          : onWithdraw && !withdrawing && <a onClick={onWithdraw}>Withdraw</a>
+        ? placement === 'queued' && <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
         : onPutBack && <a onClick={onPutBack}>Put back in the composer</a>}
     </span>
   );
@@ -4106,10 +4125,21 @@ export function WorkspaceView({
     () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
     [scopedQueuedTurns, transcriptEvents],
   );
-  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be.
+  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be. Only
+  // the rows the tray does not hold (`inPendingTray`): what Orbit queued, and a message whose
+  // delivery settled undelivered, which is part of the conversation's record.
   const queuedTailEvents = useMemo(
-    () => visibleQueuedTurns.map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
+    () =>
+      visibleQueuedTurns
+        .filter((turn) => !inPendingTray(turn))
+        .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
+  );
+  // The reader's steers the engine has not read yet: the transcript leaves them out, and the tray
+  // above the composer holds them (Transcript `UnreadSteer`).
+  const unreadSteers = useMemo(
+    () => unreadSteersOf(transcriptEvents, turnImages),
+    [transcriptEvents, turnImages],
   );
   // The render-time filter above removes duplication in the same frame the SSE event lands. Trim
   // the acknowledged copy afterwards so landed turns do not accumulate in memory.
@@ -6329,17 +6359,12 @@ export function WorkspaceView({
       // Withdrawing shouldn't silently eat what the user typed (interrupt parity): fold the
       // message back into the composer so it can be edited and resent. Only restored once the
       // DELETE succeeds — a rejected withdraw means the runner already leased it, so it lands
-      // in the transcript and restoring would duplicate it. Unlike Stop (offered only with an
-      // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
-      // read through textRef, since the awaited gap may have outdated this render's `text`.
-      // Nor does a turn nobody typed come back (`returnsToComposer`).
+      // in the transcript and restoring would duplicate it. Withdrawn from the tray it comes back
+      // as a withdrawn steer does (decided 2026-10-16, docs/mocks/steer-tray): an explicit press,
+      // so a draft keeps its place above the words rather than losing them to it. Nor does a turn
+      // nobody typed come back (`returnsToComposer`).
       const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
-      if (body && !textRef.current.trim()) {
-        setText(withdrawn?.shell ? `!${body}` : body);
-        // The files follow the words: restoring them under a draft that kept its place would stage
-        // one message's images against another's text.
-        stageRestored(withdrawn?.attachments);
-      }
+      if (body) restoreUndelivered?.(withdrawn?.shell ? `!${body}` : body, withdrawn?.attachments);
     } catch {
       message.info('This message is already being processed and cannot be withdrawn');
     }
@@ -7416,6 +7441,40 @@ export function WorkspaceView({
     readyImages.length === 0 &&
     !replyTo;
 
+  // Holding Send while a turn runs offers the other way to send the message — queued for the next
+  // turn instead of into this one — which ⌥Enter does from a keyboard (decided 2026-10-16,
+  // docs/mocks/steer-tray). A phone has no ⌥.
+  const queueOffered = defaultSendIntent === 'CURRENT_WORK' && !showStop && runtimeTakesMidTurnSteer(selectedEngine);
+  const [queueOffer, setQueueOffer] = useState(false);
+  const queueOfferRef = useRef<HTMLDivElement>(null);
+  // The press now on Send, and whether it was held long enough to open the offer instead of sending.
+  const sendHold = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
+  const releaseSendHold = () => {
+    const hold = sendHold.current;
+    if (hold && !hold.fired) {
+      clearTimeout(hold.timer);
+      sendHold.current = null;
+    }
+  };
+  useEffect(() => {
+    if (!queueOffer) return undefined;
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !queueOfferRef.current?.contains(event.target as Element | null)) {
+        setQueueOffer(false);
+      }
+    };
+    document.addEventListener('pointerdown', close, true);
+    document.addEventListener('keydown', close, true);
+    return () => {
+      document.removeEventListener('pointerdown', close, true);
+      document.removeEventListener('keydown', close, true);
+    };
+  }, [queueOffer]);
+  // Nothing to send that way any more (sent, emptied, the turn ended): the offer goes too.
+  useEffect(() => {
+    if (!queueOffered) setQueueOffer(false);
+  }, [queueOffered]);
+
   // ── `/` command, skill, and local command autocomplete ─────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
   // / runner.skills). Show them as a hint menu while the cursor sits on a `/token`
@@ -8143,6 +8202,99 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing, withdrawingSteers, withdrawnSteers],
   );
+  // Queued messages a Steer is out for: drawn as on their way into the turn until the server answers.
+  const [steeringTurns, setSteeringTurns] = useState<ReadonlySet<string>>(() => new Set());
+  // The tray's Steer: send a message queued for the next turn into the one running now. The server
+  // makes it the steer it would have been (POST …/steer), and the row moves on from there as a steer
+  // does; with no turn left to join it stays queued, and is told so.
+  const steerQueued = async (turnId: string): Promise<void> => {
+    const sessionId = selectedId;
+    if (!sessionId || steeringTurns.has(turnId)) return;
+    setSteeringTurns((s) => new Set(s).add(turnId));
+    try {
+      const res = await steerQueuedTurn(sessionId, turnId);
+      setQueued((current) =>
+        current.map((turn) =>
+          turn.turnId === turnId
+            ? { ...turn, placement: 'steer', ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}) }
+            : turn,
+        ),
+      );
+    } catch (e) {
+      if (isCurrentWorkUnavailable(e)) {
+        const reason = e instanceof ApiError ? e.body?.reason : undefined;
+        message.info(
+          "Couldn't send it into this turn",
+          reason === 'STEER_UNSUPPORTED'
+            ? "This agent can't take a message mid-turn. It stays queued for the next turn."
+            : 'The turn is over or being stopped. It stays queued for the next turn.',
+        );
+      } else {
+        message.error("Couldn't send it into this turn", e instanceof Error ? e.message : undefined);
+      }
+    } finally {
+      setSteeringTurns((s) => {
+        const next = new Set(s);
+        next.delete(turnId);
+        return next;
+      });
+    }
+  };
+  // Steer is offered while a turn runs on an engine that can take a message into one (the server
+  // still asks the runner, and refuses one too old).
+  const steerOffered = !!live && selectedRunStatus === 'RUNNING' && runtimeTakesMidTurnSteer(selectedEngine);
+  // The tray's rows, in the order they were sent: the reader's steers nothing has read (from the
+  // transcript's events) and their messages still on the queue (`inPendingTray`).
+  const pendingTrayRows = ((): PendingTrayRow[] => {
+    if (selectedTrashed || selectedMissing) return [];
+    const steerRow = (steer: UnreadSteer): PendingTrayRow => {
+      // Missed the turn it was aimed at and handed back to run as the next turn: queued now, and
+      // shortly the message that opens that turn.
+      const requeued = steer.delivery === 'requeued';
+      const withdrawing = withdrawingSteers.has(steer.turnId);
+      return {
+        key: steer.turnId,
+        heading: requeued ? 'next' : 'current',
+        text: steer.text,
+        ...trayPictures(steer.images, steer.attachmentRefs),
+        state: withdrawing ? 'Withdrawing…' : requeued ? 'Queued for next turn' : steerDeliveryState(steer.delivery).label,
+        busy: withdrawing,
+        onWithdraw:
+          !requeued && steerWithdrawal && offersSteerWithdraw(steer.delivery, steer.withdrawable)
+            ? () => steerWithdrawal.withdraw(steer.turnId, steer.text, steer.attachmentRefs)
+            : undefined,
+      };
+    };
+    const queuedRow = (turn: QueuedTurn): PendingTrayRow => {
+      const steering = steeringTurns.has(turn.turnId);
+      const intoTurn = turn.placement === 'steer' || steering;
+      const withdrawing = withdrawingSteers.has(turn.turnId);
+      const refs: TurnAttachmentRef[] | undefined = turn.attachments?.map((a) => ({ id: a.id, mime: a.mimeType || undefined }));
+      return {
+        key: turn.turnId,
+        heading: intoTurn ? 'current' : 'next',
+        text: turn.content,
+        shell: turn.shell,
+        ...trayPictures(turnImages[turn.turnId], refs),
+        state: withdrawing ? 'Withdrawing…' : intoTurn ? steerDeliveryState(undefined).label : 'Queued for next turn',
+        busy: withdrawing || steering,
+        // Not handed to a runner yet, either way: the server takes it back alone.
+        onWithdraw: turn.placement === 'steer'
+          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.content, refs) : undefined
+          : () => void cancelQueued(turn.turnId),
+        onSteer: !intoTurn && !turn.shell && steerOffered ? () => void steerQueued(turn.turnId) : undefined,
+      };
+    };
+    return [
+      ...unreadSteers
+        .filter((steer) => !withdrawnSteers.has(steer.turnId))
+        .map((steer) => ({ at: steer.ts, row: steerRow(steer) })),
+      ...visibleQueuedTurns.filter(inPendingTray).map((turn) => ({ at: turn.createdAt, row: queuedRow(turn) })),
+    ]
+      // A row this tab just sent has no receipt time yet: it is the newest.
+      .sort((a, b) => (a.at ?? '\uffff').localeCompare(b.at ?? '\uffff'))
+      .map(({ row }) => row);
+  })();
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -10735,9 +10887,11 @@ export function WorkspaceView({
                 // queue's own is said here, in the slot each card keeps for it: how the turn stands,
                 // and the way out of it.
                 //
-                // A wake a watch queued is withdrawn rather than cancelled, because nothing sends it
-                // again; and only words the reader typed are put back in the composer
-                // (`returnsToComposer`), as Cancel and Stop hand back only those.
+                // The reader's own messages still on their way wait in the tray instead
+                // (`inPendingTray`); what is left here is what Orbit queued and what settled
+                // undelivered. A wake a watch queued is withdrawn rather than cancelled, because
+                // nothing sends it again; and only words the reader typed are put back in the
+                // composer (`returnsToComposer`), as Cancel and Stop hand back only those.
                 const wake = isQueuedWatchWake(q);
                 return (
                   <QueuedUserTurn
@@ -10752,12 +10906,6 @@ export function WorkspaceView({
                         deliveryReason={q.deliveryReason}
                         wake={wake}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
-                        onWithdraw={
-                          steerWithdrawal && q.placement === 'steer' && !wake && returnsToComposer(q)
-                            ? () => steerWithdrawal.withdraw(q.turnId, q.content, q.attachments)
-                            : undefined
-                        }
-                        withdrawing={withdrawingSteers.has(q.turnId)}
                         onPutBack={
                           restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined
                         }
@@ -11037,6 +11185,8 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
+        {/* The reader's messages nothing has read yet, tucked behind the composer's top edge. */}
+        <PendingTray rows={pendingTrayRows} />
         <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
               Only shown once the box has hit its auto-grow cap or the user set a manual
@@ -11390,7 +11540,9 @@ export function WorkspaceView({
                 // reader is still composing in (the settlement card's Start the project, the
                 // confirmation card's Confirm done).
                 if (text.trim() || readyImages.length > 0 || replyTo) e.stopPropagation();
-                onSend();
+                // ⌥Enter sends it the other way while a turn runs: queued for the next turn instead
+                // of into this one (decided 2026-10-16, docs/mocks/steer-tray).
+                onSend(e.altKey ? 'NEXT_TURN' : undefined);
               }
             }}
           />
@@ -11688,15 +11840,61 @@ export function WorkspaceView({
                 aria-label="Stop"
               />
             ) : (
-              <Button
-                className="composer-send"
-                variant="primary"
-                icon={<ArrowUpOutlined />}
-                disabled={!canSend}
-                loading={send.isPending}
-                onClick={() => onSend()}
-                aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-              />
+              <span className="composer-send-hold">
+                <Button
+                  className="composer-send"
+                  variant="primary"
+                  icon={<ArrowUpOutlined />}
+                  disabled={!canSend}
+                  loading={send.isPending}
+                  onClick={() => {
+                    // The press that opened the offer is not a send as well.
+                    if (sendHold.current?.fired) {
+                      sendHold.current = null;
+                      return;
+                    }
+                    onSend();
+                  }}
+                  onPointerDown={() => {
+                    sendHold.current = null;
+                    if (!queueOffered || !canSend) return;
+                    const hold = {
+                      fired: false,
+                      timer: setTimeout(() => {
+                        hold.fired = true;
+                        setQueueOffer(true);
+                      }, QUEUE_OFFER_HOLD_MS),
+                    };
+                    sendHold.current = hold;
+                  }}
+                  onPointerUp={releaseSendHold}
+                  onPointerLeave={releaseSendHold}
+                  onPointerCancel={releaseSendHold}
+                  onContextMenu={(e) => {
+                    if (queueOffered) e.preventDefault();
+                  }}
+                  aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+                  title={
+                    queueOffered
+                      ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn`
+                      : undefined
+                  }
+                />
+                {queueOffer && (
+                  <div ref={queueOfferRef} className="composer-queue-offer" role="menu" aria-label="Send">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setQueueOffer(false);
+                        onSend('NEXT_TURN');
+                      }}
+                    >
+                      Queue for next turn
+                    </button>
+                  </div>
+                )}
+              </span>
             )}
           </div>
         </div>
