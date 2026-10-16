@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { SESSION_CURRENT_WORK_ROUTING_V1 } from '@orbit/shared';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionNotSendable, SessionsService } from './sessions.service';
 
 /**
@@ -52,9 +53,11 @@ function makeService(opts: {
   };
   const updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const tx = {
-    // The Session lock, and liveEngineTurn's read of the running turn.
-    $queryRaw: async (query: unknown) => {
-      const text = Array.isArray(query) ? query.join('') : (query as { strings: string[] }).strings.join('');
+    // The Session lock, and liveEngineTurn's read of the running turn. The two calling conventions
+    // Prisma accepts are the shared helper's business (test-support/prisma-transaction-double), not
+    // this double's: a spec that reads them itself is the drift the conventions sweep forbids.
+    $queryRaw: async (...args: unknown[]) => {
+      const text = renderRawQuery(args).text;
       if (!text.includes('"conversation_turn"')) return [{ id: SESSION_ID }];
       return opts.live === false ? [] : [{ id: LIVE_ID, seq: 3 }];
     },
