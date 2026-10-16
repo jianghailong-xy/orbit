@@ -1739,7 +1739,7 @@ interface ProjectListAttention {
 |---|---|---|
 | C1 | 项目没有代码库行 | 落地判定用 `LEGACY_LANDING_BRANCHES`；`CriterionLanding` 只会是 `LANDED` / `UNKNOWN`，与今天一致 |
 | C2 | `lineStarted` 为假 | J9 退化为今天的「只认 DONE」 |
-| C3 | `lineStarted` 为真 | `CriterionUnlandedProducer.factsFor` 不再为该项目派生 `CRITERION_UNLANDED`：合并由平台负责，失败走待办 |
+| C3 | `lineStarted` 为真 | 合并由平台负责，失败走待办。`CriterionUnlandedProducer.factsFor` 照常为该项目派生 `CRITERION_UNLANDED`：代码从来没有按 `lineStarted` 过滤，这条事实也仍然经过交付读数——`DELIVERY_REVIEW` 与 owner blocker 都由它触发（待办种类表的 `DELIVERY_REVIEW` 一行）。此行 2026-10-16 按代码更正，此前写的是「不再派生」 |
 | C4 | 任何项目 | `ATTEMPT_ENDED_UNSETTLED` 照常记录（`CONSUMED`），不再开判断会话；由 `TASK_FAILED` 待办承担（附录 A-Q12） |
 | C5 | 任何项目 | 熔断器摘除（F12–F14） |
 | C6 | 会话 `sourceState = UNBOUND` | worktree 逐字节走原路径（L10） |
