@@ -6,7 +6,7 @@ import {
   type CursorKeyCheckState,
 } from '@orbit/shared';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
-import { isRunnerOnline } from '../runners/runners.service';
+import { SESSION_RUNNER_OFFLINE_AFTER_MS } from '../sessions/session-state';
 import { keyFingerprint } from './provider-engine-resolution';
 
 /**
@@ -63,7 +63,11 @@ export interface CursorKeyCheckerRow {
 export function cursorKeyCheckers<T extends CursorKeyCheckerRow>(runners: readonly T[], now = Date.now()): T[] {
   return runners
     .filter((runner) => {
-      if (!isRunnerOnline(runner, now)) return false;
+      // The runners list's rule (RunnersService isRunnerOnline, not imported: that file pulls in the runner
+      // controller, which reaches this one): not marked offline, and heard from within three heartbeats.
+      const online = runner.status !== 'OFFLINE' && !!runner.lastHeartbeatAt
+        && runner.lastHeartbeatAt.getTime() >= now - SESSION_RUNNER_OFFLINE_AFTER_MS;
+      if (!online) return false;
       if (!runner.capabilitiesReportedAt || !(runner.capabilities ?? []).includes(CURSOR_KEY_CHECK_V1)) return false;
       const cursor = sanitizeRunnerEngines(runner.engines)?.find((engine) => engine.engine === AgentProvider.CURSOR);
       return !!cursor?.installed && !cursor.installationError;
