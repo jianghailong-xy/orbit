@@ -1,4 +1,4 @@
-import type { ReportedEngine, RunnerEngineUpdate } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, type ReportedEngine, type RunnerEngineUpdate } from '@orbit/shared';
 
 /**
  * Facts about a runner's engine CLIs that more than one place needs, owned by none of them.
@@ -18,7 +18,18 @@ export const ENGINE_CLI_NAME: Record<ReportedEngine, string> = {
   opencode: 'OpenCode',
   antigravity: 'Antigravity CLI',
   dsh: 'DeepSeek Harness',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
+
+/**
+ * Whether the web draws this engine at all: every engine but Cursor CLI, which is registered (project P1)
+ * and has no screens here until P7a builds the owner's design board. Every list of engines these pages
+ * offer leaves it out — the pickers, the Infrastructure cards, a runner's rows and the attention list —
+ * and a runner's report of it is not drawn.
+ */
+export function webShowsEngine(engine: string): boolean {
+  return engine !== AgentProvider.CURSOR;
+}
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

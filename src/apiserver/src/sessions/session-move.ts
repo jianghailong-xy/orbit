@@ -5,7 +5,7 @@
  * the rows it has locked — judge by the same rules and give the same reasons. The reasons are
  * English sentences the clients show exactly as they are.
  */
-import { AgentProvider } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { isSessionGenerating } from '../common/session-generating';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
@@ -28,6 +28,7 @@ const RUNTIME_LABEL: Record<AgentProvider, string> = {
   [AgentProvider.OPENCODE]: 'OpenCode',
   [AgentProvider.ANTIGRAVITY]: 'Antigravity',
   [AgentProvider.DSH]: 'DeepSeek Harness',
+  [AgentProvider.CURSOR]: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 /** Why a session cannot move at all (§5.2, "会话自身"). */
@@ -98,12 +99,14 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   if (s.runtime === null) return refuse(MOVE_REFUSAL.ENGINE_UNKNOWN);
   // How their conversations would carry over has not been verified. agy's lives in a per-session
   // gemini directory on the runner (docs/antigravity-runtime-contract.md §3.1), and a resume from
-  // any other directory silently starts a new conversation (§4.3).
+  // any other directory silently starts a new conversation (§4.3). Cursor CLI's loading a session in
+  // another directory is unverified too (docs/cursor-runtime-contract.md §17.1).
   if (
     s.runtime === AgentProvider.KIMI ||
     s.runtime === AgentProvider.OPENCODE ||
     s.runtime === AgentProvider.ANTIGRAVITY ||
-    s.runtime === AgentProvider.DSH
+    s.runtime === AgentProvider.DSH ||
+    s.runtime === AgentProvider.CURSOR
   ) {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }

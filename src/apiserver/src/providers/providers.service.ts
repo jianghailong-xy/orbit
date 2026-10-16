@@ -38,15 +38,16 @@ import { geminiApiModel, isInternalHost } from './held-key';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
 /**
- * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080 and
- * 0367 parked one on `opencode` and one on `antigravity` when each became a built-in runtime, to
+ * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080, 0367
+ * and 0426 parked one on `opencode`, `antigravity` and `cursor` when each became a built-in runtime, to
  * fence an older control plane through a rolling deploy (and to keep it from creating a provider
  * under the name). The built-in runtime is what answers to the slug, so no list, lookup or write
- * here ever treats either row as a provider.
+ * here ever treats any of those rows as a provider.
  */
 export const COMPATIBILITY_GUARD_SLUGS: string[] = [
   AgentProvider.OPENCODE,
   AgentProvider.ANTIGRAVITY,
+  AgentProvider.CURSOR,
 ];
 
 /** The DeepSeek preset, and the retired one an older client still connects DeepSeek Harness with. */
@@ -399,8 +400,8 @@ export class ProvidersService {
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
-        // The built-in entries below already name `opencode` and `antigravity`; the compatibility
-        // guard rows that hold those slugs are not second providers to choose between.
+        // The built-in entries below already name `opencode`, `antigravity` and `cursor`; the
+        // compatibility guard rows that hold those slugs are not second providers to choose between.
         slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         AND: [{ OR: [{ enabled: true }, { slug: AgentProvider.DSH }] }],
         ...(await usableProviderScope(this.prisma, ownerId)),

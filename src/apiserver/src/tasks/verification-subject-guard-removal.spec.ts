@@ -284,6 +284,9 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     // fence 0080 put up for OpenCode (`session_opencode_runner_claim_guard` below). A SIBLING change.
     'session_antigravity_runner_claim_guard',
     'session_completed_at_compat',
+    // 0426's: Cursor CLI claims and inbox acquisitions require the request's and the persisted
+    // heartbeat's declarations, as 0377's do for DeepSeek Harness. Another SIBLING change.
+    'session_cursor_runner_acquisition_guard',
     'session_dispatch_dependency_check',
     // 0377's: DeepSeek Harness claims and positive inbox acquisitions require the current
     // request and persisted heartbeat declarations. Another SIBLING change.
@@ -325,7 +328,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 50,
+  assert.equal(core.length, 51,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -344,7 +347,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'where 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped, '
     + 'and 47 once 0377 added `session_dsh_runner_acquisition_guard` for DeepSeek Harness, and 50 '
     + 'once 0414 added `session_acquisition_engine_guard`, `session_engine_from_task_pin` and '
-    + '`session_engine_immutable` with the recorded session engine');
+    + '`session_engine_immutable` with the recorded session engine, and 51 once 0426 added '
+    + '`session_cursor_runner_acquisition_guard` for Cursor CLI');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -360,6 +364,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
       'project_task_status_count_move', 'run_event_ingestion_provenance_guard',
       'session_acquisition_engine_guard',
       'session_antigravity_runner_claim_guard',
+      'session_cursor_runner_acquisition_guard',
       'session_dsh_runner_acquisition_guard',
       'session_engine_from_task_pin', 'session_engine_immutable',
       'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
@@ -372,7 +377,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_request_asker_stopped`, 0367\'s `session_antigravity_runner_claim_guard` and '
     + '0370\'s `task_owner_confirmation_review_reviewer_ended` and '
     + '0377\'s `session_dsh_runner_acquisition_guard` and 0414\'s `session_acquisition_engine_guard`, '
-    + '`session_engine_from_task_pin` and `session_engine_immutable`. '
+    + '`session_engine_from_task_pin` and `session_engine_immutable` and 0426\'s '
+    + '`session_cursor_runner_acquisition_guard`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

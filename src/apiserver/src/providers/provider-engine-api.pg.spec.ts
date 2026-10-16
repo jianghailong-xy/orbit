@@ -248,7 +248,7 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     // An engine nobody has heard of is refused by name.
     const unknown = await refusal(create(at, { engine: 'gpt' }));
     assert.equal(unknown.code, 'ENGINE_UNKNOWN');
-    assert.equal(unknown.message, 'engine "gpt" is not one of claude, codex, kimi, antigravity, opencode, dsh');
+    assert.equal(unknown.message, 'engine "gpt" is not one of claude, codex, kimi, antigravity, opencode, dsh, cursor');
   });
 
   await t.test('T3 incompatible pairs are refused and write nothing: DeepSeek Harness on a GLM key, OpenCode on a subscription token, Claude Code on a Gemini key', async () => {
