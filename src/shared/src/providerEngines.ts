@@ -63,6 +63,7 @@ const NATIVE_ENGINE: Readonly<Record<KeyDialect, AgentProvider>> = {
   openai: AgentProvider.CODEX,
   'openai-compatible': AgentProvider.KIMI,
   gemini: AgentProvider.ANTIGRAVITY,
+  cursor: AgentProvider.CURSOR,
 };
 
 // The WHATWG URL parser every runtime this package runs on provides (Node, browsers); the package
@@ -107,6 +108,8 @@ function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>): AgentProvi
   const dialect = keyDialect(key.runtime);
   if (!dialect) return [];
   if (key.subscriptionToken) return dialect === 'anthropic' ? [AgentProvider.CLAUDE] : [];
+  // A Cursor key is spent by Cursor CLI alone: it is no model API OpenCode could call.
+  if (dialect === 'cursor') return [AgentProvider.CURSOR];
   // A row still on the retired `dsh` runtime ran on DeepSeek Harness, and keeps doing so by default.
   const legacyDsh = key.runtime === AgentProvider.DSH;
   const native = legacyDsh ? AgentProvider.DSH : NATIVE_ENGINE[dialect];

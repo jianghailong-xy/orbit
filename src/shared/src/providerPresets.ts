@@ -55,10 +55,11 @@ export interface ProviderPreset {
    * no other dialect since it dropped Chat Completions in February 2026 — `kimi` for Moonshot's own
    * API, and `antigravity` for Google's Gemini API. Which engines a key then runs on is the
    * compatibility table's (providerEngines.ts): that native one, OpenCode, and — for a DeepSeek
-   * key — DeepSeek Harness. `dsh` is only the retired `deepseek-harness` preset's, kept until every
-   * deployment has folded those rows into DeepSeek keys.
+   * key — DeepSeek Harness. `cursor` is a Cursor User API Key, which Cursor CLI alone spends. `dsh` is
+   * only the retired `deepseek-harness` preset's, kept until every deployment has folded those rows
+   * into DeepSeek keys.
    */
-  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity' | 'dsh';
+  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity' | 'dsh' | 'cursor';
   /**
    * True when this vendor's endpoint IS the runtime CLI's own — Anthropic for `claude`, OpenAI
    * for `codex`, Gemini for `antigravity`. The runner probes those CLIs for their live model list
@@ -201,6 +202,22 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     note: 'Global endpoint; the CN platform uses https://api.moonshot.cn/v1.',
     brand: { mono: 'K', from: '#3a3a3a', to: '#111111' },
     keyUrl: 'https://platform.moonshot.ai',
+  },
+  {
+    // A Cursor User API Key, which Cursor CLI alone runs on (docs/cursor-runtime-contract.md §9): the
+    // runner hands it to the CLI as CURSOR_API_KEY, which trades it for a token at this endpoint
+    // itself. Not `cursor`, the engine's name, which no key may take. The models are Cursor CLI's ACP
+    // catalogue on each runner — opaque variant values, read per key or account (contract §10) — so
+    // none is listed here.
+    slug: 'cursor-api',
+    label: 'Cursor',
+    runtime: 'cursor',
+    baseUrl: 'https://api2.cursor.sh',
+    models: [],
+    defaultModel: '',
+    modelsFromRuntime: true,
+    brand: { mono: 'C', from: '#2b2b2b', to: '#000000' },
+    keyUrl: 'https://cursor.com/dashboard',
   },
   {
     slug: 'glm',

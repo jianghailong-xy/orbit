@@ -547,6 +547,16 @@ export interface ProviderKeyUsage {
   tasks: number;
 }
 
+/**
+ * What Cursor CLI on a runner last answered when asked with a Cursor API key (`agent models`,
+ * docs/cursor-runtime-contract.md §9): Cursor accepted the key, refused it ("The provided API key is
+ * invalid."), or could not be reached to ask — which says nothing about the key. A Cursor key's row
+ * carries it as `keyCheckState`, beside `keyCheckedAt`; both null until a runner has checked the key
+ * it holds now. A runner reports it as it checks a session's key (POST /runner/sessions/:id/cursor-key-check).
+ */
+export const CURSOR_KEY_CHECK_STATES = ['VALID', 'INVALID', 'UNREACHABLE'] as const;
+export type CursorKeyCheckState = (typeof CURSOR_KEY_CHECK_STATES)[number];
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle

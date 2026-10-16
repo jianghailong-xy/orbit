@@ -163,6 +163,12 @@ func fakeCursorModels(dir string) int {
 	case "garbled":
 		fmt.Fprintln(os.Stderr, "something went sideways")
 		return 1
+	case "invalid-key":
+		// A key Cursor refuses, as P0a recorded it (failure-shapes-without-prompt), colours and all.
+		fmt.Fprintln(os.Stderr, "\x1b[33m⚠ Warning: The provided API key is invalid.\x1b[0m\n"+
+			"The API key was loaded from the CURSOR_API_KEY environment variable.\n"+
+			"Please check you have the right key, create a new one, or authenticate without it.")
+		return 1
 	}
 	if os.Getenv("CURSOR_AUTH_TOKEN") == "" && os.Getenv("CURSOR_API_KEY") == "" {
 		fmt.Fprintln(os.Stderr, "Authentication required. Please run 'agent login' first.")
@@ -784,7 +790,7 @@ func TestCursorNeverUpdatesItself(t *testing.T) {
 	job := &ClaimedSession{SessionID: "11111111-2222-4333-8444-555555555555", AgentID: "a", TaskID: "t"}
 	allowCursorInstall(t, false)
 
-	spec, err := PrepareCursorSessionLaunch(context.Background(), job, execDir)
+	spec, err := PrepareCursorSessionLaunch(context.Background(), job, execDir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -827,7 +833,7 @@ func TestCursorNeverUpdatesItself(t *testing.T) {
 		if _, err := os.Lstat(filepath.Join(spec.Home, ".local", "bin", "agent")); err != nil {
 			t.Fatalf("the update a stubborn build ran is not in the session's home: %v", err)
 		}
-		again, err := PrepareCursorSessionLaunch(context.Background(), job, execDir)
+		again, err := PrepareCursorSessionLaunch(context.Background(), job, execDir, nil)
 		if err != nil || again.Executable != exe {
 			t.Fatalf("after a self-update the session launches %q, %v; want the pinned %q", again.Executable, err, exe)
 		}
