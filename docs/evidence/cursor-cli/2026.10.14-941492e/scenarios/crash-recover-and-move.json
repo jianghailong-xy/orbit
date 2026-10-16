@@ -1,0 +1,108 @@
+{
+ "name": "crash-recover-and-move",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "startedAt": "2026-10-16T17:45:08.332Z",
+ "finishedAt": "2026-10-16T17:46:01.106Z",
+ "passed": false,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 11,
+   "at": "2026-10-16T17:45:17.781Z",
+   "note": "turn interrupted by stdin EOF then SIGKILL"
+  }
+ ],
+ "protocol": "protocol/crash-recover-and-move.ndjson",
+ "protocolLines": 46,
+ "fixtures": [
+  "crash-recover-and-move/crash",
+  "crash-recover-and-move/moved"
+ ],
+ "checks": [
+  {
+   "name": "8 s after stdin EOF in mid-turn the process is still running the turn",
+   "ok": true
+  },
+  {
+   "name": "SIGKILL mid-turn: no prompt response ever arrives",
+   "ok": true
+  },
+  {
+   "name": "after SIGKILL of the CLI alone, its shell command keeps running (orphaned) until the runner kills it",
+   "ok": true,
+   "detail": 1
+  },
+  {
+   "name": "the interrupted turn is on disk (store.db exists)",
+   "ok": true
+  },
+  {
+   "name": "a copied acp-sessions/<id> directory loads from another CURSOR_CONFIG_DIR/HOME",
+   "ok": true
+  },
+  {
+   "name": "the replay contains the interrupted user message",
+   "ok": true
+  },
+  {
+   "name": "the interrupted tool call is not replayed",
+   "ok": true
+  },
+  {
+   "name": "loading writes an error tool result for the interrupted shell call",
+   "ok": false
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "crash": {
+   "started": true,
+   "aliveAfterEof": true,
+   "updatesAfterEof": 23,
+   "exit": {
+    "code": null,
+    "signal": "SIGKILL"
+   },
+   "promptResponse": {
+    "transportClosed": true
+   },
+   "orphanSleepPids": 1
+  },
+  "replay of the crashed turn after moving acp-sessions/<id> to another config dir": {
+   "ok": true,
+   "kinds": {
+    "user_message_chunk": 1,
+    "agent_thought_chunk": 1,
+    "agent_message_chunk": 1
+   },
+   "tools": [],
+   "replay": [
+    {
+     "sessionUpdate": "user_message_chunk",
+     "content": {
+      "type": "text",
+      "text": "Run the shell command `sleep 31 && echo crash-finished > crash.txt`, wait for it to finish, then reply CRASH-DONE."
+     }
+    },
+    {
+     "sessionUpdate": "agent_thought_chunk",
+     "content": {
+      "type": "text",
+      "text": "Running the sleep command now. Will reply CRASH-DONE once finished.\n\nSetting a 40–45 second timeout to ensure the command finishes."
+     }
+    },
+    {
+     "sessionUpdate": "agent_message_chunk",
+     "content": {
+      "type": "text",
+      "text": "I'll run that command and wait for it to finish."
+     }
+    }
+   ]
+  },
+  "tool result the CLI writes for the interrupted call when the session is loaded": null
+ }
+}

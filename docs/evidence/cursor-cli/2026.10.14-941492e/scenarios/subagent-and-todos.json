@@ -1,0 +1,188 @@
+{
+ "name": "subagent-and-todos",
+ "runId": "2026-10-16T17-45-59-200Z",
+ "startedAt": "2026-10-16T17:51:23.181Z",
+ "finishedAt": "2026-10-16T17:52:14.414Z",
+ "passed": true,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 19,
+   "at": "2026-10-16T17:51:32.928Z",
+   "note": "TodoWrite + Task subagent"
+  }
+ ],
+ "protocol": "protocol/subagent-and-todos.ndjson",
+ "protocolLines": 120,
+ "fixtures": [
+  "subagent-and-todos/subagent"
+ ],
+ "checks": [
+  {
+   "name": "cursor/update_todos arrives as a request carrying the todo list",
+   "ok": true
+  },
+  {
+   "name": "cursor/task arrives when the Task tool finishes",
+   "ok": true
+  },
+  {
+   "name": "subagent_spawned / subagent_state_update session updates arrive (subagents negotiated)",
+   "ok": true
+  },
+  {
+   "name": "the subagent's own updates arrive under a different sessionId",
+   "ok": true
+  },
+  {
+   "name": "the answer carries the README's first line",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "subagent": {
+   "negotiated": {
+    "list": {},
+    "subagents": {}
+   },
+   "stopReason": "end_turn",
+   "extensionRequests": [
+    {
+     "method": "cursor/update_todos",
+     "params": {
+      "toolCallId": "call-<UUID_1>-0\nfc_<UUID_2>_0",
+      "todos": [
+       {
+        "id": "1",
+        "content": "read README",
+        "status": "in_progress"
+       },
+       {
+        "id": "2",
+        "content": "report first line",
+        "status": "pending"
+       }
+      ],
+      "merge": false
+     }
+    },
+    {
+     "method": "cursor/task",
+     "params": {
+      "toolCallId": "call-<UUID_1>-1\nfc_<UUID_2>_1",
+      "description": "Read README first line",
+      "prompt": "Read the file README.md in the workspace at <RUN>/work/README.md and return ONLY its first line (the exact text of line 1, nothing else).",
+      "subagentType": {
+       "custom": {
+        "unspecified": {}
+       }
+      },
+      "model": "default",
+      "agentId": "<UUID_3>",
+      "durationMs": 10958
+     }
+    },
+    {
+     "method": "cursor/update_todos",
+     "params": {
+      "toolCallId": "call-<UUID_4>-2\nfc_<UUID_5>_0",
+      "todos": [
+       {
+        "id": "1",
+        "content": "read README",
+        "status": "completed"
+       },
+       {
+        "id": "2",
+        "content": "report first line",
+        "status": "completed"
+       }
+      ],
+      "merge": true
+     }
+    }
+   ],
+   "kinds": {
+    "session_info_update": 1,
+    "available_commands_update": 1,
+    "agent_thought_chunk": 33,
+    "agent_message_chunk": 37,
+    "tool_call": 3,
+    "tool_call_update": 12,
+    "subagent_spawned": 1,
+    "subagent_state_update": 1
+   },
+   "subagentUpdates": [
+    {
+     "sessionUpdate": "subagent_spawned",
+     "subagentSessionId": "<UUID_6>",
+     "name": "generalPurpose",
+     "task": "Read the file README.md in the workspace at <P0_ROOT>/runs/2026-10-16T",
+     "capabilities": {},
+     "_meta": {
+      "cursor": {
+       "toolCallId": "call-<UUID_1>-1\nfc_<UUID_2>_1",
+       "agentId": "<UUID_6>",
+       "model": "default"
+      }
+     }
+    },
+    {
+     "sessionUpdate": "subagent_state_update",
+     "subagentSessionId": "<UUID_6>",
+     "state": "completed",
+     "_meta": {
+      "cursor": {
+       "toolCallId": "call-<UUID_1>-1\nfc_<UUID_2>_1",
+       "agentId": "<UUID_6>",
+       "model": "default"
+      }
+     }
+    }
+   ],
+   "childSessionUpdates": {
+    "agent_thought_chunk": 9,
+    "tool_call": 1,
+    "tool_call_update": 2,
+    "agent_message_chunk": 3
+   },
+   "childSessionIds": [
+    "<UUID_6>"
+   ],
+   "tools": [
+    {
+     "title": "Update TODOs: read README, report first line",
+     "kind": "other",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Task: Read README first line",
+     "kind": "other",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Update TODOs: read README, report first line",
+     "kind": "other",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    }
+   ],
+   "answer": "I'll create the todo list and start one subagent to read the first line of README.md.Marking both todos complete, then replying with only the first line.# probe repo"
+  }
+ }
+}

@@ -1,0 +1,6 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false,"_meta":{"subagents":true}},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[]}}
+{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"<UUID_7>","prompt":[{"type":"text","text":"Do two things. 1) Use your TodoWrite tool to create a todo list with the items \"read README\" and \"report first line\", and mark each completed as you finish it. 2) Use your Task tool to start exactly one subagent that reads README.md and returns its first line. Then reply with that first line only."}]}}
+{"jsonrpc":"2.0","id":0,"result":{}}
+{"jsonrpc":"2.0","id":1,"result":{}}
+{"jsonrpc":"2.0","id":2,"result":{}}
