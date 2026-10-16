@@ -130,9 +130,9 @@ export class AuthService {
 
   /**
    * Swap a valid refresh token for a fresh access+refresh pair (rotation). The presented token
-   * is consumed atomically; replaying an already-consumed token signals theft, so the user's
-   * whole refresh-token family is revoked and the call fails (forcing a real re-login). The new pair
-   * stays in the presented token's login session; a token issued before sessions starts one.
+   * is consumed atomically; replaying an already-consumed token signals theft, so the family it was
+   * rotated in — its login session — is revoked and the call fails (forcing a real re-login). The new
+   * pair stays in the presented token's login session; a token issued before sessions starts one.
    */
   async refresh(refreshToken: string) {
     const tokenHash = sha256(refreshToken);
@@ -147,11 +147,17 @@ export class AuthService {
     // for stand-ins that answer with the token row alone, which the check after the claim still covers.
     if (row.user?.disabledAt) throw accountDisabled();
     if (row.revokedAt) {
-      // A consumed/revoked token replayed → treat as theft: revoke every live token for the user.
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: row.userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+      // A consumed/revoked token replayed → treat as theft of its login session: revoke every live
+      // token of that session. The account's other sessions stand: revoking them is silent (their
+      // access tokens work on until they run out), and each one's next refresh would then be a replay
+      // that ended every other session in turn. A token from before sessions names none, so it is
+      // refused and revokes nothing.
+      if (row.loginSessionId) {
+        await this.prisma.refreshToken.updateMany({
+          where: { loginSessionId: row.loginSessionId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
       throw new UnauthorizedException('refresh token reuse detected');
     }
     if (row.expiresAt.getTime() <= Date.now()) {

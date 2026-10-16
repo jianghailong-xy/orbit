@@ -14,8 +14,9 @@
  *   (3) signing out stops the pushes to the devices registered in that session, and only those;
  *   (4) so does the session expiring;
  *   (5) and a sign-out that lands while an FCM send is in flight stops that send;
- *   (6) reuse detection, which ends every session of the account, stops them all, while a row
- *       registered with an access token from before sessions is pushed to throughout;
+ *   (6) reuse detection ends the replayed token's session and stops its devices, and only those: the
+ *       account's other sessions stand, a token from before sessions ends none, and a row registered
+ *       with an access token from before sessions is pushed to throughout;
  *   (7) registering again under a new sign-in brings a device back.
  */
 import assert from 'node:assert/strict';
@@ -167,16 +168,28 @@ test('a push registration ends with the login session that made it', { skip: !ur
     assert.deepEqual(await pushedTo(), ['apns-legacy']);
   });
 
-  await t.test('(6) reuse detection ends every session of the account; a row registered before sessions is pushed to throughout', async () => {
+  await t.test('(6) reuse detection ends the replayed token\'s session, and only that one; a row registered before sessions is pushed to throughout', async () => {
     const d = await signIn();
     const e = await signIn();
     await register(d.accessToken, ios('apns-d'));
     await register(e.accessToken, ios('apns-e'));
-    await auth.refresh(d.refreshToken);
+    const rotated = await auth.refresh(d.refreshToken);
     assert.deepEqual(await pushedTo(), ['apns-d', 'apns-e', 'apns-legacy']);
     await assert.rejects(auth.refresh(d.refreshToken), /refresh token reuse detected/);
-    assert.equal(await db.refreshToken.count({ where: { userId: user.id, revokedAt: null } }), 0);
-    assert.deepEqual(await pushedTo(), ['apns-legacy']);
+    // The token it rotated into is revoked with it, and presented in turn ends nothing more.
+    await assert.rejects(auth.refresh(rotated.refreshToken), /refresh token reuse detected/);
+    assert.deepEqual(await pushedTo(), ['apns-e', 'apns-legacy']);
+    // The other sign-in stands: its next refresh works, in its session.
+    const next = await auth.refresh(e.refreshToken);
+    assert.equal(sid(next.accessToken), sid(e.accessToken));
+    // A token from before sessions names none to end: refused, and nothing revoked.
+    const legacy = `legacy-${randomUUID()}`;
+    await db.refreshToken.create({ data: {
+      userId: user.id, tokenHash: sha256(legacy), expiresAt: new Date(Date.now() + 86_400_000), revokedAt: new Date(),
+    } });
+    await assert.rejects(auth.refresh(legacy), /refresh token reuse detected/);
+    assert.equal((await db.refreshToken.findUniqueOrThrow({ where: { tokenHash: sha256(next.refreshToken) } })).revokedAt, null);
+    assert.deepEqual(await pushedTo(), ['apns-e', 'apns-legacy']);
   });
 
   await t.test('(7) registering again under a new sign-in brings a device back', async () => {
@@ -190,6 +203,6 @@ test('a push registration ends with the login session that made it', { skip: !ur
     const { registrationKey } = await register(f.accessToken, { ...android, token: 'fcm-f' });
     assert.equal((await db.deviceToken.findMany({ where: { installationId: android.installationId } }))
       .map((r) => r.id).join(), registrationKey);
-    assert.deepEqual(await pushedTo(), ['apns-a', 'apns-legacy', 'fcm-f']);
+    assert.deepEqual(await pushedTo(), ['apns-a', 'apns-e', 'apns-legacy', 'fcm-f']);
   });
 });

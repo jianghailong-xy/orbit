@@ -27,9 +27,15 @@ A login session is one sign-in and every refresh token rotated from it.
 | --- | --- | --- |
 | Refresh (rotation) | the presented token revoked, the next one issued with the same id | live |
 | `POST /auth/logout` | the live token revoked | ended |
-| A consumed token replayed (reuse detection) | every live token of the account revoked | every session of the account ended |
+| A consumed token replayed (reuse detection) | every live token of its session revoked | that session ended; the account's others stand |
 | Account disabled, or enabled again | every live token revoked, or every token deleted | ended |
 | 30 days without a refresh | the live token expires | ended |
+
+Reuse detection ends one session (2026-10-16). It used to revoke every live token of the account,
+and that never settled once two devices were signed in. The other devices did not notice: their
+access tokens kept working until `ACCESS_TOKEN_TTL` (7 days) ran out. Then each one's refresh
+presented a revoked token, which was a replay in turn and ended every session signed in since. A
+stolen token says nothing about the account's other sessions, so they stand.
 
 ## Registration
 
@@ -52,8 +58,9 @@ device registers again, unregisters, or its account is deleted, and nothing is s
 
 - A row with no session (`NULL`) is pushed to as before. It was registered before 0425, or with an
   access token signed before it, and it binds once the device registers with a token that has `sid`.
-- A refresh token issued before 0425 has no session; its first rotation starts one. An access token
-  without `sid` still authenticates.
+- A refresh token issued before 0425 has no session; its first rotation starts one. Replayed, it is
+  refused and revokes nothing, since it names no session to end. An access token without `sid` still
+  authenticates.
 - Clients change nothing. Android's `registrationKey` contract and the iOS `{token}` unregister are
   unchanged, and unregistering is still how a client removes its binding at once.
 
@@ -79,5 +86,7 @@ bash scripts/run-pg-spec.sh src/apiserver/src/push/push-login-session.pg.spec.ts
 
 It holds that a device of a live session is pushed to, also across a rotation; that sign-out, expiry
 and reuse detection each stop the pushes, and a sign-out that lands while an FCM send is in flight
-stops that send; that a row with no session is still pushed to; and that registering again under a
-new sign-in brings the device back.
+stops that send; that reuse detection ends only the replayed token's session, so another sign-in
+refreshes and is pushed to as before, and that a token from before sessions revokes nothing; that a
+row with no session is still pushed to; and that registering again under a new sign-in brings the
+device back.
