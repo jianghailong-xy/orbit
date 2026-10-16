@@ -326,4 +326,38 @@ final class TailPinningTests: XCTestCase {
         let measured = TailScrollSample(offset: 300, contentHeight: 1507, bottomGap: 468, topInset: 148)
         XCTAssertFalse(follows(measured, from: atQuestion))
     }
+
+    // MARK: - The floor rising under a composer band that floats over the list (iOS 26)
+
+    /// The keyboard arriving, as measured on the iOS 26 simulator: the list snapped from a 427.6pt
+    /// frame back to 874 with 436pt floating over its bottom, the content kept its place against the
+    /// frame (offset 1090.3 to 644), and the last answer sat 436 below the top of the composer.
+    private let keyboardRising = TailScrollSample(offset: 1090.3, contentHeight: 1518, bottomGap: 0,
+                                                  topInset: 62, bottomInset: 0)
+    private let underTheComposer = TailScrollSample(offset: 644, contentHeight: 1518, bottomGap: 436,
+                                                    topInset: 62, bottomInset: 436)
+
+    func testTheKeyboardLiftingAFloatingBandIsFollowed() {
+        XCTAssertTrue(pinned(underTheComposer, from: keyboardRising, evidence: .reported),
+                      "nobody scrolled, so the pin holds — and the tail is out of view")
+        XCTAssertTrue(follows(underTheComposer, from: keyboardRising))
+    }
+
+    func testTheComposerGrowingALineUnderAFloatingBandIsFollowed() {
+        // Each line the draft wraps onto lifts the floor 22pt under an offset nothing moves.
+        let atTail = TailScrollSample(offset: 1080, contentHeight: 1518, bottomGap: 0, topInset: 62, bottomInset: 436)
+        let grown = TailScrollSample(offset: 1080, contentHeight: 1518, bottomGap: 22, topInset: 62, bottomInset: 458)
+        XCTAssertTrue(follows(grown, from: atTail))
+    }
+
+    func testARisingFloorCarriesOnlyAReaderAtTheTail() {
+        XCTAssertFalse(follows(underTheComposer, from: keyboardRising, pinned: false),
+                       "a reader who had scrolled up keeps their place")
+        XCTAssertFalse(follows(underTheComposer, from: keyboardRising, moving: true),
+                       "and nothing is followed while the list moves")
+        // …and no further than the floor rose, past the slack: a pinned reading that far up is a
+        // jump that kept its pin (see above), and a floor rising under it doesn't make it the tail.
+        let farUp = TailScrollSample(offset: 300, contentHeight: 1518, bottomGap: 780, topInset: 62, bottomInset: 436)
+        XCTAssertFalse(follows(farUp, from: keyboardRising))
+    }
 }
