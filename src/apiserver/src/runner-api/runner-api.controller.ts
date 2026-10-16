@@ -24,6 +24,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
@@ -179,7 +180,8 @@ import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
-import { type CreateTaskBatchItemDto } from '../tasks/dto';
+import { CreateTaskBatchItemDto } from '../tasks/dto';
+import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
 import { enqueueRecap, recapDue } from '../sessions/recap';
 import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
@@ -799,6 +801,32 @@ async function settleStoppedCurrentWorkSteers(
   await holdUnreadSteerReplies(tx, sessionId, terminalizedTurnIds);
   const requestsClosed = await closeUnreadSteerRequests(tx, sessionId, terminalizedTurnIds);
   return { terminalizedTurnIds, requestsClosed };
+}
+
+/**
+ * Whether a preview's failure is one the WRITE would answer the same way, and so has to reach the
+ * caller instead of being swallowed into a card (`cardInput`).
+ *
+ * Only a refusal that is IDENTICAL on both doors may be rethrown, because a card's preview runs the
+ * BATCH door's validation over a SINGLE door's body and the two are not the same door. The single
+ * one legally carries `verification` — refused on the batch door by construction — so rethrowing
+ * what the batch door says about it would refuse a create the write accepts.
+ *
+ * Today exactly one code is on that list, and widening it is a question about the two doors rather
+ * than a convenience: a code may only join it when the batch door and the single door answer the
+ * same body with it, byte for byte. The shape advice is a question put to the CALLER (use the
+ * suggested criterion, or record why this task keeps the one it declares), it is computed from the
+ * declaration alone and knows nothing about which door asked, and it is the one refusal the caller
+ * answers only by calling again — so a card raised over it asks a person to approve a write that
+ * will then be refused, and costs them a second press once the model has answered. Everything else
+ * the preview can say stays where it is: the card is drawn without its pill and the question stands.
+ */
+function isTaskCriterionShapeAdvice(error: unknown): boolean {
+  if (!(error instanceof HttpException)) return false;
+  const body = error.getResponse();
+  return typeof body === 'object'
+    && body !== null
+    && (body as { code?: unknown }).code === TASK_CRITERION_SHAPE_ADVICE_CODE;
 }
 
 /** `runner.findUnique` is the whole of the quota snapshot read, and was itself a drift point. */
@@ -4342,6 +4370,10 @@ export class RunnerApiController {
    * preconditions, and a body it refuses is a body the write would refuse too — but a failure here
    * must cost the card its consequence line and never the question itself, because an agent waiting
    * on a card nobody was shown is the failure this whole path exists to prevent.
+   *
+   * The one exception is a refusal the answer to which is a CALLER's, and it is rethrown rather
+   * than swallowed (`isTaskCriterionShapeAdvice`): that one would be asked of a person who cannot
+   * answer it, and refused again the moment they did.
    */
   private async cardInput(
     ownerId: string,
@@ -4353,11 +4385,19 @@ export class RunnerApiController {
       return input as Prisma.InputJsonValue;
     }
     try {
+      // Every id the runner sends is a public id — the base62 spelling the MCP tools and the
+      // clients use — and the HTTP door is what normally decodes one, on the way in through its
+      // DTO. This call does not pass through that door, so the DTO is applied here instead: ONE
+      // `@IsPublicId` normalization over the whole item, rather than a hand-copied list of the
+      // eight fields that carry one. Without it an id reaches Prisma as base62 and the preview
+      // dies on its first query with `invalid input syntax for type uuid` — which is how every
+      // single-create card has been filed since this preview shipped: whole, and without its pill.
       const preview = await this.tasks.previewCreateMany(ownerId, {
-        tasks: [input as unknown as CreateTaskBatchItemDto],
+        tasks: [plainToInstance(CreateTaskBatchItemDto, input)],
       });
       return { ...input, preview } as Prisma.InputJsonValue;
-    } catch {
+    } catch (error) {
+      if (isTaskCriterionShapeAdvice(error)) throw error;
       // The card is drawn without its pill; the question stands.
       return input as Prisma.InputJsonValue;
     }
