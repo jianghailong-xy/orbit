@@ -724,7 +724,7 @@ test('once the coordinator is back and its turn ends, the waiting revision is de
       assert.equal(messages.length, 1, 'the coordinator was told other than once');
       assert.equal(messages[0]!.clientTurnId, turnKey);
       assert.ok(messages[0]!.content!.includes(waitedSentence(submitted)), messages[0]!.content!);
-      assert.match(messages[0]!.content!, /evidenceRevision 传 "1"/);
+      assert.match(messages[0]!.content!, /evidenceRevision: "1"/);
 
       // Held from the delivery for the project's window, and listed as sent meanwhile.
       const deliveredAt = delivered.updatedAt.getTime();
