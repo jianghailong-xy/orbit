@@ -170,9 +170,11 @@ func prepareCursorLaunchFor(t *testing.T, sessionID, execDir string) (CursorLaun
 	return PrepareCursorSessionLaunch(context.Background(), &ClaimedSession{SessionID: sessionID}, execDir, nil)
 }
 
-// The CLI's environment is an allowlist and what the contract names: nothing of the runner's own
-// credentials or configuration, memory-only credential storage, no browser, no direnv, no debug log. The
-// commands the agent runs get the real HOME back and none of the CLI's own variables, through orbit-bash.
+// The CLI's environment is an allowlist of the runner's, the workspace's variables over it, and what the
+// contract names over both: nothing of the runner's own credentials or configuration, memory-only
+// credential storage, no browser, no direnv, no debug log, whatever the workspace sets. The commands the
+// agent runs get the real HOME back and none of the CLI's own variables, through orbit-bash, and still
+// see the workspace's.
 func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 	home := useCursorRealHome(t)
 	r := newFakeCursorRelease(t)
@@ -187,7 +189,9 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 		t.Setenv(key, value)
 	}
 	job := &ClaimedSession{SessionID: "31111111-2222-4333-8444-555555555555", AgentID: "a", TaskID: "t", SpawnDepth: 1,
-		Agent: AgentExecConfig{Env: map[string]string{"ANTHROPIC_API_KEY": "agent-anthropic", "CURSOR_API_KEY": "agent-key-not-injected-here"}}}
+		Agent: AgentExecConfig{Env: map[string]string{"ANTHROPIC_API_KEY": "agent-anthropic", "CURSOR_API_KEY": "key_from-the-workspace",
+			"WORKSPACE_VALUE": "workspace", "HOME": "/workspace/home", "CURSOR_CONFIG_DIR": "/workspace/cursor",
+			"AGENT_CLI_CREDENTIAL_STORE": "file", "ORBIT_SESSION_ID": "another-session", "ORBIT_HOME": "/workspace/orbit"}}}
 	execDir := t.TempDir()
 	spec, err := prepareCursorLaunch(job, execDir, exe, filepath.Join(runDir(job.SessionID), "cursor"))
 	if err != nil {
@@ -200,7 +204,9 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 		"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "NODE_USE_ENV_PROXY",
 		"HOME", "SHELL", "CURSOR_CONFIG_DIR", "CURSOR_DATA_DIR", "AGENT_CLI_CREDENTIAL_STORE", "NO_OPEN_BROWSER", "DIRENV_DISABLE",
 		"CURSOR_AGENT_DISABLE_DEBUG_LOG", "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", "ORBIT_ALLOW_ORCHESTRATION",
-		envWatches, envWiki, envSpawnDepth, envBgSocket, envBgToken} {
+		envWatches, envWiki, envSpawnDepth, envBgSocket, envBgToken,
+		// The workspace's own variables, its key among them.
+		"ANTHROPIC_API_KEY", "CURSOR_API_KEY", "WORKSPACE_VALUE"} {
 		allowed[key] = true
 	}
 	seen := map[string]bool{}
@@ -214,7 +220,7 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 		}
 		seen[key] = true
 		for _, secret := range []string{"runner-cursor-key", "runner-cursor-token", "runner-anthropic", "runner-openai",
-			"runner-github", "runner-user-token", "agent-anthropic", "agent-key-not-injected-here", "evil.js"} {
+			"runner-github", "runner-user-token", "evil.js", "/workspace/", "another-session"} {
 			if strings.Contains(entry, secret) {
 				t.Errorf("the launch environment carries %q", entry)
 			}
@@ -226,6 +232,7 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 		"NODE_USE_ENV_PROXY": "1", "HTTPS_PROXY": "http://proxy.invalid:3128", "LANG": "C.UTF-8", envRunnerChild: "1",
 		"ORBIT_SESSION_ID": publicID(job.SessionID), "ORBIT_AGENT_ID": publicID("a"), "ORBIT_TASK_ID": publicID("t"), envSpawnDepth: "1",
 		"CURSOR_CONFIG_DIR": spec.ConfigDir, "CURSOR_DATA_DIR": spec.DataDir, "HOME": spec.Home,
+		"CURSOR_API_KEY": "key_from-the-workspace", "WORKSPACE_VALUE": "workspace", "ANTHROPIC_API_KEY": "agent-anthropic",
 	} {
 		if env[key] != want {
 			t.Errorf("%s = %q, want %q", key, env[key], want)
@@ -277,8 +284,8 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 			t.Errorf("a command sees %s=%q", key, value)
 		}
 	}
-	if commandEnv["HOME"] != home || commandEnv["ORBIT_SESSION_ID"] != publicID(job.SessionID) {
-		t.Errorf("a command's HOME = %q, ORBIT_SESSION_ID = %q", commandEnv["HOME"], commandEnv["ORBIT_SESSION_ID"])
+	if commandEnv["HOME"] != home || commandEnv["ORBIT_SESSION_ID"] != publicID(job.SessionID) || commandEnv["WORKSPACE_VALUE"] != "workspace" {
+		t.Errorf("a command's HOME = %q, ORBIT_SESSION_ID = %q, WORKSPACE_VALUE = %q", commandEnv["HOME"], commandEnv["ORBIT_SESSION_ID"], commandEnv["WORKSPACE_VALUE"])
 	}
 
 	// The spec never prints or serializes its environment, where the session's credential will be.
@@ -293,6 +300,118 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 		}
 	}
 	assertNoCursorStateIn(t, home)
+}
+
+// The session's Cursor CLI runs on three layers of environment, each over the ones before
+// (docs/cursor-runtime-contract.md §16.3): the runner's allowlist, the workspace's variables, and what the
+// contract fixes with the credential Orbit chose. A key or token of the workspace's own is the session's
+// credential, as the control plane's sign-in preflight counts it and hasInjectedCredentials reads it; a
+// dispatched key replaces it; the Default account's login is used only when the session brings none.
+func TestCursorLaunchEnvironmentLayers(t *testing.T) {
+	launch := func(t *testing.T, env map[string]string) map[string]string {
+		t.Helper()
+		job := &ClaimedSession{SessionID: "61111111-2222-4333-8444-555555555555", AgentID: "a", Agent: AgentExecConfig{Env: env}}
+		spec, err := prepareCursorLaunch(job, t.TempDir(), "/opt/cursor/cursor-agent", filepath.Join(runDir(job.SessionID), "cursor"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return envMap(spec.Env)
+	}
+	t.Run("workspace-key-without-a-login", func(t *testing.T) {
+		useCursorRealHome(t)
+		env := map[string]string{"CURSOR_API_KEY": "key_from-the-workspace"}
+		got := launch(t, env)
+		if got["CURSOR_API_KEY"] != "key_from-the-workspace" || got["AGENT_CLI_CREDENTIAL_STORE"] != "memory" {
+			t.Fatalf("the CLI runs on CURSOR_API_KEY %q, store %q: want the workspace's key, in memory", got["CURSOR_API_KEY"], got["AGENT_CLI_CREDENTIAL_STORE"])
+		}
+		if _, ok := got["CURSOR_AUTH_TOKEN"]; ok || !hasInjectedCredentials(providerCursor, env) {
+			t.Fatal("a session that brings its own key is not counted as one")
+		}
+		if msg := engineAuthPreflight(providerCursor, env); msg != "" {
+			t.Fatalf("a session with a key of its own was held to the runner's sign-in: %s", msg)
+		}
+	})
+	t.Run("dispatched-key-wins", func(t *testing.T) {
+		useCursorRealHome(t)
+		signInCursorDefault(t, cursorTestToken(t, time.Now().Add(time.Hour)))
+		got := launch(t, map[string]string{cursorAPIKeyVar: cursorTestKey,
+			"CURSOR_API_KEY": "key_from-the-workspace", "CURSOR_AUTH_TOKEN": "token-from-the-workspace"})
+		if got["CURSOR_API_KEY"] != cursorTestKey {
+			t.Fatalf("the CLI runs on CURSOR_API_KEY %q, want the dispatched key", got["CURSOR_API_KEY"])
+		}
+		for _, key := range []string{"CURSOR_AUTH_TOKEN", cursorAPIKeyVar} {
+			if value, ok := got[key]; ok {
+				t.Errorf("beside the dispatched key the CLI also has %s=%q", key, value)
+			}
+		}
+	})
+	t.Run("default-login-only-without-a-credential-of-its-own", func(t *testing.T) {
+		useCursorRealHome(t)
+		token := cursorTestToken(t, time.Now().Add(time.Hour))
+		signInCursorDefault(t, token)
+		if got := launch(t, map[string]string{"WORKSPACE_VALUE": "workspace"}); got["CURSOR_AUTH_TOKEN"] != token {
+			t.Fatalf("a session that brings no credential runs on CURSOR_AUTH_TOKEN %q, want the Default account's login", got["CURSOR_AUTH_TOKEN"])
+		}
+		got := launch(t, map[string]string{"CURSOR_AUTH_TOKEN": "token-from-the-workspace"})
+		if got["CURSOR_AUTH_TOKEN"] != "token-from-the-workspace" {
+			t.Fatalf("a session with a token of its own runs on %q", got["CURSOR_AUTH_TOKEN"])
+		}
+		signInCursorDefault(t, cursorTestToken(t, time.Now().Add(time.Minute)))
+		got = launch(t, nil)
+		if value, ok := got["CURSOR_AUTH_TOKEN"]; ok {
+			t.Fatalf("a login past the CLI's own expiry threshold was handed over: %q", value)
+		}
+		if cursorLaunchSignsIn(mapEnv(got)) {
+			t.Fatal("a launch with no credential reads as signed in")
+		}
+	})
+	t.Run("contract-variables-win", func(t *testing.T) {
+		useCursorRealHome(t)
+		got := launch(t, map[string]string{"HOME": "/workspace/home", "SHELL": "/bin/zsh", "CURSOR_CONFIG_DIR": "/workspace/cursor",
+			"CURSOR_DATA_DIR": "/workspace/data", "AGENT_CLI_CREDENTIAL_STORE": "file", "NO_OPEN_BROWSER": "0", "DIRENV_DISABLE": "0",
+			"ORBIT_SESSION_ID": "another-session", "ORBIT_HOME": "/workspace/orbit", cursorAccountDirVar: cursorDefaultAccountDir(),
+			"CURSOR_API_KEY": "key_from-the-workspace"})
+		for key, value := range got {
+			if strings.HasPrefix(value, "/workspace/") || value == "another-session" || value == "/bin/zsh" ||
+				(key == "AGENT_CLI_CREDENTIAL_STORE" && value != "memory") || ((key == "NO_OPEN_BROWSER" || key == "DIRENV_DISABLE") && value != "1") {
+				t.Errorf("the workspace set the contract's %s=%q", key, value)
+			}
+		}
+		if _, ok := got[cursorAccountDirVar]; ok {
+			t.Errorf("%s reached the CLI", cursorAccountDirVar)
+		}
+		if got["ORBIT_SESSION_ID"] != publicID("61111111-2222-4333-8444-555555555555") {
+			t.Errorf("ORBIT_SESSION_ID = %q", got["ORBIT_SESSION_ID"])
+		}
+	})
+	t.Run("workspace-variables-reach-commands", func(t *testing.T) {
+		home := useCursorRealHome(t)
+		job := &ClaimedSession{SessionID: "71111111-2222-4333-8444-555555555555", AgentID: "a", Agent: AgentExecConfig{Env: map[string]string{
+			"WORKSPACE_VALUE": "workspace", "CURSOR_API_KEY": "key_from-the-workspace"}}}
+		spec, err := prepareCursorLaunch(job, t.TempDir(), "/opt/cursor/cursor-agent", filepath.Join(runDir(job.SessionID), "cursor"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A command the agent runs, the way the CLI runs it: in $SHELL, with the CLI's environment.
+		shell := exec.Command(envMap(spec.Env)["SHELL"], "-O", "extglob", "-c", `printf '%s|%s|%s' "$WORKSPACE_VALUE" "$HOME" "${CURSOR_API_KEY-unset}"`)
+		shell.Env = spec.Env
+		out, err := shell.CombinedOutput()
+		if err != nil {
+			t.Fatalf("orbit-bash: %v: %s", err, out)
+		}
+		if want := "workspace|" + home + "|unset"; string(out) != want {
+			t.Fatalf("a command saw %q, want the workspace's variable, the real HOME and no credential: %q", out, want)
+		}
+	})
+}
+
+// mapEnv is envMap's inverse, in no particular order.
+func mapEnv(env map[string]string) []string {
+	out := make([]string, 0, len(env))
+	for key, value := range env {
+		out = append(out, key+"="+value)
+	}
+	return out
 }
 
 // Nothing the runner starts on Cursor CLI's behalf — the install's version probe, the health and

@@ -20,11 +20,14 @@ package main
 // drops the CLI's own variables before it execs bash: approach A of D4 (§8.4). That the pinned CLI
 // picks the wrapper up is still to be measured with a real prompt (§17.1, item 3).
 //
-// The environment is the allowlist (cursorBaseEnv) plus what the contract names: the session's
-// directories, credentials held in memory only (AGENT_CLI_CREDENTIAL_STORE=memory, so no auth.json is
-// ever written), no browser, no direnv, no debug log, and the session's own Orbit variables. The
-// credential itself arrives with the session — an API key (P2) or an account's login (P4b) — and
-// nothing of the runner's own is passed on.
+// The environment comes in three layers, each over the ones before (§16.3): the allowlist of the
+// runner's own (cursorBaseEnv), of which nothing else is passed on; the session's agent environment —
+// its workspace's variables — as every engine gets it, less the variables that are the runner's to read;
+// and what the contract fixes, over anything the workspace set: the session's directories, credentials
+// held in memory only (AGENT_CLI_CREDENTIAL_STORE=memory, so no auth.json is ever written), no browser,
+// no direnv, no debug log, the session's own Orbit variables, and the credential Orbit chose for it
+// (cursorLaunchCredential). The agent's commands see the workspace's variables too: orbit-bash takes away
+// only the CLI's own.
 //
 // A Cursor API key saved in Orbit arrives as ORBIT_CURSOR_API_KEY (cursorAPIKeyVar), and the CLI gets
 // it as its own CURSOR_API_KEY (§16.3), held in memory: it trades the key for a token itself and writes
@@ -44,13 +47,19 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // cursorAPIKeyVar is the variable a session's Cursor API key arrives in from the control plane (the
 // apiserver's injectedEnv). The CLI gets the key as CURSOR_API_KEY; this variable never reaches it.
 const cursorAPIKeyVar = "ORBIT_CURSOR_API_KEY"
+
+// cursorAccountDirVar names the runner's Cursor CLI account a session runs on (§16.2), for the runner to
+// read; it never reaches the CLI.
+const cursorAccountDirVar = "ORBIT_CURSOR_ACCOUNT_DIR"
 
 // What `agent models` asked with a Cursor API key answered, as the control plane keeps it on the key
 // (@orbit/shared CURSOR_KEY_CHECK_STATES): Cursor accepted it, refused it, or could not be reached.
@@ -232,29 +241,93 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 	if err != nil {
 		return CursorLaunchSpec{}, fmt.Errorf("CURSOR_CONFIG_CONFLICT: cannot write the shell Cursor CLI runs commands in: %w", err)
 	}
-	spec.Env = append(cursorBaseEnv(),
-		"HOME="+spec.Home,
-		"SHELL="+shell,
-		"CURSOR_CONFIG_DIR="+spec.ConfigDir,
-		"CURSOR_DATA_DIR="+spec.DataDir,
-		"AGENT_CLI_CREDENTIAL_STORE=memory",
-		"NO_OPEN_BROWSER=1",
-		"DIRENV_DISABLE=1",
-		"CURSOR_AGENT_DISABLE_DEBUG_LOG=1",
-		"ORBIT_SESSION_ID="+publicID(job.SessionID),
-		"ORBIT_AGENT_ID="+publicID(job.AgentID),
-		"ORBIT_TASK_ID="+publicID(job.TaskID),
-		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
-		envWatches+"="+watchesEnv(job.WatchesDisabled),
-		envWiki+"="+wikiEnv(job.WikiDisabled),
-		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),
-	)
-	spec.Env = append(spec.Env, bgJobEnvPairs(job.SessionID)...)
-	// The session's Cursor API key, under the CLI's own name and in memory only (§8.2, §16.3).
-	if key := cursorSessionKey(job); key != "" {
-		spec.Env = append(spec.Env, "CURSOR_API_KEY="+key)
+	credential, value, err := cursorLaunchCredential(job)
+	if err != nil {
+		return CursorLaunchSpec{}, err
+	}
+	// The workspace's variables over the allowlist, but those that are the runner's: its session context
+	// and the variables the control plane hands the runner to read.
+	agent := map[string]string{}
+	for key, value := range job.Agent.Env {
+		if !sessionContextEnvKey(key) && !strings.EqualFold(key, "ORBIT_HOME") && key != cursorAPIKeyVar && key != cursorAccountDirVar {
+			agent[key] = value
+		}
+	}
+	fixed := map[string]string{
+		"HOME":                           spec.Home,
+		"SHELL":                          shell,
+		"CURSOR_CONFIG_DIR":              spec.ConfigDir,
+		"CURSOR_DATA_DIR":                spec.DataDir,
+		"AGENT_CLI_CREDENTIAL_STORE":     "memory",
+		"NO_OPEN_BROWSER":                "1",
+		"DIRENV_DISABLE":                 "1",
+		"CURSOR_AGENT_DISABLE_DEBUG_LOG": "1",
+		"ORBIT_SESSION_ID":               publicID(job.SessionID),
+		"ORBIT_AGENT_ID":                 publicID(job.AgentID),
+		"ORBIT_TASK_ID":                  publicID(job.TaskID),
+		"ORBIT_ALLOW_ORCHESTRATION":      orchestrationEnv(job.AllowOrchestration),
+		envWatches:                       watchesEnv(job.WatchesDisabled),
+		envWiki:                          wikiEnv(job.WikiDisabled),
+		envSpawnDepth:                    strconv.Itoa(job.SpawnDepth),
+	}
+	for _, pair := range bgJobEnvPairs(job.SessionID) {
+		key, value, _ := strings.Cut(pair, "=")
+		fixed[key] = value
+	}
+	spec.Env = cursorOverlay(runnerChildEnv(cursorOverlay(cursorBaseEnv(), agent)), fixed)
+	if credential != "" {
+		// Orbit's choice replaces whatever key or token the workspace set, under the CLI's own name and
+		// in memory only (§8.2, §16.3).
+		kept := spec.Env[:0]
+		for _, entry := range spec.Env {
+			if key, _, _ := strings.Cut(entry, "="); key != "CURSOR_API_KEY" && key != "CURSOR_AUTH_TOKEN" {
+				kept = append(kept, entry)
+			}
+		}
+		spec.Env = append(kept, credential+"="+value)
 	}
 	return spec, nil
+}
+
+// cursorOverlay sets values over env, a key at a time in a fixed order, each replacing what env held.
+func cursorOverlay(env []string, values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		env = envWithValue(env, key, values[key])
+	}
+	return env
+}
+
+// cursorLaunchCredential is the credential Orbit chooses for the session's CLI, as the variable the CLI
+// reads it from and its value (§2.3, §16.3): the Cursor API key the session was dispatched (P2); none of
+// Orbit's when the workspace's own variables bring a CURSOR_API_KEY or a CURSOR_AUTH_TOKEN, as the
+// control plane's sign-in preflight counts them (hasInjectedCredentials reads the same); else the login
+// saved for the runner's Default account (§16.2), as a token. Nothing at all is a session that cannot
+// sign in, which the driver refuses before anything starts.
+func cursorLaunchCredential(job *ClaimedSession) (string, string, error) {
+	if key := cursorSessionKey(job); key != "" {
+		return "CURSOR_API_KEY", key, nil
+	}
+	env := job.Agent.Env
+	if dir := strings.TrimSpace(env[cursorAccountDirVar]); dir != "" && filepath.Clean(dir) != filepath.Clean(cursorDefaultAccountDir()) {
+		return "", "", errors.New("Failed to authenticate: this Cursor CLI session runs on an account added to this runner, " +
+			"and this runner cannot run sessions on added Cursor CLI accounts yet")
+	}
+	if strings.TrimSpace(env["CURSOR_API_KEY"]) != "" || strings.TrimSpace(env["CURSOR_AUTH_TOKEN"]) != "" {
+		return "", "", nil
+	}
+	token, err := cursorStoredLogin(cursorDefaultAccountDir())
+	if err != nil {
+		return "", "", errors.New("Failed to authenticate: " + err.Error())
+	}
+	if token == "" || cursorTokenExpired(token, time.Now()) {
+		return "", "", nil
+	}
+	return "CURSOR_AUTH_TOKEN", token, nil
 }
 
 // writeCursorSessionConfig sets what Orbit owns in the session's cli-config.json and leaves the rest —
