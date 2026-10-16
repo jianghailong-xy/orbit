@@ -697,6 +697,7 @@ struct TranscriptView: View {
         }
         // On the list alone, under `chrome`, so the jump-to-latest disc floating over it stays solid.
         .meetsComposerBand()
+        .softTopEdge()
         // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
         // if the user has scrolled up to read, don't drag them back. A session switch always
         // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
@@ -1217,6 +1218,19 @@ struct TranscriptView: View {
 }
 
 private extension View {
+    /// The top edge held to iOS 26's soft scroll-edge effect, capsule or not. With the question's
+    /// capsule in the nav bar's centre the phone chose the hard style on its own — a frosted strip
+    /// down to the bar's lower edge, a hairline under it, the rows behind it gone (the owner's
+    /// screenshot, 2026-10-16) — where without the capsule the transcript runs on up behind the bar,
+    /// as the owner asked it to. They asked for that with the capsule too.
+    @ViewBuilder func softTopEdge() -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) { scrollEdgeEffectStyle(.soft, for: .top) } else { self }
+        #else
+        self
+        #endif
+    }
+
     /// How the transcript meets the composer band: it ends at the band and fades into it — except
     /// where the band floats over it (iOS 26, `ConsoleView.transcriptAndBand`), and the list runs on
     /// under the band, where the system's scroll-edge effect is the fade.

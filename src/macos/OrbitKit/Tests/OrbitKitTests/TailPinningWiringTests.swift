@@ -119,6 +119,17 @@ final class TailPinningWiringTests: XCTestCase {
         XCTAssertFalse(mac.contains("atBottom"), "the Mac's band shows at the tail too, as web's does")
     }
 
+    /// With the capsule in the bar the phone switched the top edge to its hard style on its own — a
+    /// frosted strip and a hairline over the rows (the owner, 2026-10-16: not that, with the capsule
+    /// either). The transcript holds the soft one.
+    func testTheTopEdgeStaysSoftUnderTheCapsule() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let list = try section(source, from: "private var rowsList: some View {", to: "private func follows(")
+        XCTAssertTrue(list.contains(".softTopEdge()"), "the transcript asks for the soft top edge")
+        let edge = try section(source, from: "@ViewBuilder func softTopEdge()", to: "#else")
+        XCTAssertTrue(edge.contains("scrollEdgeEffectStyle(.soft, for: .top)"), "and it is the soft one")
+    }
+
     /// The jump-to-latest button answers "is the tail out of view?", not only "did the reader scroll
     /// up?". The pin un-pins on a scroll UP alone — on purpose, see `TailPinning` — so while the
     /// button read the pin alone it stayed hidden whenever the tail left the view any other way: a
