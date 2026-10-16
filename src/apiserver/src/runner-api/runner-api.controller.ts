@@ -444,6 +444,24 @@ const OFFLINE_AFTER_MS = 90_000;
 // Interactive sessions (Route B): per-session input long-poll + at-least-once lease.
 const INBOX_LONG_POLL_MS = 25_000;
 const INBOX_LEASE_MS = 300_000;
+// How many times one message may be handed to an engine with nothing under it answering before the
+// control plane stops putting it back on the queue at once. A message that deserves another delivery
+// deserves it promptly, and everything that legitimately needs one — an engine still starting, a
+// conversation being resumed — answers or fails within its first two. What is left is an engine that
+// is swallowing the message, and a fourth hand-over asks the same question the last three asked.
+// See the delivery count in `turnComplete` for what it bounds and how it is spent.
+const UNANSWERED_DELIVERY_BUDGET = 3;
+// What a run whose message was swallowed is reported failed with, kept in the session's `error` — the
+// list shows it under the title and the failure card reads it. Two halves: what the control plane
+// watched happen (deliveries with no answer under any of them) and what it did about it (the ladder),
+// because the person is the one who decides whether to wait for it.
+function swallowedMessageError(reported: string | undefined): string {
+  const sentence =
+    `Nothing answered this message across ${UNANSWERED_DELIVERY_BUDGET} deliveries of it to the engine. ` +
+    'It was left for a retry on the backoff ladder rather than handed over again at once.';
+  const said = reported?.trim();
+  return said ? `${sentence}\n\n${said}` : sentence;
+}
 // Tool-permission approvals: the orbit MCP permission tool blocks on this long-poll
 // until a human decides. DB-polled (approvals are low-frequency; no NOTIFY needed).
 const APPROVAL_LONG_POLL_MS = 25_000;
@@ -5029,6 +5047,27 @@ export class RunnerApiController {
           },
           select: { id: true },
         })) == null;
+      // ...and a message that is STILL unanswered after that many hand-overs is not owed another:
+      // the engine is swallowing it, and putting it back on the queue is the loop this bounds
+      // (2026-10-10: one dead turn redelivered 67 times in three minutes, each round starting an
+      // engine turn that ended having said nothing). The count is of the deliveries themselves — the
+      // `user` events the runner writes as it feeds the engine, one per hand-over, none ever removed
+      // — because it is the only trace that survives a requeue: every claim overwrites `delivered_at`
+      // and every put-back clears it with the lease.
+      //
+      // This is a net for that class, not a rule about engines: a runtime that cannot answer a
+      // message must say so (its own failure, or a turn that produced nothing — the runner reports
+      // both), and what reaches here is what nothing named. The budget is spent as a FAILURE of the
+      // attempt rather than another requeue, and the ladder below carries the message from there.
+      const deliveries = unanswered
+        ? await tx.runEvent.count({
+            where: { sessionId, turnId: dto.turnId, type: RunEventType.USER },
+          })
+        : 0;
+      const swallowed = deliveries >= UNANSWERED_DELIVERY_BUDGET;
+      // Decided after `failTask` above, which stays as it was: a task's work is judged by what its
+      // turns report, and a delivery nobody answered is not a report about the work.
+      if (swallowed) failSession = true;
       // ...and of those, the one the server can undo BY ITSELF is the turn that produced nothing
       // at all: no engine turn ran and nothing was billed for one, which is an engine that never
       // came up (`--resume` on a conversation that was never opened, a runtime refusing its own
@@ -5100,9 +5139,14 @@ export class RunnerApiController {
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
         : usageLimit
           ? usageLimit.retryAt
-          : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
+          // The swallowed message rejoins on the ladder the requeue case below already uses — a
+          // countdown instead of a hot loop — which is what makes the budget a delay rather than a
+          // drop. Never over an arm already standing, for the reason that case gives.
+          : swallowed && current.retryAt == null
             ? nextAutoRetryAt(current.retryAttempts, new Date())
-            : null;
+            : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
+              ? nextAutoRetryAt(current.retryAttempts, new Date())
+              : null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -5110,6 +5154,12 @@ export class RunnerApiController {
       // clears the stale merge state — that was true before this was folded into one write, and
       // it is the reason the clear cannot simply ride along with the park below. Nothing has
       // written the Session row on this path, so this IS the one write.
+      //
+      // A swallowed delivery is consumed rather than requeued: the engine was handed this message
+      // its budget and nothing answered under any of them, so a fifth hand-over is the loop — while
+      // leaving the row out on delivery would leave it nothing to claim. ANSWERED is what takes it
+      // out of every queue; the transcript keeps showing the person's message unanswered, because no
+      // event ever answered it, and the retry the ladder arms re-sends the words as a turn of its own.
       const ack = await tx.conversationTurn.updateMany({
         where: {
           id: dto.turnId,
@@ -5117,7 +5167,7 @@ export class RunnerApiController {
           status: { not: 'ANSWERED' },
           deliveredAt: { not: null },
         },
-        data: unanswered
+        data: unanswered && !swallowed
           ? { status: 'PENDING', deliveredAt: null, leaseDeadlineAt: null, leaseGeneration: null }
           : { status: 'ANSWERED', answeredAt: new Date() },
       });
@@ -5465,7 +5515,10 @@ export class RunnerApiController {
           // tear that process down and reclaim the slot (mirrors reaper forceFinalize).
           ...(failSession
             ? {
-                error: (acceptanceFailureReason ?? failureText) || 'run failed',
+                // A swallowed delivery says what the control plane watched happen rather than
+                // reporting the engine's words, which for this shape are nothing: the runtime
+                // released the turn without a reply. Its own sentence follows when it gave one.
+                error: (acceptanceFailureReason ?? (swallowed ? swallowedMessageError(failureText) : failureText)) || 'run failed',
                 finishedAt: new Date(),
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
