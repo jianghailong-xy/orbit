@@ -1,7 +1,7 @@
 import Foundation
 
 /// One reading of the transcript scroll view's geometry. SwiftUI's `ScrollGeometry` is Apple-only
-/// and these four numbers are all the tail-pinning rules need, so the decisions themselves live
+/// and these five numbers are all the tail-pinning rules need, so the decisions themselves live
 /// here — in the package that builds and tests on Linux.
 public struct TailScrollSample: Equatable, Sendable {
     /// Vertical content offset.
@@ -14,12 +14,18 @@ public struct TailScrollSample: Equatable, Sendable {
     /// sticky "↑ Your question" header among them. A bar that arrives pushes the rows down by what
     /// it adds here, and the tail with them, without anybody scrolling.
     public let topInset: Double
+    /// How far the content is inset from the viewport's bottom edge: what floats over the list's
+    /// bottom — the composer band where it floats (iOS 26), and the keyboard under it. Zero where the
+    /// list ends at its band. A bar that grows there lifts the floor the tail rests on.
+    public let bottomInset: Double
 
-    public init(offset: Double, contentHeight: Double, bottomGap: Double, topInset: Double = 0) {
+    public init(offset: Double, contentHeight: Double, bottomGap: Double, topInset: Double = 0,
+                bottomInset: Double = 0) {
         self.offset = offset
         self.contentHeight = contentHeight
         self.bottomGap = bottomGap
         self.topInset = topInset
+        self.bottomInset = bottomInset
     }
 }
 
@@ -156,11 +162,23 @@ public enum TailPinning {
     /// from the tail lands its first reading inside the slack and pins the transcript again — and
     /// nothing later in the jump has to un-pin it. A pinned transcript left out of view that way is
     /// `stranded`, and the jump-to-latest disc is the way back.
+    ///
+    /// The one larger gap followed is the floor rising: a bar floating over the list's bottom grew —
+    /// the keyboard arriving under a floating composer band, the composer growing a line — and took
+    /// the tail under it. Nobody scrolled; the tail is as far below the new floor as the floor rose,
+    /// and no more than that past the slack, which no jump can arrange (a jump moves no inset).
+    /// Measured on iOS 26: the keyboard snapped the list from a 427.6pt frame back to 874 with 436pt
+    /// floating over its bottom, the content kept its place against the frame (offset 1090.3 to
+    /// 644), and the tail sat 436 below the composer; the composer then grew a line at a time
+    /// (insets 458, 480, 502) under an offset nothing moved again.
     public static func followsGeometry(pinned: Bool,
                                        from previous: TailScrollSample,
                                        to current: TailScrollSample,
                                        moving: Bool) -> Bool {
-        guard pinned, !moving, current.bottomGap > subpixel, current.bottomGap <= nearBottom else { return false }
+        guard pinned, !moving, current.bottomGap > subpixel else { return false }
+        let lifted = current.bottomInset - previous.bottomInset
+        if lifted > subpixel, current.bottomGap <= lifted + nearBottom { return true }
+        guard current.bottomGap <= nearBottom else { return false }
         let resized = current.contentHeight != previous.contentHeight
         let pushed = current.topInset - previous.topInset
         guard resized || pushed != 0 else { return false }

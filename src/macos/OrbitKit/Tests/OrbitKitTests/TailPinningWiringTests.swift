@@ -171,6 +171,27 @@ final class TailPinningWiringTests: XCTestCase {
                       "and the answer has to reach the transcript, which owns the scroll")
     }
 
+    /// On iOS 26 the composer band floats over the transcript as a safe-area bar (the owner,
+    /// 2026-10-16), and the list runs on under it. Its tail is then read net of the band, and the band
+    /// is read: the pin's gap leaves the band's strip out, and the sample carries the bottom inset so
+    /// the follow hears the keyboard and a growing composer lift it. Counted in, a reader who scrolled
+    /// up by less than the band is tall was still "at the tail" and got pulled back; unread, the
+    /// keyboard left the last answer under the composer (measured: offset 644 against a tail at 1146,
+    /// the frame unchanged — the resize-follow had nothing to hear).
+    func testAFloatingBandIsNettedOutOfTheTail() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let layout = try section(source, from: "private func transcriptAndBand(", to: "private func composerBand(")
+        XCTAssertTrue(layout.contains("if #available(iOS 26.0, *) {\n"
+                                      + "            transcript.safeAreaBar(edge: .bottom, spacing: 0) { composerBand(console) }"),
+                      "on iOS 26 the band floats over the transcript")
+        let tracker = try section(source, from: "private struct ScrollTracker",
+                                  to: "/// Publishes the id of the item currently under")
+        XCTAssertTrue(tracker.contains("geo.contentSize.height + geo.contentInsets.bottom"),
+                      "the pin's gap is to what the reader can see, net of the band")
+        XCTAssertTrue(tracker.contains("bottomInset: Double(geo.contentInsets.bottom)"),
+                      "and the follow is handed the bottom inset, so a rising floor is followed")
+    }
+
     /// …and it has to land as a scroll the way every other out-of-update scroll does (`heldScroll`):
     /// this one arrives off a layout report, where naming a row's index path is how the transcript
     /// was handed an index past the end (the 0.1.2 crash in `heldScroll`'s note).

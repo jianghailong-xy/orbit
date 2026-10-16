@@ -95,7 +95,52 @@ extension View {
                 }
                 Color.black.frame(width: 16)
             }
+            #if os(iOS)
+            // On up behind the nav bar. The scroll view runs on up there — its frame starts at the top
+            // of the screen, its content inset by the bar — and what passes behind the bar is the
+            // bar's to soften (iOS 26's scroll-edge effect), not this mask's to cut. Sized to the
+            // layout frame alone, which stops at the bar, it sliced every row off at the bar's lower
+            // edge and left a blank strip behind the glass (the owner, 2026-10-16).
+            .ignoresSafeArea(.container, edges: .top)
+            #endif
         }
+    }
+
+    /// The surface of a card that stands in the composer band: the tray, the git bar, Tasks created
+    /// here, Watching. On iOS 26 the console's band floats over the transcript, which runs on under it
+    /// (`ConsoleView.transcriptAndBand`), so the card is Liquid Glass — the faint fill would let the
+    /// rows passing behind read straight through it. Elsewhere it stands on the bare content backdrop
+    /// as it always has: a faint fill and a hairline.
+    @ViewBuilder func composerBandCard(cornerRadius: CGFloat = 8) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            clipShape(shape).glassEffect(.regular, in: shape)
+        } else {
+            background(Color.primary.opacity(0.04), in: shape).clipShape(shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
+        }
+        #else
+        background(Color.primary.opacity(0.04), in: shape).clipShape(shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
+        #endif
+    }
+
+    /// The composer card's own surface, under its hairline: an elevated fill with a soft drop shadow
+    /// that lifts a touch on focus — or, on iOS 26, glass, for the reason `composerBandCard` gives.
+    @ViewBuilder fileprivate func composerCardSurface(cornerRadius: CGFloat, focused: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular, in: shape)
+        } else {
+            background(shape.fill(Color.editorSurface)
+                .shadow(color: .black.opacity(focused ? 0.12 : 0.06), radius: focused ? 7 : 4, y: 1.5))
+        }
+        #else
+        background(shape.fill(Color.editorSurface)
+            .shadow(color: .black.opacity(focused ? 0.12 : 0.06), radius: focused ? 7 : 4, y: 1.5))
+        #endif
     }
 }
 
@@ -354,13 +399,8 @@ struct ComposerView: View {
             // shadow. Focus deepens the border toward the accent and lifts the shadow a touch instead
             // of flipping to a hard blue outline. The corner is `cardRadius` because the toolbar's two
             // round ends sit 8pt in from the edges with their centres 24pt from both — on the
-            // corner's own centre.
-            .background(
-                RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
-                    .fill(Color.editorSurface)
-                    .shadow(color: .black.opacity(boxFocused ? 0.12 : 0.06),
-                            radius: boxFocused ? 7 : 4, y: 1.5)
-            )
+            // corner's own centre. On iOS 26 the surface is glass instead (`composerCardSurface`).
+            .composerCardSurface(cornerRadius: Self.cardRadius, focused: boxFocused)
             .overlay {
                 RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(boxFocused ? 0.22 : 0.10), lineWidth: 1)

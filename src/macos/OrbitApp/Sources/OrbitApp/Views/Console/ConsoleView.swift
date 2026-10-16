@@ -119,104 +119,133 @@ struct ConsoleView: View {
         #endif
     }
 
+    /// The transcript and the composer band. Pending approvals (incl. the AskUserQuestion form)
+    /// render inline at the tail of the transcript — as the agent's latest turn, web-style — not in a
+    /// fixed panel here. See TranscriptView.
+    ///
+    /// On iOS 26 the band floats over the transcript instead of standing below it (the owner,
+    /// 2026-10-16: the bottom as clear as the top). The transcript runs on under it, the system's
+    /// scroll-edge effect softens what passes beneath, and the band's cards are glass
+    /// (`composerBandCard`). It is a safe-area bar, so the list's content is inset by its height:
+    /// the tail and every follow stop above it, the pin reads the list net of it, and the follow
+    /// hears it grow — the keyboard, a composer growing a line (`ScrollTracker`,
+    /// `TailPinning.followsGeometry`).
+    @ViewBuilder
+    private func transcriptAndBand(_ console: ConsoleModel, navTitleWidth: CGFloat) -> some View {
+        let transcript = TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
+                                        reviewingCard: approvalReview != nil || promotionReview != nil,
+                                        questionWidth: navTitleWidth)
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            transcript.safeAreaBar(edge: .bottom, spacing: 0) { composerBand(console) }
+        } else {
+            VStack(spacing: 0) {
+                transcript
+                composerBand(console)
+            }
+        }
+        #else
+        VStack(spacing: 0) {
+            transcript
+            composerBand(console)
+        }
+        #endif
+    }
+
+    private func composerBand(_ console: ConsoleModel) -> some View {
+        // Error, background tray, git bar, composer — web's order (`workspace-composer`).
+        // Staged attachments are not a member: they sit inside the composer's card, above
+        // the text they go out with. The band owns the gutter and the gaps; members only
+        // say whether they are on screen.
+        ComposerBand {
+            // The managed runner's state while it is anything but ready, when this
+            // console's runner is it (docs/managed-runner-design.md): about the runner the
+            // message goes to, so it stays in sight while you type.
+            if let managed = console.managed, managed.showsBanner {
+                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                    .padding(.bottom, .composerBandGap)
+            }
+            // Errors only, and sticky until the ✕ — this row is in flow, so anything that
+            // comes and goes on a timer here shoves the composer around while the user is
+            // typing in it. Confirmations belong in the toast host (see `showToast`).
+            // Why this run produced nothing at all. Drawn first because it is about the
+            // run itself rather than the message being sent, and drawn INSTEAD of the
+            // two engine-repair cards below when it has something to say — one fact,
+            // one card (an engine reason it does not claim is theirs, and the reverse).
+            if let runStart = console.runStart {
+                SessionRunStartCardView(console: console, card: runStart)
+                    .padding(.bottom, .composerBandGap)
+            } else if let repair = console.queuedDshRepair {
+                DshRepairCardView(console: console, repair: repair)
+                    .padding(.bottom, .composerBandGap)
+            } else if let repair = console.queuedAntigravityRepair {
+                AntigravityRepairCardView(console: console, repair: repair)
+                    .padding(.bottom, .composerBandGap)
+            }
+            if let msg = console.statusMessage {
+                HStack {
+                    Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)
+                    Spacer()
+                    Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+                .padding(.bottom, .composerBandGap)
+            }
+            // The message went somewhere — it just isn't here. Above the composer
+            // because that is where the send was made from, and it carries the one
+            // press that follows it.
+            if let routed = console.handedOverSessionID {
+                TaskRunHandedOverCard(
+                    sessionID: routed,
+                    onOpenRun: { appModel.route(to: .session($0)) },
+                    onDismiss: { console.dismissRunConflict() })
+                    .padding(.bottom, .composerBandGap)
+            }
+            // …and the refusals that used to be the server's English sentence in the
+            // row above. Shown here rather than as a status line because each one
+            // carries a way out that has to stay pressable.
+            if let conflict = console.composerRunConflict {
+                // A question is not dismissible into silence: `Keep it running` IS the
+                // way to decline it, and an ✕ beside that would be a third answer that
+                // leaves the message unsent with nothing on screen about why.
+                let dismiss: (() -> Void)? = conflict.kind == .confirmSwitch
+                    ? nil : { console.dismissRunConflict() }
+                TaskRunHandoffCard(
+                    conflict: conflict,
+                    onOpenRun: { appModel.route(to: .session($0)) },
+                    onStopAndContinue: { Task { await console.stopAndContinue() } },
+                    onKeepRunning: { console.keepRunning() },
+                    onDismiss: dismiss)
+                    .padding(.bottom, .composerBandGap)
+            }
+            // The session's cards, which a phone folds while you type (`TypingFold`). The
+            // one-off cards above stay: each is about the message being sent.
+            VStack(spacing: 0) {
+                // What this session waits on — a watch, not a process — above the real shells.
+                WatchingCardStack(sessionID: console.sessionID)
+                BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
+                // The tasks this session's agent created, beside the code the bar below
+                // carries — the session's two kinds of output, together.
+                CreatedTasksCard(console: console)
+                WorktreeBar(console: console)
+            }
+            .modifier(TypingFold(folded: foldsChrome(console)))
+            ComposerView(console: console)
+            // What the provider pick standing in the composer will do, and WHEN — the
+            // part that matters, because a run keeps its provider for its whole life.
+            // In flow under the composer, and it stays for as long as the pick does.
+            if let note = console.providerSwitchNote {
+                Text(note).font(.orbitMeta).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+            }
+        }
+    }
+
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
             if let console = registry.peek(sessionID) {
-                VStack(spacing: 0) {
-                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
-                                   reviewingCard: approvalReview != nil || promotionReview != nil,
-                                   questionWidth: navTitleWidth)
-                    // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
-                    // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
-                    // here. See TranscriptView.
-                    // Error, background tray, git bar, composer — web's order (`workspace-composer`).
-                    // Staged attachments are not a member: they sit inside the composer's card, above
-                    // the text they go out with. The band owns the gutter and the gaps; members only
-                    // say whether they are on screen.
-                    ComposerBand {
-                        // The managed runner's state while it is anything but ready, when this
-                        // console's runner is it (docs/managed-runner-design.md): about the runner the
-                        // message goes to, so it stays in sight while you type.
-                        if let managed = console.managed, managed.showsBanner {
-                            ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                                .padding(.bottom, .composerBandGap)
-                        }
-                        // Errors only, and sticky until the ✕ — this row is in flow, so anything that
-                        // comes and goes on a timer here shoves the composer around while the user is
-                        // typing in it. Confirmations belong in the toast host (see `showToast`).
-                        // Why this run produced nothing at all. Drawn first because it is about the
-                        // run itself rather than the message being sent, and drawn INSTEAD of the
-                        // two engine-repair cards below when it has something to say — one fact,
-                        // one card (an engine reason it does not claim is theirs, and the reverse).
-                        if let runStart = console.runStart {
-                            SessionRunStartCardView(console: console, card: runStart)
-                                .padding(.bottom, .composerBandGap)
-                        } else if let repair = console.queuedDshRepair {
-                            DshRepairCardView(console: console, repair: repair)
-                                .padding(.bottom, .composerBandGap)
-                        } else if let repair = console.queuedAntigravityRepair {
-                            AntigravityRepairCardView(console: console, repair: repair)
-                                .padding(.bottom, .composerBandGap)
-                        }
-                        if let msg = console.statusMessage {
-                            HStack {
-                                Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)
-                                Spacer()
-                                Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
-                                    .buttonStyle(.plain).foregroundStyle(.secondary)
-                            }
-                            .padding(.bottom, .composerBandGap)
-                        }
-                        // The message went somewhere — it just isn't here. Above the composer
-                        // because that is where the send was made from, and it carries the one
-                        // press that follows it.
-                        if let routed = console.handedOverSessionID {
-                            TaskRunHandedOverCard(
-                                sessionID: routed,
-                                onOpenRun: { appModel.route(to: .session($0)) },
-                                onDismiss: { console.dismissRunConflict() })
-                                .padding(.bottom, .composerBandGap)
-                        }
-                        // …and the refusals that used to be the server's English sentence in the
-                        // row above. Shown here rather than as a status line because each one
-                        // carries a way out that has to stay pressable.
-                        if let conflict = console.composerRunConflict {
-                            // A question is not dismissible into silence: `Keep it running` IS the
-                            // way to decline it, and an ✕ beside that would be a third answer that
-                            // leaves the message unsent with nothing on screen about why.
-                            let dismiss: (() -> Void)? = conflict.kind == .confirmSwitch
-                                ? nil : { console.dismissRunConflict() }
-                            TaskRunHandoffCard(
-                                conflict: conflict,
-                                onOpenRun: { appModel.route(to: .session($0)) },
-                                onStopAndContinue: { Task { await console.stopAndContinue() } },
-                                onKeepRunning: { console.keepRunning() },
-                                onDismiss: dismiss)
-                                .padding(.bottom, .composerBandGap)
-                        }
-                        // The session's cards, which a phone folds while you type (`TypingFold`). The
-                        // one-off cards above stay: each is about the message being sent.
-                        VStack(spacing: 0) {
-                            // What this session waits on — a watch, not a process — above the real shells.
-                            WatchingCardStack(sessionID: console.sessionID)
-                            BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
-                            // The tasks this session's agent created, beside the code the bar below
-                            // carries — the session's two kinds of output, together.
-                            CreatedTasksCard(console: console)
-                            WorktreeBar(console: console)
-                        }
-                        .modifier(TypingFold(folded: foldsChrome(console)))
-                        ComposerView(console: console)
-                        // What the provider pick standing in the composer will do, and WHEN — the
-                        // part that matters, because a run keeps its provider for its whole life.
-                        // In flow under the composer, and it stays for as long as the pick does.
-                        if let note = console.providerSwitchNote {
-                            Text(note).font(.orbitMeta).foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.top, 4)
-                        }
-                    }
-                }
+                transcriptAndBand(console, navTitleWidth: navTitleWidth)
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
                 // The tasks this conversation filed, which a watch's wake line names its targets by.
@@ -665,7 +694,7 @@ struct TranscriptView: View {
             }
         }
         // On the list alone, under `chrome`, so the jump-to-latest disc floating over it stays solid.
-        .fadesIntoComposerBand()
+        .meetsComposerBand()
         // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
         // if the user has scrolled up to read, don't drag them back. A session switch always
         // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
@@ -1185,6 +1214,19 @@ struct TranscriptView: View {
     #endif
 }
 
+private extension View {
+    /// How the transcript meets the composer band: it ends at the band and fades into it — except
+    /// where the band floats over it (iOS 26, `ConsoleView.transcriptAndBand`), and the list runs on
+    /// under the band, where the system's scroll-edge effect is the fade.
+    @ViewBuilder func meetsComposerBand() -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) { self } else { fadesIntoComposerBand() }
+        #else
+        fadesIntoComposerBand()
+        #endif
+    }
+}
+
 #if os(iOS)
 private extension View {
     /// The sticky question's capsule: iOS 26's Liquid Glass at the height of the back and ⋯ buttons
@@ -1543,10 +1585,18 @@ private struct ScrollTracker: ViewModifier {
                     scrolling = phase != .idle
                 }
                 .onScrollGeometryChange(for: TailScrollSample.self) { geo in
+                    // The gap is to the bottom of what the reader can see, net of the content's
+                    // bottom inset: where the composer band floats over the list (iOS 26) the list
+                    // runs on under it, and counting that strip as "in view" would pin a reader who
+                    // had scrolled up by less than the band is tall. The inset itself is read too:
+                    // the keyboard and a growing composer lift it, and the follow has to hear that
+                    // (`TailPinning.followsGeometry`). Zero where the list ends at its band.
                     TailScrollSample(offset: Double(geo.contentOffset.y),
                                      contentHeight: Double(geo.contentSize.height),
-                                     bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY),
-                                     topInset: Double(geo.contentInsets.top))
+                                     bottomGap: Double(geo.contentSize.height + geo.contentInsets.bottom
+                                                       - geo.visibleRect.maxY),
+                                     topInset: Double(geo.contentInsets.top),
+                                     bottomInset: Double(geo.contentInsets.bottom))
                 } action: { was, now in
                     let pinned = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
                                                     readerDriven: readerIsMoving,
