@@ -477,7 +477,7 @@ final class KimiAccountsTests: XCTestCase {
         XCTAssertTrue(["claude", "codex", "antigravity", "kimi"].allSatisfy(RunnerPageFormat.keepsAccounts))
         XCTAssertEqual(CodexAccounts.monthMins, 30 * 24 * 60)
         let shared = try source("src/shared/src/planUsage.ts")
-        for literal in ["ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity', 'kimi']",
+        for literal in ["ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity', 'kimi', 'cursor']",
                         "kimi: 'KIMI_CODE_HOME'", "kimi: ['KIMI_MODEL_NAME', 'KIMI_MODEL_API_KEY']",
                         "OWN_CREDENTIAL_NEEDS_ALL: ReadonlySet<string> = new Set(['kimi'])",
                         "const MONTH_MINS = 30 * 24 * 60;", "[snapshot.month, MONTH_MINS]", "[snapshot.monthCode, MONTH_MINS]"] {

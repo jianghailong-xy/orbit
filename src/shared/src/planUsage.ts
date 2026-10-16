@@ -214,6 +214,9 @@ const OWN_CREDENTIAL_KEYS: Partial<Record<string, readonly string[]>> = {
   claude: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN'],
   antigravity: ['GEMINI_API_KEY'],
   kimi: ['KIMI_MODEL_NAME', 'KIMI_MODEL_API_KEY'],
+  // A key or token in the environment signs Cursor CLI in by itself (docs/cursor-runtime-contract.md
+  // §2.3): no account's login is spent.
+  cursor: ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN'],
 };
 
 /** The engines whose variables above count only all together. Kimi Code runs on a model of the
@@ -225,26 +228,31 @@ const OWN_CREDENTIAL_NEEDS_ALL: ReadonlySet<string> = new Set(['kimi']);
 /** The directory an engine's own login lives in when the run names none: what its CLI resolves
  *  (CODEX_HOME else ~/.codex; CLAUDE_CONFIG_DIR else ~/.claude; KIMI_CODE_HOME else ~/.kimi-code).
  *  Antigravity's Default is the runner's own Google sign-in, which no variable or HOME moves: a run
- *  that names no directory is on it. */
+ *  that names no directory is on it. So is Cursor CLI's, a directory the runner keeps under its own
+ *  home (docs/cursor-runtime-contract.md §16.2). */
 const ENGINE_DEFAULT_DIR: Partial<Record<string, (home: string | undefined) => string | undefined>> = {
   codex: (home) => (home === undefined ? undefined : `${home}/.codex`),
   claude: (home) => (home === undefined ? undefined : `${home}/.claude`),
   antigravity: () => undefined,
   kimi: (home) => (home === undefined ? undefined : `${home}/.kimi-code`),
+  cursor: () => undefined,
 };
 
 /** The variable that hands one account's directory to each engine that keeps accounts: the CLI's own
  *  for Codex, Claude Code and Kimi Code; for Antigravity, whose agy takes a flag instead, the runner's
- *  (it picks the sign-in a session's copy is made from, src/runner-go/antigravity_account_slot.go). */
+ *  (it picks the sign-in a session's copy is made from, src/runner-go/antigravity_account_slot.go); and
+ *  for Cursor CLI the runner's too: it reads it to pick the account a session's CLI signs in with, and
+ *  keeps it out of the CLI's environment (docs/cursor-runtime-contract.md §16.2). */
 export const ACCOUNT_DIR_VAR: Readonly<Record<AccountEngine, string>> = {
   codex: 'CODEX_HOME',
   claude: 'CLAUDE_CONFIG_DIR',
   antigravity: 'ORBIT_ANTIGRAVITY_GOOGLE_DIR',
   kimi: 'KIMI_CODE_HOME',
+  cursor: 'ORBIT_CURSOR_ACCOUNT_DIR',
 };
 
 /** The engines that keep a login per directory, so that one runner holds several accounts of them. */
-export const ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity', 'kimi'];
+export const ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity', 'kimi', 'cursor'];
 
 export function isAccountEngine(engine: string | null | undefined): engine is AccountEngine {
   return !!engine && (ACCOUNT_ENGINES as readonly string[]).includes(engine);
@@ -361,9 +369,9 @@ export function planUsageBlockedUntil(
 }
 
 /** The engines whose CLI keeps a login per directory — a CODEX_HOME, a CLAUDE_CONFIG_DIR, an
- *  Antigravity Google sign-in's Gemini directory, a KIMI_CODE_HOME — so that a runner can hold several
- *  accounts of them, each with its own quota. */
-export type AccountEngine = 'codex' | 'claude' | 'antigravity' | 'kimi';
+ *  Antigravity Google sign-in's Gemini directory, a KIMI_CODE_HOME, a Cursor CLI account's directory —
+ *  so that a runner can hold several accounts of them, each with its own quota. */
+export type AccountEngine = 'codex' | 'claude' | 'antigravity' | 'kimi' | 'cursor';
 
 /**
  * `usage` (a runner's heartbeat planUsage) with Antigravity's quota folded in from the engine health it
