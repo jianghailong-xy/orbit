@@ -84,7 +84,7 @@ func TestEngineFlagsAreInTheHelpOfEveryCommandThatTakesThem(t *testing.T) {
 		}
 	}
 	for _, help := range []string{sessionActionHelp["create"], taskActionHelp["create"]} {
-		for _, name := range []string{"Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"} {
+		for _, name := range []string{"Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness", "Cursor CLI"} {
 			if !strings.Contains(strings.Join(strings.Fields(help), " "), name) {
 				t.Errorf("an --engine help does not name %s:\n%s", name, help)
 			}

@@ -22,10 +22,10 @@ import (
 
 // engineNames are the engines a session or a task can name (docs/provider-engine-contract.md §0):
 // the CLI on the runner that runs it, beside the provider its credential comes from. One list, so the
-// CLI flags, the MCP schemas and the help all name the same six.
-var engineNames = []string{providerClaude, providerCodex, providerKimi, providerAntigravity, providerOpenCode, providerDsh}
+// CLI flags, the MCP schemas and the help all name the same seven.
+var engineNames = []string{providerClaude, providerCodex, providerKimi, providerAntigravity, providerOpenCode, providerDsh, providerCursor}
 
-// engineArgument is how capabilities spell an --engine value: claude|codex|kimi|antigravity|opencode|dsh.
+// engineArgument is how capabilities spell an --engine value: claude|codex|kimi|antigravity|opencode|dsh|cursor.
 func engineArgument() string { return "--engine <" + strings.Join(engineNames, "|") + ">" }
 
 // nullableEngineEnum is engineNames as a JSON-schema enum that also takes null: what a task's engine
@@ -57,10 +57,10 @@ Usage:
 
 A provider is where a session's credential comes from; the engine is the CLI that runs it
 (--engine: claude for Claude Code, codex for Codex, kimi for Kimi Code, antigravity for
-Antigravity CLI, opencode for OpenCode, dsh for DeepSeek Harness). This reports every slug
-accepted by --provider on 'orbit session create', 'orbit task create', 'orbit task update'
-and 'orbit task batch-pin', each with "engines": the engines it can run, the one it runs on
-when no engine is named first.
+Antigravity CLI, opencode for OpenCode, dsh for DeepSeek Harness, cursor for Cursor CLI).
+This reports every slug accepted by --provider on 'orbit session create', 'orbit task
+create', 'orbit task update' and 'orbit task batch-pin', each with "engines": the engines it
+can run, the one it runs on when no engine is named first.
 
 The built-in entries (builtin true) are each engine's own sign-in on the runner; opencode is
 OpenCode's own configuration, and dsh is DeepSeek Harness on the account's first enabled
