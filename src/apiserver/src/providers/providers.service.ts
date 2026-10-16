@@ -3,10 +3,13 @@ import { Prisma } from '@prisma/client';
 import {
   AgentProvider,
   credentialEngines,
+  CURSOR_KEY_CHECK_STATES,
   ENGINE_CLI_NAMES,
   isEngine,
+  keyDialect,
   providerPreset,
   RunEventType,
+  type CursorKeyCheckState,
   type PlanUsageSnapshot,
   type ProviderKeyUsage,
   type ProviderPreset,
@@ -34,7 +37,9 @@ import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
 import { keyCredential, keyRowEngine, usableProviderScope } from './custom-provider';
 import { openCodeKeyModel } from '@orbit/shared';
+import { storedCredential } from './engine-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
+import { keyFingerprint } from './provider-engine-resolution';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
 /**
@@ -629,6 +634,12 @@ export class ProvidersService {
     // Only re-encrypt when a new key is supplied; an omitted key keeps the stored one.
     const apiKeyEnc = dto.apiKey ? encryptSecret(dto.apiKey) : undefined;
     if (apiKeyEnc) data.apiKeyEnc = apiKeyEnc;
+    // A Cursor key's last check was of the key it held then (recordCursorKeyCheck): a new key, or a row
+    // moved off Cursor's dialect, has not been checked.
+    if (apiKeyEnc || (dto.runtime && dto.runtime !== current.runtime)) {
+      data.keyCheckState = null;
+      data.keyCheckedAt = null;
+    }
     await this.assertPoolMemberEdit(current, {
       ...current,
       runtime: dto.runtime ?? current.runtime,
@@ -678,6 +689,55 @@ export class ProvidersService {
   async usage(ownerId: string, id: string): Promise<ProviderKeyUsage> {
     const row = await this.getScoped(ownerId, id);
     return { providerId: row.id, ...(await readKeyUsage(this.prisma, row)) };
+  }
+
+  /**
+   * What Cursor CLI on a runner answered `agent models` with, asked with the Cursor key one of that
+   * runner's sessions is dispatched on (docs/cursor-runtime-contract.md §9): kept on the key as its last
+   * check, which is what tells a key Cursor refuses apart from a Cursor API that could not be reached —
+   * the CLI's own handshake succeeds either way, and `session/new` refuses both with one -32603 (§12).
+   *
+   * Only from the runner the session is assigned to, and only about a Cursor key the session runs Cursor
+   * CLI on. The runner names the key it checked by its fingerprint (keyFingerprint), and the answer is
+   * kept only while the row still holds that key: one about a key replaced since is about nothing here.
+   * Anything else changes nothing and says so (`recorded: false`).
+   */
+  async recordCursorKeyCheck(
+    runnerId: string,
+    sessionId: string,
+    report: { state?: unknown; keyFingerprint?: unknown },
+  ): Promise<{ recorded: boolean }> {
+    const state = report?.state as CursorKeyCheckState;
+    if (!CURSOR_KEY_CHECK_STATES.includes(state)) throw new BadRequestException('Unknown Cursor key check state');
+    const fingerprint = report.keyFingerprint;
+    if (typeof fingerprint !== 'string' || !/^[0-9a-f]{16}$/.test(fingerprint)) {
+      throw new BadRequestException('keyFingerprint must be the 16 hex digits of the checked key\'s fingerprint');
+    }
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { assignedRunnerId: true, ownerId: true, provider: true, providerBuiltin: true, engine: true },
+    });
+    if (!session || session.assignedRunnerId !== runnerId) {
+      throw new ForbiddenException('session does not belong to this runner');
+    }
+    if (session.engine !== AgentProvider.CURSOR) return { recorded: false };
+    const credential = await storedCredential(this.prisma, session);
+    if (credential?.kind !== 'key' || keyDialect(credential.row.runtime) !== 'cursor') return { recorded: false };
+    const row = credential.row;
+    let key: string;
+    try {
+      key = decryptSecret(row.apiKeyEnc);
+    } catch {
+      return { recorded: false };
+    }
+    if (keyFingerprint(key) !== fingerprint) return { recorded: false };
+    // Compare-and-set on the key read: one saved since the runner checked this one is not what it checked.
+    const { count } = await this.prisma.modelProvider.updateMany({
+      where: { id: row.id, apiKeyEnc: row.apiKeyEnc, runtime: AgentProvider.CURSOR },
+      data: { keyCheckState: state, keyCheckedAt: new Date() },
+    });
+    if (count > 0) this.publishChanged(row.ownerId, row.id);
+    return { recorded: count > 0 };
   }
 
   /**
@@ -886,6 +946,14 @@ export class ProvidersService {
     model?: string;
     runtime?: string;
   }): Promise<{ ok: boolean; status?: number; message: string }> {
+    // A Cursor key is no model API this side can probe: Cursor CLI checks it on a runner with `agent
+    // models` (docs/cursor-runtime-contract.md §9), and the key is never sent anywhere from here.
+    if (dto.runtime === AgentProvider.CURSOR) {
+      throw new BadRequestException({
+        code: 'CURSOR_KEY_CHECKED_ON_RUNNER',
+        message: 'A Cursor API key cannot be tested from here: Cursor CLI checks it on a runner before a session starts on it',
+      });
+    }
     const base = this.assertTestableUrl(dto.baseUrl).replace(/\/+$/, '');
     const model = (dto.model ?? '').trim();
     if (!model) throw new BadRequestException('add a model before testing');

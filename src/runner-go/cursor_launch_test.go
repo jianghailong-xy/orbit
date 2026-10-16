@@ -82,11 +82,11 @@ func TestCursorLaunchSpecIsolatesSessionDirectories(t *testing.T) {
 	jobA := &ClaimedSession{SessionID: "11111111-2222-4333-8444-555555555555", AgentID: "a", TaskID: "t"}
 	jobB := &ClaimedSession{SessionID: "21111111-2222-4333-8444-555555555555", AgentID: "a"}
 
-	a, err := PrepareCursorSessionLaunch(context.Background(), jobA, execDir) // installs on demand
+	a, err := PrepareCursorSessionLaunch(context.Background(), jobA, execDir, nil) // installs on demand
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := PrepareCursorSessionLaunch(context.Background(), jobB, execDir)
+	b, err := PrepareCursorSessionLaunch(context.Background(), jobB, execDir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestCursorLaunchSpecIsolatesSessionDirectories(t *testing.T) {
 	}
 	crash()
 
-	again, err := PrepareCursorSessionLaunch(context.Background(), jobA, execDir)
+	again, err := PrepareCursorSessionLaunch(context.Background(), jobA, execDir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestCursorLaunchSpecIsolatesSessionDirectories(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(b.ConfigDir, "cli-config.json"), []byte("not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := PrepareCursorSessionLaunch(context.Background(), jobB, execDir); err == nil || !strings.HasPrefix(err.Error(), "CURSOR_CONFIG_CONFLICT:") {
+	if _, err := PrepareCursorSessionLaunch(context.Background(), jobB, execDir, nil); err == nil || !strings.HasPrefix(err.Error(), "CURSOR_CONFIG_CONFLICT:") {
 		t.Fatalf("a cli-config.json Orbit cannot read = %v, want a refusal that leaves it alone", err)
 	}
 	if data, _ := os.ReadFile(filepath.Join(b.ConfigDir, "cli-config.json")); string(data) != "not json" {
@@ -167,7 +167,7 @@ func TestCursorLaunchSpecIsolatesSessionDirectories(t *testing.T) {
 
 func prepareCursorLaunchFor(t *testing.T, sessionID, execDir string) (CursorLaunchSpec, error) {
 	t.Helper()
-	return PrepareCursorSessionLaunch(context.Background(), &ClaimedSession{SessionID: sessionID}, execDir)
+	return PrepareCursorSessionLaunch(context.Background(), &ClaimedSession{SessionID: sessionID}, execDir, nil)
 }
 
 // The CLI's environment is an allowlist and what the contract names: nothing of the runner's own
@@ -314,7 +314,7 @@ func TestCursorNeverWritesRealCursorHome(t *testing.T) {
 		t.Fatalf("catalogue = %d, %v", len(models), err)
 	}
 	job := &ClaimedSession{SessionID: "41111111-2222-4333-8444-555555555555", AgentID: "a"}
-	spec, err := PrepareCursorSessionLaunch(context.Background(), job, t.TempDir())
+	spec, err := PrepareCursorSessionLaunch(context.Background(), job, t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

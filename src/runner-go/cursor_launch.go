@@ -25,18 +25,108 @@ package main
 // ever written), no browser, no direnv, no debug log, and the session's own Orbit variables. The
 // credential itself arrives with the session — an API key (P2) or an account's login (P4b) — and
 // nothing of the runner's own is passed on.
+//
+// A Cursor API key saved in Orbit arrives as ORBIT_CURSOR_API_KEY (cursorAPIKeyVar), and the CLI gets
+// it as its own CURSOR_API_KEY (§16.3), held in memory: it trades the key for a token itself and writes
+// neither to disk (§8.2). Before the CLI starts on it, the key is checked the way §9 measured: `agent
+// models` asked with it, which tells a key Cursor refuses from a Cursor API that could not be reached —
+// the ACP handshake succeeds either way. The answer goes to the control plane, which keeps it on the
+// key; a refused key ends the session's start with CURSOR_API_KEY_INVALID, and starts nothing.
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+// cursorAPIKeyVar is the variable a session's Cursor API key arrives in from the control plane (the
+// apiserver's injectedEnv). The CLI gets the key as CURSOR_API_KEY; this variable never reaches it.
+const cursorAPIKeyVar = "ORBIT_CURSOR_API_KEY"
+
+// What `agent models` asked with a Cursor API key answered, as the control plane keeps it on the key
+// (@orbit/shared CURSOR_KEY_CHECK_STATES): Cursor accepted it, refused it, or could not be reached.
+const (
+	cursorKeyValid       = "VALID"
+	cursorKeyInvalid     = "INVALID"
+	cursorKeyUnreachable = "UNREACHABLE"
+)
+
+// CursorKeyCheckReport is what the runner tells the control plane after checking a session's Cursor
+// API key (POST /runner/sessions/:id/cursor-key-check): the answer, and the key it was about by its
+// fingerprint, never the key.
+type CursorKeyCheckReport struct {
+	State          string `json:"state"`
+	KeyFingerprint string `json:"keyFingerprint"`
+}
+
+// cursorKeyReporter sends a CursorKeyCheckReport for a session (Transport.cursorKeyCheck).
+type cursorKeyReporter func(sessionID string, report CursorKeyCheckReport) error
+
+// cursorSessionKey is the Cursor API key the session was dispatched with, "" when it runs on a login.
+func cursorSessionKey(job *ClaimedSession) string {
+	return strings.TrimSpace(job.Agent.Env[cursorAPIKeyVar])
+}
+
+// cursorKeyFingerprint names a key without carrying it: the first 16 hex digits of the SHA-256 of the
+// trimmed key, as the control plane names one (providers/provider-engine-resolution.ts keyFingerprint).
+func cursorKeyFingerprint(key string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(key)))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+// checkCursorAPIKey asks the pinned CLI whether Cursor accepts key, as §9 measured it: `agent models`
+// exits 0 for a key that works, prints "The provided API key is invalid." for one Cursor refuses, and
+// "Failed to reach the Cursor API" when it could not ask. "" for any other answer, which says nothing
+// either way. Never the ACP handshake: `initialize` succeeds signed out, and `session/new` refuses an
+// invalid key and an unreachable API with the same -32603 (§2.3, §12).
+func checkCursorAPIKey(ctx context.Context, exe, key string) string {
+	out, err := cursorModels(ctx, exe, "CURSOR_API_KEY="+key)
+	if err == nil {
+		return cursorKeyValid
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		return ""
+	}
+	text := strings.ToLower(out)
+	switch {
+	case strings.Contains(text, "the provided api key is invalid"):
+		return cursorKeyInvalid
+	case strings.Contains(text, "failed to reach the cursor api"):
+		return cursorKeyUnreachable
+	}
+	return ""
+}
+
+// cursorAPIKeyInvalidMessage is how a session whose Cursor API key Cursor refused ends its start.
+const cursorAPIKeyInvalidMessage = "CURSOR_API_KEY_INVALID: Cursor refused this session's API key (\"The provided API key is invalid.\"); " +
+	"save a new key for it in Orbit, then try again"
+
+// checkCursorSessionKey checks the session's Cursor API key before its CLI starts, tells the control
+// plane what Cursor answered (report; nil tells nobody), and refuses a key Cursor refused. A Cursor API
+// it could not reach, or an answer it cannot read, is no verdict on the key: the session starts, and the
+// CLI says what it finds.
+func checkCursorSessionKey(ctx context.Context, exe string, job *ClaimedSession, key string, report cursorKeyReporter) error {
+	state := checkCursorAPIKey(ctx, exe, key)
+	if state != "" && report != nil {
+		if err := report(job.SessionID, CursorKeyCheckReport{State: state, KeyFingerprint: cursorKeyFingerprint(key)}); err != nil {
+			logln("cursor:", job.SessionID+":", "could not report the API key check:", err)
+		}
+	}
+	if state == cursorKeyInvalid {
+		return errors.New(cursorAPIKeyInvalidMessage)
+	}
+	return nil
+}
 
 // CursorLaunchSpec is one Cursor CLI session process: the pinned build's entry point, the arguments
 // and environment it starts with, the session's checkout, and the session's own directories. Env will
@@ -86,8 +176,9 @@ func cursorSessionDir(sessionID string) (string, error) {
 }
 
 // PrepareCursorSessionLaunch prepares the session's process on the pinned build, installing the build
-// first when this runner may.
-func PrepareCursorSessionLaunch(ctx context.Context, job *ClaimedSession, execDir string) (CursorLaunchSpec, error) {
+// first when this runner may. A session dispatched with a Cursor API key has the key checked first
+// (checkCursorSessionKey), and what Cursor answered goes to the control plane through report.
+func PrepareCursorSessionLaunch(ctx context.Context, job *ClaimedSession, execDir string, report cursorKeyReporter) (CursorLaunchSpec, error) {
 	if msg := ensureEngine(ctx, providerCursor, func(string) {}); msg != "" {
 		return CursorLaunchSpec{}, errors.New(msg)
 	}
@@ -98,6 +189,11 @@ func PrepareCursorSessionLaunch(ctx context.Context, job *ClaimedSession, execDi
 	dir, err := cursorSessionDir(job.SessionID)
 	if err != nil {
 		return CursorLaunchSpec{}, err
+	}
+	if key := cursorSessionKey(job); key != "" {
+		if err := checkCursorSessionKey(ctx, exe, job, key, report); err != nil {
+			return CursorLaunchSpec{}, err
+		}
 	}
 	return prepareCursorLaunch(job, execDir, exe, dir)
 }
@@ -154,6 +250,10 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),
 	)
 	spec.Env = append(spec.Env, bgJobEnvPairs(job.SessionID)...)
+	// The session's Cursor API key, under the CLI's own name and in memory only (§8.2, §16.3).
+	if key := cursorSessionKey(job); key != "" {
+		spec.Env = append(spec.Env, "CURSOR_API_KEY="+key)
+	}
 	return spec, nil
 }
 

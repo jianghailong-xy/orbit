@@ -6079,6 +6079,12 @@ model ModelProvider {
   enabled       Boolean  @default(true)
   // Picker display order; NULL sorts last.
   position      Int?
+  // A Cursor key's last check (migration 0428): what Cursor CLI on a runner last answered `agent models`
+  // with it — VALID, INVALID (Cursor refused the key) or UNREACHABLE (Cursor's API could not be reached
+  // to ask) — and when. NULL until a runner reports one, and again once the key is replaced. Only a
+  // Cursor key is ever checked.
+  keyCheckState String?   @map("key_check_state")
+  keyCheckedAt  DateTime? @map("key_checked_at")
   // NULL = a shared provider (admin-managed): visible in, and dispatchable for, admins' sessions
   // only (usableProviderScope). Set = a personal (BYOK) provider: visible in, and dispatchable for,
   // only its owner's sessions. Slugs stay globally unique either way, so dispatch-by-slug is never

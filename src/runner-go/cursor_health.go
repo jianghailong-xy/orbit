@@ -97,21 +97,28 @@ func cursorLoginState(exe string) authState {
 	return cursorModelsAnswer(exe, "CURSOR_AUTH_TOKEN="+token)
 }
 
-// cursorModelsAnswer runs `agent models` with credential (KEY=value) in a throwaway home, the injected
-// credential kept in memory, and reads its answer (§9): exit 0 is a credential that works.
-func cursorModelsAnswer(exe, credential string) authState {
+// cursorModels runs `agent models` with credential (KEY=value) in a throwaway home, the injected
+// credential kept in memory (§9): what it printed, and nil for an answer of exit 0. An error that is no
+// *exec.ExitError is a CLI that gave no answer at all.
+func cursorModels(ctx context.Context, exe, credential string) (string, error) {
 	root, err := newCursorProbeRoot("orbit-cursor-models-")
 	if err != nil {
-		return authUnknown
+		return "", err
 	}
 	defer os.RemoveAll(root)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, "models")
 	cmd.Dir = root
 	cmd.Env = append(cursorProbeEnv(root), credential)
 	configureEngineCommandTree(cmd)
 	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// cursorModelsAnswer reads `agent models`' answer to credential (§9): exit 0 is a credential that works.
+func cursorModelsAnswer(exe, credential string) authState {
+	out, err := cursorModels(context.Background(), exe, credential)
 	if err == nil {
 		return authYes
 	}
@@ -119,7 +126,7 @@ func cursorModelsAnswer(exe, credential string) authState {
 	if !errors.As(err, &exit) {
 		return authUnknown
 	}
-	text := strings.ToLower(string(out))
+	text := strings.ToLower(out)
 	if strings.Contains(text, "failed to reach the cursor api") {
 		return authUnknown
 	}

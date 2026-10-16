@@ -8,7 +8,6 @@ import {
   PermissionMode,
 } from './enums';
 import { DEFAULT_MODEL_BY_PROVIDER, fastModeAvailable, modelForProvider } from './models';
-import { keyDialect } from './openCodeKeys';
 import {
   autoAvailable,
   derivePermissionSemantics,
@@ -106,9 +105,7 @@ describe('P1 Cursor CLI in the shared engine tables', () => {
       expect(credentialEngines(credential)).not.toContain(AgentProvider.CURSOR);
       expect(isEngineCompatible(AgentProvider.CURSOR, credential)).toBe(false);
     }
-    // No key dialect is Cursor CLI's (its API key is P2's), so a row on a `cursor` runtime runs nowhere.
-    expect(keyDialect('cursor')).toBeNull();
-    expect(credentialEngines(key('cursor', null, 'https://api2.cursor.sh'))).toEqual([]);
+    // Cursor CLI's own API key (P2) is the one key that runs on it: cursor-api-key.spec.ts.
   });
 
   it('P1 cursor is one resident JSON-RPC process per session with no mid-turn steer and no fast lane', () => {

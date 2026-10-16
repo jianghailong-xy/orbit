@@ -2298,7 +2298,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers, and on `session` one new acquisition guard — a function of its own that reads `runner`
       // FOR SHARE NOWAIT and writes nothing. No `project` or `project_acceptance_*` object, none of the six
       // preserved triggers/functions and neither half of the 0177 pair is named; no row is deleted.
-      '0426_cursor_engine'],
+      '0426_cursor_engine',
+      // A Cursor API key's last check (0428, docs/cursor-runtime-contract.md §9): two nullable columns on
+      // `model_provider` (`key_check_state`, `key_checked_at`) with no default, and two CHECKs every stored
+      // row satisfies (the state's three values; both columns NULL or both set) — catalog-only. Only
+      // `model_provider` is named: no `task`, `session`, `project` or `project_acceptance_*` object nor
+      // any of the six preserved triggers/functions, and no function, trigger or type is created, replaced
+      // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every
+      // stored key reads unchecked.
+      '0428_model_provider_key_check'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

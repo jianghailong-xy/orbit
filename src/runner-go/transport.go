@@ -739,6 +739,13 @@ func (t *Transport) sessionNaming(sessionID string, b SessionNamingRequest) erro
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/naming", b, nil, 15*time.Second)
 }
 
+// cursorKeyCheck reports what `agent models` answered when asked with the Cursor API key a session was
+// dispatched with (cursor_launch.go checkCursorSessionKey), which the control plane keeps on the key. The
+// key goes by its fingerprint only.
+func (t *Transport) cursorKeyCheck(sessionID string, b CursorKeyCheckReport) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/cursor-key-check", b, nil, 15*time.Second)
+}
+
 // claudeHistoryResult answers a heartbeat-delivered ClaudeHistoryCommand: what Claude Code
 // conversations this machine holds for that directory. The path is echoed inside the body, so a
 // late answer about a directory the user has since retyped can be recognised and dropped.
