@@ -1184,7 +1184,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	case "provider_create":
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "label", "runtime", "baseUrl", "apiKey", "models", "defaultModel")
-		for _, required := range []string{"label", "baseUrl", "apiKey", "models"} {
+		for _, required := range providerCreateRequired(body) {
 			if _, ok := body[required]; !ok {
 				return toolResult(required+" is required", true)
 			}
@@ -2744,17 +2744,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// The fields provider_create and provider_update both write.
 	providerRuntimeProp := map[string]interface{}{
 		"type": "string",
-		"enum": []string{"claude", "codex", "kimi", "antigravity"},
+		"enum": providerProtocols,
 		"description": "The protocol the endpoint speaks (the field keeps its old name): claude (the default; the " +
-			"Anthropic Messages API, e.g. vLLM's /v1/messages), codex (the OpenAI Responses API), kimi (Moonshot's API) " +
-			"or antigravity (the Gemini API). It decides which engines can run the key rather than naming one: the " +
-			"protocol's own CLI and OpenCode, DeepSeek Harness too for a DeepSeek key, and only Claude Code for a Claude " +
-			"subscription token (provider_list's `engines`).",
+			"Anthropic Messages API, e.g. vLLM's /v1/messages), codex (the OpenAI Responses API), kimi (Moonshot's API), " +
+			"antigravity (the Gemini API) or cursor (a Cursor User API Key, which needs no baseUrl or models: it goes in " +
+			"under the Cursor preset, on Cursor's own API, and its models are Cursor CLI's own on each runner). It decides " +
+			"which engines can run the key rather than naming one: the protocol's own CLI and OpenCode, DeepSeek Harness " +
+			"too for a DeepSeek key, only Claude Code for a Claude subscription token, and only Cursor CLI for a Cursor " +
+			"key (provider_list's `engines`).",
 	}
 	providerBaseURLProp := map[string]interface{}{
 		"type": "string",
 		"description": "The endpoint as an engine running on the key will call it, e.g. http://127.0.0.1:8000 — resolved on " +
-			"the machine the session runs on.",
+			"the machine the session runs on. Required on create, but for a Cursor key, which is on Cursor's own API.",
 	}
 	providerAPIKeyProp := map[string]interface{}{
 		"type":        "string",
@@ -2762,7 +2764,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	}
 	providerModelsProp := map[string]interface{}{
 		"type":        "array",
-		"description": "The models it serves; on update this replaces the whole list.",
+		"description": "The models it serves; on update this replaces the whole list. Required on create, but for a Cursor key.",
 		"items": obj(map[string]interface{}{
 			"value": map[string]interface{}{"type": "string", "description": "The model id the endpoint serves, passed to the engine as its model (e.g. qwen3.8-27b-fp8)."},
 			"label": str,
@@ -4148,7 +4150,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"is resolved on the machine each session runs on, so http://127.0.0.1:8000 is that runner's own port — " +
 				"run the session on an agent whose runner hosts the endpoint. The key is stored encrypted and no read " +
 				"returns it, this tool's answer included (`hasApiKey`); like every tool input it is recorded in this " +
-				"conversation, so for a real secret prefer `orbit provider create --api-key-file -`.",
+				"conversation, so for a real secret prefer `orbit provider create --api-key-file -`. A Cursor User API Key " +
+				"(`runtime` cursor) takes only `label` and `apiKey`, and runs on Cursor CLI alone.",
 			"inputSchema": obj(map[string]interface{}{
 				"label":        map[string]interface{}{"type": "string", "description": "Display name; the slug is derived from it."},
 				"runtime":      providerRuntimeProp,
@@ -4156,7 +4159,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"apiKey":       providerAPIKeyProp,
 				"models":       providerModelsProp,
 				"defaultModel": map[string]interface{}{"type": "string", "description": "The model a session that names none runs on; defaults to the first of `models`."},
-			}, "label", "baseUrl", "apiKey", "models"),
+			}, "label", "apiKey"),
 		},
 		{
 			"name": "provider_update",
