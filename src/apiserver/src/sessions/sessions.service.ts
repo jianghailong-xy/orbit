@@ -252,6 +252,7 @@ import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
   CURRENT_WORK_INTERRUPTED,
+  CURRENT_WORK_INTERRUPTED_REASON,
   CURRENT_WORK_SESSION_ENDED,
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
@@ -5635,7 +5636,7 @@ export class SessionsService {
       // with a visible failed-delivery receipt before removing ordinary queued work.
       const terminalized = await terminalizePendingCurrentWorkSteers(tx, id, {
         code: CURRENT_WORK_INTERRUPTED,
-        reason: 'CURRENT_WORK was not delivered because the session was interrupted.',
+        reason: CURRENT_WORK_INTERRUPTED_REASON,
       });
       const protectedTargetIds = terminalized.targetTurnIds;
       // Every follow-up still queued goes below, retired in place or deleted, a Watch wake among them:

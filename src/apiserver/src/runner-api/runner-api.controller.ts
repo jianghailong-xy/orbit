@@ -190,11 +190,14 @@ import {
   reapApprovalsOfReturnedCalls,
 } from '../sessions/abandoned-approvals';
 import {
+  CURRENT_WORK_INTERRUPTED,
+  CURRENT_WORK_INTERRUPTED_REASON,
   CURRENT_WORK_RUNTIME_REJECTED,
   CURRENT_WORK_SESSION_FINALIZED,
   CURRENT_WORK_TARGET_COMPLETED,
   acknowledgedRuntimeTurnIds,
   requeueUnreadCurrentWorkSteers,
+  stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
@@ -250,6 +253,7 @@ import {
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
+import { settleUnrunWakeTurns } from './wake-turn-withdraw';
 import {
   appendScheduledWakeupContext,
   cancelScheduledWakeup,
@@ -268,6 +272,7 @@ import {
   foldQueuedReplyTurnsInto,
   foldRequeuedReplyTurns,
   holdTurnRepliesForRetry,
+  holdUnreadSteerReplies,
   isSessionReplyTurn,
   readRequestForBlock,
   releaseUnreadSteerReplies,
@@ -767,6 +772,33 @@ function producedNothingBeforeFailing(
  */
 function sameIds(next: readonly string[], stored: readonly string[]): boolean {
   return next.length === stored.length && next.every((v, i) => v === stored[i]);
+}
+
+/**
+ * Write off the CURRENT_WORK steers a Stop overtook before the engine read them (`stopOvertookTarget`):
+ * not delivered, and not put back in the queue, where each would run as a turn of its own straight
+ * after the Stop (owner, 2026-10-16). What rides on them is settled the way the Stop settles the same
+ * things still queued behind the turn it stopped (`SessionsService.interrupt`): a background job's
+ * wake goes with it, and an outcome handed back to this session is held for its next turn. A request
+ * another session sent here was never read, so it is UNDELIVERED, and its asker is told after commit.
+ */
+async function settleStoppedCurrentWorkSteers(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  steers: { targetTurnIds: readonly string[] } | { turnIds: readonly string[] },
+  reason: string,
+): Promise<{ terminalizedTurnIds: string[]; requestsClosed: string[] }> {
+  const { terminalizedTurnIds } = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
+    ...steers,
+    includeInFlight: true,
+    code: CURRENT_WORK_INTERRUPTED,
+    reason,
+  });
+  if (terminalizedTurnIds.length === 0) return { terminalizedTurnIds, requestsClosed: [] };
+  await settleUnrunWakeTurns(tx, sessionId, { steerTurnIds: terminalizedTurnIds });
+  await holdUnreadSteerReplies(tx, sessionId, terminalizedTurnIds);
+  const requestsClosed = await closeUnreadSteerRequests(tx, sessionId, terminalizedTurnIds);
+  return { terminalizedTurnIds, requestsClosed };
 }
 
 /** `runner.findUnique` is the whole of the quota snapshot read, and was itself a drift point. */
@@ -4644,6 +4676,7 @@ export class RunnerApiController {
         where: { id: dto.turnId, sessionId },
         select: {
           id: true,
+          seq: true,
           kind: true,
           clientTurnId: true,
           content: true,
@@ -4768,8 +4801,42 @@ export class RunnerApiController {
       // on. The completed-turn read above serves the L0 shell path; neither query mutates the row.
       const steering = await tx.conversationTurn.findFirst({
         where: { id: dto.turnId, sessionId, kind: 'steer' },
-        select: { id: true, sendIntent: true, targetTurnId: true, deliveryStatus: true, clientTurnId: true },
+        select: {
+          id: true,
+          sendIntent: true,
+          targetTurnId: true,
+          deliveryStatus: true,
+          clientTurnId: true,
+          // Where the turn it was aimed at stands in the session, to ask whether a Stop came after it.
+          targetTurn: { select: { seq: true } },
+        },
       });
+      // A CURRENT_WORK steer whose target somebody stopped is written off by whichever report reaches
+      // here first, and never put back in the queue (`stopOvertookTarget`). Asked of the steer the
+      // runner reports, so a runner older than this rule, which hands every unread steer back, ends
+      // the same way a current one does.
+      const stopped = steering?.sendIntent === 'CURRENT_WORK'
+        && steering.deliveryStatus == null
+        && steering.targetTurn != null
+        && (dto.subtype === TURN_COMPLETE_STEER_REQUEUE || dto.status === RunStatus.FAILED)
+        && await stopOvertookTarget(tx, sessionId, steering.targetTurn.seq);
+      if (stopped) {
+        const settled = await settleStoppedCurrentWorkSteers(
+          tx,
+          sessionId,
+          { turnIds: [dto.turnId] },
+          dto.result || CURRENT_WORK_INTERRUPTED_REASON,
+        );
+        return {
+          applied: settled.terminalizedTurnIds.length > 0,
+          steer: true,
+          requeued: false,
+          status: current.status,
+          failSession: false,
+          retryAt: current.retryAt,
+          requestsClosed: settled.requestsClosed,
+        };
+      }
       // `turnComplete` is retried when the response is lost. After the first successful
       // steer_requeue the SAME row is already a `message` (and may even have been leased for its
       // real execution) by the time that retry arrives, so looking only at its current kind and
@@ -5260,9 +5327,28 @@ export class RunnerApiController {
       //
       // Dequeue commit is not a runtime ACK either: if its HTTP response was lost, the row is
       // IN_FLIGHT and would stay that way forever, so this boundary settles those too.
+      //
+      // Except after a Stop. A turn somebody stopped takes every message still waiting to be read in it
+      // down with it, written off as not delivered: requeued, each would run as a turn of its own
+      // straight after the Stop (owner, 2026-10-16). So does a turn that ended on its own while the
+      // Stop was on its way — the message was still waiting when the person pressed it.
       let currentWorkTerminalized = 0;
       let currentWorkRequeued = 0;
-      if (completedTurn && !failSession) {
+      let stoppedRequestsClosed: string[] = [];
+      if (
+        completedTurn
+        && !failSession
+        && (dto.status === RunStatus.INTERRUPTED || await stopOvertookTarget(tx, sessionId, completedTurn.seq))
+      ) {
+        const settled = await settleStoppedCurrentWorkSteers(
+          tx,
+          sessionId,
+          { targetTurnIds: [completedTurn.id] },
+          CURRENT_WORK_INTERRUPTED_REASON,
+        );
+        currentWorkTerminalized = settled.terminalizedTurnIds.length;
+        stoppedRequestsClosed = settled.requestsClosed;
+      } else if (completedTurn && !failSession) {
         const requeuedSteers = await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id]);
         currentWorkRequeued = requeuedSteers.length;
         // A background job's exit that missed this turn is a wake turn of its own again; a wake
@@ -5459,6 +5545,7 @@ export class RunnerApiController {
           status: latest?.status ?? current.status,
           failSession,
           retryAt: current.retryAt,
+          requestsClosed: stoppedRequestsClosed,
         };
       }
       if (failSession) {
@@ -5611,7 +5698,7 @@ export class RunnerApiController {
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
         taskCompleted: acceptanceTaskCompleted,
-        requestsClosed,
+        requestsClosed: [...stoppedRequestsClosed, ...requestsClosed],
         reviewToDeliver,
         reviewsAbandoned,
       };

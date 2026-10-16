@@ -246,6 +246,9 @@ apiserver 侧 `runner-api.controller.ts` 的 steer 分支已经保证了"只 ack
   **保持同一 seq、同一 clientTurnId**(与 turn-complete 里既有的"PENDING steer 降级成 message"完全一致,
   只是触发者从"turn 结束了"变成"runner 说它送不进去")。
 - 幂等:同一 turnId 重复报 `steer_requeue` 必须只生效一次(行已经是 `kind='message'` 时是 no-op)。
+- 例外(2026-10-16):目标轮被按了 Stop(目标之后有 `interrupt` turn)时不重排,重排了它会在 Stop 之后自己跑起来。
+  apiserver 把它记为没送达(`CURRENT_WORK_INTERRUPTED`),Codex 与 Claude 相同;目标轮以 INTERRUPTED 落定时还没读到的
+  steer 也一样(`stopOvertookTarget`)。
 - 旧 apiserver 收到未知 subtype 会当成普通 steer ack(标 ANSWERED)→ 消息丢失。所以
   **`steer_requeue` 必须受 §5 的能力门控保护**:runner 只在控制面明确支持时才走这条路。
 

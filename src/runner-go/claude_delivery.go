@@ -355,6 +355,11 @@ var errNoTurnToSteer = errors.New("no turn was running to steer; send it again")
 // stopped: even bytes already written to stdin must not survive to become the next turn.
 var errCurrentWorkTargetEnded = errors.New("the target turn ended before the engine acknowledged this CURRENT_WORK message")
 
+// errCurrentWorkTargetInterrupted: the turn a steer was waiting to be read in was stopped first. The
+// fence proves the engine never read it, which is what would otherwise send it back to the queue; a
+// Stop is the one ending that must not, because the turn it would open runs straight after the Stop.
+var errCurrentWorkTargetInterrupted = errors.New("the turn was interrupted by Stop before the engine read this message")
+
 // settleSteerTurn closes a steer's own conversation turn. Success or failure, it settles
 // nothing else: the turn it was written into is still running, and its result — the slot,
 // the billing, the session's status — belongs to that turn. A steer that failed says so

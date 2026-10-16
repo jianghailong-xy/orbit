@@ -2594,7 +2594,22 @@ scanLoop:
 				rt.endTurn()
 			}
 			activeOrbitMu.Unlock()
+			turnStatus := stSucceeded
+			if r.Subtype == "error_during_execution" {
+				turnStatus = stInterrupted
+			} else if r.Status == stFailed {
+				turnStatus = stFailed
+			}
 			for _, d := range fenced {
+				if turnStatus == stInterrupted {
+					// Somebody stopped the turn this message was waiting to be read in. Stopping means
+					// stop: handed back to the queue, it would run as a turn of its own straight after
+					// the Stop, so it is reported undelivered instead (owner, 2026-10-16). The words
+					// are still theirs to send again.
+					reportDelivery(d.turnID, deliveryFailed, errCurrentWorkTargetInterrupted.Error(), true)
+					settleSteerTurn(d.turnID, errCurrentWorkTargetInterrupted, job, completeTurn)
+					continue
+				}
 				if d.requeueable {
 					// The generation that could have read this frame is being killed above, so
 					// "unacknowledged at this boundary" is proof it never became part of the
@@ -2611,12 +2626,6 @@ scanLoop:
 				}
 				reportDelivery(d.turnID, deliveryFailed, errCurrentWorkTargetEnded.Error(), false)
 				settleSteerTurn(d.turnID, errCurrentWorkTargetEnded, job, completeTurn)
-			}
-			turnStatus := stSucceeded
-			if r.Subtype == "error_during_execution" {
-				turnStatus = stInterrupted
-			} else if r.Status == stFailed {
-				turnStatus = stFailed
 			}
 			// A Wiki maintenance run cut short by its turn limit failed, and the run can no longer say so
 			// itself: the runner records it on the space's cursor (wiki_maintenance_session.go).
