@@ -568,9 +568,9 @@ export class WakeDispositionService {
    *
    * "This delivery" is what the task delivered since it was last sent back: 0271's lifecycle epoch,
    * which a trigger starts whenever a task leaves DONE for OPEN or IN_PROGRESS, whoever reopened it.
-   * A landing or an answer from before then belonged to the delivery it was sent back from, and the
-   * one it made since is read as new. A task never sent back has no epoch row, and everything it
-   * was ever asked or ever landed is this delivery's.
+   * A landing, a refused merge or an answer from before then belonged to the delivery it was sent
+   * back from, and the one it made since is read as new. A task never sent back has no epoch row,
+   * and everything it was ever asked, ever landed or was ever refused is this delivery's.
    */
   private async deliveriesUnder(fact: WakeFact): Promise<ObservedDelivery[]> {
     const stated = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
@@ -641,7 +641,10 @@ export class WakeDispositionService {
           declaredPaths: declaredPaths(task),
           // The branch test is the landing fold's own, asked without its result: a conflict on
           // some other branch is a conflict about somewhere else, exactly as a merge into one is.
+          // And only this delivery's, like the landing: a merge git refused before the task was
+          // sent back refused the delivery it was sent back from, not one nobody has tried to merge.
           conflictedPaths: task.mergeReceipts.find((receipt) => receipt.result === 'CONFLICT'
+            && thisDelivery(receipt.createdAt)
             && receiptIsLandingEvidence({ result: 'MERGED', targetBranch: receipt.targetBranch }, branches),
           )?.conflicts ?? [],
         },
