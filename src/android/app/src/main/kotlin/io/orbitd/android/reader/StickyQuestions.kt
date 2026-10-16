@@ -53,11 +53,13 @@ internal object StickySummary {
     /**
      * Whether the bar may point back at this turn at all: every user turn may, but a watch's wake, a background job's news or a
      * wakeup coming due — each a line inside the answer, not the head of one (A08-14) — unless somebody also typed words on a
-     * background wake. A watch's wake is the whole of its turn's words, so nobody's are there.
+     * background wake. A watch's wake is the whole of its turn's words, so nobody's are there. Never the owner's answer handed
+     * to the coordinator, which is such a line too (OrbitKit `StickySummary.isAnchor`).
      */
     fun isAnchor(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Boolean {
         if (listOf("sessionMessage", "openItemDelivery", "taskStart", "projectStarted").any { event.card(cards, it) != null }) return true
         if (event.card(cards, "watch") != null) return false
+        if (event.card(cards, "ownerAnswer") != null) return false
         if (event.card(cards, "wake") == null) return true
         return event.personWords().isNotBlank()
     }
