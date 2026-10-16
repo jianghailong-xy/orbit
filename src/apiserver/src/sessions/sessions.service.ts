@@ -6187,6 +6187,106 @@ export class SessionsService {
     });
   }
 
+  /**
+   * Send a message queued for the next turn into the turn running now: the tray's Steer.
+   *
+   * The row becomes the CURRENT_WORK steer it would have been had it been sent that way — the same
+   * row, seq, words and attachments, aimed at the live engine turn. It is asked createTurn's
+   * CURRENT_WORK questions, in that order and under the same Session lock: an engine turn on a live
+   * lease, nobody stopping it, a runtime and runner that take an exact-target steer, and that lease
+   * asked again on the database clock. So a steer made here is one createTurn would have filed, and
+   * the inbox hands it over the same way: at once, ahead of the messages still queued, which wait
+   * for the turn's result while a steer waits for nothing.
+   *
+   * Only a message the reader typed, still PENDING behind the running turn: a `!cmd` has no turn
+   * to join, a turn Orbit wrote or another session sent is not the reader's to redirect, and one a
+   * runner already took has started. A refusal leaves the message queued and carries createTurn's
+   * CURRENT_WORK_UNAVAILABLE reasons, so a client reads both doors alike. A second press — or a
+   * retry whose answer was lost — finds the steer the first one made and answers with it.
+   */
+  async steerQueuedTurn(ownerId: string, id: string, turnId: string) {
+    // Retried whole: a compare-and-set against a row still queued. An attempt the server discarded
+    // changed nothing, so a re-run finds the message still queued, or the steer the winner made.
+    const steer = await withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      if (session.deletedAt) {
+        throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
+      }
+      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+        throw new SessionNotSendable('the session has ended');
+      }
+      const turn = await tx.conversationTurn.findFirst({
+        where: { id: turnId, sessionId: id },
+        select: {
+          id: true,
+          seq: true,
+          kind: true,
+          status: true,
+          sendIntent: true,
+          targetTurnId: true,
+          clientTurnId: true,
+          senderSessionId: true,
+        },
+      });
+      if (turn?.kind === 'steer' && turn.sendIntent === 'CURRENT_WORK') return turn;
+      if (
+        !turn
+        || turn.kind !== 'message'
+        || turn.status !== 'PENDING'
+        || turn.clientTurnId === SessionsService.initialTurnClientId(id)
+      ) {
+        throw new ConflictException('message already started or not found');
+      }
+      if (turn.senderSessionId || isOrbitAuthoredTurn(turn.clientTurnId)) {
+        throw new ConflictException('Only a message you typed can be sent into the current turn.');
+      }
+      const live = await this.liveEngineTurn(tx, id);
+      if (!live) {
+        throw currentWorkUnavailable('NO_CURRENT_WORK', 'there is no live message turn to receive CURRENT_WORK');
+      }
+      if (await stopOvertookTarget(tx, id, live.seq)) {
+        throw currentWorkUnavailable(
+          'NO_CURRENT_WORK',
+          'the current turn is being stopped, so there is no live message turn to receive CURRENT_WORK',
+        );
+      }
+      if (!(await this.runtimeTakesSteer(tx, session))) {
+        throw currentWorkUnavailable(
+          'STEER_UNSUPPORTED',
+          'this runtime or runner does not support acknowledged CURRENT_WORK delivery',
+        );
+      }
+      if (!(await this.liveEngineTurn(tx, id, live.id))) {
+        throw currentWorkUnavailable(
+          'TARGET_LEASE_EXPIRED',
+          'the current turn lease expired before this message could enter it',
+        );
+      }
+      // All three columns in one statement: the row constraint accepts a CURRENT_WORK row only as a
+      // steer naming its target, and a NEXT_TURN one only without a target.
+      const moved = await tx.conversationTurn.updateMany({
+        where: { id: turnId, sessionId: id, kind: 'message', status: 'PENDING' },
+        data: { kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: live.id },
+      });
+      if (moved.count === 0) throw new ConflictException('message already started or not found');
+      return { ...turn, kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: live.id };
+    }, loggedRetry(this.logger, 'sessions.steerQueuedTurn'));
+    this.realtime.notifyInbox(id);
+    this.realtime.publishQueuedTurnsChanged(id);
+    return {
+      turnId: steer.id,
+      seq: steer.seq,
+      kind: steer.kind,
+      placement: 'steer' as const,
+      ...(steer.targetTurnId ? { targetTurnId: steer.targetTurnId } : {}),
+    };
+  }
+
   /** End a live session (closes the runner's claude process). */
   async end(ownerId: string, id: string) {
     const session = await this.getSendable(ownerId, id);

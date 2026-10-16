@@ -793,7 +793,73 @@ export const TURN_ENDED_WITHOUT_REPLY = 'This turn ended without a reply — sen
 // `completed` (codex/kimi) — and anything else is a turn that did not.
 const TURN_FINISHED_SUBTYPES = new Set(['success', 'completed']);
 
+/**
+ * A message the reader sent into the running turn that the engine has not read yet. It is not part
+ * of the conversation until it is read, so the transcript leaves it out and the tray above the
+ * composer holds it instead (WorkspaceView's PendingTray, which also offers the way to take it
+ * back). Once its delivery settles it is drawn here, where it settled: read into the turn after the
+ * output that came before the reading, or not delivered where that became known.
+ */
+export interface UnreadSteer {
+  turnId: string;
+  seq: number;
+  ts?: string;
+  /** The reader's words: what was typed, without what delivery appended to it. */
+  text: string;
+  /** This tab's local previews of the images it was sent with (composer object URLs). */
+  images?: TurnImage[];
+  attachmentRefs?: TurnAttachmentRef[];
+  /** The latest delivery state (lib/steerDelivery): absent, `enqueued`, `written` or `requeued`. */
+  delivery?: string;
+  withdrawable?: boolean;
+}
+
+// The deliveries a steer waits for: it was read into the turn, or it provably or possibly never was.
+// `withdrawn` ends the wait too, with nothing to draw.
+const SETTLED_STEER_DELIVERY = new Set(['acknowledged', 'failed', 'unconfirmed']);
+
+// Words the reader typed and nothing else's (lib/queuedTurnRestore `returnsToComposer`, read off the
+// echo): not another session's message, not a turn Orbit drew as its card, not a wake. Only these
+// wait in the tray; a steer Orbit filed (a job's exit, a request's outcome) stays where its echo lands.
+const readersOwnWords = (node: TextNode): boolean =>
+  !node.sessionMessage
+  && !node.sessionReplies
+  && !node.itemCard
+  && !node.taskStart
+  && !node.startedCard
+  && !node.reviewRequest
+  && !node.reviewReturn
+  && !parseWatchWake(node.text)
+  && !parseBackgroundWake(node.note);
+
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
+  return buildTranscript(events, turnImages).nodes;
+}
+
+// The last build, for the second reader of the same events: the Transcript draws the nodes and the
+// tray reads the unread steers, both from WorkspaceView's one `transcriptEvents`.
+const lastBuild = new WeakMap<
+  RunEvent[],
+  { turnImages?: Record<string, TurnImage[]>; built: { nodes: Node[]; unread: UnreadSteer[] } }
+>();
+
+function transcriptOf(events: RunEvent[], turnImages?: Record<string, TurnImage[]>) {
+  const cached = lastBuild.get(events);
+  if (cached && cached.turnImages === turnImages) return cached.built;
+  const built = buildTranscript(events, turnImages);
+  lastBuild.set(events, { turnImages, built });
+  return built;
+}
+
+/** The reader's steers these events leave unread, in the order they were sent. */
+export function unreadSteersOf(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): UnreadSteer[] {
+  return transcriptOf(events, turnImages).unread;
+}
+
+function buildTranscript(
+  events: RunEvent[],
+  turnImages?: Record<string, TurnImage[]>,
+): { nodes: Node[]; unread: UnreadSteer[] } {
   const roots: Node[] = [];
   const byId = new Map<string, ToolNode>();
   // Stderr failures are emitted without a tool_use id by some runners. Keep the unresolved calls
@@ -992,6 +1058,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // User bubbles by turn, so a delivery report that lands after one can amend it. A
   // message is never re-rendered as sent by a later event — only ever as failed.
   const userByTurn = new Map<string, TextNode>();
+  // The reader's steers not drawn yet, by turn: each waits here, with the parent its echo named,
+  // until its delivery settles and it is drawn at that point (UnreadSteer).
+  const unreadSteers = new Map<string, { node: TextNode; parent: string | undefined }>();
+  const drawSettledSteer = (turnId: string) => {
+    const waiting = unreadSteers.get(turnId);
+    if (!waiting) return;
+    unreadSteers.delete(turnId);
+    into(waiting.parent).push(waiting.node);
+  };
   // Whether this turn has already put a row on screen that accounts for how it went: a reply, the
   // runner's own error (or the sign-in / auto-retry card it earns), or the user's own interrupt.
   // `turn_end` speaks only when none of them did — in the recorded corpus every codex `failed`
@@ -1076,6 +1151,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             priorSteer.note = recorded?.note;
           }
           if (refs && refs.length) priorSteer.attachmentRefs = refs;
+          // Still in the tray — the engine never read it — so it is drawn now, where it arrived as
+          // the message that opens a turn of its own.
+          if (unreadSteers.has(ev.turnId!)) {
+            if (!parent) {
+              priorSteer.turnHead = {};
+              turnHead = priorSteer.turnHead;
+            }
+            drawSettledSteer(ev.turnId!);
+          }
           break;
         }
         if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
@@ -1108,7 +1192,17 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             node.turnHead = {};
             turnHead = node.turnHead;
           }
-          into(parent).push(node);
+          if (
+            node.steer
+            && ev.turnId
+            && node.delivery !== WITHDRAWN_DELIVERY
+            && !SETTLED_STEER_DELIVERY.has(node.delivery ?? '')
+            && readersOwnWords(node)
+          ) {
+            unreadSteers.set(ev.turnId, { node, parent });
+          } else {
+            into(parent).push(node);
+          }
         }
         break;
       }
@@ -1121,6 +1215,10 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         if (node && typeof p.delivery === 'string') {
           node.delivery = p.delivery;
           node.deliveryReason = typeof p.reason === 'string' ? p.reason : undefined;
+          // A steer waiting in the tray leaves it here: drawn at the point it was read (or found
+          // undelivered), or — dropped unread by the engine — never drawn at all.
+          if (turnId && p.delivery === WITHDRAWN_DELIVERY) unreadSteers.delete(turnId);
+          else if (turnId && SETTLED_STEER_DELIVERY.has(p.delivery)) drawSettledSteer(turnId);
         }
         break;
       }
@@ -1297,7 +1395,17 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         break;
     }
   }
-  return roots;
+  const unread = [...unreadSteers.values()].map(({ node }): UnreadSteer => ({
+    turnId: node.turnId!,
+    seq: node.seq,
+    ts: node.ts,
+    text: node.text,
+    images: node.images,
+    attachmentRefs: node.attachmentRefs,
+    delivery: node.delivery,
+    withdrawable: node.withdrawable,
+  }));
+  return { nodes: roots, unread };
 }
 
 /**
@@ -1429,7 +1537,7 @@ export const Transcript = memo(function Transcript({
    *  component is memo'd, and a new one on every render rebuilds the whole conversation. */
   inserts?: readonly TranscriptInsert[];
 }) {
-  const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
+  const nodes = useMemo(() => transcriptOf(events, turnImages).nodes, [events, turnImages]);
   // Only the Agent and Workflow cards read this (TaskBadgeAndStatus, TaskProgressDetail), so a
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
@@ -2676,15 +2784,16 @@ export function AttachmentImage({
   previewKey,
   order,
   // The composer draws the same stored image at chip size when one is handed back out of a
-  // message, so it says which of the two it is asking for rather than restyling a transcript image.
+  // message, and the tray above it as a row's thumbnail, so each says which it is asking for rather
+  // than restyling a transcript image.
   variant = 'transcript',
 }: {
   id: string;
   previewKey?: string;
   order?: number;
-  variant?: 'transcript' | 'chip';
+  variant?: 'transcript' | 'chip' | 'tray';
 }) {
-  const className = variant === 'chip' ? 'composer-attach-thumb' : 'chat-image';
+  const className = variant === 'chip' ? 'composer-attach-thumb' : variant === 'tray' ? 'pending-tray-thumb' : 'chat-image';
   return (
     <ResolvedAttachmentImage
       id={id}

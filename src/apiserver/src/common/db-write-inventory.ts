@@ -945,6 +945,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary.',
   },
   {
+    at: 'sessions/sessions.service.ts#steerQueuedTurn',
+    shape: 'TX_RETRIED',
+    locks: "session FOR UPDATE (rank 30), then reads of the live engine turn, of an interrupt filed after it and of the assigned runner's capabilities, and one UPDATE of the queued conversation_turn row (rank 60) by id while it is still a PENDING message, turning it into the CURRENT_WORK steer aimed at that live turn.",
+    identity: 'The turn id being sent into the running turn.',
+    isolation: '',
+    attempts: 4,
+    replay: 'A compare-and-set against a message still queued: an attempt the server discarded changed nothing, so a re-run either finds it still queued and asks the same questions, or finds the steer the winner made and answers with it.',
+    effects: 'The inbox wake and the queued-turns notice, after commit.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
     at: 'sessions/sessions.service.ts#mergeToMain',
     shape: 'TX_RETRIED',
     locks: 'session FOR UPDATE (rank 30), then the session and workspace writes.',

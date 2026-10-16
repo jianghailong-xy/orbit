@@ -111,6 +111,17 @@ export function supportsMidTurnSteer(runtime: string, declaredCapabilities?: rea
 }
 
 /**
+ * Whether this runtime can take a message into a running turn at all, whatever the runner holding
+ * it declared: what a client asks before it offers to send a queued message into the turn (the
+ * tray's Steer). The server still asks the runner (`supportsTargetBoundCurrentWorkSteer`) and
+ * refuses for one too old, so this can only withhold an offer that would always be refused.
+ */
+export function runtimeTakesMidTurnSteer(runtime: string): boolean {
+  const required = MID_TURN_STEER[runtime as AgentProvider];
+  return required !== NEVER && required !== undefined;
+}
+
+/**
  * Whether an explicit CURRENT_WORK message can be fenced to one exact executable turn.
  *
  * Codex app-server addresses an exact engine turn id. Claude has no provider-side address, so its

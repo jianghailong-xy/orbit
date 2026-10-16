@@ -39,6 +39,32 @@ describe('steer delivery labels, web vs OrbitKit', () => {
     }
   });
 
+  it('says the same words about the tray above the composer', () => {
+    // docs/mocks/steer-tray: the same message, waiting in the same tray, on every client watching it.
+    const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
+    const web = read('../components/PendingTray.tsx') + read('../components/WorkspaceView.tsx');
+    const native =
+      SWIFT
+      + read('../../../macos/OrbitKit/Sources/OrbitKit/Transcript/PendingTray.swift')
+      + read('../../../macos/OrbitApp/Sources/OrbitApp/Views/Console/PendingTrayView.swift')
+      + read('../../../macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift')
+      + read('../../../macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift');
+    for (const words of [
+      'Queued for next turn',
+      'Withdrawing…',
+      'Steer',
+      'Send into the current turn now',
+      'Withdraw — back to the composer',
+      'Queue for next turn',
+      "Couldn't send it into this turn",
+      "This agent can't take a message mid-turn. It stays queued for the next turn.",
+      'The turn is over or being stopped. It stays queued for the next turn.',
+    ]) {
+      expect(web.includes(words), `web has no "${words}"`).toBe(true);
+      expect(native.includes(words), `the native clients have no "${words}"`).toBe(true);
+    }
+  });
+
   it('has a tone for each of the three things there are to say', () => {
     // progress / delivered / failed: on its way, in the conversation, never got there. A client
     // missing one of these has a state it cannot render.

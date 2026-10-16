@@ -699,7 +699,30 @@ struct ComposerView: View {
             }
             .buttonStyle(.plain)
             .disabled(!console.canSend)
+            // Held on a phone, right-clicked on a Mac: the other way to send it while a turn runs —
+            // queued for the next turn instead of into this one (decided 2026-10-16,
+            // docs/mocks/steer-tray). The web's ⌥Enter; here ⌥Return is the system's line break.
+            .contextMenu {
+                if queueOffered {
+                    Button {
+                        let status = app.session(id: console.sessionID)?.effectiveRunStatus
+                        Task { await console.send(authoritative: status, queueForNextTurn: true) }
+                    } label: {
+                        Label("Queue for next turn", systemImage: "text.line.last.and.arrowtriangle.forward")
+                    }
+                }
+            }
+            .help(queueOffered ? "Send into the current turn — right-click to queue it for the next turn" : "Send")
         }
+    }
+
+    /// Whether Send can also queue the message for the next turn: a turn is running on an engine that
+    /// would otherwise send it into that turn, and an ordinary message is typed (a `!cmd` always waits).
+    private var queueOffered: Bool {
+        (app.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running
+            && SteerDelivery.runtimeTakesMidTurnSteer(console.engine)
+            && console.canSend && console.replyContext == nil
+            && !ComposerLogic.parseShell(console.composerText).shell
     }
 
     /// The permission mode, on the toolbar's left where the web composer has it. It outranks the

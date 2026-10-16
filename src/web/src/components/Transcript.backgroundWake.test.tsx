@@ -520,7 +520,7 @@ describe('a wake still waiting in the queued tail', { timeout: 60_000 }, () => {
       await vi.waitFor(
         () => {
           expect(mounted().querySelector('.bgwake')).not.toBeNull();
-          expect(mounted().querySelector('.chat-queued')).not.toBeNull();
+          expect(mounted().querySelector('.pending-tray-row')).not.toBeNull();
         },
         { timeout: 20_000, interval: 20 },
       );
@@ -545,9 +545,10 @@ describe('a wake still waiting in the queued tail', { timeout: 60_000 }, () => {
     expect(queueLine.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
     expect([...queueLine.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Cancel']);
 
-    // The message typed behind it is drawn as it always was.
-    const bubbles = mounted().querySelectorAll<HTMLElement>('.chat-queued');
-    expect(bubbles).toHaveLength(1);
-    expect(bubbles[0].querySelector('.md')?.textContent?.trim()).toBe(TYPED);
+    // The message typed behind it waits in the tray above the composer, the wake's line staying here.
+    expect(mounted().querySelectorAll('.chat-queued')).toHaveLength(0);
+    const rows = mounted().querySelectorAll<HTMLElement>('.pending-tray-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.pending-tray-text')?.textContent).toBe(TYPED);
   });
 });

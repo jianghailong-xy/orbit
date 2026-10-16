@@ -18,6 +18,7 @@ import {
   Transcript,
   UndeliveredCtx,
   resultText,
+  unreadSteersOf,
 } from './Transcript';
 import { encodeId } from '../lib/idCodec';
 import { ApiError } from '../api';
@@ -425,42 +426,42 @@ describe('message delivery', () => {
     expect(html).not.toContain('Not delivered');
   });
 
-  it('shows a re-filed message once, in the place it was typed', () => {
+  it('shows a re-filed message once, where it arrived as a turn of its own', () => {
     // A steer the engine provably never read is handed back and runs as an ordinary turn: the
     // same row, the same turn id, delivered a second time. Two bubbles would show what the
-    // person sent twice and leave the first one looking like it failed.
-    const html = renderToStaticMarkup(
-      <Transcript
-        events={[
-          { seq: 1, type: 'user', turnId: 't1', payload: { text: 'adjust this', delivery: 'enqueued', steer: true } },
-          deliveryEvent(2, 't1', 'written'),
-          deliveryEvent(3, 't1', 'requeued'),
-          userEvent(4, 't1', 'adjust this', 'enqueued'),
-        ]}
-      />,
-    );
+    // person sent twice and leave the first one looking like it failed. Nothing read it in the
+    // turn it was aimed at, so it is drawn where it was read: opening the turn after.
+    const events: RunEvent[] = [
+      { seq: 1, type: 'user', turnId: 't1', payload: { text: 'adjust this', delivery: 'enqueued', steer: true } },
+      deliveryEvent(2, 't1', 'written'),
+      { seq: 3, type: 'assistant', payload: { text: 'the suite is green' } },
+      deliveryEvent(4, 't1', 'requeued'),
+      userEvent(5, 't1', 'adjust this', 'enqueued'),
+    ];
+    const html = renderToStaticMarkup(<Transcript events={events} />);
 
     expect(html.split('adjust this').length - 1).toBe(1);
-    // And it stops narrating a delivery it is no longer having: it is an ordinary queued
-    // message now, and an ordinary message's bubble says nothing about how it got there.
+    expect(html.indexOf('the suite is green')).toBeLessThan(html.indexOf('adjust this'));
+    // And it stops narrating a delivery it is no longer having: it is an ordinary message now,
+    // and an ordinary message's bubble says nothing about how it got there.
     expect(html).not.toContain('Queued for next turn instead');
     expect(html).not.toContain('Not delivered');
+    expect(unreadSteersOf(events)).toEqual([]);
   });
 
-  it('says a re-filed message is coming back before its delivery lands', () => {
-    // The window between the two: the bubble is open, the engine is not going to read it, and
-    // the turn that will is not here yet. Silence would read exactly like a dropped message.
-    const html = renderToStaticMarkup(
-      <Transcript
-        events={[
-          { seq: 1, type: 'user', turnId: 't1', payload: { text: 'adjust this', delivery: 'enqueued', steer: true } },
-          deliveryEvent(2, 't1', 'requeued'),
-        ]}
-      />,
-    );
+  it('keeps a re-filed message in the tray until it is delivered as a turn of its own', () => {
+    // The window between the two: the engine is not going to read it in the turn it was aimed
+    // at, and the turn that will is not here yet. It is queued for the next turn, and the tray
+    // above the composer says so; the conversation has nothing of it yet.
+    const events: RunEvent[] = [
+      { seq: 1, type: 'user', turnId: 't1', payload: { text: 'adjust this', delivery: 'enqueued', steer: true } },
+      deliveryEvent(2, 't1', 'requeued'),
+    ];
+    const html = renderToStaticMarkup(<Transcript events={events} />);
 
-    expect(html).toContain('Queued for next turn instead');
+    expect(html).not.toContain('adjust this');
     expect(html).not.toContain('Not delivered');
+    expect(unreadSteersOf(events)).toMatchObject([{ turnId: 't1', text: 'adjust this', delivery: 'requeued' }]);
   });
 
   it('marks only the message that failed, not the one before it', () => {
@@ -537,39 +538,44 @@ describe('a message steered into the running turn', () => {
     payload: { turnId, delivery, ...(reason ? { reason, retryable: true } : {}) },
   });
 
-  it('shows it on its way while the engine has not taken it yet', () => {
-    const html = renderToStaticMarkup(
-      <Transcript events={[steerEvent(1, 't1', 'use the other endpoint')]} />,
-    );
+  it('leaves it out of the conversation while the engine has not read it, and tells the tray how far it got', () => {
+    // Not part of the conversation yet: the tray above the composer holds it (PendingTray).
+    const sent = [steerEvent(1, 't1', 'use the other endpoint')];
+    expect(renderToStaticMarkup(<Transcript events={sent} />)).not.toContain('use the other endpoint');
+    expect(unreadSteersOf(sent)).toMatchObject([{ turnId: 't1', text: 'use the other endpoint', delivery: 'enqueued' }]);
 
-    expect(html).toContain('Sending…');
-    expect(html).not.toContain('Read in this turn');
+    const written = [...sent, deliveryEvent(2, 't1', 'written')];
+    expect(renderToStaticMarkup(<Transcript events={written} />)).not.toContain('use the other endpoint');
+    expect(unreadSteersOf(written)).toMatchObject([{ turnId: 't1', delivery: 'written' }]);
   });
 
-  it('moves to delivering once its bytes are in the engine', () => {
-    const html = renderToStaticMarkup(
-      <Transcript
-        events={[steerEvent(1, 't1', 'use the other endpoint'), deliveryEvent(2, 't1', 'written')]}
-      />,
-    );
-
-    expect(html).toContain('Waiting to be read');
-    expect(html).not.toContain('Sending…');
-  });
-
-  it('says it landed only once the engine echoed it back', () => {
-    const html = renderToStaticMarkup(
-      <Transcript
-        events={[
-          steerEvent(1, 't1', 'use the other endpoint'),
-          deliveryEvent(2, 't1', 'written'),
-          deliveryEvent(3, 't1', 'acknowledged'),
-        ]}
-      />,
-    );
+  it('says it landed only once the engine echoed it back, and draws it where it was read', () => {
+    // The output the engine wrote before it read the message comes first: drawn at its `user`
+    // event, the bubble would claim the model had it in hand for all of that.
+    const events: RunEvent[] = [
+      steerEvent(1, 't1', 'use the other endpoint'),
+      deliveryEvent(2, 't1', 'written'),
+      { seq: 3, type: 'assistant', payload: { text: 'the suite is still running' } },
+      deliveryEvent(4, 't1', 'acknowledged'),
+      { seq: 5, type: 'assistant', payload: { text: 'switching to the other endpoint' } },
+    ];
+    const html = renderToStaticMarkup(<Transcript events={events} />);
 
     expect(html).toContain('Read in this turn');
     expect(html).not.toContain('Waiting to be read');
+    expect(html.indexOf('the suite is still running')).toBeLessThan(html.indexOf('use the other endpoint'));
+    expect(html.indexOf('use the other endpoint')).toBeLessThan(html.indexOf('switching to the other endpoint'));
+    expect(unreadSteersOf(events)).toEqual([]);
+  });
+
+  it('leaves a steer Orbit filed where its echo lands, whatever its state', () => {
+    // A job's exit or a request's outcome is not the reader's to take back or send again; the
+    // tray holds only what they typed.
+    const events: RunEvent[] = [
+      { seq: 1, type: 'user', turnId: 't1', payload: { text: 'from the other session', delivery: 'written', steer: true,
+        sessionMessage: { fromSessionId: 'session-2', fromTitle: 'the other session' } } },
+    ];
+    expect(unreadSteersOf(events)).toEqual([]);
   });
 
   it('replaces the progress with the failure, not both', () => {
@@ -665,6 +671,22 @@ describe('a steer that can be taken back', () => {
     turnId,
     payload: { text, delivery: 'enqueued', steer: true, withdrawable: true },
   });
+  // The reader's words with a wake the control plane appended to them: not the reader's alone, so
+  // drawn where its echo lands rather than held in the tray — and still theirs to take back.
+  const WAKE = [
+    '<background-job-wake>',
+    '  A background job you started with bg_run has news you were waiting for. It ended while you were working, so this message was added to the turn you are in:',
+    '    bgj_5e1f0c2a9b7d｜job｜npm run build｜the release build',
+    '      ended｜failed｜exit code 2',
+    '      output /root/.orbit/runs/s/bgj_5e1f0c2a9b7d.output｜this covers bytes 0–120',
+    '</background-job-wake>',
+  ].join('\n');
+  const withWake = (seq: number, turnId: string, text: string): RunEvent => ({
+    seq,
+    type: 'user',
+    turnId,
+    payload: { text: `${text}\n\n${WAKE}`, controlPlaneNote: `\n\n${WAKE}`, delivery: 'enqueued', steer: true, withdrawable: true },
+  });
   const delivery = (seq: number, turnId: string, state: string): RunEvent => ({
     seq,
     type: 'user_delivery',
@@ -683,41 +705,44 @@ describe('a steer that can be taken back', () => {
       </SteerWithdrawCtx.Provider>,
     );
 
-  it('offers Withdraw beside the state while it waits to be read', () => {
-    const html = render([withdrawable(1, 't1', 'then push it to main'), delivery(2, 't1', 'written')]);
-    expect(html).toContain('Waiting to be read');
-    expect(html).toContain('>Withdraw</button>');
+  it('tells the tray it can be taken back while it waits to be read, and draws nothing of it here', () => {
+    const events = [withdrawable(1, 't1', 'then push it to main'), delivery(2, 't1', 'written')];
+    expect(render(events)).not.toContain('then push it to main');
+    expect(unreadSteersOf(events)).toMatchObject([{ turnId: 't1', delivery: 'written', withdrawable: true }]);
   });
 
-  it('offers nothing the runner did not say the engine can drop, nor once it is read', () => {
-    expect(
-      render([
-        { seq: 1, type: 'user', turnId: 't1', payload: { text: 'go', delivery: 'enqueued', steer: true } },
-        delivery(2, 't1', 'written'),
-      ]),
-    ).not.toContain('>Withdraw</button>');
-    const read = render([withdrawable(1, 't1', 'go'), delivery(2, 't1', 'written'), delivery(3, 't1', 'acknowledged')]);
+  it('offers nothing once it is read', () => {
+    const events = [withdrawable(1, 't1', 'go'), delivery(2, 't1', 'written'), delivery(3, 't1', 'acknowledged')];
+    const read = render(events);
     expect(read).toContain('Read in this turn');
     expect(read).not.toContain('>Withdraw</button>');
+    expect(unreadSteersOf(events)).toEqual([]);
   });
 
-  it('offers nothing where nothing can be sent', () => {
-    expect(render([withdrawable(1, 't1', 'go')], null)).not.toContain('>Withdraw</button>');
+  it('offers Withdraw on a steer drawn where it landed, and nothing where nothing can be sent', () => {
+    const events = [withWake(1, 't1', 'then push it to main'), delivery(2, 't1', 'written')];
+    const html = render(events);
+    expect(html).toContain('then push it to main');
+    expect(html).toContain('>Withdraw</button>');
+    expect(unreadSteersOf(events)).toEqual([]);
+    expect(render(events, null)).not.toContain('>Withdraw</button>');
   });
 
   it('says Withdrawing… while the answer is out, with nothing to press twice', () => {
-    const html = render([withdrawable(1, 't1', 'go'), delivery(2, 't1', 'written')], handle({ withdrawing: new Set(['t1']) }));
+    const html = render([withWake(1, 't1', 'go on'), delivery(2, 't1', 'written')], handle({ withdrawing: new Set(['t1']) }));
     expect(html).toContain('Withdrawing…');
-    expect(html).not.toContain('Waiting to be read');
     expect(html).not.toContain('>Withdraw</button>');
   });
 
-  it('draws nothing of a steer the engine dropped — on the runner\'s word or the server\'s ahead of it', () => {
+  it('draws nothing of a steer the engine dropped, and the tray lets it go', () => {
     const words = 'then push it to main';
-    const dropped = render([withdrawable(1, 't1', words), delivery(2, 't1', 'written'), delivery(3, 't1', 'withdrawn')]);
+    const events = [withdrawable(1, 't1', words), delivery(2, 't1', 'written'), delivery(3, 't1', 'withdrawn')];
+    const dropped = render(events);
     expect(dropped).not.toContain(words);
     expect(dropped).not.toContain('chat-steer-state');
-    const confirmed = render([withdrawable(1, 't1', words), delivery(2, 't1', 'written')], handle({ withdrawn: new Set(['t1']) }));
+    expect(unreadSteersOf(events)).toEqual([]);
+    // The server's word, ahead of the runner's: a steer drawn where it landed goes at once.
+    const confirmed = render([withWake(1, 't1', words), delivery(2, 't1', 'written')], handle({ withdrawn: new Set(['t1']) }));
     expect(confirmed).not.toContain(words);
   });
 });
@@ -749,28 +774,25 @@ describe('a codex steer, whose bubble opens at whatever happened first', () => {
 
   it('opens straight at delivering when codex took it before anything was said', () => {
     // `turn/steer` returned OK: codex has the message and the model has not read it yet. There
-    // was never an `enqueued` event for this one, and the bubble still has to read correctly.
-    const html = renderToStaticMarkup(
-      <Transcript events={[steerEvent(1, 't1', 'use the other endpoint', 'written')]} />,
-    );
-
-    expect(html).toContain('Waiting to be read');
-    expect(html).not.toContain('Sending…');
+    // was never an `enqueued` event for this one, and the tray still has to read it correctly.
+    const events = [steerEvent(1, 't1', 'use the other endpoint', 'written')];
+    expect(renderToStaticMarkup(<Transcript events={events} />)).not.toContain('use the other endpoint');
+    expect(unreadSteersOf(events)).toMatchObject([{ turnId: 't1', delivery: 'written' }]);
   });
 
   it('stays on delivering however long codex holds it before the model reads it', () => {
     // Measured at 31 seconds against codex 0.149.0 (contract §4.6): codex buffers a steer until
     // its next model request. Saying anything else for that stretch — "sent", or a failure —
     // would be reporting something that has not happened.
-    const html = renderToStaticMarkup(
-      <Transcript
-        events={[steerEvent(1, 't1', 'use the other endpoint', 'written')]}
-      />,
-    );
+    const events = [
+      steerEvent(1, 't1', 'use the other endpoint', 'written'),
+      { seq: 2, type: 'assistant', payload: { text: 'still reading the logs' } },
+    ];
+    const html = renderToStaticMarkup(<Transcript events={events} />);
 
-    expect(html).toContain('Waiting to be read');
     expect(html).not.toContain('Read in this turn');
     expect(html).not.toContain('Not delivered');
+    expect(unreadSteersOf(events)).toMatchObject([{ turnId: 't1', delivery: 'written' }]);
   });
 
   it('opens straight at sent when the echo beat the answer to the request', () => {

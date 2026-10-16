@@ -340,6 +340,25 @@ delivered by codex`)。反向验证:把"读 `user` 事件自带的 delivery"这�
 Withdraw(排队列表里还 PENDING 的 steer 也给);撤回成功后气泡消失、文字回到输入框,runner 再发一条
 `user_delivery`(`delivery: "withdrawn"`)让别的端也把气泡拿掉。
 
+**托盘与 Steer(2026-10-16 起,板子见 `docs/mocks/steer-tray`)**:用户自己打的、模型还没读到的消息不画在
+对话里,放在输入框上方的托盘,一行一条 —— 还没被读的 steer(`enqueued`/`written`/还没给 runner 的 PENDING),
+和排着等下一轮的 message/shell。steer 的气泡在它**结算的那一刻**才进对话,位置就是结算事件的位置:
+`acknowledged` 排在模型读到它之前写出的输出之后,`failed`/`unconfirmed`(含服务端的持久回执)排在知道没送到的
+地方;`withdrawn` 不画;`requeued` 在托盘里显示为排着,等它作为下一轮的消息送达时画成那一轮的开头。Orbit 自己
+排的(唤醒、任务简报、别的会话的消息、回复卡)不进托盘,照旧画在对话末尾或回显落下的地方。web 的判断在
+`Transcript.tsx`(`UnreadSteer`/`readersOwnWords`)与 `WorkspaceView.tsx`(`inPendingTray`),原生在
+`TranscriptState.unreadSteers`、`SteerDelivery.isReadersOwn` 与 `PendingTray`;原生翻历史分页时分页里的 steer
+画在发出的位置(分页看不到后面的结算)。
+
+托盘里排着的 message 可以 **Steer**:`POST /sessions/:id/turns/:turnId/steer`(`SessionsService.steerQueuedTurn`)
+在会话行锁里把这一行**原地**改成指向正在跑的那一轮的 CURRENT_WORK steer(同一行、同 seq、同附件),问的问题与
+`createTurn` 的 CURRENT_WORK 一样;不行就 409 `CURRENT_WORK_UNAVAILABLE`(`NO_CURRENT_WORK` / `STEER_UNSUPPORTED` /
+`TARGET_LEASE_EXPIRED`),行原样排着。inbox 里 steer 排在普通消息前面,所以它马上交给 runner,前面排着的消息
+照旧等这一轮的结果。反方向:回合进行中 web 的 ⌥Enter 或长按发送键、原生发送键的上下文菜单(Mac 右键、iPhone
+长按;Mac 上 ⌥Return 是系统的换行)发 `intent: NEXT_TURN`;原生平时的 `POST /turns` 仍不带 intent。客户端只在
+Claude/Codex 会话上给 Steer(`runtimeTakesMidTurnSteer`),runner 太旧由服务端拒绝。垃圾桶就是上面的 Withdraw /
+Cancel,文字一律回到输入框、接在草稿下面。
+
 **`steer_requeue` 的客户端结局**:重排不发任何事件,**排队列表就是公告** —— 同一 `turnId` 以
 `kind='message'` 重新出现,Cancel 必须跟着回来。两端都验了;Swift 侧把
 `bubble.steer = isSteerKind(kind)` 改成 `||=`(即"只置真不置假")会直接红。
