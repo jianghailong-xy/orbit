@@ -28,8 +28,11 @@ final class SteerDeliveryTests: XCTestCase {
         return RunEvent(seq: seq, type: .userDelivery, payload: .object(payload))
     }
 
+    /// Every user message wherever it is drawn: the conversation, or — a steer of the reader's that
+    /// nothing has read yet — the tray above the composer (`unreadSteers`, `PendingTrayTests`).
     private func bubbles(_ r: TranscriptReducer) -> [UserBubble] {
         r.state.items.compactMap { if case .user(let b) = $0 { return b } else { return nil } }
+            + r.state.unreadSteers
     }
 
     // MARK: - the states themselves

@@ -90,6 +90,38 @@ public enum SteerDelivery {
     /// will ever read it, so its bubble leaves the transcript (`TranscriptReducer`).
     public static let withdrawn = "withdrawn"
 
+    /// Whether this delivery ends a steer's wait: read into the turn, or provably or possibly never.
+    /// Until then a steer of the reader's waits in the tray above the composer, out of the
+    /// conversation (`TranscriptState.unreadSteers`); from then on it is drawn where it settled.
+    /// Web parity: `Transcript.tsx`'s `SETTLED_STEER_DELIVERY`.
+    public static func settles(_ delivery: String?) -> Bool {
+        delivery == "acknowledged" || delivery == "failed" || delivery == "unconfirmed"
+    }
+
+    /// Whether a user turn is the reader's own words and nothing else's: what the tray above the
+    /// composer holds while nothing has read it (`PendingTray`). A steer Orbit filed — a job's exit,
+    /// a request's outcome — or another session's message stays where its echo lands; a wake on the
+    /// queue stays in the transcript's tail. The bubble's `text` is the reader's part of an echo and
+    /// its `note` what delivery appended; a queued wake has its block as its text. Web parity:
+    /// `Transcript.tsx`'s `readersOwnWords` and the queue's `returnsToComposer`.
+    public static func isReadersOwn(_ b: UserBubble) -> Bool {
+        !b.authoredByOrbit && b.itemCard == nil && b.taskStart == nil && b.startedCard == nil
+            && b.sessionMessage == nil && b.sessionReplies == nil
+            && b.reviewRequest == nil && b.reviewReturn == nil
+            && WatchWakeText.parse(b.text) == nil
+            && BackgroundWakeText.parse(b.text) == nil && BackgroundWakeText.parse(b.note) == nil
+    }
+
+    /// Whether this runtime can take a message into a running turn at all, whatever its runner
+    /// declared — what a client asks before it offers to send a queued message into the turn (the
+    /// tray's Steer) or to queue one instead. The server still asks the runner and refuses one too
+    /// old. The twin of `runtimeTakesMidTurnSteer` in shared/src/providerTransport.ts: claude always,
+    /// codex on a runner that declared `turn/steer`; kimi, DeepSeek Harness, OpenCode and Antigravity
+    /// never, a message sent there mid-turn queues.
+    public static func runtimeTakesMidTurnSteer(_ runtime: String) -> Bool {
+        runtime == "claude" || runtime == "codex"
+    }
+
     /// Whether to offer taking a steer back: its runner said the engine can drop it unread
     /// (`withdrawable` on its user event), and nothing has read, failed or withdrawn it since.
     public static func offersWithdraw(delivery: String?, withdrawable: Bool) -> Bool {

@@ -1570,6 +1570,15 @@ public final class APIClient: @unchecked Sendable {
                                        body: Optional<Empty>.none))
     }
 
+    /// Send a message queued for the next turn into the one running now (the tray's Steer). It
+    /// becomes the steer it would have been had it been sent that way; with no turn left to join, or
+    /// an engine or runner that cannot take one, it stays queued and the refusal is
+    /// `CURRENT_WORK_UNAVAILABLE` with its `reason`. Web parity: `steerQueuedTurn`.
+    public func steerQueuedTurn(sessionID: String, turnId: String) async throws {
+        _ = try await send(makeRequest("sessions/\(sessionID)/turns/\(turnId)/steer", method: "POST",
+                                       body: Optional<Empty>.none))
+    }
+
     public func resume(sessionID: String, _ req: ResumeRequest) async throws -> TurnAccepted {
         try await post("sessions/\(sessionID)/resume", body: req)
     }

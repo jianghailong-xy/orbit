@@ -917,11 +917,16 @@ public struct SessionTurnRequest: Codable, Sendable {
     public let content: String
     public let kind: String           // "message" | "shell"
     public let attachmentIds: [String]?
-    public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil) {
+    /// `NEXT_TURN` to queue a message behind a running turn instead of sending it into that turn;
+    /// nil (left out of the body) keeps the server's own placement, as every send before it had.
+    public let intent: String?
+    public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
+                intent: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
+        self.intent = intent
     }
 }
 

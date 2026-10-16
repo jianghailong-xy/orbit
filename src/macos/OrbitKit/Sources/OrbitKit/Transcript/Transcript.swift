@@ -180,6 +180,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// bubble may offer to take it back while it waits (`SteerDelivery.offersWithdraw`). False on
     /// every other message, on an engine that cannot, and from a runner that predates it.
     public var withdrawable: Bool
+    /// A `!cmd` still waiting on the queue (the send's own `shell`, or the listing's `kind`): it runs
+    /// on the runner beside the engine, so it has no turn to be sent into (`PendingTray`'s Steer).
+    /// False on every echo — the runner runs one as a Bash card, never as a user turn.
+    public var shell: Bool
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
@@ -191,7 +195,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 sessionReplies: [SessionReply]? = nil,
                 authoredByOrbit: Bool = false,
                 reviewRequest: ConfirmationReviewRequestCard? = nil,
-                reviewReturn: ConfirmationReturnCard? = nil) {
+                reviewReturn: ConfirmationReturnCard? = nil,
+                shell: Bool = false) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -213,6 +218,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.authoredByOrbit = authoredByOrbit
         self.reviewRequest = reviewRequest
         self.reviewReturn = reviewReturn
+        self.shell = shell
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
@@ -220,7 +226,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery, itemCard, taskStart, startedCard, sessionMessage, sessionReplies
-        case authoredByOrbit, reviewRequest, reviewReturn, withdrawable
+        case authoredByOrbit, reviewRequest, reviewReturn, withdrawable, shell
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -251,6 +257,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // And for a review's two turns: a snapshot from before they existed keeps its reading.
         reviewRequest = try? c.decodeIfPresent(ConfirmationReviewRequestCard.self, forKey: .reviewRequest)
         reviewReturn = try? c.decodeIfPresent(ConfirmationReturnCard.self, forKey: .reviewReturn)
+        shell = (try? c.decodeIfPresent(Bool.self, forKey: .shell)) ?? false
     }
 }
 

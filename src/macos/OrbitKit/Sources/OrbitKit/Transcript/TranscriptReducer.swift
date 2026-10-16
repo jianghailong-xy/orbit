@@ -18,6 +18,13 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// beside `items` rather than in it for the reason `queued` is: an event still arriving for the
     /// turn before belongs above them. Mirrors web's `acceptedUserTurns`.
     public var accepted: [UserBubble] = []
+    /// The reader's steers the engine has not read yet. Held OUT of `items` too, for a different
+    /// reason than `queued`: they are not part of the conversation until the engine reads them, so
+    /// they wait in the tray above the composer instead (`PendingTray`). Each moves into `items` at
+    /// the point its delivery settles (`settleUnreadSteer`) — read into the turn, after the output
+    /// written before the reading, or found undelivered — and a withdrawn one never does. Web
+    /// parity: Transcript.tsx's `UnreadSteer`.
+    public var unreadSteers: [UserBubble] = []
     public var status: RunStatus = .pending
     /// Persisted high-water seq — the `?sinceSeq=` value to reconnect with. Live events advance it
     /// only when durable; a historical page may also advance across a legacy live-only row that an
@@ -74,7 +81,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, unreadSteers, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -82,6 +89,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         background = try c.decode([BackgroundProc].self, forKey: .background)
         queued = (try? c.decodeIfPresent([UserBubble].self, forKey: .queued)) ?? []
         accepted = (try? c.decodeIfPresent([UserBubble].self, forKey: .accepted)) ?? []
+        unreadSteers = (try? c.decodeIfPresent([UserBubble].self, forKey: .unreadSteers)) ?? []
         status = try c.decode(RunStatus.self, forKey: .status)
         maxSeq = try c.decode(Int.self, forKey: .maxSeq)
         oldestSeq = (try? c.decodeIfPresent(Int.self, forKey: .oldestSeq)) ?? nil
@@ -123,6 +131,11 @@ public struct TranscriptReducer: Sendable, Codable {
     /// reducer's — now or after either mints more. Transient like `bgLaunch`: the parent's is
     /// always "i", so it's excluded from the persisted keys and old snapshots still decode.
     private var idPrefix = "i"
+    /// Whether the reader's unread steers wait out of `items` (`TranscriptState.unreadSteers`). Off for
+    /// a reducer folding an older history page (`prependOlder`): how a steer there ended may lie in
+    /// the window already loaded, past what the page can see, so the page draws each where it was
+    /// sent, as history always was. Transient like `idPrefix`.
+    private var holdsUnreadSteers = true
     /// Command + optional `description` of each `Bash(run_in_background)` launch, keyed by its
     /// tool_use id. The `background_*` events never carry either, so both are correlated from the
     /// launch captured here — matching web's `deriveBackgroundShells`, which titles the row
@@ -451,6 +464,7 @@ public struct TranscriptReducer: Sendable, Codable {
         guard !fresh.isEmpty else { return }
         var sub = TranscriptReducer()
         sub.idPrefix = "o\(fresh[0].seq)-"   // per-page id namespace: see `idPrefix`
+        sub.holdsUnreadSteers = false
         for ev in fresh { sub.apply(ev) }
         sub.flushStreaming()   // close anything left open at the page's end (defensive; pages hold no deltas)
         state.items = sub.state.items + state.items
@@ -577,9 +591,11 @@ public struct TranscriptReducer: Sendable, Codable {
     /// after the transcript and reconciled out of the queue by `appendUser` once the runner leases
     /// it. An idle send has no in-flight output to split, so it goes straight into `items`.
     public mutating func addOptimisticUser(clientTurnId: String, text: String,
-                                           attachments: [TurnAttachment] = [], queued: Bool = false) {
+                                           attachments: [TurnAttachment] = [], queued: Bool = false,
+                                           shell: Bool = false) {
         let bubble = UserBubble(id: nextID(), text: text, attachments: attachments,
-                                clientTurnId: clientTurnId, turnId: nil, pending: true, queued: queued)
+                                clientTurnId: clientTurnId, turnId: nil, pending: true, queued: queued,
+                                shell: shell)
         if queued {
             state.queued.append(bubble)
         } else {
@@ -644,6 +660,13 @@ public struct TranscriptReducer: Sendable, Codable {
         state.queued.removeAll { $0.id == id }
     }
 
+    /// A queued message the tray's Steer sent into the running turn (`POST …/steer`): a steer now, on
+    /// its way into that turn, until the runner's echo takes it over (`appendUser`).
+    public mutating func markQueuedSteered(turnId: String) {
+        guard let i = state.queued.firstIndex(where: { $0.turnId == turnId }) else { return }
+        state.queued[i].steer = true
+    }
+
     /// Take a withdrawn steer off the screen, wherever it is drawn: the transcript, the queued tail
     /// or the accepted head. The runner's `withdrawn` delivery does this for every client watching
     /// (`applyUserDelivery`); the console that asked calls it the moment the server confirms, ahead
@@ -653,6 +676,7 @@ public struct TranscriptReducer: Sendable, Codable {
     public mutating func removeWithdrawnSteer(turnId: String) {
         state.queued.removeAll { $0.turnId == turnId }
         state.accepted.removeAll { $0.turnId == turnId }
+        state.unreadSteers.removeAll { $0.turnId == turnId }
         guard let i = state.items.lastIndex(where: {
             if case .user(let b) = $0 { return b.turnId == turnId }
             return false
@@ -688,7 +712,18 @@ public struct TranscriptReducer: Sendable, Codable {
             guard case .user(let bubble) = item else { return nil }
             return bubble
         }
+        // A durable receipt for a steer still in the tray settles it: the engine never read it, or
+        // nobody can say, and no runner event will come to say so (web parity:
+        // `transcriptEventsWithDurableDeliveryReceipts`).
+        for turn in turns {
+            guard let receipt = turn.delivery,
+                  let i = state.unreadSteers.firstIndex(where: { $0.turnId == turn.turnId }) else { continue }
+            state.unreadSteers[i].delivery = receipt
+            settleUnreadSteer(at: i)
+        }
+        // A steer in the tray has its echo already: it is drawn there, never again in the tail.
         let deliveredTurnIDs = Set(transcriptTurns.compactMap(\.turnId))
+            .union(state.unreadSteers.compactMap(\.turnId))
         let listedTurnIDs = Set(turns.map(\.turnId))
         var consumed = Set<Int>()
         var accepted: [UserBubble] = []
@@ -761,8 +796,9 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.queued = true
                 bubble.undelivered = false
                 // The server's kind, so a reopened console can still tell the message waiting for
-                // its turn from the one being written into the turn in progress.
+                // its turn from the one being written into the turn in progress — and a `!cmd`.
                 bubble.steer = SteerDelivery.isSteerKind(turn.kind)
+                bubble.shell = turn.kind == "shell"
                 // Every card the projection carried — an exception item's delivery, a run's brief, a
                 // project's start, another session's message, the outcomes a reply hands back, a
                 // confirmation review's two turns: the console draws the card the moment the turn is
@@ -778,7 +814,8 @@ public struct TranscriptReducer: Sendable, Codable {
                                         attachments: incomingAttachments ?? [], turnId: turn.turnId,
                                         pending: true, queued: true,
                                         steer: SteerDelivery.isSteerKind(turn.kind),
-                                        authoredByOrbit: turn.authoredByOrbit == true)
+                                        authoredByOrbit: turn.authoredByOrbit == true,
+                                        shell: turn.kind == "shell")
                 bubble.cards = turn.cards
                 reconciled.append(bubble)
             }
@@ -1180,6 +1217,13 @@ public struct TranscriptReducer: Sendable, Codable {
             removeWithdrawnSteer(turnId: turnId)
             return
         }
+        // A steer waiting in the tray leaves it the moment its delivery settles, drawn at this point:
+        // after what the engine wrote before it read it, or where it was found undelivered.
+        if let i = state.unreadSteers.firstIndex(where: { $0.turnId == turnId }) {
+            state.unreadSteers[i].delivery = delivery
+            if SteerDelivery.settles(delivery) { settleUnreadSteer(at: i) }
+            return
+        }
         if let i = state.items.lastIndex(where: {
             if case .user(let b) = $0 { return b.turnId == turnId }
             return false
@@ -1207,6 +1251,23 @@ public struct TranscriptReducer: Sendable, Codable {
                 state.accepted[i].undelivered = true
             }
         }
+    }
+
+    /// Move a steer out of the tray and into the conversation, at the point it settled: the end of
+    /// `items` as they stand. Not a boundary — a steer is read in the middle of a turn that goes on
+    /// streaming — so nothing open is flushed (see `appendUser`).
+    private mutating func settleUnreadSteer(at i: Int) {
+        var bubble = state.unreadSteers.remove(at: i)
+        bubble.undelivered = bubble.delivery == "failed"
+        state.items.append(.user(bubble))
+    }
+
+    /// Whether this bubble, just echoed, waits in the tray rather than the conversation: a steer the
+    /// reader typed that nothing has read yet (`TranscriptState.unreadSteers`).
+    private func waitsUnread(_ bubble: UserBubble) -> Bool {
+        holdsUnreadSteers && bubble.steer && bubble.turnId != nil
+            && !SteerDelivery.settles(bubble.delivery) && bubble.delivery != SteerDelivery.withdrawn
+            && SteerDelivery.isReadersOwn(bubble)
     }
 
     private mutating func appendUser(_ ev: RunEvent) {
@@ -1276,12 +1337,13 @@ public struct TranscriptReducer: Sendable, Codable {
         }
         // The runner just leased a queued send: drop its placeholder from `state.queued` — this
         // durable event becomes its real transcript row below, in order (web parity).
-        if let qi = state.queued.firstIndex(where: echoes) {
-            state.queued.remove(at: qi)
-        }
+        let queuedPlaceholder = state.queued.firstIndex(where: echoes).map { state.queued.remove(at: $0) }
         // The accepted head this echoes (matched by its turn id): the echo takes over its row — the
         // same id, where it was already drawn — so the turn is not drawn twice, nor drawn anew.
         let acceptedHead = state.accepted.firstIndex(where: echoes).map { state.accepted.remove(at: $0) }
+        // A steer waiting in the tray that this turn's echo now speaks for: a re-steer replaces it
+        // below, and the message it was handed back as is drawn as a turn of its own.
+        if let tid = ev.turnId { state.unreadSteers.removeAll { $0.turnId == tid } }
         // One message, one row. A steer the engine provably never read is handed back and delivered
         // again as the ordinary turn it would have been — the same row, the same turn id — so its
         // second `user` event is that message arriving, not another one: it amends the row already
@@ -1335,25 +1397,50 @@ public struct TranscriptReducer: Sendable, Codable {
                     b.delivery = delivery
                     b.undelivered = delivery == "failed"
                 }
-                state.items[i] = .user(b)
+                // Sent while this end thought nothing was running, and filed as a steer: it waits in
+                // the tray, as every steer of the reader's does until it is read.
+                if waitsUnread(b) {
+                    state.items.remove(at: i)
+                    if let o = openAssistant, o > i { openAssistant = o - 1 }
+                    if let o = openThinking, o > i { openThinking = o - 1 }
+                    state.unreadSteers.append(b)
+                } else {
+                    state.items[i] = .user(b)
+                }
             }
             return
         }
         // An echo that took over the accepted head keeps its inputs if it carries none of its own, as
         // a reconciled send keeps its optimistic ones above.
         let inputs = atts.isEmpty ? acceptedHead?.attachments ?? [] : atts
-        state.items.append(.user(UserBubble(id: acceptedHead?.id ?? nextID(), text: body, attachments: inputs, ts: ev.ts,
-                                            clientTurnId: cid, turnId: ev.turnId, pending: false,
-                                            undelivered: delivery == "failed",
-                                            note: recorded?.note,
-                                            steer: steer, delivery: delivery,
-                                            withdrawable: withdrawable,
-                                            itemCard: itemCard, taskStart: taskStart,
-                                            startedCard: startedCard,
-                                            sessionMessage: sessionMessage,
-                                            sessionReplies: sessionReplies,
-                                            reviewRequest: reviewRequest,
-                                            reviewReturn: reviewReturn)))
+        var bubble = UserBubble(id: acceptedHead?.id ?? nextID(), text: body,
+                                attachments: inputs, ts: ev.ts,
+                                clientTurnId: cid, turnId: ev.turnId, pending: false,
+                                undelivered: delivery == "failed",
+                                note: recorded?.note,
+                                steer: steer, delivery: delivery,
+                                withdrawable: withdrawable,
+                                itemCard: itemCard, taskStart: taskStart,
+                                startedCard: startedCard,
+                                sessionMessage: sessionMessage,
+                                sessionReplies: sessionReplies,
+                                reviewRequest: reviewRequest,
+                                reviewReturn: reviewReturn)
+        // A steer of the reader's that nothing has read yet is not part of the conversation: it
+        // waits in the tray — the row it was drawn as while queued, under the same id — until its
+        // delivery settles (`applyUserDelivery`).
+        if waitsUnread(bubble) {
+            if let placeholder = queuedPlaceholder {
+                bubble = UserBubble(id: placeholder.id, text: bubble.text,
+                                    attachments: atts.isEmpty ? placeholder.attachments : atts, ts: bubble.ts,
+                                    clientTurnId: bubble.clientTurnId, turnId: bubble.turnId, pending: false,
+                                    note: bubble.note, steer: true, delivery: bubble.delivery,
+                                    withdrawable: bubble.withdrawable)
+            }
+            state.unreadSteers.append(bubble)
+        } else {
+            state.items.append(.user(bubble))
+        }
     }
 
     private mutating func appendInterrupt(seq: Int, dropsQueue: Bool) {

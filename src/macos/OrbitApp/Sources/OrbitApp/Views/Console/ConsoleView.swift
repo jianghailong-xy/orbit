@@ -232,6 +232,10 @@ struct ConsoleView: View {
                 WorktreeBar(console: console)
             }
             .modifier(TypingFold(folded: foldsChrome(console)))
+            // The reader's messages nothing has read yet, on the composer they were sent from —
+            // not folded while typing: they are about the message flow being typed into.
+            PendingTrayView(console: console, rows: console.pendingTrayRows(
+                turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running))
             ComposerView(console: console)
             // What the provider pick standing in the composer will do, and WHEN — the
             // part that matters, because a run keeps its provider for its whole life.

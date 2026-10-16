@@ -572,7 +572,9 @@ public enum TranscriptRows {
         // behind it.
         rows.append(contentsOf: state.pendingApprovals.map(TranscriptRow.approval))
         if showWorkingIndicator { rows.append(.working) }
-        rows.append(contentsOf: state.queued.map(TranscriptRow.queued))
+        // …except the reader's own messages still on their way, which the tray above the composer
+        // holds instead (`PendingTray.holds`); what Orbit queued keeps its card here.
+        rows.append(contentsOf: state.queued.filter { !PendingTray.holds($0) }.map(TranscriptRow.queued))
         // Zero-height tail row: a stable `scrollTo` target that always sits below the last message
         // (the last item's own id moves as it streams).
         rows.append(.bottom)

@@ -1187,20 +1187,22 @@ final class TranscriptReducerTests: XCTestCase {
 
     /// Whether a steer can be taken back is the runner's word on the steer's own durable `user`
     /// event, so the bubble holds it after a reload as well as live — and an idle send the server
-    /// filed as a steer takes it when its echo reconciles the bubble in place.
+    /// filed as a steer takes it when its echo reconciles the bubble. Nothing has read any of them
+    /// yet, so each waits in the tray rather than the conversation (`unreadSteers`).
     func testASteerCarriesWhetherItsEngineCanDropItUnread() {
         var r = TranscriptReducer()
         r.apply(steerEvent(1, turn: "t1", text: "first"))
         r.apply(steerEvent(2, turn: "t2", text: "second", withdrawable: nil))
         r.apply(steerEvent(3, turn: "t3", text: "third", withdrawable: false))
-        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.withdrawable), [true, false, false])
+        XCTAssertEqual(r.state.unreadSteers.map(\.withdrawable), [true, false, false])
+        XCTAssertTrue(r.state.items.isEmpty)
 
         var sent = TranscriptReducer()
         sent.addOptimisticUser(clientTurnId: "c1", text: "use the other endpoint")
         sent.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", steer: true)
         sent.apply(steerEvent(4, turn: "t1"))
-        XCTAssertEqual(sent.state.items.count, 1, "the echo reconciles the bubble rather than adding one")
-        XCTAssertEqual(sent.state.items[0].asUser?.withdrawable, true)
+        XCTAssertTrue(sent.state.items.isEmpty, "the echo takes the bubble over rather than adding one")
+        XCTAssertEqual(sent.state.unreadSteers.map(\.withdrawable), [true])
     }
 
     /// A steer the engine provably never read runs again as the ordinary message it would have been:
@@ -1268,12 +1270,13 @@ final class TranscriptReducerTests: XCTestCase {
         r.apply(steerEvent(3, turn: "t2", text: "and keep the old one"))
 
         r.removeWithdrawnSteer(turnId: "t1")
-        let texts = ["refactor the parser", "and keep the old one"]
-        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.text), texts)
+        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.text), ["refactor the parser"])
+        XCTAssertEqual(r.state.unreadSteers.map(\.text), ["and keep the old one"])
 
         r.apply(withdrawnEvent(4, turn: "t1"))
         r.removeWithdrawnSteer(turnId: "never-drawn")
-        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.text), texts)
+        XCTAssertEqual(r.state.items.compactMap(\.asUser).map(\.text), ["refactor the parser"])
+        XCTAssertEqual(r.state.unreadSteers.map(\.text), ["and keep the old one"])
     }
 
     /// A snapshot keeps whether a steer can be withdrawn, and one written before the flag existed

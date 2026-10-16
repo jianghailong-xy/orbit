@@ -341,12 +341,16 @@ public enum ComposerLogic {
         return trimmed
     }
 
+    /// `queueForNextTurn` sends it the other way while a turn runs — queued for the next turn
+    /// instead of into this one (the Send button's menu, decided 2026-10-16). Otherwise no intent
+    /// goes out and the server places the message as it always has.
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
-                                attachmentIds: [String]) -> SessionTurnRequest {
+                                attachmentIds: [String], queueForNextTurn: Bool = false) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,
                            content: text,
                            kind: shell ? "shell" : "message",
-                           attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds)
+                           attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
+                           intent: queueForNextTurn ? "NEXT_TURN" : nil)
     }
 
     /// Split a composer draft into the text to send and whether it's a raw shell command. A
