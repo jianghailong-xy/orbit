@@ -95,6 +95,14 @@ extension View {
                 }
                 Color.black.frame(width: 16)
             }
+            #if os(iOS)
+            // On up behind the nav bar. The scroll view runs on up there — its frame starts at the top
+            // of the screen, its content inset by the bar — and what passes behind the bar is the
+            // bar's to soften (iOS 26's scroll-edge effect), not this mask's to cut. Sized to the
+            // layout frame alone, which stops at the bar, it sliced every row off at the bar's lower
+            // edge and left a blank strip behind the glass (the owner, 2026-10-16).
+            .ignoresSafeArea(.container, edges: .top)
+            #endif
         }
     }
 }
