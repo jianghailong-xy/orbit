@@ -219,7 +219,10 @@ export class QueueService {
         id: true, ownerId: true, provider: true, providerBuiltin: true, engine: true, error: true, model: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
         antigravityAccount: true, antigravityAccountPinned: true, kimiAccount: true, kimiAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+        cursorAccount: true, cursorAccountPinned: true,
+        workspace: {
+          select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true },
+        },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
@@ -718,6 +721,8 @@ export class QueueService {
     antigravityAccountPinned: boolean;
     kimiAccount: string | null;
     kimiAccountPinned: boolean;
+    cursorAccount: string | null;
+    cursorAccountPinned: boolean;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   }): Promise<WorkspaceAccountChoices> {
@@ -727,6 +732,7 @@ export class QueueService {
       claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
       kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
+      cursorAccount: session.cursorAccount ?? workspace?.cursorAccount,
     };
     const engine = isAccountEngine(session.provider) ? session.provider : null;
     const runner = session.assignedRunner;
@@ -965,6 +971,7 @@ export class QueueService {
         claudeAccount: accounts.claudeAccount,
         antigravityAccount: accounts.antigravityAccount,
         kimiAccount: accounts.kimiAccount,
+        cursorAccount: accounts.cursorAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);

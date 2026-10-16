@@ -207,12 +207,12 @@ test('Antigravity keeps its display order when dsh is reported, and accounts lik
     auth: 'unknown',
   });
   // It signs in Google accounts through the relay, one Gemini directory each, the way Claude and
-  // Codex keep theirs — and has an install action, which every sign-in engine has.
+  // Codex keep theirs — and has an install action, which every sign-in engine but Cursor CLI has.
   assert.equal(isLoginEngine('antigravity'), true);
   assert.equal(engineKeepsAccounts('antigravity'), true);
   assert.equal(isInstallEngine('antigravity'), true);
   assert.equal(isReportedEngine('antigravity'), true);
-  assert.deepEqual(LOGIN_ENGINES, ['claude', 'codex', 'kimi', 'antigravity']);
+  assert.deepEqual(LOGIN_ENGINES, ['claude', 'codex', 'kimi', 'antigravity', 'cursor']);
   assert.deepEqual(REPORTED_ENGINES, ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh', 'cursor']);
   // Reportable and installable, never signable-in: the install relay needs a command, the sign-in
   // relay a flow, and OpenCode only has the former.

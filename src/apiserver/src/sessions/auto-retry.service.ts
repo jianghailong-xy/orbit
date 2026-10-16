@@ -364,19 +364,25 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         assignedRunner: {
           select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true, accountPauses: true },
         },
-        // Which of the runner's Codex, Claude, Antigravity or Kimi accounts the run spends: the one
-        // picked for the session, else its workspace's. Its quota alone holds back a session somebody
-        // pinned there; one on Automatic waits only while every other account is spent too.
+        // Which of the runner's Codex, Claude, Antigravity, Kimi or Cursor CLI accounts the run spends:
+        // the one picked for the session, else its workspace's. Its quota alone holds back a session
+        // somebody pinned there; one on Automatic waits only while every other account is spent too.
         codexAccount: true,
         claudeAccount: true,
         antigravityAccount: true,
         kimiAccount: true,
+        cursorAccount: true,
         codexAccountPinned: true,
         claudeAccountPinned: true,
         antigravityAccountPinned: true,
         kimiAccountPinned: true,
+        cursorAccountPinned: true,
         providerBuiltin: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+        workspace: {
+          select: {
+            env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+          },
+        },
       },
     });
     if (due.length === 0) return;
@@ -545,6 +551,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                   claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
                   antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
                   kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
+                  cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
                 },
                 session.assignedRunner?.engines,
               ),

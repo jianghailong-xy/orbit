@@ -67,6 +67,8 @@ export class CreateWorkspaceDto {
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) antigravityAccount?: string | null;
   /** The Kimi Code account this workspace's Kimi sessions run on. Same rules again. */
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) kimiAccount?: string | null;
+  /** The Cursor CLI account this workspace's Cursor CLI sessions run on. Same rules again. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) cursorAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
@@ -118,6 +120,8 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) antigravityAccount?: string | null;
   /** See CreateWorkspaceDto.kimiAccount. Absent leaves the choice alone; null clears it. */
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) kimiAccount?: string | null;
+  /** See CreateWorkspaceDto.cursorAccount. Absent leaves the choice alone; null clears it. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) cursorAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;

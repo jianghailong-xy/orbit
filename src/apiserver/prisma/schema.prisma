@@ -763,6 +763,12 @@ model Runner {
   loginMessage  String?   @map("login_message")
   // When the current relay started, so an abandoned one can be timed out.
   loginAt       DateTime? @map("login_at")
+  // When the link loginUrl holds stops working, as the runner reports it (migration 0427): Cursor
+  // CLI's `agent login` waits on its one link for about 27 minutes. NULL when the runner names none.
+  loginExpiresAt DateTime? @map("login_expires_at")
+  // Why a `failed` sign-in failed, when a client answers it differently (migration 0427): `expired`
+  // is the link running out before anyone signed in with it. NULL for every other failure.
+  loginReason   String?   @map("login_reason")
 
   // Removing a Codex account slot from this machine — the one relay that takes an account away
   // rather than adding one. The same shape as the sign-in relay above and for the same reason: the
@@ -1000,6 +1006,11 @@ model Workspace {
   // the runner added (8 lowercase hex) or `default`, never a path. Same rules as codexAccount above;
   // dispatch hands the slot's directory to the runner as KIMI_CODE_HOME.
   kimiAccount         String?   @map("kimi_account")
+  // Which Cursor CLI account this workspace's Cursor CLI sessions run on (migration 0427): the id of
+  // an account the runner added (8 lowercase hex) or `default`, never a path. Same rules as
+  // codexAccount above; dispatch hands the account's directory to the runner as
+  // ORBIT_CURSOR_ACCOUNT_DIR.
+  cursorAccount       String?   @map("cursor_account")
   agentKey            String?   @map("agent_key")
   enabled             Boolean   @default(true)
   // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +
@@ -1482,6 +1493,10 @@ model Session {
   // (Workspace.kimiAccount).
   kimiAccount              String?  @map("kimi_account")
   kimiAccountPinned        Boolean  @default(false) @map("kimi_account_pinned")
+  // Its Cursor CLI account, the same pair again (migration 0427); NULL follows the workspace's
+  // (Workspace.cursorAccount).
+  cursorAccount            String?  @map("cursor_account")
+  cursorAccountPinned      Boolean  @default(false) @map("cursor_account_pinned")
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid
