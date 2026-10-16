@@ -2426,7 +2426,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	engineProp := map[string]interface{}{
 		"type": []string{"string", "null"},
 		"enum": nullableEngineEnum(),
-		"description": "Pin the CLI this task's runs use: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode) or \"dsh\" (DeepSeek Harness). " +
+		"description": "Pin the CLI this task's runs use: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode), \"dsh\" (DeepSeek Harness) or \"cursor\" (Cursor CLI). " +
 			"With `provider` the two must be a pair that runs: a provider can run only the engines provider_list names for it, and any other is refused PROVIDER_ENGINE_INCOMPATIBLE. " +
 			"Alone it keeps the task's provider pin, which then has to run on it; with no provider pin the run uses that engine's own credential — its sign-in on the runner, OpenCode's own configuration, or for \"dsh\" the owner's first enabled DeepSeek key (refused DEEPSEEK_KEY_REQUIRED without one). " +
 			"Omit to leave the engine to the provider pin or, with neither, to where the assignee's project last started; on task_update and task_batch_pin null clears only the engine pin.",
@@ -4264,7 +4264,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"engine": map[string]interface{}{
 						"type": "string",
 						"enum": append([]string{}, engineNames...),
-						"description": "The CLI that runs the session: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode) or \"dsh\" (DeepSeek Harness). It is the session's for life: a session never changes engine, so another engine means another session. " +
+						"description": "The CLI that runs the session: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode), \"dsh\" (DeepSeek Harness) or \"cursor\" (Cursor CLI). It is the session's for life: a session never changes engine, so another engine means another session. " +
 							"With `provider` the two must be a pair that runs: a provider can run only the engines provider_list names for it, and any other is refused PROVIDER_ENGINE_INCOMPATIBLE. " +
 							"Alone, it runs on that engine's own credential — its sign-in on the runner, OpenCode's own configuration, or for \"dsh\" the owner's first enabled DeepSeek key (refused DEEPSEEK_KEY_REQUIRED without one). " +
 							"Omit it to run on the engine `provider` runs on by default, or with neither, where the target agent's project last started.",

@@ -218,6 +218,14 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 		}
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
 	}
+	if spec.bin == providerCursor {
+		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
+		defer cancel()
+		if err := installCursor(ctx, proxyVars); err != nil {
+			return InstallResultRequest{Status: installFailed, Command: spec.installCmd, Message: err.Error()}
+		}
+		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
+	}
 	// Whoever got here first may have already installed it — but "there" is not "working", and a
 	// binary that is present and cannot run is the one case this button exists to fix. Answering
 	// "done" for it is how a damaged engine stays damaged: nothing else in Orbit runs an installer
@@ -292,6 +300,9 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	if bin == providerDsh {
 		return ensureDsh(ctx, notify)
+	}
+	if bin == providerCursor {
+		return ensureCursor(ctx, notify)
 	}
 	if engineRunnable(bin) {
 		return ""
@@ -508,6 +519,11 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 func lookEngine(engine string) (string, bool) {
 	if engine == providerDsh {
 		p, err := dshExecutablePath()
+		return p, err == nil
+	}
+	// The pinned build in Orbit's version directory, never a Cursor CLI the user put on PATH.
+	if engine == providerCursor {
+		p, err := cursorExecutablePath()
 		return p, err == nil
 	}
 	exe := engine

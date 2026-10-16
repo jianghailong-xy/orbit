@@ -199,6 +199,18 @@ func userTokenEnvCases() []userTokenEnvCase {
 			},
 		},
 		{
+			// Built from an allowlist, so it inherits neither token; held to the rule all the same.
+			name: "cursor", sites: []string{"cursor_launch.go prepareCursorLaunch"},
+			holds: []string{session, "AGENT_CLI_CREDENTIAL_STORE=memory"},
+			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
+				spec, err := prepareCursorLaunch(job, dir, "/opt/cursor/cursor-agent", filepath.Join(dir, "cursor"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return spec.Env
+			},
+		},
+		{
 			name: "runner-hosted background job", sites: []string{"background_job.go (*bgTailer).startJob"}, holds: inherited,
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				bg := newBgTailer(context.Background(), ignore, nil)

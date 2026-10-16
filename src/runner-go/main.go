@@ -879,6 +879,14 @@ func resumeCommand(sessionID, sessionDir string, meta *sessionMeta) (*exec.Cmd, 
 			"Orbit drives Harness over ACP, the Harness it installs has no terminal interface, and the session's "+
 			"DeepSeek key reaches it only with each run Orbit dispatches. Continue it in Orbit, or from here with "+
 			"`orbit session send %s --message TEXT --resume-if-ended`", publicID(sessionID))
+	case providerCursor:
+		// Not the claude fallback either. Orbit drives Cursor CLI over ACP, with a HOME and a
+		// conversation store of the session's own (cursor_launch.go), and whether the CLI's terminal
+		// interface can open an ACP conversation is unmeasured; the session's credential comes with
+		// each run Orbit dispatches.
+		return nil, fmt.Errorf("this session runs on Cursor CLI, which orbit resume cannot open in a terminal: "+
+			"Orbit drives Cursor CLI over ACP, and the session's credential reaches it only with each run Orbit "+
+			"dispatches. Continue it in Orbit, or from here with `orbit session send %s --message TEXT --resume-if-ended`", publicID(sessionID))
 	default:
 		cmd = exec.Command("claude", "--resume", meta.SessionUUID)
 	}

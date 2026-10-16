@@ -65,6 +65,10 @@ func modelContextWindow(runtime, model string) int {
 		models = catalog.Antigravity
 	case providerDsh:
 		models = catalog.Dsh
+	case providerCursor:
+		// Cursor CLI reports no context usage and no window over ACP (docs/cursor-runtime-contract.md
+		// §4.1): no reading, so no denominator either, and the gauge reads unavailable.
+		return 0
 	default:
 		models = catalog.Claude
 	}

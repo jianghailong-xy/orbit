@@ -52,6 +52,10 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeKimiACPDirEnv); dir != "" {
 		os.Exit(runFakeKimiACP(dir))
 	}
+	// The scripted Cursor CLI, in the version directory of a fake release (cursor_install_test.go).
+	if dir := os.Getenv(fakeCursorAgentEnv); dir != "" {
+		os.Exit(runFakeCursorAgent(dir))
+	}
 	// The one-shot `claude -p` that `orbit wiki verify` runs (wiki_verify_test.go).
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
 		os.Exit(runFakeVerifyClaude(dir))

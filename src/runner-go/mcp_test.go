@@ -1500,8 +1500,9 @@ func TestMCPProviderAloneSendsNoEngine(t *testing.T) {
 	}
 }
 
-// Each of the five schemas declares `engine` with all six engines, in the CLI names a person knows
-// them by; the task pins take null too, since null is how a pin is cleared.
+// Each of the five schemas declares `engine` with every engine — the six, and Cursor CLI since it joined
+// them — in the CLI names a person knows them by; the task pins take null too, since null is how a pin
+// is cleared. The name predates Cursor CLI and stays: scripts/test-provider-engine-cli.mjs requires it.
 func TestMCPEngineSchemasNameTheSixEngines(t *testing.T) {
 	tools := toolDescriptors(false, true)
 	batchItem := func() map[string]interface{} {
@@ -1541,14 +1542,14 @@ func TestMCPEngineSchemasNameTheSixEngines(t *testing.T) {
 					enum = append(enum, value.(string))
 				}
 			}
-			if !reflect.DeepEqual(enum, []string{"claude", "codex", "kimi", "antigravity", "opencode", "dsh"}) {
+			if !reflect.DeepEqual(enum, []string{"claude", "codex", "kimi", "antigravity", "opencode", "dsh", "cursor"}) {
 				t.Fatalf("%s engine enum = %#v", tc.tool, engine["enum"])
 			}
 			if hasNull != tc.nullable {
 				t.Fatalf("%s engine enum null = %v, want %v", tc.tool, hasNull, tc.nullable)
 			}
 			description, _ := engine["description"].(string)
-			for _, name := range []string{"Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"} {
+			for _, name := range []string{"Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness", "Cursor CLI"} {
 				if !strings.Contains(description, name) {
 					t.Fatalf("%s engine description does not name %s: %q", tc.tool, name, description)
 				}

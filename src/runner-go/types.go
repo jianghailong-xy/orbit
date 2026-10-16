@@ -310,6 +310,7 @@ type ModelCatalog struct {
 	OpenCode    []ModelInfo `json:"opencode,omitempty"`
 	Antigravity []ModelInfo `json:"antigravity,omitempty"`
 	Dsh         []ModelInfo `json:"dsh,omitempty"`
+	Cursor      []ModelInfo `json:"cursor,omitempty"`
 }
 
 type ModelInfo struct {
@@ -330,6 +331,25 @@ type ModelInfo struct {
 	// Whether this model has the runtime's fast lane. A pointer for the same reason: nil is "could
 	// not say" and false is "asked, and it does not", which the clients must tell apart.
 	FastMode *bool `json:"fastMode,omitempty"`
+	// Every setting the model takes beside its name, as the runtime lists them: Cursor CLI's effort,
+	// context size, fast lane and thinking (cursor_models.go). Absent for a runtime that lists none.
+	Parameters []ModelParameter `json:"parameters,omitempty"`
+}
+
+// ModelParameter is one setting a model takes, with the values it accepts and the one it starts on.
+// ID is what selects it, and is the model's own: one model's effort is `effort`, another's
+// `reasoning_effort`.
+type ModelParameter struct {
+	ID       string                `json:"id"`
+	Label    string                `json:"label"`
+	Category string                `json:"category,omitempty"`
+	Default  string                `json:"default,omitempty"`
+	Values   []ModelParameterValue `json:"values"`
+}
+
+type ModelParameterValue struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
 type HeartbeatResponse struct {

@@ -243,6 +243,7 @@ func isLeaseOwnershipError(err error) bool {
 // request, so the heartbeat persists it as the provider:<name> capabilities the dsh gate also reads.
 // It states protocol support only: whether dsh is installed on this machine is its health report's
 // (dsh_health.go), and a session started without it fails with that report's repair, not as Claude.
+// Cursor CLI is added to it only while this runner can run its sessions (supportedProvidersHeader).
 const runnerSupportedProviders = "claude,codex,opencode,antigravity,dsh"
 
 func NewTransport(baseURL, token string) *Transport {
@@ -298,7 +299,7 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
 	req.Header.Set(runnerOSHeader, runtime.GOOS)
-	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
+	req.Header.Set("X-Orbit-Supported-Providers", supportedProvidersHeader())
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
 	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))
 	req.Header.Set(runnerWriteContractDigestHeader, runnerWriteContractDigest)
