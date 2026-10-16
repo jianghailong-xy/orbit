@@ -11896,7 +11896,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : (
             await this.prisma.workspace.findMany({
               where: { id: { in: accountWorkspaceIds } },
-              select: { id: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
+              select: {
+                id: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
+                cursorAccount: true,
+              },
             })
           ).map((w) => [w.id, w]),
     );

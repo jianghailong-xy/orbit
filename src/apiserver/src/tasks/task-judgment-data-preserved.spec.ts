@@ -2298,7 +2298,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers, and on `session` one new acquisition guard — a function of its own that reads `runner`
       // FOR SHARE NOWAIT and writes nothing. No `project` or `project_acceptance_*` object, none of the six
       // preserved triggers/functions and neither half of the 0177 pair is named; no row is deleted.
-      '0426_cursor_engine'],
+      '0426_cursor_engine',
+      // Cursor CLI accounts (0427): 0408's three columns again for Cursor CLI — one nullable TEXT with
+      // no default on `workspace` (`cursor_account`), and on `session` one nullable TEXT with no default
+      // (`cursor_account`) and one BOOLEAN NOT NULL DEFAULT false (`cursor_account_pinned`), catalog-only
+      // as a constant default is — and on `runner`, beside the sign-in relay's `login_at` (0073), one
+      // nullable TIMESTAMP(3) (`login_expires_at`) and one nullable TEXT (`login_reason`), neither with a
+      // default. Five `ADD COLUMN` statements and nothing else: no index, CHECK, foreign key, function,
+      // trigger or type is created or dropped, so it is not another writer of the DONE fence and names
+      // none of the six preserved objects; `task`, `project` and `project_acceptance_*` are not named.
+      // No INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0427_cursor_account'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -1219,7 +1219,9 @@ export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
  */
 export interface LoginCommand {
   action: 'start' | 'code' | 'cancel';
-  /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. */
+  /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. A
+   *  `cursor` start, Default's included, goes only to a runner that declares `cursor-account-login/v1`:
+   *  an older one signs in Claude Code for an engine it does not know. */
   engine?: LoginEngine;
   /** The authorization code the user pasted, for `code`. */
   code?: string;
@@ -1289,6 +1291,15 @@ export interface LoginResult {
   /** The one-time code the user types on the sign-in page, for the device flow. */
   userCode?: string;
   message?: string;
+  /** With `url`: when that link stops working, ISO 8601. Cursor CLI's `agent login` prints one link
+   *  and gives up on it about 27 minutes later (docs/cursor-runtime-contract.md §9), so the runner
+   *  reports the start of the sign-in plus that. Absent where the runner names no such time. */
+  expiresAt?: string;
+  /** With `failed`: why, when a client answers it differently from any other failure — the one value
+   *  is `expired`, the link running out before anyone signed in with it (Cursor CLI's "Login failed or
+   *  timed out"), which a client answers with a new link rather than a retry. `message` still says it
+   *  in words. Absent for every other failure. */
+  reason?: LoginFailureReason;
   /** The `attempt` of the start this reports on. A report about an attempt the control plane has
    *  moved past (cancelled, or replaced by a new sign-in) changes nothing. Absent from an older
    *  runner, whose reports are taken as they come. */
@@ -1318,8 +1329,8 @@ export interface RunnerEngineHealth {
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
    *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
-  /** Codex, Claude Code, Antigravity and Kimi Code: every account signed into this machine's CLI,
-   *  Default first, each with its own sign-in state. `auth` above stays the engine's answer, which is
+  /** Codex, Claude Code, Antigravity, Kimi Code and Cursor CLI: every account signed into this
+   *  machine's CLI, Default first, each with its own sign-in state. `auth` above stays the engine's answer, which is
    *  what every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
    *  while its Default account is the runner's Google sign-in alone. Absent from an older runner, and
    *  whenever the runner couldn't list its accounts — read as the one account every machine had
@@ -1353,7 +1364,7 @@ export interface DshRuntimeHealth {
 /**
  * One account on a runner: a directory the CLI keeps that login in — a Codex CODEX_HOME, a Claude
  * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a Kimi Code
- * KIMI_CODE_HOME — which the runner signs in and runs sessions on.
+ * KIMI_CODE_HOME, a Cursor CLI account's directory — which the runner signs in and runs sessions on.
  *
  * Nothing here names the account itself. Neither its email nor its account id leaves the machine
  * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
@@ -1490,7 +1501,20 @@ export interface RunnerLoginState {
    *  names none — the runner's own login — and for a new account until the runner reports the
    *  slot it added. */
   account?: string | null;
+  /** When the link at `url` stops working, ISO 8601, as the runner reported it (LoginResult.expiresAt):
+   *  what a client counts down from. Present only while a sign-in is waiting on a link that has one. */
+  expiresAt?: string;
+  /** Why a `failed` sign-in failed, when a client answers it differently (LoginResult.reason).
+   *  Present only on such a failure. */
+  reason?: LoginFailureReason;
 }
+
+/** Why a sign-in failed, when a client answers it differently from any other failure: `expired` is
+ *  the sign-in link running out before anyone signed in with it. */
+export type LoginFailureReason = 'expired';
+
+/** Every LoginFailureReason, for a reader that checks one it is handed. */
+export const LOGIN_FAILURE_REASONS: readonly LoginFailureReason[] = ['expired'];
 
 /** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
 export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';
