@@ -46,4 +46,18 @@ final class ComposerBandGlassWiringTests: XCTestCase {
         XCTAssertEqual(repairs.components(separatedBy: ".composerBandWash(.orange, opacity: 0.08)").count - 1, 2,
                        "both engine-repair cards wash through the band")
     }
+
+    /// The fold that hides the session's cards while a phone types (`TypingFold`) cuts them to the
+    /// stack's frame only on its way down. Open, a cut there sheared the glass's rim and shadow off the
+    /// tray and the git bar, and left the tray's shadow in the gap as a slab with square ends.
+    func testTheTypingFoldLeavesTheGlassWholeWhileOpen() throws {
+        let console = try source(views + "Console/ConsoleView.swift")
+        guard let start = console.range(of: "private struct TypingFold: ViewModifier {"),
+              let end = console.range(of: "struct TranscriptView: View {", range: start.upperBound..<console.endIndex)
+        else { return XCTFail("TypingFold not found") }
+        let fold = String(console[start.lowerBound..<end.lowerBound])
+        XCTAssertFalse(fold.contains(".clipped()"), "no cut at the stack's own frame while it is open")
+        XCTAssertTrue(fold.contains(".clipShape(Rectangle().inset(by: folded ? 0 : -Self.glassBleed))"),
+                      "the cut stands clear of the cards' glass until the stack folds")
+    }
 }
