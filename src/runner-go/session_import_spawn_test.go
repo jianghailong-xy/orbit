@@ -380,7 +380,7 @@ func TestImportRequestRefusedPartwayKeepsTheRestInOrder(t *testing.T) {
 	work := t.TempDir()
 	const uuid = "4e453ab7-f37c-494d-8017-bb4e9beffeef"
 	path, _, _, _ := writeLongImportTranscript(t, home, work, uuid)
-	_, _, replay, err := parseImportTranscript(path)
+	_, _, replay, err := parseImportTranscript(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

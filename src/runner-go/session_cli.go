@@ -717,11 +717,12 @@ func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext)
 		return fmt.Errorf("no transcript found for Claude session %s on this machine", claudeID)
 	}
 	// A previous import can leave a copy under a dead checkout; try candidates until one
-	// parses, and report the last refusal when none does.
+	// parses, and report the last refusal when none does. A line the parse skips goes
+	// unreported here: the runner's import step logs it, and stdout is this command's output.
 	var sourceCwd string
 	var lastErr error
 	for _, cand := range matches {
-		cwd, _, _, err := parseImportTranscript(cand)
+		cwd, _, _, err := parseImportTranscript(cand, nil)
 		if err != nil {
 			lastErr = err
 			continue
