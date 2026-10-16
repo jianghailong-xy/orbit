@@ -20,10 +20,10 @@ class ProviderEnginesTest {
     // describe('engines')
 
     @Test fun listsEveryEngineOnceEachUnderItsCliName() {
-        assertEquals(setOf("claude", "codex", "kimi", "antigravity", "opencode", "dsh"), ProviderEngines.ALL_ENGINES.toSet())
-        assertEquals(6, ProviderEngines.ALL_ENGINES.size)
+        assertEquals(setOf("claude", "codex", "kimi", "antigravity", "opencode", "dsh", "cursor"), ProviderEngines.ALL_ENGINES.toSet())
+        assertEquals(7, ProviderEngines.ALL_ENGINES.size)
         assertEquals(mapOf("claude" to "Claude Code", "codex" to "Codex", "kimi" to "Kimi Code", "antigravity" to "Antigravity CLI",
-            "opencode" to "OpenCode", "dsh" to "DeepSeek Harness"), ProviderEngines.ENGINE_CLI_NAMES)
+            "opencode" to "OpenCode", "dsh" to "DeepSeek Harness", "cursor" to "Cursor CLI"), ProviderEngines.ENGINE_CLI_NAMES)
         ProviderEngines.ALL_ENGINES.forEach { assertTrue(ProviderEngines.isEngine(it)) }
         assertFalse(ProviderEngines.isEngine("deepseek-harness"))
         assertFalse(ProviderEngines.isEngine(""))
@@ -160,7 +160,8 @@ class ProviderEnginesTest {
     @Test fun theEnginesAndTheirNamesAreTheSharedModulesOwn() {
         val source = shared("providerEngines.ts")
         val order = Regex("ALL_ENGINES: readonly AgentProvider\\[] = \\[(.*?)];", RegexOption.DOT_MATCHES_ALL).find(source)!!.groupValues[1]
-        val enums = mapOf("CLAUDE" to "claude", "CODEX" to "codex", "KIMI" to "kimi", "ANTIGRAVITY" to "antigravity", "OPENCODE" to "opencode", "DSH" to "dsh")
+        val enums = mapOf("CLAUDE" to "claude", "CODEX" to "codex", "KIMI" to "kimi", "ANTIGRAVITY" to "antigravity", "OPENCODE" to "opencode", "DSH" to "dsh",
+            "CURSOR" to "cursor")
         assertEquals(Regex("AgentProvider\\.(\\w+)").findAll(order).map { enums.getValue(it.groupValues[1]) }.toList(), ProviderEngines.ALL_ENGINES)
         val names = Regex("\\[AgentProvider\\.(\\w+)]: '([^']+)'").findAll(source).associate { enums.getValue(it.groupValues[1]) to it.groupValues[2] }
         assertEquals(names, ProviderEngines.ENGINE_CLI_NAMES)

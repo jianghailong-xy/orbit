@@ -359,7 +359,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 | code | HTTP | 何时 | message | body 附加字段 |
 | --- | --- | --- | --- | --- |
-| `ENGINE_UNKNOWN` | 400 | engine 不是六个值之一 | `engine "<value>" is not one of claude, codex, kimi, antigravity, opencode, dsh` | — |
+| `ENGINE_UNKNOWN` | 400 | engine 不是七个值之一 | `engine "<value>" is not one of claude, codex, kimi, antigravity, opencode, dsh, cursor` | — |
 | `PROVIDER_ENGINE_INCOMPATIBLE` | 400 | engine 与 provider 不兼容（新建、切换、任务 pin、batch-pin、wiki 设置）；或只给 provider 而它没有默认 engine | 点名 engine 时：`provider "<slug>" cannot run on <CLI 名称>; it runs on <CLI 名称, …>`，可用列表为空时以 `no engine can run it` 结尾。只给 provider 时：`provider "<slug>" cannot run on any engine` | `engine`（只给 provider 时为 `null`）、`provider`、`engines` |
 | `ENGINE_IMMUTABLE` | 400 | resume、config、retry 带了不同的 engine | `this session runs on <CLI 名称>, and a session's engine never changes; start a new session to use <CLI 名称>` | `engine` |
 | `DEEPSEEK_KEY_REQUIRED` | 400 | 只给 `dsh`、内置 `dsh`，而用户没有启用的 DeepSeek key | `DeepSeek Harness runs on a DeepSeek API key; connect one, then try again` | — |

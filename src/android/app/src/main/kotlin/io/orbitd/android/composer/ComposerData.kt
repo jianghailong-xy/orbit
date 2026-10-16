@@ -453,9 +453,10 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
      * each with its credentials and the one a pick of it lands on: the first of [preferred] it holds that can run (the draft's pick,
      * then what the workspace last ran), else its own sign-in, else the first credential that can run. An engine with nothing to run
      * on here is left out — except DeepSeek Harness on a runner that could run it: with no DeepSeek key yet it offers the connection.
+     * One this app does not draw yet (ProviderEngines.androidShowsEngine) is never listed.
      */
     fun engines(preferred: List<Pair<String?, String?>> = emptyList(), antigravityKey: Boolean = false): List<EngineOption> =
-        ProviderEngines.ALL_ENGINES.mapNotNull { engine ->
+        ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).mapNotNull { engine ->
             val options = credentials(engine, antigravityKey)
             if (options.isEmpty()) {
                 return@mapNotNull if (engine == ProviderEngines.DSH && dshBlocker() != "Update runner")

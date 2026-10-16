@@ -1843,7 +1843,7 @@ private struct TaskDetailContent: View {
             }
         )) {
             Text(pin.inheritedEngine).tag(String?.none)
-            ForEach(ProviderEngines.all, id: \.self) { engine in
+            ForEach(pin.engineChoices, id: \.self) { engine in
                 Text(ProviderEngines.cliName(engine)).tag(Optional(engine))
             }
         }

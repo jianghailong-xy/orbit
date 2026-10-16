@@ -22,10 +22,21 @@ public enum ProviderEngines {
         ("antigravity", "Antigravity CLI"),
         ("opencode", "OpenCode"),
         ("dsh", "DeepSeek Harness"),
+        ("cursor", "Cursor CLI"),
     ]
 
     /// Every engine, in the order a picker lists them (shared `ALL_ENGINES`).
     public static let all: [String] = names.map(\.engine)
+
+    /// Whether these apps draw `engine` in a list of engines: every engine but Cursor CLI, which the
+    /// server knows (project P1) and which has no screens here until P7b builds the owner's design
+    /// board — web `webShowsEngine`, Kotlin `androidShowsEngine`. The new-session hero's engines, a
+    /// task's Engine field, Infrastructure's engine cards and a machine's Engines rows leave it out, a
+    /// runner's report of it included, so they read as they did before it was registered. Opening
+    /// Cursor CLI here is changing this one function.
+    public static func appleShowsEngine(_ engine: String) -> Bool {
+        engine != "cursor"
+    }
 
     /// "Antigravity CLI" for `antigravity`; an engine this build doesn't know, by the name it came as.
     public static func cliName(_ engine: String) -> String {
