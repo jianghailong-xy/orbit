@@ -98,6 +98,7 @@
     前缀改成 `https://downloads.cursor.com/lab/<版本>` 后 5.8 s 装完。
   - **P3 的建议**：runner 自己下载 tarball、校验固定哈希、解包到不可变的版本目录，再用绝对路径启动 `<目录>/cursor-agent acp`。
     不要依赖 `~/.local/bin/agent`，也不要依赖 CLI 的安装器：它还会建 `~/.local/bin/cursor` 包装脚本、清理旧版本，只保留当前和最新两个【源码 2761@1877、2761@5637】。
+    清理由一个脱离父进程的 `cursor-agent … cleanup-install-versions <版本>` 子进程完成：`install` 退出 40 分钟后它仍在运行（父进程是 init）【实测：两次 `install-and-version` 运行各留下一个，事后手工结束】。
 - **包内容**【实测】：
   - `cursor-agent` 是 bash 启动脚本，执行同目录的 `node`（Node v24.5.0）加 `index.js`。
   - 只要 `AGENT_CLI_CREDENTIAL_STORE` 不是 `file`，就加 `--use-system-ca`【源码 cursor-agent@781】。也就是说，file 存储模式**不用系统 CA**，
