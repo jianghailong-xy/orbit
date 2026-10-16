@@ -19,6 +19,10 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   // ACP supplies opaque model tokens via configOptions. No static model or window fallback:
   // a blank selection leaves the Harness's current/default choice intact (P0 contract §4).
   [AgentProvider.DSH]: '',
+  // Cursor CLI's ACP model values are parameterized variants (`gpt-5.5[context=272k,…]`, Auto is
+  // `default[]`) that only the runner's live catalogue lists. Blank leaves a new session on Auto
+  // (docs/cursor-runtime-contract.md §10, §16.3).
+  [AgentProvider.CURSOR]: '',
 };
 
 /**
@@ -197,7 +201,8 @@ export function modelForProvider(
   const model = override || fallback;
   // Harness configOptions values are opaque tokens, not ids that can be rebuilt or validated
   // using another runtime's prefixes. Admission checks them against that runtime's live list.
-  if (provider === AgentProvider.DSH) return model;
+  // Cursor CLI's are too, and it runs other vendors' models: a `claude-…` or `gpt-…` id is its own.
+  if (provider === AgentProvider.DSH || provider === AgentProvider.CURSOR) return model;
   // OpenCode's selector is always `provider/model`. A provider-only API patch from an older
   // client can leave the prior runtime's model on the agent; omit that invalid bare id instead
   // of passing it to the CLI. A namespaced id is opaque here — it may legitimately name any

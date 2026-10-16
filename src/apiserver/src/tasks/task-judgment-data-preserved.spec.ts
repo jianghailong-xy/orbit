@@ -2285,7 +2285,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers/functions, and no function, trigger, type or constraint is created, replaced or
       // dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every
       // stored token and registration reads NULL.
-      '0425_login_session_push_binding'],
+      '0425_login_session_push_binding',
+      // Cursor CLI becomes the seventh engine (0426, docs/cursor-runtime-contract.md): 0367's moves for
+      // the `cursor` slug. Whatever held it — a key, an account pool or a retired name — takes the first
+      // `cursor-N` free in all three, and every stored reference follows: `provider` (and an old OpenCode
+      // `model` naming the key) on `session` and `task`, and the rows 0367 rewrote. The `task` UPDATEs
+      // write `provider` and `model` only, which no row trigger of `task` lists, so the DONE writer fence
+      // (`status`, `completion_fence_revision`) does not fire; the statement-level AFTER UPDATE triggers
+      // act on `status`, `run_at`, `project_id` or `list_id`, which it never changes. 0414's
+      // `session_engine_check` and `task_engine_check` are dropped and re-added with one more value, which
+      // every stored row satisfies. Then a compatibility row on `model_provider` with its CHECK and two
+      // triggers, and on `session` one new acquisition guard — a function of its own that reads `runner`
+      // FOR SHARE NOWAIT and writes nothing. No `project` or `project_acceptance_*` object, none of the six
+      // preserved triggers/functions and neither half of the 0177 pair is named; no row is deleted.
+      '0426_cursor_engine'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

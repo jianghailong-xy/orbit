@@ -6,7 +6,7 @@ import { runsOnEnvKey } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderRow } from '../lib/providerAdmin';
 import { poolRunsCodex, type ProviderPool } from '../lib/providerPools';
-import { ago } from '../lib/runnerEngines';
+import { ago, webShowsEngine } from '../lib/runnerEngines';
 import { EngineTile } from './ProviderGallery';
 import { engineHealthOf, rowKindOf } from './RunnerEngines';
 import { ENGINE_NAME, RunnerSignIn } from './RunnerSignIn';
@@ -22,7 +22,7 @@ import { Button } from './ui/Button';
  */
 
 /** The engines a machine signs in, in the order every list on the page names them. */
-const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
+const ENGINES = (Object.keys(ENGINE_NAME) as LoginEngine[]).filter(webShowsEngine);
 
 const machineName = (runner: Runner) => runner.displayName || runner.name;
 
@@ -182,6 +182,7 @@ export function EngineOverview({
       </div>
       <div className="infra-engines">
         {ALL_ENGINES.map((engine) => {
+          if (!webShowsEngine(engine)) return null;
           // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
           const machines =
             engine === AgentProvider.DSH

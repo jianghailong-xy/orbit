@@ -76,6 +76,7 @@ import {
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
+  CURSOR_RUNNER_UPGRADE_ERROR,
   DSH_NOT_INSTALLED_ERROR,
   DSH_PLATFORM_UNSUPPORTED_ERROR,
   DSH_RUNNER_UPGRADE_ERROR,
@@ -335,6 +336,9 @@ export class QueueService {
     // A runner that declares dsh but whose engine report does not show the CLI ready
     // (RunnerApiController.claim, dshRuntimeUnavailable) is withheld dsh rows like one that does not.
     const supportsDsh = (runner.supportedProviders?.includes(AgentProvider.DSH) ?? false) && !runner.dshUnavailable;
+    // Cursor CLI: the route keeps it in the request's declaration only when the runner's persisted
+    // heartbeat declares it too (RunnerApiController.claim); the statement below asks the heartbeat again.
+    const supportsCursor = runner.supportedProviders?.includes(AgentProvider.CURSOR) ?? false;
     const paused = await this.pausedPendingSessions(runner.id, supportsWikiMaintenance, runner.dshUnavailable);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
@@ -358,16 +362,16 @@ export class QueueService {
         // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
         // executeRaw deliberately discards that result (same pattern as pg_notify).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
-        // Migrations 0080, 0367 and 0377 install database triggers so an older apiserver replica cannot
-        // claim OpenCode, Antigravity or dsh as Claude during a rolling control-plane deploy (0372
-        // widened the Antigravity one to the configured rows that borrow it). These
+        // Migrations 0080, 0367, 0377 and 0426 install database triggers so an older apiserver replica
+        // cannot claim OpenCode, Antigravity, dsh or Cursor CLI as Claude during a rolling control-plane
+        // deploy (0372 widened the Antigravity one to the configured rows that borrow it). These
         // transaction-local capabilities are the positive signal that lets only the new, capable
-        // path pass. One statement sets all three inside the global claim lock above.
+        // path pass. One statement sets them all inside the global claim lock above.
         //
-        // The fourth (migration 0414) says this claim reads the session's recorded engine: without it
+        // One more (migration 0414) says this claim reads the session's recorded engine: without it
         // the database refuses to let a transaction claim a session that has one, which is what keeps an
         // older replica — which would derive the engine from the slug — off them (§5.2).
-        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true), set_config('orbit.runner_supports_dsh', ${supportsDsh ? '1' : '0'}, true), set_config('orbit.claim_reads_session_engine', '1', true)`;
+        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true), set_config('orbit.runner_supports_dsh', ${supportsDsh ? '1' : '0'}, true), set_config('orbit.runner_supports_cursor', ${supportsCursor ? '1' : '0'}, true), set_config('orbit.claim_reads_session_engine', '1', true)`;
         // Asked again here, after the waits for a connection and for the lock above (up to 20s
         // under a busy pool): the runner may have hung up during them.
         if (hungUp?.aborted) return [];
@@ -394,6 +398,7 @@ export class QueueService {
               ${OPENCODE_RUNNER_UPGRADE_ERROR},
               ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
               ${DSH_RUNNER_UPGRADE_ERROR},
+              ${CURSOR_RUNNER_UPGRADE_ERROR},
               ${DSH_NOT_INSTALLED_ERROR},
               ${DSH_PLATFORM_UNSUPPORTED_ERROR},
               ${DSH_VERSION_INCOMPATIBLE_ERROR},
@@ -441,7 +446,7 @@ export class QueueService {
             AND (
               (s."engine" IS NOT NULL AND (
                 (s.provider = s."engine" AND (
-                  s.provider IN ('claude', 'codex', 'opencode', 'antigravity')
+                  s.provider IN ('claude', 'codex', 'opencode', 'antigravity', 'cursor')
                   OR (s."provider_builtin" AND s.provider = 'kimi')
                 ))
                 OR (s."engine" = 'dsh' AND s.provider = 'dsh' AND s."provider_builtin")
@@ -472,7 +477,7 @@ export class QueueService {
                 ))
               ))
               OR (s."engine" IS NULL AND (
-                COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity')
+                COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity', 'cursor')
                 OR (s."provider_builtin" AND s.provider IN ('kimi', 'dsh'))
                 OR (NOT s."provider_builtin" AND (
                   EXISTS (
@@ -509,6 +514,17 @@ export class QueueService {
                 SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
                   AND r."capabilities_reported_at" IS NOT NULL
                   AND 'provider:dsh' = ANY(r.capabilities)
+              ))
+            )
+            -- Cursor CLI the same way (migration 0426): the request and the persisted heartbeat both
+            -- declare it, for a session recorded on it whatever credential it spends, and for one
+            -- without an engine named cursor, which since 0426 only the built-in can be.
+            AND (
+              COALESCE(s."engine", s.provider, 'claude') <> 'cursor'
+              OR (${supportsCursor} AND EXISTS (
+                SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
+                  AND r."capabilities_reported_at" IS NOT NULL
+                  AND 'provider:cursor' = ANY(r.capabilities)
               ))
             )
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode

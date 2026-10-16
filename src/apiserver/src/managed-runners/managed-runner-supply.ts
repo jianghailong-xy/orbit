@@ -1,5 +1,5 @@
 import { ConflictException } from '@nestjs/common';
-import { MODEL_UNAVAILABLE, type LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, MODEL_UNAVAILABLE, type LoginEngine } from '@orbit/shared';
 
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -34,6 +34,7 @@ const ENGINE_LABELS: Record<LoginEngine, string> = {
   codex: 'Codex',
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 /**

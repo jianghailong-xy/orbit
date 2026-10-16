@@ -16,8 +16,9 @@ import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import { runnerAccountPausedUntil } from './account-pause';
 
 /**
- * The engines a runner can sign into (LoginEngine's full set), in the order they're shown. Only a
- * runner that can relay Antigravity's Google sign-in is asked to (antigravityGoogleLogin).
+ * The engines Orbit signs a runner into, in the order they're shown. Only a runner that can relay
+ * Antigravity's Google sign-in is asked to (antigravityGoogleLogin). Cursor CLI is a LoginEngine but
+ * not one of these yet: no runner relays its sign-in, so none is sent one.
  */
 export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
 
@@ -63,6 +64,7 @@ export const REPORTED_ENGINES: readonly ReportedEngine[] = [
   'opencode',
   'antigravity',
   'dsh',
+  'cursor',
 ];
 
 export function isReportedEngine(value: unknown): value is ReportedEngine {

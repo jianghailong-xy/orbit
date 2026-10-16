@@ -36,6 +36,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api, getShareLink, type ModelHintLevel, type ModelHintOption, type TaskRunRoute } from '../api';
 import { copyText } from '../lib/clipboard';
+import { webShowsEngine } from '../lib/runnerEngines';
 import { mainBranchName } from '../lib/projectStart';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { reportTaskRunConflict, type TaskRunConflictToast } from './TaskRunHandoffNotice';
@@ -1621,7 +1622,7 @@ export function TaskDetailPanel({
                 matchTriggerWidth={false}
                 options={[
                   { value: '', label: "Assignee's" },
-                  { label: '', options: ALL_ENGINES.map((engine) => ({ value: engine, label: ENGINE_CLI_NAMES[engine] })) },
+                  { label: '', options: ALL_ENGINES.filter(webShowsEngine).map((engine) => ({ value: engine, label: ENGINE_CLI_NAMES[engine] })) },
                 ]}
                 renderOption={(option) =>
                   option.value ? (

@@ -22,6 +22,10 @@ export const PROVIDER_TRANSPORTS: Record<AgentProvider, ProviderTransport> = {
   // ACP JSON-RPC over one resident process; a prompt remains outstanding until ordered updates
   // settle. It has cancellation and configuration, but no mid-turn steer (P0 contract §4).
   [AgentProvider.DSH]: 'json-rpc',
+  // Cursor CLI's own ACP server (`agent acp`), one resident process per session. A second
+  // `session/prompt` mid-turn cancels the running turn (docs/cursor-runtime-contract.md §3.2), so it
+  // has no mid-turn steer either: Orbit queues the message for the next turn (see MID_TURN_STEER).
+  [AgentProvider.CURSOR]: 'json-rpc',
   // One process per turn, carrying that turn's prompt and exiting with it.
   [AgentProvider.OPENCODE]: 'one-shot',
   // One resident `agy --print=` process per session, stream-json in both directions, a `result`
@@ -82,6 +86,8 @@ const MID_TURN_STEER: Record<AgentProvider, string | typeof ALWAYS | typeof NEVE
   // agy runs a mid-turn frame as a turn of its own after the current `result` (contract §8.1),
   // and the runner refuses a steer for it (provider_runtime.go). A message sent mid-turn queues.
   [AgentProvider.ANTIGRAVITY]: NEVER,
+  // A prompt sent mid-turn would cancel the running turn rather than join it (cursor contract §3.2).
+  [AgentProvider.CURSOR]: NEVER,
 };
 
 /**
