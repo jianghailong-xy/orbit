@@ -615,8 +615,7 @@ export class WakeDispositionService {
     ]);
 
     return serving.map(({ row, task }) => {
-      const since = task.progress?.epochStartedAt ?? null;
-      const thisDelivery = (at: Date) => since === null || at >= since;
+      const thisDelivery = thisDeliverySince(task.progress?.epochStartedAt ?? null);
       return {
         taskId: task.id,
         sessionId: task.sessions[0]?.id ?? null,
@@ -777,6 +776,12 @@ export class WakeDispositionService {
    * never by `kind`, which the missing-judgment-path signal shares, and never by `detail`, which is
    * display only. Each is a compare-and-set on the row still being open, so a redelivery, a second
    * receipt or an owner resolving it first writes nothing twice.
+   *
+   * Only a landing of this delivery counts, by the boundary `deliveriesUnder` draws: a receipt from
+   * before the task was last sent back landed the delivery it was sent back from, and an open
+   * question is about the one made since — the one `blockerFor` asks about. Until 2026-10-16 the old
+   * receipt closed that question in the very request that put it. A task never sent back has no
+   * boundary, and any of its landings counts, as before.
    */
   async resolveLandedBlockers(projectIds: ReadonlyArray<string | null | undefined>): Promise<number> {
     const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
@@ -803,18 +808,21 @@ export class WakeDispositionService {
       }),
     ]);
     if (open.length === 0 && reviews.length === 0) return 0;
-    const receipts = await this.prisma.sessionMergeReceipt.findMany({
-      where: {
-        taskId: {
-          in: [...new Set([
-            ...open.map((blocker) => blocker.subjectId),
-            ...reviews.map((review) => review.taskId!).filter(Boolean),
-          ])],
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { taskId: true, result: true, targetBranch: true },
-    });
+    const taskIds = [...new Set([
+      ...open.map((blocker) => blocker.subjectId),
+      ...reviews.map((review) => review.taskId!).filter(Boolean),
+    ])];
+    const [receipts, epochs] = await Promise.all([
+      this.prisma.sessionMergeReceipt.findMany({
+        where: { taskId: { in: taskIds } },
+        orderBy: { createdAt: 'asc' },
+        select: { taskId: true, result: true, targetBranch: true, createdAt: true },
+      }),
+      this.prisma.taskProgress.findMany({
+        where: { taskId: { in: taskIds } },
+        select: { taskId: true, epochStartedAt: true },
+      }),
+    ]);
     const codebases = await this.prisma.projectCodebase.findMany({
       where: { projectId: { in: ids }, slot: 'primary' },
       select: { projectId: true, upstreamRef: true, integrationRef: true },
@@ -824,7 +832,11 @@ export class WakeDispositionService {
       const branches = landingBranchesFor(
         codebases.find((codebase) => codebase.projectId === projectId) ?? null,
       );
+      const thisDelivery = thisDeliverySince(
+        epochs.find((epoch) => epoch.taskId === taskId)?.epochStartedAt ?? null,
+      );
       return receipts.find((receipt) => receipt.taskId === taskId
+        && thisDelivery(receipt.createdAt)
         && receiptIsLandingEvidence(receipt, branches));
     };
 
@@ -913,6 +925,15 @@ function askedAbout(delivery: ObservedDelivery, reason: BlockerReason): 'OPEN' |
   if (delivery.questions.some((question) => question.open && question.key === filed)) return 'OPEN';
   return delivery.questions.some((question) => !question.open
     && (question.key === blocker || question.key === review)) ? 'ANSWERED' : null;
+}
+
+/**
+ * Whether a moment belongs to a task's current delivery: what it delivered since it was last sent
+ * back, 0271's lifecycle epoch (`deliveriesUnder` says why). A task never sent back has no epoch
+ * start, and everything it ever did is this delivery's.
+ */
+function thisDeliverySince(epochStartedAt: Date | null): (at: Date) => boolean {
+  return (at) => epochStartedAt === null || at >= epochStartedAt;
 }
 
 /** The reasons whose blocker a landing ends — see `resolveLandedBlockers`. */
