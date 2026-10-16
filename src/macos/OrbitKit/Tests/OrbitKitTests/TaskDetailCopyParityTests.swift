@@ -112,7 +112,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
         let native = try nativeTasksView()
         for piece in ["Section(\"Account pools\")", "Section(pin.runEngine == \"dsh\" ? \"Your DeepSeek keys\" : \"Your keys\")",
                       "Text(\"\\(TaskDetailCopy.engineDefault) · \\(engineDefault)\")",
-                      "ForEach(ProviderEngines.all, id: \\.self) { engine in"] {
+                      "ForEach(pin.engineChoices, id: \\.self) { engine in"] {
             XCTAssertTrue(native.contains(piece), "the task's pins lost `\(piece)`")
         }
     }
