@@ -499,14 +499,22 @@ struct ConsoleView: View {
 /// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made
 /// meanwhile all keep their state, and the cards come back as they were when the keyboard goes.
 /// The wide shells never fold, and macOS doesn't take the modifier at all.
+///
+/// The stack is cut to its own frame only while it folds and while it is folded. Open, the cut
+/// stands `glassBleed` clear of it. On iOS 26 the cards are glass, which draws its rim and its
+/// shadow past its own edge. A cut at the frame sheared both off: the tray and the git bar lost
+/// their rim along the sides and the top, and the tray's shadow was left in the gap below it as a
+/// grey slab with square ends (the owner, 2026-10-16).
 private struct TypingFold: ViewModifier {
     let folded: Bool
+    /// Clear of the deepest shadow a card's glass casts, which is an open tray's: the tallest card.
+    private static let glassBleed: CGFloat = 40
 
     func body(content: Content) -> some View {
         #if os(iOS)
         content
             .frame(height: folded ? 0 : nil, alignment: .top)
-            .clipped()
+            .clipShape(Rectangle().inset(by: folded ? 0 : -Self.glassBleed))
             .opacity(folded ? 0 : 1)
             .allowsHitTesting(!folded)
             .accessibilityHidden(folded)
