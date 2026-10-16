@@ -107,13 +107,17 @@ final class ComposerBandFoldWiringTests: XCTestCase {
         XCTAssertTrue(try bar.contains(".frame(height: .foldedBandBar)"))
     }
 
-    /// A tap opens the band where the reader is; their next drag folds it again.
-    func testATapOpensTheBandUntilTheReadersNextDrag() throws {
+    /// A tap opens the band where the reader is, and so does putting the keyboard away; their next
+    /// drag folds it again. Folding as the keyboard went — by the very drag that took it — landed in
+    /// the middle of the keyboard's layout, and the band opened again and carried the reader down.
+    func testATapOrTheKeyboardGoingOpensTheBandUntilTheReadersNextDrag() throws {
         let view = try console
         let band = try slice(view, from: "private func composerBand(", to: "private func bandMembers(")
         XCTAssertTrue(band.contains("open: { bandOpened = true }"))
+        let keyboard = try slice(band, from: ".onChange(of: console.composerEditing) { _, editing in", to: "}")
+        XCTAssertTrue(keyboard.contains("if !editing { bandOpened = true"))
         let trackers = try slice(view, from: "private func tracker(ruler:", to: "private func repinAfterResize")
-        XCTAssertTrue(trackers.contains("dragged: { bandOpened.wrappedValue = false }"))
+        XCTAssertTrue(trackers.contains("dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } }"))
         let tracker = try slice(view, from: "private struct ScrollTracker", to: "private struct AnchorRow: ViewModifier {")
         XCTAssertTrue(tracker.contains("if phase == .interacting { dragged() }"), "a finger on the list, not its coast")
     }

@@ -34,7 +34,8 @@ struct ConsoleView: View {
     /// fold to its bar (`foldsBand`): written by the transcript's scroll tracker, off the same reading
     /// as the pin (`TailPinning.foldsBand`). Never set on the Mac.
     @State private var readingBack = false
-    /// The folded bar was tapped: the band stays open where the reader is until their next drag.
+    /// The band was opened where the reader is — its folded bar tapped, or the keyboard put away —
+    /// and stays open until their next drag.
     @State private var bandOpened = false
     /// Bumped by the folded bar's ↓, which the transcript answers with the floating disc's jump.
     @State private var jumpRequest = 0
@@ -130,8 +131,9 @@ struct ConsoleView: View {
     /// Whether a phone's composer band folds to its one-line bar (`FoldedBandBar`; the owner,
     /// 2026-10-16): the reader has gone back through the history — far enough that the folded band
     /// leaves them clear of the tail (`readingBack`), or into a window opened at a record — the
-    /// composer doesn't hold the keyboard, and the bar wasn't just tapped open. Only where the band
-    /// floats over the transcript, iOS 26 at a compact width; the wide shells and the Mac never fold.
+    /// composer doesn't hold the keyboard, and the reader hasn't just opened the band (`bandOpened`).
+    /// Only where the band floats over the transcript, iOS 26 at a compact width; the wide shells and
+    /// the Mac never fold.
     private func foldsBand(_ console: ConsoleModel) -> Bool {
         #if os(iOS)
         guard #available(iOS 26.0, *), hSize == .compact else { return false }
@@ -196,6 +198,13 @@ struct ConsoleView: View {
             #endif
         }
         .animation(.smooth(duration: 0.3), value: folded)
+        // Putting the keyboard away leaves the band open where the reader is, as a tap on its bar
+        // does, until their next drag. A drag is how the keyboard goes, and a fold in the same breath
+        // landed in the middle of the keyboard's own layout: the list read as at its tail for a frame,
+        // the band opened again, and the reader was carried back down (measured on the simulator).
+        .onChange(of: console.composerEditing) { _, editing in
+            if !editing { bandOpened = true }
+        }
     }
 
     private func bandMembers(_ console: ConsoleModel) -> some View {
@@ -647,7 +656,8 @@ struct TranscriptView: View {
         #if os(iOS)
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
                              recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll,
-                             readingBack: readingBack, dragged: { bandOpened.wrappedValue = false })
+                             readingBack: readingBack,
+                             dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } })
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
                              recompute: recomputeStuck, follow: repinAfterResize)
