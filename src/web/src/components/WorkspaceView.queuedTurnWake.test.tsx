@@ -330,7 +330,11 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
     await click(stop!);
 
     await waitForUi(() => {
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC);
+      // The composer's Stop: this session, no follow-up, and the explicit ask that its
+      // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+        stopBackgroundWork: true,
+      });
       // What was typed comes back to be edited and resent; the watch's words do not come with it.
       expect(composer()?.value).toBe(TYPED);
     });
@@ -386,7 +390,11 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
     await click(stop!);
 
     await waitForUi(() => {
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC);
+      // The composer's Stop: this session, no follow-up, and the explicit ask that its
+      // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+        stopBackgroundWork: true,
+      });
       expect(composer()?.value).toBe(TYPED);
     });
   });

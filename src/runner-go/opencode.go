@@ -241,6 +241,9 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			}
 			setTurn("")
 		case "interrupt":
+			// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this session's
+			// background work with the turn; see bgTailer.stopBackgroundWork.
+			stopBackgroundWorkForTurn(bg, resp)
 			emit(evInterrupt, map[string]interface{}{})
 		case "reload":
 			applyRuntimeReload(job, resp.Content)
@@ -322,6 +325,8 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			}
 			switch resp.Kind {
 			case "interrupt":
+				// RunInterruptRequest.stopBackgroundWork — see bgTailer.stopBackgroundWork.
+				stopBackgroundWorkForTurn(bg, resp)
 				activeCancel(errOpenCodeInterrupted)
 				emit(evInterrupt, map[string]interface{}{})
 			case "steer":

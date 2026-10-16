@@ -76,6 +76,15 @@ const (
 	// runner_shutdown either, which is the runner going away under a session that was not ending.
 	bgSessionCancelledReason = "session_cancelled"
 
+	// bgStopReason marks a kill somebody pressed Stop for (bgTailer.stopBackgroundWork): the
+	// person in front of the session ended its background work along with the turn. Its own
+	// reason rather than bg_kill's "requested", because the two are not the same ask — "requested"
+	// is the agent ending a job it started, this is the session's owner ending everything — and it
+	// is not bgDrainCapReason, which is the one kill nobody asked for. The session is NOT ending,
+	// which is what separates it from `drain`/`drain_cap`/session_cancelled: unlike those, a turn
+	// the person interrupted can be followed by another turn in the same session.
+	bgStopReason = "stop"
+
 	// bgJobOutputCap bounds one bg_output read.
 	bgJobOutputCap = 256 * 1024
 
@@ -723,7 +732,11 @@ func (b *bgTailer) wakeOnEnd(job *bgJob, reason string) {
 // wakeFor is the wake wakeOnEnd sends, when the job's end owes its session one.
 func (b *bgTailer) wakeFor(job *bgJob, reason string) (bgWake, bool) {
 	switch reason {
-	case "requested", "drain", bgDrainCapReason:
+	case "requested", "drain", bgDrainCapReason, bgStopReason:
+		// bgStopReason is here for the same reason "requested" is: whoever ended it is the person
+		// reading the answer (they pressed Stop, and the transcript's own interrupt marker is on
+		// the way). Waking the session they just stopped would be the opposite of what they asked
+		// for, and the session's next turn already carries the kill on its background list.
 		return bgWake{}, false
 	}
 	size := outputSizeOf(job.outputPath)
