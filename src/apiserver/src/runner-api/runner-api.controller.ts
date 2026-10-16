@@ -5079,7 +5079,7 @@ export class RunnerApiController {
       // account (KIMI_ACCOUNT_MOVE_V1, runner kimi_account_move.go). Kimi's ACP answers a turn its
       // usage limit ended as an ordinary end and says nothing of why; the runner reads the limit from
       // the turn's own record and reports it as the turn's error, in the words this reads
-      // (kimi_acp.go kimiTurnUsageLimit).
+      // (kimi_acp.go kimiFailureSentence).
       //
       // Asked of the session's engine, on the runner's own sign-in for it only: a Codex or Kimi session
       // on a key or a pool spends no account of the runner's, and has none to be moved off.
