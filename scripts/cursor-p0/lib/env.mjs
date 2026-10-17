@@ -72,6 +72,7 @@ export function cursorEnv(slot, { layout = 'full', apiKey = null, store = 'file'
 // ledger outlives runs and refuses past its cap.
 export const LEDGERS = {
   p0a: { file: 'prompts.jsonl', cap: 30, task: 'P0a 34h05eeSDrtKGW2ret55v' },
+  p0b: { file: 'p0b-prompts.jsonl', cap: 30, task: 'P0b 34h05fIoCOHhRY79oksON' },
   p0c: { file: 'p0c-prompts.jsonl', cap: 10, task: 'P0c 34h3xGGSqUnA6DTMj1iop' },
 };
 export const LEDGER_NAME = process.env.CURSOR_P0_LEDGER ?? 'p0c';

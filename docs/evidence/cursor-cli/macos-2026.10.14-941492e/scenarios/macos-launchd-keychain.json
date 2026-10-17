@@ -1,8 +1,8 @@
 {
  "name": "macos-launchd-keychain",
- "runId": "2026-10-17T01-43-21-362Z",
- "startedAt": "2026-10-17T01:44:31.986Z",
- "finishedAt": "2026-10-17T01:44:52.096Z",
+ "runId": "2026-10-17T08-37-19-553Z",
+ "startedAt": "2026-10-17T08:41:04.558Z",
+ "finishedAt": "2026-10-17T08:41:24.632Z",
  "passed": true,
  "realPromptsDeclared": 0,
  "realPrompts": [],
@@ -32,7 +32,7 @@
   }
  ],
  "detail": {
-  "launchd job output": "security-add+real-HOME       exit=0 ms=51\nsecurity-add+bogus-HOME      exit=signal SIGTERM ms=8026\ncli-probe+real-HOME          exit=0 ms=1157 err=\ncli-probe+bogus-HOME         exit=1 ms=3467 err=\u001b[33mError: Your macOS login keychain is locked.\u001b[0m | Run \u001b[36msecurity unlock-keychain\u001b[0m and try a\n== job done\n",
+  "launchd job output": "security-add+real-HOME       exit=0 ms=39\nsecurity-add+bogus-HOME      exit=signal SIGTERM ms=8057\ncli-probe+real-HOME          exit=0 ms=724 err=\ncli-probe+bogus-HOME         exit=1 ms=3425 err=\u001b[33mError: Your macOS login keychain is locked.\u001b[0m | Run \u001b[36msecurity unlock-keychain\u001b[0m and try a\n== job done\n",
   "real cursor dirs restored": true
  }
 }

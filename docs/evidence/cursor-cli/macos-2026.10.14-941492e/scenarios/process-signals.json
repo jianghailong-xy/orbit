@@ -1,8 +1,8 @@
 {
  "name": "process-signals",
- "runId": "2026-10-17T01-35-17-530Z",
- "startedAt": "2026-10-17T01:38:21.943Z",
- "finishedAt": "2026-10-17T01:39:19.948Z",
+ "runId": "2026-10-17T08-37-19-553Z",
+ "startedAt": "2026-10-17T08:40:01.672Z",
+ "finishedAt": "2026-10-17T08:40:59.946Z",
  "passed": true,
  "realPromptsDeclared": 0,
  "realPrompts": [],
@@ -20,7 +20,7 @@
    "detail": {
     "code": 130,
     "signal": null,
-    "ms": 50
+    "ms": 36
    }
   },
   {
@@ -29,7 +29,7 @@
    "detail": {
     "code": 143,
     "signal": null,
-    "ms": 51
+    "ms": 36
    }
   },
   {
@@ -47,22 +47,22 @@
    "SIGINT": {
     "code": 130,
     "signal": null,
-    "ms": 50
+    "ms": 36
    },
    "SIGTERM": {
     "code": 143,
     "signal": null,
-    "ms": 51
+    "ms": 36
    },
    "SIGHUP": {
     "code": null,
     "signal": "SIGHUP",
-    "ms": 25
+    "ms": 16
    },
    "SIGKILL": {
     "code": null,
     "signal": "SIGKILL",
-    "ms": 29
+    "ms": 31
    }
   }
  }

@@ -1,8 +1,8 @@
 {
  "name": "install-and-version",
- "runId": "2026-10-17T01-43-21-362Z",
- "startedAt": "2026-10-17T01:43:21.373Z",
- "finishedAt": "2026-10-17T01:43:32.725Z",
+ "runId": "2026-10-17T08-41-58-465Z",
+ "startedAt": "2026-10-17T08:41:58.473Z",
+ "finishedAt": "2026-10-17T08:42:07.430Z",
  "passed": true,
  "realPromptsDeclared": 0,
  "realPrompts": [],
@@ -11,31 +11,28 @@
  "fixtures": [],
  "checks": [
   {
-   "name": "pinned tarball sha256",
+   "name": "the tarball of the build under test has the expected sha256",
    "ok": true,
    "detail": {
     "bytes": 178006204
    }
   },
   {
-   "name": "--version is the pinned version",
+   "name": "--version is the build under test",
    "ok": true,
    "detail": "2026.10.14-941492e"
   },
   {
-   "name": "about reports the pinned cliVersion, and latestVersion/latestStatus say where the channel stands",
+   "name": "about reports the build under test as cliVersion",
    "ok": true,
-   "detail": {
-    "latestVersion": "2026.10.16-e3cb207",
-    "latestStatus": "update_available"
-   }
+   "detail": "2026.10.14-941492e"
   },
   {
    "name": "install <version> unpacks into ~/.local/share/cursor-agent/versions/<version>",
    "ok": true
   },
   {
-   "name": "installed index.js is byte-identical to the pinned tarball",
+   "name": "installed index.js is byte-identical to the tarball under test",
    "ok": true
   },
   {
@@ -73,12 +70,20 @@
    "shell": "unknown",
    "lastRequestId": null
   },
+  "update channel: latest build and status (recorded, not asserted)": {
+   "latestVersion": "2026.10.16-e3cb207",
+   "latestStatus": "update_available",
+   "isLatest": false
+  },
   "install": {
    "exit": 0,
    "stdout": "",
    "stderr": "",
-   "ms": 5794
+   "ms": 2287
   },
+  "processes the installer left running (ended by the scenario)": [
+   "<RUN>/slots/installer/home/.local/share/cursor-agent/versions/2026.10.14-941492e/cursor-agent <RUN>/slots/installer/home/.local/share/cursor-agent/versions/2026.10.14-941492e/index.js cleanup-install-versions 2026.10.14-941492e"
+  ],
   "installer-home-tree": [
    ".local/",
    ".local/bin/",
@@ -89,6 +94,7 @@
    ".local/share/cursor-agent/",
    ".local/share/cursor-agent/versions/",
    ".local/share/cursor-agent/versions/2026.10.14-941492e/",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/.running/",
    ".local/share/cursor-agent/versions/2026.10.14-941492e/1030.index.js 644 686",
    ".local/share/cursor-agent/versions/2026.10.14-941492e/1197.index.js 644 1658",
    ".local/share/cursor-agent/versions/2026.10.14-941492e/1326.index.js 644 39345",
@@ -138,8 +144,7 @@
    ".local/share/cursor-agent/versions/2026.10.14-941492e/7262.index.js 644 899",
    ".local/share/cursor-agent/versions/2026.10.14-941492e/7337.index.js 644 9592",
    ".local/share/cursor-agent/versions/2026.10.14-941492e/7688.index.js 644 9840",
-   ".local/share/cursor-agent/versions/2026.10.14-941492e/7748.index.js 644 1085",
-   ".local/share/cursor-agent/versions/2026.10.14-941492e/7867.index.js 644 1865"
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/7748.index.js 644 1085"
   ]
  }
 }

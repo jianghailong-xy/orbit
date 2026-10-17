@@ -1,6 +1,7 @@
 {
  "cli": {
   "version": "2026.10.14-941492e",
+  "pinned": true,
   "tarballSha256": "c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77",
   "launcherSha256": "2ccc9a8e167797641448b5e5c936f006ba137a2555f117f38c5eb76a5238a233",
   "indexJsSha256": "ddadb162e679c03dd467327f9f71900f4d8ddeff7ac5c07a1416cccdd6a9b67c"
@@ -12,11 +13,13 @@
   "cpus": 8,
   "harnessNode": "v25.6.1"
  },
- "orbitCommit": "81938e34c7dff8723d24f712eca75f1fca664885",
- "lastRunId": "2026-10-17T08-25-59-664Z",
+ "orbitCommit": "f385ee9c59c5cc1ea4dde42351da2200e39f734e",
+ "lastRunId": "2026-10-17T08-41-58-465Z",
+ "ledger": "p0b",
  "realPromptsSpent": 0,
  "realPromptCap": 30,
  "skippedNoKey": [],
+ "realPromptsInTheseResults": 0,
  "realCursorDirsBefore": {
   "/Users/long/.cursor": null,
   "/Users/long/.config/cursor": null,
@@ -32,8 +35,8 @@
    "name": "debug-log-location",
    "current": true,
    "passed": true,
-   "runId": "2026-10-17T01-35-17-530Z",
-   "finishedAt": "2026-10-17T01:38:21.938Z",
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:40:01.666Z",
    "checks": 5,
    "failedChecks": [],
    "realPrompts": 0
@@ -42,9 +45,9 @@
    "name": "failure-shapes-without-prompt",
    "current": true,
    "passed": true,
-   "runId": "2026-10-17T01-43-21-362Z",
-   "finishedAt": "2026-10-17T01:44:27.822Z",
-   "checks": 16,
+   "runId": "2026-10-17T08-41-58-465Z",
+   "finishedAt": "2026-10-17T08:43:17.334Z",
+   "checks": 18,
    "failedChecks": [],
    "realPrompts": 0
   },
@@ -52,8 +55,8 @@
    "name": "install-and-version",
    "current": true,
    "passed": true,
-   "runId": "2026-10-17T01-43-21-362Z",
-   "finishedAt": "2026-10-17T01:43:32.725Z",
+   "runId": "2026-10-17T08-41-58-465Z",
+   "finishedAt": "2026-10-17T08:42:07.430Z",
    "checks": 7,
    "failedChecks": [],
    "realPrompts": 0
@@ -62,8 +65,8 @@
    "name": "login-link-and-logout",
    "current": true,
    "passed": true,
-   "runId": "2026-10-17T01-35-17-530Z",
-   "finishedAt": "2026-10-17T01:37:35.004Z",
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:39:15.057Z",
    "checks": 4,
    "failedChecks": [],
    "realPrompts": 0
@@ -72,8 +75,8 @@
    "name": "macos-launchd-keychain",
    "current": true,
    "passed": true,
-   "runId": "2026-10-17T01-43-21-362Z",
-   "finishedAt": "2026-10-17T01:44:52.096Z",
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:41:24.632Z",
    "checks": 5,
    "failedChecks": [],
    "realPrompts": 0
@@ -82,8 +85,8 @@
    "name": "macos-quarantine",
    "current": true,
    "passed": true,
-   "runId": "2026-10-17T01-43-21-362Z",
-   "finishedAt": "2026-10-17T01:44:31.985Z",
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:41:04.553Z",
    "checks": 5,
    "failedChecks": [],
    "realPrompts": 0
@@ -92,8 +95,8 @@
    "name": "process-signals",
    "current": true,
    "passed": true,
-   "runId": "2026-10-17T01-35-17-530Z",
-   "finishedAt": "2026-10-17T01:39:19.948Z",
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:40:59.946Z",
    "checks": 5,
    "failedChecks": [],
    "realPrompts": 0
@@ -102,8 +105,8 @@
    "name": "signed-out-handshake",
    "current": true,
    "passed": true,
-   "runId": "2026-10-17T01-35-17-530Z",
-   "finishedAt": "2026-10-17T01:35:44.447Z",
+   "runId": "2026-10-17T08-37-19-553Z",
+   "finishedAt": "2026-10-17T08:37:48.793Z",
    "checks": 12,
    "failedChecks": [],
    "realPrompts": 0

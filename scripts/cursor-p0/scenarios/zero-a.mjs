@@ -11,9 +11,21 @@ const sha256File = f => createHash('sha256').update(readFileSync(f)).digest('hex
 // Processes whose command line names a path under `dir`.
 function processesUnder(dir) {
   const out = [];
-  for (const d of readdirSync('/proc')) {
-    if (!/^\d+$/.test(d) || Number(d) === process.pid) continue;
-    try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' ').trim(); if (c.includes(dir)) out.push({ pid: Number(d), cmdline: c }); } catch {}
+  if (process.platform === 'linux') {
+    for (const d of readdirSync('/proc')) {
+      if (!/^\d+$/.test(d) || Number(d) === process.pid) continue;
+      try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' ').trim(); if (c.includes(dir)) out.push({ pid: Number(d), cmdline: c }); } catch {}
+    }
+  } else {
+    // darwin: no /proc; `ps -axo pid=,command=` covers the harness user's processes.
+    const r = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
+    for (const line of (r.stdout ?? '').split('\n')) {
+      const i = line.indexOf(' ');
+      if (i <= 0) continue;
+      const pid = Number(line.slice(0, i).trim());
+      const cmd = line.slice(i + 1);
+      if (Number.isInteger(pid) && pid !== process.pid && cmd.includes(dir)) out.push({ pid, cmdline: cmd });
+    }
   }
   return out;
 }
@@ -384,8 +396,13 @@ export const zeroA = [
       // The same repository with project configs off: the file is never read.
       const r2 = ctx.acp({ slot: ctx.slot('bad-cli-disabled'), cwd: bad, label: 'acp-invalid-cli-json-disabled', args: ['--disable-project-configs'], envOpts: { store: 'memory' } });
       const r2i = await ctx.initialize(r2);
-      const r2n = r2i.result ? await ctx.newSession(r2, bad) : null;
-      ctx.check('with --disable-project-configs the same invalid .cursor/cli.json no longer stops `agent acp` (initialize and session/new answer)', r2i.result?.protocolVersion === 1 && !!r2n?.result?.sessionId, { exit: r2.exit, stderr: r2.stderr.slice(-200), newError: r2n?.error });
+      ctx.check('with --disable-project-configs the same invalid .cursor/cli.json no longer stops `agent acp` (initialize answers)', r2i.result?.protocolVersion === 1, { exit: r2.exit, stderr: r2.stderr.slice(-200) });
+      if (ctx.key) {
+        const r2n = r2i.result ? await ctx.newSession(r2, bad) : null;
+        ctx.check('…and session/new succeeds with the key', !!r2n?.result?.sessionId, { newError: r2n?.error });
+      } else {
+        ctx.check('…and session/new succeeds with the key', true, 'skipped: needs the owner key', true);
+      }
       await r2.dispose();
       // hidden local mode is not available in this build
       const al = ctx.cli(ctx.slot('authless'), ['acp', '--authless'], { envOpts: { apiKey: false, store: 'memory' } });

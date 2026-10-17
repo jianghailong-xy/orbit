@@ -1,13 +1,13 @@
 {
  "name": "failure-shapes-without-prompt",
- "runId": "2026-10-17T01-43-21-362Z",
- "startedAt": "2026-10-17T01:43:32.737Z",
- "finishedAt": "2026-10-17T01:44:27.822Z",
+ "runId": "2026-10-17T08-41-58-465Z",
+ "startedAt": "2026-10-17T08:42:07.434Z",
+ "finishedAt": "2026-10-17T08:43:17.334Z",
  "passed": true,
  "realPromptsDeclared": 0,
  "realPrompts": [],
  "protocol": "protocol/failure-shapes-without-prompt.ndjson",
- "protocolLines": 54,
+ "protocolLines": 60,
  "fixtures": [
   "failure-shapes-without-prompt/bogus-key-memory",
   "failure-shapes-without-prompt/bogus-key-file"
@@ -103,6 +103,20 @@
      "signal": null
     }
    }
+  },
+  {
+   "name": "with --disable-project-configs the same invalid .cursor/cli.json no longer stops `agent acp` (initialize answers)",
+   "ok": true,
+   "detail": {
+    "exit": null,
+    "stderr": ""
+   }
+  },
+  {
+   "name": "…and session/new succeeds with the key",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: needs the owner key"
   },
   {
    "name": "`agent acp --authless` refuses: only for agent-cli-local (exit 2)",
