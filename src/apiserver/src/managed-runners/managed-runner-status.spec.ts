@@ -21,6 +21,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     managementState: 'READY',
     generation: 1,
     revision: 7,
+    backend: 'kubernetes',
     clusterKey: 'c',
     namespace: 'n',
     pvcName: 'mr-data-r',

@@ -313,8 +313,9 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   /**
    * The mapping, the runner row and the default workspace, in one retriable transaction. The runner
    * row starts OFFLINE with a credential nobody holds: the manager issues the real one with the
-   * bootstrap credential. The data volume's location and name are the run backend's. A concurrent
-   * request that loses the owner's unique key reads the winner.
+   * bootstrap credential. The data volume's location and name are the run backend's, and so is the
+   * mapping: only that backend's manager drives it. A concurrent request that loses the owner's
+   * unique key reads the winner.
    */
   private async createMapping(ownerId: string, idempotencyKey: string, { profile, manager: { backend } }: AvailableRuntime): Promise<ManagedRunner> {
     try {
@@ -346,6 +347,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
               ownerId,
               runnerId: runner.id,
               defaultWorkspaceId: workspace.id,
+              backend: backend.name,
               clusterKey: backend.location.clusterKey,
               namespace: backend.location.namespace,
               pvcName: backend.names(runner.id).volume,

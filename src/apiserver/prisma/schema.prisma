@@ -1139,8 +1139,13 @@ model ManagedRunner {
   /// and bumps it. Two writes of their own columns are predicate writes instead and leave it: demand
   /// (`demandRevision`, `lastDemandAt`, RUNNING desired) and a drained instance's `stopAcknowledgedAt`.
   revision           Int                          @default(1)
+  /// The run backend that made this mapping's volume and instances, and alone drives them
+  /// (managed-runner-backend.ts): `kubernetes` — every mapping before migration 0430 — or `docker`.
+  /// A CHECK holds it to those two; a manager leaves another backend's mappings as they are.
+  backend            String                       @default("kubernetes")
   /// The configured cluster and namespace the PVC lives in, fixed at creation. With `pvcName`
   /// (`mr-data-<runner uuid>`, held by a CHECK) this is the location no second mapping can take.
+  /// On Docker: the profile's cluster key and the channel's instance, and the volume's name.
   clusterKey         String                       @map("cluster_key")
   namespace          String
   pvcName            String                       @map("pvc_name")

@@ -11,9 +11,10 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *
  *   kubernetes   KubernetesBackend (kubernetes-backend.ts): a Ceph RBD filesystem PVC, the bootstrap
  *                Secret of each generation, and one bare Pod under a fixed name.
- *   docker       named, not implemented: one host's local volume and container (task D2). A profile
- *                that chooses it leaves the feature unavailable (managed-runner-profile.ts); nothing
- *                is run on Kubernetes in its place.
+ *   docker       DockerBackend (docker-backend.ts): one host's local named volume, the credential of
+ *                each generation and one container under a fixed name, all through the restricted
+ *                Docker channel (deploy/managed-runner/docker-channel); the apiserver never holds the
+ *                Docker socket.
  *
  * A backend observes and acts; it decides nothing and writes no database row. The manager reads an
  * observation, decides, records what it is about to do on the mapping (a pending resource operation),
@@ -38,11 +39,14 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *     gives it a UID it never reuses (Kubernetes: the Pod UID, which the runner reads through the
  *     Downward API). The manager records that UID, and the runner door authorizes only the recorded
  *     generation and UID (managed-runner-instance.ts), so it has to be a canonical UUID.
- *   - Stopping. No method stops a running instance. An instance stops by itself — it accepted a
- *     sleep request in its heartbeat, or its owner's account was disabled and the runner door
- *     refuses it — and nothing is forced (docs/managed-runner-design.md, "Implementation record:
- *     capacity, wake and sleep"). The backend reports that stop: `ManagedInstance.terminated`, and
- *     `stopConfirmed` when the host itself vouches every process ended, which is half a stop proof.
+ *   - Stopping. An instance stops by itself — it accepted a sleep request in its heartbeat, or its
+ *     owner's account was disabled and the runner door refuses it (docs/managed-runner-design.md,
+ *     "Implementation record: capacity, wake and sleep"). The backend reports that stop:
+ *     `ManagedInstance.terminated`, and `stopConfirmed` when the host itself vouches every process
+ *     ended, which is half a stop proof. Only a backend whose host reports every stop it makes may
+ *     also stop an instance (`stopInstance`, Docker), and the manager asks it only for a drain that
+ *     overran its drain time. A stop asked for is never a proof: the same report and removal are
+ *     waited for. Kubernetes has no such call — a deleted Pod on an unreachable node proves nothing.
  *   - Removal by UID. An instance or a credential is removed only by the UID it was observed with,
  *     so a successor under the same name is never removed; and an instance only once its stop is
  *     proven (the manager's gate).
@@ -169,8 +173,8 @@ export interface ManagedRunnerBackend {
   names(runnerId: string): { volume: string; instance: string; credential: string };
 
   // ── capacity ──
-  /** The pool's totals, from configuration. */
-  capacityBudget(): CapacityBudget;
+  /** The pool's totals: from configuration, or (Docker) derived from the host where it does not say. */
+  capacityBudget(): CapacityBudget | Promise<CapacityBudget>;
   /** What one running instance reserves from the pool. */
   computeShare(): ComputeAmounts;
   /** What one data volume reserves from the pool, for as long as it exists. */
@@ -212,6 +216,12 @@ export interface ManagedRunnerBackend {
   instanceProblem(instance: ManagedInstance, mapping: ManagedRunner): string | null;
   /** Remove the recorded instance (`mapping.podUid`), by that UID. Called only once its stop is proven. */
   removeInstance(mapping: ManagedRunner): Promise<void>;
+  /**
+   * Ask the recorded instance (`mapping.podUid`) to stop: its runner is signalled, given its grace and
+   * then killed. Only for a backend whose host reports every stop it makes (Docker); absent for one
+   * that cannot vouch for a stop it asked for (Kubernetes). Never a proof: `stopConfirmed` is.
+   */
+  stopInstance?(mapping: ManagedRunner): Promise<void>;
 
   // ── stop proof ──
   /** The recorded proof of an instance's own stop. The caller has checked `stopConfirmed`. */
