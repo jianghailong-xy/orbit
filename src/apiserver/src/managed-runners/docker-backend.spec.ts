@@ -15,7 +15,7 @@ import { tripwireKubeClientFactory } from '../test-support/fake-kube-client';
 import { DOCKER_DEFAULT_RESERVE, DockerBackend, dockerCapacityBudget, dockerComputeShare } from './docker-backend';
 import { DockerChannelClient, DockerChannelError, DockerChannelUnreachable, dockerChannelFromProfile, type ChannelHost } from './docker-channel-client';
 import { ManagedRunnerAdmissionGuard } from './managed-runner-admission.controller';
-import { ManagedRunnerConflict } from './managed-runner-backend';
+import { ManagedRunnerConflict, ManagedVolumeHeld } from './managed-runner-backend';
 import type { ManagedRunnerPredecessor } from './managed-runner-fencing';
 import { parseManagedRunnerProfile, type DockerRunnerProfile } from './managed-runner-profile';
 import { managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
@@ -268,6 +268,18 @@ test('DockerBackend proves the single-container guard before a container, then c
   assert.deepEqual(await backend.volumeHolders({ volume, backing }), [managedPodName(RUNNER), 'a container outside this instance']);
 });
 
+test('a container the channel refuses because another container refers to the volume is a held volume, and nothing is made', async () => {
+  const { backend, channel } = world();
+  const volume = await backend.createVolume(mapping());
+  const recorded = mapping({ pvcUid: volume.uid });
+  await backend.issueCredential(recorded, 'the-credential-0123456789');
+  channel.foreignHolders.set(managedPvcName(RUNNER), 1);
+  await assert.rejects(backend.createInstance(recorded), (e: unknown) => e instanceof ManagedVolumeHeld && e.detail === 'something else refers to it', 'the channel\'s words, for the operator');
+  assert.equal(channel.containers.size, 0);
+  channel.foreignHolders.delete(managedPvcName(RUNNER));
+  assert.equal((await backend.createInstance(recorded)).running, true, 'once it is free, the same create goes through');
+});
+
 test('the guard probe is proof only when the guard itself refuses it', async () => {
   const { backend, channel } = world();
   const recorded = mapping({ pvcUid: '0195c0de-0000-7000-8000-0000000000c1' });
@@ -293,6 +305,7 @@ test('Docker\'s report is the stop: an exit with its code and time, or no start 
   const stopped = (await backend.readInstance(running))!;
   assert.deepEqual([stopped.terminated, stopped.stopConfirmed, stopped.running], [true, true, false]);
   assert.equal(stopped.phase, 'exited (exit 143)');
+  assert.deepEqual(stopped.exit, { code: 143, outOfMemory: false });
   const predecessor: ManagedRunnerPredecessor = { runnerId: RUNNER, generation: 1, podName: instance.name, podUid: instance.uid, nodeName: 'docker-host-a', pvcUid: volume.uid, volumeHandle: 'h' };
   const proof = backend.observedStop(predecessor, stopped, new Date('2026-10-17T00:00:00.000Z'));
   assert.equal(proof.kind, 'OBSERVED_STOP');
@@ -306,21 +319,26 @@ test('Docker\'s report is the stop: an exit with its code and time, or no start 
   assert.equal(await backend.readInstance(running), null, 'gone');
   await backend.removeInstance(running); // already gone is done
 
-  // Docker's own words for the other states.
-  const states: Array<[Record<string, unknown>, { terminated: boolean; stopConfirmed: boolean; running: boolean; removing: boolean; phase: string }]> = [
-    [{ status: 'created', neverStarted: true }, { terminated: true, stopConfirmed: true, running: false, removing: false, phase: 'created (never started)' }],
-    [{ status: 'dead', exitCode: 137, finishedAt: '2026-10-17T00:00:00Z', oomKilled: true }, { terminated: true, stopConfirmed: true, running: false, removing: false, phase: 'dead (exit 137; OOM-killed)' }],
-    [{ status: 'exited', exitCode: 255, finishedAt: null }, { terminated: true, stopConfirmed: false, running: false, removing: false, phase: 'exited (exit 255)' }],
-    [{ status: 'paused' }, { terminated: false, stopConfirmed: false, running: false, removing: false, phase: 'paused' }],
-    [{ status: 'removing', finishedAt: '2026-10-17T00:00:00Z' }, { terminated: false, stopConfirmed: false, running: false, removing: true, phase: 'removing' }],
+  // Docker's own words for the other states. Out of memory is Docker's OOM mark on a runner that ended
+  // killed (137): the mark alone is also set when only a child process of the runner was killed.
+  type Seen = { terminated: boolean; stopConfirmed: boolean; running: boolean; removing: boolean; phase: string; exit: { code: number | null; outOfMemory: boolean } | null };
+  const states: Array<[Record<string, unknown>, Seen]> = [
+    [{ status: 'created', neverStarted: true }, { terminated: true, stopConfirmed: true, running: false, removing: false, phase: 'created (never started)', exit: null }],
+    [{ status: 'dead', exitCode: 137, finishedAt: '2026-10-17T00:00:00Z', oomKilled: true },
+      { terminated: true, stopConfirmed: true, running: false, removing: false, phase: 'dead (exit 137; OOM-killed)', exit: { code: 137, outOfMemory: true } }],
+    [{ status: 'exited', exitCode: 255, finishedAt: '2026-10-17T00:00:00Z', oomKilled: true },
+      { terminated: true, stopConfirmed: true, running: false, removing: false, phase: 'exited (exit 255; OOM-killed)', exit: { code: 255, outOfMemory: false } }],
+    [{ status: 'exited', exitCode: 255, finishedAt: null }, { terminated: true, stopConfirmed: false, running: false, removing: false, phase: 'exited (exit 255)', exit: { code: 255, outOfMemory: false } }],
+    [{ status: 'paused' }, { terminated: false, stopConfirmed: false, running: false, removing: false, phase: 'paused', exit: null }],
+    [{ status: 'removing', finishedAt: '2026-10-17T00:00:00Z' }, { terminated: false, stopConfirmed: false, running: false, removing: true, phase: 'removing', exit: null }],
     [{ status: 'exited', exitCode: 143, finishedAt: '2026-10-17T00:00:00Z', evicted: { reason: 'VOLUME_OVER_LIMIT', volume: 'v', usageBytes: 11, limitBytes: 10, at: 'now' } },
-      { terminated: true, stopConfirmed: true, running: false, removing: false, phase: 'exited (exit 143; stopped: its volume held 11 bytes, over its 10-byte limit)' }],
+      { terminated: true, stopConfirmed: true, running: false, removing: false, phase: 'exited (exit 143; stopped: its volume held 11 bytes, over its 10-byte limit)', exit: { code: 143, outOfMemory: false } }],
   ];
   const again = await backend.createInstance(recorded);
   for (const [state, expected] of states) {
     Object.assign(channel.containers.get(again.name)!, { running: false, neverStarted: false, oomKilled: false, evicted: null, ...state });
     const seen = (await backend.readInstance(recorded))!;
-    assert.deepEqual({ terminated: seen.terminated, stopConfirmed: seen.stopConfirmed, running: seen.running, removing: seen.removing, phase: seen.phase }, expected, JSON.stringify(state));
+    assert.deepEqual({ terminated: seen.terminated, stopConfirmed: seen.stopConfirmed, running: seen.running, removing: seen.removing, phase: seen.phase, exit: seen.exit }, expected, JSON.stringify(state));
   }
   Object.assign(channel.containers.get(again.name)!, { status: 'created', neverStarted: true });
   const never = backend.observedStop(predecessor, (await backend.readInstance(recorded))!, new Date());

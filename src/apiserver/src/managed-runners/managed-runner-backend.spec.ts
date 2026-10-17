@@ -207,9 +207,17 @@ test('KubernetesBackend issues, reads and removes the bootstrap credential, and 
   const verified = { volume, backing };
   assert.deepEqual(await backend.volumeHolders(verified), [`csi-${volume.boundTo}-node-a`], 'attached while the Pod is there');
 
+  assert.equal(instance.exit, null, 'running: it has not ended');
   cluster.stopPod(managedPodName(RUNNER));
   const stopped = (await backend.readInstance(running))!;
   assert.deepEqual([stopped.terminated, stopped.stopConfirmed, stopped.phase], [true, true, 'Succeeded']);
+  assert.deepEqual(stopped.exit, { code: 0, outOfMemory: false }, 'the runner container\'s exit');
+  // The runtime's OOMKilled on a runner that ended killed (137) is out of memory; on another exit it is not.
+  cluster.stopPod(managedPodName(RUNNER), 137, 'OOMKilled');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 137, outOfMemory: true });
+  cluster.stopPod(managedPodName(RUNNER), 255, 'OOMKilled');
+  assert.deepEqual((await backend.readInstance(running))!.exit, { code: 255, outOfMemory: false });
+  cluster.stopPod(managedPodName(RUNNER));
   const predecessor = { runnerId: RUNNER, generation: 1, podName: instance.name, podUid: instance.uid, nodeName: 'node-a', pvcUid: volume.uid, volumeHandle: backing.handle };
   const proof = backend.observedStop(predecessor, stopped, new Date('2026-10-17T00:00:00.000Z'));
   assert.equal(proof.kind, 'OBSERVED_STOP');

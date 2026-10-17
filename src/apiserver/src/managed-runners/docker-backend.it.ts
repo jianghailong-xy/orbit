@@ -15,15 +15,16 @@
  * stand for a crash, writing data into a volume through `docker exec`.
  *
  *   (0) the channel refuses what it must, on real Docker, and nothing changes;
- *   (1) provisioning; an abnormal exit (SIGKILL) and the owner's retry on the same volume;
+ *   (1) provisioning; an abnormal exit (SIGKILL), and the restart that follows it on the same volume;
  *   (2) an idle runner sleeps by itself: compute stays reserved until Docker reports the container
  *       exited AND it is removed; a wake brings back the same files and SQLite database;
  *   (3)–(5) wake by a new message, by a runnable task and by scheduled work;
  *   (6) concurrent wakes, with a second manager racing the first: one container;
- *   (7) a "host restart": runner killed mid-write, channel killed, manager stopped; all back: recovery;
+ *   (7) a "host restart": runner killed mid-write, channel killed, manager stopped; all back: it
+ *       recovers by itself;
  *   (8) the manager restarted mid-wake, (9) the channel down during a wake;
  *   (10) capacity: the third runner waits, and starts once a slot is given back;
- *   (11) a volume over its disk limit: its container is stopped, and not started again.
+ *   (11) a volume over its disk limit: its container is stopped, and the restart is refused on it.
  * Throughout: never two containers on one volume (sampled), never a Docker socket in this process.
  */
 import assert from 'node:assert/strict';
@@ -543,21 +544,19 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     bobReady.catch(() => undefined);
 
     await docker('kill', '--signal', 'KILL', containerOf(a1));
-    const failed = await stateIs(alice, 'FAILED', 1, 120_000);
-    const proof = failed.fencingReceipt as { kind: string; observation: { containers: Array<{ exitCode?: number; finishedAt?: string }> } };
-    assert.equal((failed.lastError as { code: string }).code, 'POD_TERMINATED');
+    // Started again by itself, with no retry: Docker's report of the kill is the stop proof the next generation is made on.
+    const a2 = await stateIs(alice, 'READY', 2, 300_000);
+    const proof = a2.fencingReceipt as { kind: string; retiredAt?: string; observation: { containers: Array<{ exitCode?: number; finishedAt?: string }> } };
     assert.equal(proof.kind, 'OBSERVED_STOP');
+    assert.ok(proof.retiredAt, 'retired by the restart');
     assert.equal(proof.observation.containers[0].exitCode, 137, 'Docker\'s report: killed');
     assert.ok(proof.observation.containers[0].finishedAt, 'and when');
-    assert.equal((await stateOf(containerOf(a1)))?.Status, 'exited', 'kept until the retry removes it');
-    assert.equal((await pool()).pods_reserved, 2, 'a recorded container keeps its compute until it is gone');
-    const retried = await api('POST', '/api/managed-runner/retry', alice.token, { idempotencyKey: 'retry-crash', revision: failed.revision });
-    assert.equal(retried.status, 202, retried.text);
-    const a2 = await stateIs(alice, 'READY', 2, 300_000);
+    assert.equal(a2.attempt, 1, 'one attempt spent');
+    assert.equal((await pool()).pods_reserved, 2, 'compute held through the restart, never taken twice');
     assert.deepEqual({ pvcUid: a2.pvcUid, runnerId: a2.runnerId, workspace: a2.defaultWorkspaceId }, { pvcUid: a1.pvcUid, runnerId: a1.runnerId, workspace: a1.defaultWorkspaceId });
     assert.notEqual(a2.podUid, a1.podUid);
     assert.equal(a2.initialProvider, 'codex');
-    note('(1) crash and retry', { exitCode: 137, finishedAt: proof.observation.containers[0].finishedAt, generation: a2.generation, pvcUid: a2.pvcUid });
+    note('(1) crash and restart', { exitCode: 137, finishedAt: proof.observation.containers[0].finishedAt, generation: a2.generation, pvcUid: a2.pvcUid });
   });
 
   // ── (2) ─────────────────────────────────────────────────────────────────────────────────────
@@ -687,12 +686,9 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     note('(7) everything stopped', { container: (await stateOf(containerOf(ready)))?.Status });
     await startChannel();
     await startApp();
-    const failed = await stateIs(alice, 'FAILED', ready.generation, 180_000);
-    assert.equal((failed.lastError as { code: string }).code, 'POD_TERMINATED');
-    assert.equal((failed.fencingReceipt as { observation: { containers: Array<{ exitCode?: number }> } }).observation.containers[0].exitCode, 137);
-    const retried = await api('POST', '/api/managed-runner/retry', alice.token, { idempotencyKey: `retry-${randomUUID()}`, revision: failed.revision });
-    assert.equal(retried.status, 202, retried.text);
+    // Back by itself, with no retry: the next generation on the same volume, on Docker's report of the kill.
     const back = await stateIs(alice, 'READY', ready.generation + 1, 300_000);
+    assert.equal((back.fencingReceipt as { observation: { containers: Array<{ exitCode?: number }> } }).observation.containers[0].exitCode, 137);
     const after = await dataState(back);
     assert.equal(after.files, reference.files, 'the files as they were');
     assert.equal(after.integrity, 'ok', 'SQLite recovered its WAL: integrity_check ok');
@@ -798,18 +794,14 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     assert.equal(woke.status, 202, woke.text);
     const ready = await stateIs(alice, 'READY', undefined, 300_000);
     await shell(containerOf(ready), `head -c ${300 * MiB} /dev/zero > ${DATA}/filler`);
-    const failed = await stateIs(alice, 'FAILED', ready.generation, 240_000);
-    const detail = (failed.lastError as { code: string; detail: string });
-    assert.equal(detail.code, 'POD_TERMINATED');
-    assert.match(detail.detail, /over its 268435456-byte limit/);
-    const retried = await api('POST', '/api/managed-runner/retry', alice.token, { idempotencyKey: `retry-${randomUUID()}`, revision: failed.revision });
-    assert.equal(retried.status, 202, retried.text);
+    // The channel's disk check stops it; the restart that follows any stop is refused on a volume over its limit.
     const refused = await until('the over-limit refusal', async () => {
       const m = await mappingOf(alice);
       return m.managementState === 'FAILED' && (m.lastError as { code?: string } | null)?.code === 'VOLUME_OVER_LIMIT' ? m : null;
-    }, 240_000, 500);
+    }, 480_000, 500);
+    assert.equal(refused.generation, ready.generation + 1, 'the stopped container retired, and none made for the next generation');
     assert.equal((await containersOf(ready.runnerId)).length, 0, 'no container on a volume over its limit');
-    note('(11) disk limit', { eviction: detail.detail, refusal: (refused.lastError as { message: string }).message });
+    note('(11) disk limit', { stop: (refused.fencingReceipt as { observation: unknown }).observation, refusal: (refused.lastError as { message: string }).message });
   });
 
   // ── the end: the records and Docker agree, and nothing opened the Docker socket here ──────

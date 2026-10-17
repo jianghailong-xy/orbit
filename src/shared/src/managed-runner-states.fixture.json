@@ -850,6 +850,183 @@
       }
     },
     {
+      "name": "waking: started again after its instance stopped",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "REQUESTED",
+          "desiredState": "RUNNING",
+          "revision": 17,
+          "generation": 1,
+          "attempt": 1,
+          "initialProvider": "claude",
+          "lastErrorCode": "POD_RESTARTING",
+          "nextAttemptAt": "2026-10-09T08:00:08.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:55:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waking",
+        "title": "Waking your managed runner",
+        "detail": "The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 17,
+        "managementState": "REQUESTED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "POD_RESTARTING",
+          "message": "The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "retryable": true
+        },
+        "retryAfter": "2026-10-09T08:00:08.000Z",
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "waking: started again after it ran out of memory",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 21,
+          "generation": 2,
+          "attempt": 1,
+          "initialProvider": "claude",
+          "lastErrorCode": "POD_RESTARTING_OUT_OF_MEMORY"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:55:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waking",
+        "title": "Waking your managed runner",
+        "detail": "The runner ran out of memory and stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 21,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "POD_RESTARTING_OUT_OF_MEMORY",
+          "message": "The runner ran out of memory and stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "waking: its data volume held by something else",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 24,
+          "generation": 3,
+          "initialProvider": "claude",
+          "lastErrorCode": "VOLUME_IN_USE"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:55:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waking",
+        "title": "Waking your managed runner",
+        "detail": "Something else is using this runner's data volume, such as a backup, so the runner is not started on it yet. It starts once the volume is free.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 24,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "VOLUME_IN_USE",
+          "message": "Something else is using this runner's data volume, such as a backup, so the runner is not started on it yet. It starts once the volume is free.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
       "name": "waiting for capacity to wake",
       "server": {
         "enabled": true,
@@ -1130,6 +1307,182 @@
           "canWake": false,
           "canSleep": false,
           "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "failed: stopped too often to be started again",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "FAILED",
+          "desiredState": "RUNNING",
+          "revision": 30,
+          "generation": 3,
+          "attempt": 3,
+          "initialProvider": "claude",
+          "lastErrorCode": "POD_TERMINATED"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:55:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "failed",
+        "title": "Managed runner failed",
+        "detail": "The runner instance stopped too often to be started again automatically. A retry starts it again and keeps the data volume.",
+        "retry": true,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 30,
+        "managementState": "FAILED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "POD_TERMINATED",
+          "message": "The runner instance stopped too often to be started again automatically. A retry starts it again and keeps the data volume.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": true,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "failed: kept running out of memory",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "FAILED",
+          "desiredState": "RUNNING",
+          "revision": 31,
+          "generation": 3,
+          "attempt": 3,
+          "initialProvider": "claude",
+          "lastErrorCode": "POD_OUT_OF_MEMORY"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:55:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "failed",
+        "title": "Managed runner failed",
+        "detail": "The runner kept running out of memory, so it is not started again automatically. A retry starts it again and keeps the data volume; if it keeps happening, an operator can give runners more memory.",
+        "retry": true,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 31,
+        "managementState": "FAILED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "POD_OUT_OF_MEMORY",
+          "message": "The runner kept running out of memory, so it is not started again automatically. A retry starts it again and keeps the data volume; if it keeps happening, an operator can give runners more memory.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": true,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "failed: its data volume restored",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "FAILED",
+          "desiredState": "RUNNING",
+          "revision": 9,
+          "generation": 4,
+          "initialProvider": "claude",
+          "lastErrorCode": "PVC_RESTORED"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-08T21:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "failed",
+        "title": "Managed runner failed",
+        "detail": "This runner's data volume is back as it was recorded. A retry starts the runner on it.",
+        "retry": true,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 9,
+        "managementState": "FAILED",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-08T21:00:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "PVC_RESTORED",
+          "message": "This runner's data volume is back as it was recorded. A retry starts the runner on it.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": true,
           "canDelete": false
         },
         "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
