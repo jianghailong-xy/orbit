@@ -1,0 +1,5 @@
+limit: tmp, in 07191c4093bd as 10001:10001 at 2026-10-17T13:24:42Z
+/tmp: tmpfs           67108864 16384  67092480   1% /tmp
+63+0 records out
+67092480 bytes (67 MB, 64 MiB) copied, 0.0163255 s, 4.1 GB/s
+written: 67092480 bytes; memory.current with it: 149266432

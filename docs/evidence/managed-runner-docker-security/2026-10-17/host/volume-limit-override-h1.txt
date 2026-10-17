@@ -1,0 +1,3 @@
+PUT /v1/volumes/mr-data-8c342985-2d5d-4961-af81-5168b179ed23 200 None None 268435456 None
+PUT /v1/credentials/8c342985-2d5d-4961-af81-5168b179ed23 200 None None None None
+POST /v1/containers 201 None running None None

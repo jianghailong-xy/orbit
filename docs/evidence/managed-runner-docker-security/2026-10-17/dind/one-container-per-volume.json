@@ -1,0 +1,49 @@
+{
+ "samples": 695,
+ "from": "2026-10-17T14:06:06.366Z",
+ "to": "2026-10-17T14:13:08.717Z",
+ "testHostUp": 673,
+ "testHostDown": 22,
+ "downSpans": [
+  [
+   "2026-10-17T14:06:41.549Z",
+   "2026-10-17T14:06:53.716Z"
+  ],
+  [
+   "2026-10-17T14:09:00.550Z",
+   "2026-10-17T14:09:01.293Z"
+  ]
+ ],
+ "mostContainersReferringToOneVolume": 1,
+ "mostRunningOnOneVolume": 1,
+ "events": 65,
+ "eventsFrom": 1792245970,
+ "eventsTo": 1792246412,
+ "containerLivesPerRunner": {
+  "01a14a02-f987\u2026": [
+   [
+    "7",
+    1792246068.5,
+    1792246132.7
+   ],
+   [
+    "8",
+    1792246311.5,
+    null
+   ]
+  ],
+  "01a14a02-f8f0\u2026": [
+   [
+    "6",
+    1792246028.6,
+    1792246252.9
+   ],
+   [
+    "7",
+    1792246257.8,
+    null
+   ]
+  ]
+ },
+ "overlappingLivesOnOneVolume": []
+}

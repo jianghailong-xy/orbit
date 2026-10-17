@@ -390,6 +390,10 @@ COMPOSE_PROFILES=managed-runners-docker
   runner reaches the internet (its model's endpoint, Git hosts) and reaches this deployment the way a runner on
   another machine does: through the gateway's published port 2086, at the host's address on that network. It
   reaches neither another runner nor the stack's own containers.
+- **Their server address.** `profile.json` gives each runner `http://<gateway of orbit-managed-runners>:2086`. A
+  runner sends its credential with every request, and a managed runner accepts plain HTTP to any private address,
+  so keep `runner.serverUrl` on this host's own address on that network, or make it `https://`. Never point it at
+  another machine over plain HTTP, a LAN address included.
 
 The first account, the administrator created at `/setup`, is given its runner when it signs in. The runner takes
 sessions once a runtime is signed in on it; until then it reports that none is installed and signed in.
@@ -413,6 +417,10 @@ mistakes. It is not a strong boundary against a malicious user: a flaw in the ke
 code in one container reach the host, other people's runners and data, and this deployment's secrets. Where anyone
 can sign up, that risk comes with the deployment, and accepting it is the deployer's decision. Where it is not
 acceptable, switch managed runners off or keep sign-up to people you trust.
+
+A runner can also reach every service this host listens to on an address other than loopback (sshd, for one), and
+through the host the network it sits on. Bind such services to loopback, or firewall the managed runners' network:
+[what a managed runner can reach](managed-runner-docker-operations.md#what-a-managed-runner-can-reach).
 
 ### Turn them off or on
 
@@ -442,7 +450,9 @@ rebuilds and recreates `docker-channel`. It does not rebuild the managed runner 
 files name until an administrator builds another one and names its ID in both.
 
 Each runner's data is on a Docker volume, `mr-data-<runner id>`, on this host's disk alone. The Postgres backups
-above do not include it, and neither switching managed runners off nor disabling an account deletes it.
+above do not include it, and neither switching managed runners off nor disabling an account deletes it. Back the
+volumes up, restore them, and handle a full disk, a memory limit, a channel or apiserver outage and a host restart as
+[Managed runners on Docker: backup, restore and failure handling](managed-runner-docker-operations.md) describes.
 
 ## Upgrading
 

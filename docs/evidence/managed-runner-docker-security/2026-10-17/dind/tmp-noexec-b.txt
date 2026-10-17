@@ -1,0 +1,10 @@
+/tmp mount options: rw,nosuid,nodev,noexec,relatime; TMPDIR=unset; GOTMPDIR=unset
+a script run from /tmp: exit=126
+sh: 2: /tmp/d5-exec-check: Permission denied
+ran
+the same script run from the data volume: exit=0
+FAIL	d5	0.000s
+FAIL
+go test with the default temporary directory: exit=1
+ok  	d5	0.001s
+go test with GOTMPDIR on the data volume: exit=0
