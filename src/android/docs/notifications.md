@@ -359,7 +359,11 @@ schedules. The following steps remain even if every local check succeeds:
    log (`adb logcat -b events`: `notification_enqueue`, `notification_cancel`,
    `notification_clicked`, `wm_on_resume_called`) and a frame-timestamped screen
    recording (`screenrecord --bugreport`), mapped to one collector time line with
-   the offset bounds of a01-errata-v2 §6.
+   the offset bounds of a01-errata-v2 §6. `scripts/push-p07-collect.sh SERIAL DIR`
+   captures all of these beside a scheduled phone session (it never installs, taps
+   or changes settings; clock samples every 15 seconds; Orbit's lines only) until
+   `DIR/stop` exists. Server clock marks come from records the server timestamps,
+   with the collector's time before and after each request.
 5. Resolve an approval on another actual client; after sync and independently after
    foreground recovery, record notification removal and refreshed in-app pending
    state within the required ≤3 seconds. Exercise token refresh, account/server
