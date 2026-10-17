@@ -281,6 +281,22 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
   - 不要依赖关闭 stdin。
   - 杀进程后，按进程组或 cgroup 清理 CLI 启动的命令。CLI 跑命令用 detached 进程组【源码 I@7388762】，**单杀 CLI 的进程组也清不干净**，要按会话作用域清（例如每会话一个 systemd scope）。
 - 团队切换（§13.2）后 CLI 会自己 exit 0。
+- **每会话进程作用域（P5b 跟进，已实现，`src/runner-go/session_scope*.go`）**：
+  - **Linux**：CLI 跑在一个 keeper 进程下面。keeper 就是 runner 二进制本身（`/proc/self/exe session-scope`），先把自己设为
+    child subreaper（`PR_SET_CHILD_SUBREAPER`），再启动 CLI。孤儿由最近的 subreaper 收养，不交给 init，所以会话起的进程不管换到
+    哪个进程组或会话，都一直是 keeper 的后代。
+    - CLI 一结束（Stop 后进程被结束、会话结束、崩溃、租约丢失、runner 停止），keeper 就杀掉并回收剩下的全部后代，然后按 CLI 的方式退出
+      （同样的退出码，或死于同一个信号），runner 读到的退出状态和以前一样。
+    - runner 没了（keeper 的控制 socket 断开）：keeper 替 runner 给 CLI 发 SIGTERM，10 s 后连同剩下的一起杀掉。
+    - keeper 是 runner 的子进程，留在 runner 的 cgroup 里：systemd 下 runner 重启（`KillMode=mixed`）照样清掉残留进程，OOM 照样算在
+      runner 的单元上（`OOMPolicy=stop`）。不需要 `Delegate=`、systemd scope、root 或额外部署步骤。
+    - Stop 被 CLI 回答时进程不结束（Orbit 的中断约定）：Cursor 自己给正在跑的命令的进程组发 SIGTERM【源码 I@7372443、I@7371872】。
+      命令从这个进程组再脱离出去的进程，等会话进程结束时由作用域回收。CLI 自己也起脱离的常驻进程（例如 code server，
+      detached + unref【源码 `3548.index.js`@292811】），所以 Stop 时不能按“不在 CLI 的进程组里”去清。
+    - 例外：keeper 本身被单独 SIGKILL（不是经 runner 的进程树清理）时，它的后代交给 init。
+  - **macOS 和其他非 Linux 平台**：没有 child subreaper，做不到同等保证，退回进程组清理：CLI 是自己进程组的组长，结束时杀这个进程组，
+    再按父子关系杀还找得到的后代。CLI 崩溃后被 launchd 收养、又不在 CLI 进程组里的命令找不到，会留下来。
+  - 其他 engine 不用作用域，仍是原来的进程组清理（`session_process_tree_unix.go`）。
 
 ### 3.5 恢复与重放【实测 `multi-turn-tools-default`、`crash-recover-and-move`、`crash-continue-and-shell-wrapper`】
 

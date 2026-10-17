@@ -25,14 +25,19 @@ package main
 // not exit when stdin ends, only on SIGTERM (143) or SIGINT (130) (§3.4) — or, when the script says so,
 // once its recording has gone out: killed, as a crash, or with its stdout closed while it runs on. The
 // same binary answers `agent models` the ways P0a recorded it (§9), each call noted in models.jsonl.
+//
+// A script can also have the CLI start, as its first prompt arrives, what a session's commands leave
+// running (Spawn, scope.json): the processes a session's scope has to reclaim (session_scope.go).
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -58,6 +63,129 @@ type fakeCursorACPScript struct {
 	MatchParams bool `json:"matchParams,omitempty"`
 	// IgnoreCancel is a CLI that no longer answers: a session/cancel cancels nothing.
 	IgnoreCancel bool `json:"ignoreCancel,omitempty"`
+	// Spawn starts, before the first prompt's stream goes out, the processes fakeCursorScope names. A
+	// session/cancel then ends the command's process group, as Cursor ends a cancelled command's (§3.3),
+	// unless IgnoreCancel.
+	Spawn bool `json:"spawn,omitempty"`
+}
+
+// fakeCursorScopeProcessEnv starts this test binary as one of the processes a Spawn script starts
+// (runFakeCursorScopeProcess), naming which.
+const fakeCursorScopeProcessEnv = "ORBIT_FAKE_CURSOR_SCOPE_PROCESS"
+
+// fakeCursorScope is what a Spawn script started, as scope.json keeps it: what a session's commands
+// leave running, in each of the places it can be.
+type fakeCursorScope struct {
+	CLI int `json:"cli"`
+	// Helper is in the CLI's own process group, as its worker and MCP servers are.
+	Helper int `json:"helper"`
+	// Command runs in a process group and session of its own, as Cursor runs every command (detached,
+	// §3.4); CommandChild is in its process group.
+	Command      int `json:"command"`
+	CommandChild int `json:"commandChild"`
+	// Escaped is a process the command moved into a session of its own: out of the reach of anything
+	// that ends the command's process group.
+	Escaped int `json:"escaped"`
+	// Daemon's parent exited as soon as it had started it: it is an orphan from the start.
+	Daemon int `json:"daemon"`
+}
+
+// fakeCursorSpawn starts what fakeCursorScope names and writes scope.json, once every one is running.
+// Each carries the CLI's environment, as Cursor's commands do (§8.3), but not the variable that makes
+// this binary the CLI. It returns the command, whose process group a cancel ends.
+func fakeCursorSpawn(dir string) (int, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return 0, err
+	}
+	var env []string
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, fakeCursorACPDirEnv+"=") {
+			env = append(env, entry)
+		}
+	}
+	scope := fakeCursorScope{CLI: os.Getpid()}
+	helper := exec.Command("sleep", "600")
+	helper.Env = env
+	if err := helper.Start(); err != nil {
+		return 0, err
+	}
+	go func() { _ = helper.Wait() }() // a CLI reaps what it started
+	scope.Helper = helper.Process.Pid
+	ready := filepath.Join(dir, "command.json")
+	command := exec.Command(self)
+	command.Env = append(append([]string{}, env...), fakeCursorScopeProcessEnv+"=command", fakeCursorScopeReadyEnv+"="+ready)
+	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := command.Start(); err != nil {
+		return 0, err
+	}
+	go func() { _ = command.Wait() }()
+	scope.Command = command.Process.Pid
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		data, err := os.ReadFile(ready)
+		if err == nil {
+			err = json.Unmarshal(data, &scope)
+		}
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return 0, fmt.Errorf("the command did not start its processes: %w", err)
+		}
+	}
+	daemonize := exec.Command(self)
+	daemonize.Env = append(append([]string{}, env...), fakeCursorScopeProcessEnv+"=daemonize")
+	out, err := daemonize.Output()
+	if err == nil {
+		scope.Daemon, err = strconv.Atoi(strings.TrimSpace(string(out)))
+	}
+	if err != nil {
+		return 0, fmt.Errorf("the daemon did not start: %w", err)
+	}
+	wire, err := json.Marshal(scope)
+	if err == nil {
+		err = writeFileAtomically(filepath.Join(dir, "scope.json"), wire, 0o600)
+	}
+	return scope.Command, err
+}
+
+// fakeCursorScopeReadyEnv names the file a "command" process writes the processes it started to.
+const fakeCursorScopeReadyEnv = "ORBIT_FAKE_CURSOR_SCOPE_READY"
+
+// runFakeCursorScopeProcess is one of the processes fakeCursorSpawn starts, by mode: "command" starts a
+// child in its own process group and one in a session of its own, says so, and runs on as a long command
+// does; "daemonize" starts one in a session of its own, prints its pid and exits. Every process here
+// ends within ten minutes whatever happens to the test.
+func runFakeCursorScopeProcess(mode string) int {
+	switch mode {
+	case "command":
+		child, escaped := exec.Command("sleep", "600"), exec.Command("sleep", "600")
+		escaped.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		for _, cmd := range []*exec.Cmd{child, escaped} {
+			if err := cmd.Start(); err != nil {
+				fmt.Fprintln(os.Stderr, "fake cursor command:", err)
+				return 1
+			}
+			go func(cmd *exec.Cmd) { _ = cmd.Wait() }(cmd)
+		}
+		wire, _ := json.Marshal(map[string]int{"commandChild": child.Process.Pid, "escaped": escaped.Process.Pid})
+		if err := writeFileAtomically(os.Getenv(fakeCursorScopeReadyEnv), wire, 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, "fake cursor command:", err)
+			return 1
+		}
+		time.Sleep(10 * time.Minute)
+		return 0
+	case "daemonize":
+		daemon := exec.Command("sleep", "600")
+		daemon.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		if err := daemon.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, "fake cursor daemon:", err)
+			return 1
+		}
+		fmt.Println(daemon.Process.Pid)
+		return 0
+	}
+	return 2
 }
 
 // fakeCursorModelsCall is one `agent models` the fake answered, as models.jsonl keeps it.
@@ -238,6 +366,7 @@ func runFakeCursorACP(dir string) int {
 	running := map[string]string{}   // recorded prompts sent and not answered yet -> their session
 	cancelled := map[string]bool{}   // recorded prompts the runner cancelled
 	unanswered := ""                 // the first recorded request the CLI never answered
+	command := 0                     // the command a Spawn script started, which leads its process group
 	for _, request := range requests {
 		if request.unanswered {
 			unanswered = request.id
@@ -339,9 +468,18 @@ func runFakeCursorACP(dir string) int {
 				session := firstString(params, "sessionId")
 				cancel(session)
 				running[requests[match].id] = session
+				if script.Spawn && command == 0 {
+					if command, err = fakeCursorSpawn(dir); err != nil {
+						fmt.Fprintln(os.Stderr, "fake cursor acp:", err)
+						return 2
+					}
+				}
 			}
 		case method == "session/cancel" && !script.IgnoreCancel:
 			cancel(firstString(params, "sessionId"))
+			if command != 0 {
+				_ = syscall.Kill(-command, syscall.SIGTERM)
+			}
 		case id != nil:
 			if rpcIDKey(id) == waiting {
 				waiting = ""

@@ -39,6 +39,15 @@ const fakeClaudeTimeout = 10 * time.Second
 // the programmable one in codex_rate_limit_reset_consume_test.go, and fakeKimiACPDirEnv for the
 // scripted `kimi acp` in fake_kimi_acp_test.go.
 func TestMain(m *testing.M) {
+	// This binary as a session process's keeper, which the runner starts as /proc/self/exe
+	// (session_scope_linux.go) — under test, this binary — ahead of the fakes the process may be.
+	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
+		os.Exit(runSessionScope(os.Args[2:]))
+	}
+	// What the scripted Cursor CLI's commands leave running (fake_cursor_acp_test.go).
+	if mode := os.Getenv(fakeCursorScopeProcessEnv); mode != "" {
+		os.Exit(runFakeCursorScopeProcess(mode))
+	}
 	if dir := os.Getenv(fakeClaudeDirEnv); dir != "" {
 		os.Exit(runFakeClaude(dir))
 	}
