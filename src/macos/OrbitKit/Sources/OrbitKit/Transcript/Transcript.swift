@@ -11,7 +11,9 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     case assistant(AssistantBubble)
     case thinking(ThinkingBlock)
     case toolCall(ToolCard)
-    case interrupt(id: String, seq: Int)
+    /// A turn stopped short. `runnerRestart`: nobody pressed Stop — the runner restarted under the
+    /// turn and cut it off (`TranscriptReducer.cutByRunnerRestart`), so the row says that instead.
+    case interrupt(id: String, seq: Int, runnerRestart: Bool = false)
     case error(id: String, message: String)
     /// A sign-in failure, rendered as a remedy card rather than an error line: the runtime reports
     /// it as ordinary assistant text (or an `error` event, when the engine never got to spawn), but
@@ -33,7 +35,7 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .assistant(let b): return b.id
         case .thinking(let b): return b.id
         case .toolCall(let c): return c.id
-        case .interrupt(let id, _): return id
+        case .interrupt(let id, _, _): return id
         case .error(let id, _): return id
         case .authError(let id, _): return id
         case .autoRetry(let n): return n.id

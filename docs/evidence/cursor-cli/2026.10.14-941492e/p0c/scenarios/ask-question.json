@@ -1,0 +1,132 @@
+{
+ "name": "ask-question",
+ "runId": "2026-10-17T02-08-28-348Z",
+ "startedAt": "2026-10-17T02:08:28.362Z",
+ "finishedAt": "2026-10-17T02:09:59.743Z",
+ "passed": true,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 6,
+   "at": "2026-10-17T02:08:35.850Z",
+   "note": "cursor/ask_question (agent mode): unanswered 30 s then error (fallback), then answered"
+  }
+ ],
+ "protocol": "protocol/ask-question.ndjson",
+ "protocolLines": 292,
+ "fixtures": [
+  "ask-question/ask"
+ ],
+ "checks": [
+  {
+   "name": "no cursor/ask_question in agent mode: the model says it has no such tool and asks in plain text",
+   "ok": true,
+   "detail": "ssion, so I could not ask \"Pick a fruit\" or \"Pick a color\" and do not have either answer.\n\nI cannot reply with `fruit=<answer>, color=<answer>` until that tool is available and both answers come back."
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "questions": {
+   "mode": "agent",
+   "questions": [],
+   "fallbackPermissionRequests": [
+    {
+     "sessionId": "<UUID_1>",
+     "title": "`ls <RUN>/slots/a/home/.cursor 2>/dev/null | head -50; find /opt /usr/local -name '*ask*question*' -o -name '*AskQuestion*' 2>/dev/null | head -20`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_2>-2\nfc_<UUID_3>_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: find, head"
+       }
+      }
+     ],
+     "answer": "reject-once"
+    }
+   ],
+   "createPlan": [],
+   "stopReason": "end_turn",
+   "answer": "nect. I’ll try the other ask-question entry points.The ask-question tool is not available in this session, so I could not ask \"Pick a fruit\" or \"Pick a color\" and do not have either answer.\n\nI cannot reply with `fruit=<answer>, color=<answer>` until that tool is available and both answers come back.",
+   "tools": [
+    {
+     "title": "Find `**/*ask*question*`",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep | head -50 --include=\"*.{json,md,ts,py}\" \"ask.?question|AskQuestion\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "`ls <RUN>/slots/a/home/.cursor 2>/dev/null | head -50; find /opt /usr/local -name '*ask*question*' -o -name '*AskQuestion*' 2>/dev/null | head -20`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "List MCP Resources",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Find `**/*`",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "Read README.md",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "grep | head -30 \"AskQuestion|ask-question|ask_question\"",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    }
+   ]
+  },
+  "tools offered in the stored context (dynamic-tool namespaces)": {
+   "namespaces": {},
+   "mentionsAskQuestion": false
+  }
+ }
+}

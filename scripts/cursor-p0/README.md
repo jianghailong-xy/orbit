@@ -3,9 +3,9 @@
 固定 Cursor CLI `2026.10.14-941492e`（Linux x64 tarball SHA-256 `6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d`，
 macOS arm64 tarball SHA-256 `c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77`，P0b 在 orbit-macos 上测得）。
 结论和接口约定见[运行时契约](../../docs/cursor-runtime-contract.md)，录制和每个场景的断言见
-[`docs/evidence/cursor-cli/2026.10.14-941492e/`](../../docs/evidence/cursor-cli/2026.10.14-941492e/)（Linux）和
-[`docs/evidence/cursor-cli/macos-2026.10.14-941492e/`](../../docs/evidence/cursor-cli/macos-2026.10.14-941492e/)（macOS），
-回放用的单进程样本见 [`src/runner-go/testdata/cursor/`](../../src/runner-go/testdata/cursor/)。
+[`docs/evidence/cursor-cli/2026.10.14-941492e/`](../../docs/evidence/cursor-cli/2026.10.14-941492e/)（P0a）和其下的 `p0c/`（P0c），以及
+[`docs/evidence/cursor-cli/macos-2026.10.14-941492e/`](../../docs/evidence/cursor-cli/macos-2026.10.14-941492e/)（P0b，macOS），
+回放用的单进程样本见 [`src/runner-go/testdata/cursor/`](../../src/runner-go/testdata/cursor/)（P0c 的在其下 `p0c/`）。
 
 ## 准备
 
@@ -19,7 +19,7 @@ macOS arm64 tarball SHA-256 `c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b5
    tar -xzf agent-cli-package.tar.gz -C $B/cli/$V.tmp && mv $B/cli/$V.tmp/dist-package $B/cli/$V && rmdir $B/cli/$V.tmp && chmod -R a-w $B/cli/$V
    ```
 
-   位置可用 `CURSOR_P0_ROOT`、`CURSOR_P0_CLI` 改。脚本启动时核对 `--version`，不是固定版本就退出。
+   位置可用 `CURSOR_P0_ROOT`、`CURSOR_P0_CLI` 改。脚本启动时核对 `--version`，不是要测的版本（默认是固定版本）就退出。
 
    macOS（darwin/arm64）同样步骤，URL 换成 `…/darwin/arm64/agent-cli-package.tar.gz`，哈希见上。
 
@@ -49,12 +49,31 @@ macOS 专属场景：`macos-keychain-store`（Keychain 条目名与不变性）�
 
 ## 真实 prompt 预算
 
-真实 prompt 消耗所有者的 Cursor 额度。脚本只用 Auto 模型（`default[]`），每次发送前先在
-`/mnt/data/cursor-p0/ledger/prompts.jsonl` 记账，累计到 30 次就拒绝再发。
-全量运行要发 `--list` 列出的次数（目前 19 次）。账本跨运行累计，所以一个任务里不能把全量跑两遍。
-已提交的证据是分批运行同一脚本的结果。每个场景的 `runId` 和 `finishedAt` 记在 `summary.json` 里，账本副本在
-`prompts-ledger.json`。`--selftest` 换成 [`selftest-fake-agent.mjs`](selftest-fake-agent.mjs)，从不记账、从不写证据目录，
-只用来在改脚本后先检查控制流程。
+真实 prompt 消耗所有者的 Cursor 额度。脚本只用 Auto 模型（`default[]`），只对固定版本发，每次发送前先记账，到上限就拒绝再发。
+每个任务一本账，用 `CURSOR_P0_LEDGER` 选（默认是当前任务的）：
+
+| 账本 | 文件（`/mnt/data/cursor-p0/ledger/`） | 上限 | 证据目录 | 回放样本目录 |
+| --- | --- | --- | --- | --- |
+| `p0a` | `prompts.jsonl` | 30 | `docs/evidence/cursor-cli/<版本>/` | `src/runner-go/testdata/cursor/` |
+| `p0c`（默认） | `p0c-prompts.jsonl` | 10 | `docs/evidence/cursor-cli/<版本>/p0c/` | `src/runner-go/testdata/cursor/p0c/` |
+
+- 每本账的运行写进自己的目录，后一个任务不会盖掉前一个任务的录制。证据目录的 `prompts-ledger.json` 记着它属于哪本账，
+  拿别的账本往里写时脚本直接拒绝；只有零 prompt 运行的目录没有这个文件。
+- `--list` 列出每个场景花几次真实 prompt（全部加起来 21 次，含只在需要时才跑的 `ask-question-plan-mode` 和两个单参数的 `repo-config-*`）。
+  账本跨运行累计，所以一个任务里不能把全量跑两遍。已提交的证据是分批运行同一脚本的结果，每个场景的 `runId` 和 `finishedAt` 记在 `summary.json` 里。
+- `--selftest` 换成 [`selftest-fake-agent.mjs`](selftest-fake-agent.mjs)，从不记账、从不写证据目录，只用来在改脚本后先检查控制流程。
+
+## 对比另一个版本
+
+`CURSOR_P0_VERSION=<版本> CURSOR_P0_TARBALL_SHA256=<哈希>` 让脚本改用 `/mnt/data/cursor-p0/cli/<版本>`（同样解包、只读）。
+这时只能跑 `--zero`：脚本拒绝对非固定版本发真实 prompt。回放样本默认写到 `/mnt/data/cursor-p0/fixtures/<版本>/`，不进仓库。
+[`compare-builds.mjs`](compare-builds.mjs) 比较两个证据目录（以及可选的两个解包目录），写出 `comparison.json`，见契约 §1.3。
+
+## 事后分析
+
+- [`analyze.mjs`](analyze.mjs)：P0a 运行期断言写错的场景，重新计算更正后的断言（契约 §17.2）。
+- [`turn-endings.mjs`](turn-endings.mjs)：从录制里取出每一轮的结束形状和不属于任何一轮的更新；`--classified` 并入 P5b 的 `cursorTurnFailure`
+  对这些轮的判定（做法见 `docs/evidence/cursor-cli/2026.10.14-941492e/p0c/README.md`）。
 
 ## 隔离与脱敏
 
@@ -80,4 +99,8 @@ macOS 专属场景：`macos-keychain-store`（Keychain 条目名与不变性）�
 | `test-mcp.mjs` | stdio MCP 测试服务器：`record`（有副作用）、`echo` |
 | `scenarios/zero-*.mjs` | 不发 prompt 的场景 |
 | `scenarios/real.mjs` | 发真实 prompt 的场景 |
+| `scenarios/macos.mjs` | darwin 专属场景：Keychain 条目与 launchd 行为、quarantine |
+| `probe/` | P0b 的手工探针（dummy 凭据，非场景断言），支撑契约 §18.3/§18.4 |
 | `selftest-fake-agent.mjs` | 只给 `--selftest` 用的假 agent，不是证据 |
+| `compare-builds.mjs` | 两个版本同名场景的对比 |
+| `turn-endings.mjs` | 每一轮怎么结束、轮外有哪些更新 |

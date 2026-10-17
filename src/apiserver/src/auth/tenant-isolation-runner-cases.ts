@@ -109,6 +109,12 @@ export interface RunnerObjects {
   /** Open items of the project assigned to its coordinator: one to resolve, one to hand over. */
   coordinatorItemId: string;
   handOverItemId: string;
+  /**
+   * The task both items are failures of: one of the project's own that nothing is attempting, so that
+   * both stay owed (`openItemOwed`) and the escalation tick's backstop leaves them open. No case names
+   * it; it is here so that the write trap counts it among A's ids.
+   */
+  failedTaskId: string;
   /** A watch `callingSessionId` observes. */
   watchId: string;
   /** The account's own model providers, by the slug the runner door names them by. */
@@ -1268,7 +1274,7 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
  */
 const PLAN_USAGE_IDS = ['limitId', 'rateLimits[].limitId', 'rateLimitReset.rateLimitResetCredits.credits[].id', 'buckets[].id'];
 const planUsageReadings = Object.fromEntries(
-  ['planUsage.', 'planUsage.claude.', 'planUsage.codex.', 'planUsage.kimi.', 'planUsage.antigravity.', 'engines[].planUsage.']
+  ['planUsage.', 'planUsage.claude.', 'planUsage.codex.', 'planUsage.kimi.', 'planUsage.cursor.', 'planUsage.antigravity.', 'engines[].planUsage.']
     .flatMap((at) => PLAN_USAGE_IDS.map((id) => [
       `POST /runner/heartbeat body ${at}${id}`,
       'a provider\'s own name for one of its rate-limit buckets or credits, not an Orbit row: stored as the reporting '

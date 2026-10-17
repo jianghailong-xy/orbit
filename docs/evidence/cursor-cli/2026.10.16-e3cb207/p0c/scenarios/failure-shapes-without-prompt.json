@@ -1,0 +1,153 @@
+{
+ "name": "failure-shapes-without-prompt",
+ "runId": "2026-10-17T02-55-37-289Z",
+ "startedAt": "2026-10-17T02:55:37.290Z",
+ "finishedAt": "2026-10-17T02:57:36.986Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/failure-shapes-without-prompt.ndjson",
+ "protocolLines": 86,
+ "fixtures": [
+  "failure-shapes-without-prompt/bogus-key-memory",
+  "failure-shapes-without-prompt/bogus-key-file",
+  "failure-shapes-without-prompt/offline"
+ ],
+ "checks": [
+  {
+   "name": "invalid API key (memory store): session/new -> -32603 \"Failed to initialize session services\"",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "message": "Failed to initialize session services"
+    }
+   }
+  },
+  {
+   "name": "invalid API key (memory store): session/list still answers (no auth check with a key present)",
+   "ok": true,
+   "detail": {
+    "sessions": []
+   }
+  },
+  {
+   "name": "invalid API key (file store): session/new -> -32603 \"Failed to initialize session services\"",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "message": "Failed to initialize session services"
+    }
+   }
+  },
+  {
+   "name": "invalid API key (file store): session/list still answers (no auth check with a key present)",
+   "ok": true,
+   "detail": {
+    "sessions": []
+   }
+  },
+  {
+   "name": "invalid key: `agent models` exits 1 with \"The provided API key is invalid\"",
+   "ok": true,
+   "detail": "\u001b[33m⚠ Warning: The provided API key is invalid.\u001b[0m\nThe API key was loaded from the CURSOR_API_KEY environment variable.\nPlease check you have the right key, create a new one, or authenticate without it."
+  },
+  {
+   "name": "invalid key via --api-key: same message, exit 1",
+   "ok": true
+  },
+  {
+   "name": "valid key: `agent models` exits 0 and lists auto first",
+   "ok": true
+  },
+  {
+   "name": "offline: initialize still works",
+   "ok": true
+  },
+  {
+   "name": "offline: session/new -> the same -32603 \"Failed to initialize session services\" as an invalid key",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "message": "Failed to initialize session services"
+    }
+   }
+  },
+  {
+   "name": "offline: `agent models` exits 1 with \"Failed to reach the Cursor API\"",
+   "ok": true,
+   "detail": "\u001b[31m✗ Failed to reach the Cursor API. If you are behind a corporate proxy, set the HTTPS_PROXY environment variable.\u001b[0m"
+  },
+  {
+   "name": "acp --model <unknown>: no session/new reply, process exits 1, stderr lists valid models",
+   "ok": true,
+   "detail": {
+    "exit": {
+     "code": 1,
+     "signal": null
+    },
+    "stderrTail": "-low, gpt-5.1, gpt-5.1-high, gemini-3-flash, gemini-3.5-flash, claude-4-sonnet, claude-4-sonnet-thinking, gpt-5-mini, kimi-k3-low, kimi-k3-high, kimi-k3-max, kimi-k2.7-code, glm-5.2-high, glm-5.2-max\n"
+   }
+  },
+  {
+   "name": "acp --model <legacy slug> resolves to the bracket variant",
+   "ok": true,
+   "detail": "gpt-5.5[context=272k,reasoning=medium,fast=false]"
+  },
+  {
+   "name": "an invalid project .cursor/cli.json makes `agent acp` exit 1 before answering initialize",
+   "ok": true,
+   "detail": {
+    "exit": {
+     "code": 1,
+     "signal": null
+    }
+   }
+  },
+  {
+   "name": "with --disable-project-configs the same invalid .cursor/cli.json no longer stops `agent acp` (initialize and session/new answer)",
+   "ok": true,
+   "detail": {
+    "exit": null,
+    "stderr": ""
+   }
+  },
+  {
+   "name": "`agent acp --authless` refuses: only for agent-cli-local (exit 2)",
+   "ok": true,
+   "detail": "Error: --authless can only be used with agent-cli-local"
+  },
+  {
+   "name": "authless environment variables do not lift the auth requirement in ACP",
+   "ok": true,
+   "detail": {
+    "code": -32000,
+    "message": "Authentication required",
+    "data": {
+     "message": "Authentication required. Please run 'agent login' first, then call authenticate() with methodId 'cursor_login'."
+    }
+   }
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "models (first lines)": [
+   "Available models",
+   "",
+   "auto - Auto (default)",
+   "gpt-5.3-codex-low - Codex 5.3 Low",
+   "gpt-5.3-codex-low-fast - Codex 5.3 Low Fast",
+   "gpt-5.3-codex - Codex 5.3",
+   "gpt-5.3-codex-fast - Codex 5.3 Fast",
+   "gpt-5.3-codex-high - Codex 5.3 High"
+  ]
+ }
+}

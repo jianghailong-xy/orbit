@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,9 +49,14 @@ type cursorRunOptions struct {
 	recording, session string // the recorded process replayed; the one session of a recording of two
 	// script adjusts how the recording is replayed: how the CLI ends, what `agent models` says.
 	script func(*fakeCursorACPScript)
+	// replay is handed the recorded CLI before the session starts on it.
+	replay func(*cursorReplay)
 	// first is delivered at once; then is asked, after each turn-complete, what to deliver next.
 	first []RunInboxResponse
 	then  func(completed int, last TurnCompleteRequest) []RunInboxResponse
+	// stopEngine and stopRunner end, at the first event each holds for, the session's engine context —
+	// as a session cancel or an idle recycle ends it — and the runner's shutdown context.
+	stopEngine, stopRunner func(event cursorEvent) bool
 	// onEvent is asked, as each event goes out, what to deliver next: a message, a steer or an interrupt
 	// that arrives while a turn runs. It is called from more than one goroutine.
 	onEvent func(event cursorEvent) []RunInboxResponse
@@ -65,6 +71,49 @@ type cursorRunOptions struct {
 	// names: a later process of the session finds what an earlier one left.
 	sameHome bool
 	execDir  string
+	// scratch is the session's scratch directory, which keeps its record (meta.json): a claim writes the
+	// record there before the session's engine starts, as runInteractiveSession does. A new one when empty,
+	// and nothing written before the engine.
+	scratch string
+	// approve decides each approval card the session files, in the order filed; nil denies every one.
+	approve func(card cursorTestCard) cursorTestDecision
+	// onCard hears each card as it is filed, and says what to deliver next.
+	onCard func(card cursorTestCard) []RunInboxResponse
+	// executable runs the session on this Cursor CLI instead of a replay (cursor_permissions_real_test.go);
+	// serve answers the control-plane requests the stub does not know, reporting whether it did.
+	executable string
+	serve      func(w http.ResponseWriter, r *http.Request) bool
+	// timeout bounds the whole session; 60 s when zero.
+	timeout time.Duration
+	// onServer is told the stub control plane's address before the session starts.
+	onServer func(url string)
+	// taskID is the task the session runs for.
+	taskID string
+}
+
+// cursorTestCard is one approval card a session filed with the stub control plane.
+type cursorTestCard struct {
+	ID        string
+	ToolName  string
+	ToolUseID string
+	Input     interface{}
+	// Withdrawn: the runner stopped reading the card while it was still open (its poll's context ended).
+	Withdrawn bool
+	// Polls is how many reads of the card reached the stub.
+	Polls int
+}
+
+// released is whether the runner no longer reads a card nobody answered: its read was cut off, or it never
+// read it at all. (One it still read would hold the stub's Close, and with it the test, until the deadline.)
+func (c cursorTestCard) released() bool { return c.Withdrawn || c.Polls == 0 }
+
+// cursorTestDecision is how the stub control plane answers a card: Status ALLOWED or DENIED, with what a
+// question card or a refusal carries; "" holds the card open until the runner stops reading it.
+type cursorTestDecision struct {
+	Status        string
+	Message       string
+	Answers       map[string][]string
+	RememberRules []PermissionRule
 }
 
 // cursorLeaseLost delivered to a session makes the control plane answer its next inbox poll as the
@@ -83,6 +132,7 @@ type cursorRun struct {
 	namings       []SessionNamingRequest
 	keyChecks     []CursorKeyCheckReport
 	leaseLost     error // what onLeaseLost was told, after a cursorLeaseLost
+	cards         []cursorTestCard
 }
 
 // useCursorSlashRegistry gives the test a slash registry of its own: the package's is the runner
@@ -108,6 +158,12 @@ func cursorMessage(turnID, content string) RunInboxResponse {
 	return RunInboxResponse{TurnID: turnID, Kind: "message", Content: content}
 }
 
+// cursorFirstPrompt is the text of a new conversation's first prompt: Orbit's agent instructions ahead
+// of what the turn says (cursorAgentInstructions).
+func cursorFirstPrompt(job *ClaimedSession, text string) string {
+	return "<orbit-agent-instructions>\n" + cursorAgentInstructions(job) + "\n</orbit-agent-instructions>\n\n" + text
+}
+
 // runCursorSession runs one Orbit session on the recorded CLI against a stub control plane, with the
 // launch the runner prepares for it and the replay as its executable.
 func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
@@ -116,18 +172,30 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 		useCursorRealHome(t)
 	}
 	useCursorSlashRegistry(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	script := fakeCursorACPScript{Recording: opts.recording, Session: opts.session}
-	if opts.script != nil {
-		opts.script(&script)
+	timeout := opts.timeout
+	if timeout == 0 {
+		timeout = 60 * time.Second
 	}
-	fake := newCursorReplayScript(t, script)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	var fake *cursorReplay
+	executable := opts.executable
+	if executable == "" {
+		script := fakeCursorACPScript{Recording: opts.recording, Session: opts.session}
+		if opts.script != nil {
+			opts.script(&script)
+		}
+		fake = newCursorReplayScript(t, script)
+		if opts.replay != nil {
+			opts.replay(fake)
+		}
+		executable = fake.shim
+	}
 	env := opts.env
 	if env == nil {
 		env = map[string]string{"CURSOR_API_KEY": cursorTestKey}
 	}
-	job := &ClaimedSession{SessionID: cursorTestSessionID, Provider: providerCursor, Title: "Cursor test session",
+	job := &ClaimedSession{SessionID: cursorTestSessionID, Provider: providerCursor, Title: "Cursor test session", TaskID: opts.taskID,
 		RuntimeSessionID: opts.runtimeSessionID, Agent: AgentExecConfig{Provider: providerCursor, Env: env}}
 	if opts.naming {
 		job.Naming = &SessionNamingJob{Description: "the session's opening request"}
@@ -139,11 +207,19 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 	if execDir == "" {
 		execDir = t.TempDir()
 	}
-	spec, err := prepareCursorLaunch(job, execDir, fake.shim, filepath.Join(runDir(job.SessionID), "cursor"))
+	spec, err := prepareCursorLaunch(job, execDir, executable, filepath.Join(runDir(job.SessionID), "cursor"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := cursorRun{job: job, spec: spec, scratch: t.TempDir(), fake: fake}
+	run := cursorRun{job: job, spec: spec, scratch: opts.scratch, fake: fake}
+	if run.scratch == "" {
+		run.scratch = t.TempDir()
+	} else {
+		if err := os.MkdirAll(run.scratch, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeSessionMeta(run.scratch, job, execDir)
+	}
 	var mu sync.Mutex
 	leaseMoved := false // a cursorLeaseLost was answered
 	inbox := make(chan RunInboxResponse, 16)
@@ -177,6 +253,58 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, prefix+"attachments/"):
 			_, _ = w.Write([]byte(opts.blobs[strings.TrimPrefix(r.URL.Path, prefix+"attachments/")]))
+		case r.Method == http.MethodPost && r.URL.Path == prefix+"approvals":
+			var card cursorTestCard
+			var body struct {
+				ToolName  string      `json:"toolName"`
+				Input     interface{} `json:"input"`
+				ToolUseID string      `json:"toolUseId"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("approval request: %v", err)
+			}
+			mu.Lock()
+			card = cursorTestCard{ID: fmt.Sprintf("approval-%d", len(run.cards)+1), ToolName: body.ToolName, ToolUseID: body.ToolUseID, Input: body.Input}
+			run.cards = append(run.cards, card)
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": card.ID, "status": "PENDING"})
+			if opts.onCard != nil {
+				for _, next := range opts.onCard(card) {
+					inbox <- next
+				}
+			}
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, prefix+"approvals/"):
+			id := strings.TrimPrefix(r.URL.Path, prefix+"approvals/")
+			mu.Lock()
+			index := -1
+			for i := range run.cards {
+				if run.cards[i].ID == id {
+					index = i
+				}
+			}
+			var card cursorTestCard
+			if index >= 0 {
+				run.cards[index].Polls++
+				card = run.cards[index]
+			}
+			mu.Unlock()
+			if index < 0 {
+				http.NotFound(w, r)
+				return
+			}
+			decision := cursorTestDecision{Status: "DENIED"}
+			if opts.approve != nil {
+				decision = opts.approve(card)
+			}
+			if decision.Status == "" {
+				<-r.Context().Done()
+				mu.Lock()
+				run.cards[index].Withdrawn = true
+				mu.Unlock()
+				return
+			}
+			_ = json.NewEncoder(w).Encode(ApprovalDecisionResponse{ID: id, Status: decision.Status, Message: decision.Message,
+				Answers: decision.Answers, RememberRules: decision.RememberRules})
 		case r.Method == http.MethodPost && r.URL.Path == prefix+"naming":
 			var naming SessionNamingRequest
 			if err := json.NewDecoder(r.Body).Decode(&naming); err != nil {
@@ -187,11 +315,17 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 			mu.Unlock()
 			_, _ = w.Write([]byte(`{"applied":true}`))
 		default:
+			if opts.serve != nil && opts.serve(w, r) {
+				return
+			}
 			t.Errorf("unexpected control-plane request: %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
 		}
 	}))
 	defer server.Close()
+	if opts.onServer != nil {
+		opts.onServer(server.URL)
+	}
 	var events cursorEvents
 	complete := func(req TurnCompleteRequest, _ ...context.Context) error {
 		mu.Lock()
@@ -206,16 +340,27 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 		}
 		return nil
 	}
+	engineCtx, stopEngine := context.WithCancel(ctx)
+	defer stopEngine()
+	shutdownCtx, stopRunner := context.WithCancel(context.Background())
+	defer stopRunner()
 	emitFor := func(turn, typ string, payload map[string]interface{}) {
 		events.emitFor(turn, typ, payload)
+		event := cursorEvent{turn, typ, payload}
+		if opts.stopEngine != nil && opts.stopEngine(event) {
+			stopEngine()
+		}
+		if opts.stopRunner != nil && opts.stopRunner(event) {
+			stopRunner()
+		}
 		if opts.onEvent != nil {
-			for _, next := range opts.onEvent(cursorEvent{turn, typ, payload}) {
+			for _, next := range opts.onEvent(event) {
 				inbox <- next
 			}
 		}
 	}
 	status, ended, reload := providerRuntimeFor(runtimeProvider(job)).run(sessionProcessArgs{
-		ctx: ctx, shutdownCtx: context.Background(), t: NewTransport(server.URL, "synthetic-runner-token"),
+		ctx: engineCtx, shutdownCtx: shutdownCtx, t: NewTransport(server.URL, "synthetic-runner-token"),
 		job: job, execDir: execDir, scratchDir: run.scratch, cursorLaunchSpec: &spec,
 		emit:    func(typ string, payload map[string]interface{}) { emitFor("", typ, payload) },
 		emitFor: emitFor, setTurn: func(string) {}, completeTurn: complete,
@@ -290,7 +435,7 @@ func TestCursorACPInitializeAndNewSession(t *testing.T) {
 			t.Fatalf("run = (%s, ended=%v, reload=%v), want an ended success", run.status, run.ended, run.reload)
 		}
 		started := run.fake.started(t)
-		if !reflect.DeepEqual(started.Args, []string{"acp", "--disable-auto-update", "--disable-indexing"}) || started.Dir != run.spec.Cwd {
+		if !reflect.DeepEqual(started.Args, []string{"acp", "--disable-auto-update", "--disable-indexing", "--disable-project-configs"}) || started.Dir != run.spec.Cwd {
 			t.Fatalf("Cursor CLI started as %q in %s, want `acp` with the launch's flags in %s", started.Args, started.Dir, run.spec.Cwd)
 		}
 		env := envMap(started.Env)
@@ -327,8 +472,12 @@ func TestCursorACPInitializeAndNewSession(t *testing.T) {
 		if open.Emitted < 1 {
 			t.Fatal("session/new was sent before initialize was answered")
 		}
-		if !cursorJSONEqual(t, open.Message["params"], map[string]interface{}{"cwd": run.spec.Cwd, "mcpServers": []interface{}{}}) {
-			t.Fatalf("session/new params = %v, want the session's checkout and no MCP server", open.Message["params"])
+		servers, err := cursorMCPServers(run.job)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cursorJSONEqual(t, open.Message["params"], map[string]interface{}{"cwd": run.spec.Cwd, "mcpServers": servers}) {
+			t.Fatalf("session/new params = %v, want the session's checkout and Orbit's MCP server", open.Message["params"])
 		}
 		inits := run.of("", evSystem)
 		var init map[string]interface{}
@@ -493,12 +642,13 @@ func TestCursorACPEventMapping(t *testing.T) {
 				seen[asString(event.payload["toolUseId"])] = 2
 			}
 		}
-		// The approvals Cursor asked for are each answered, declined until Orbit's cards take them (P5c).
+		// The approvals Cursor asked for each went to Orbit's card, about the card the turn shows, and were
+		// answered with what the person decided (cursor_permissions.go): refused here, once each.
 		answered := 0
 		for _, line := range run.fake.received(t) {
 			if line.Message["method"] == nil && line.Message["id"] != nil {
 				answered++
-				if outcome := mapValue(mapValue(line.Message["result"])["outcome"]); outcome["outcome"] != "cancelled" {
+				if outcome := mapValue(mapValue(line.Message["result"])["outcome"]); outcome["optionId"] != cursorRejectOnce {
 					t.Fatalf("an approval was answered %v", line.Message)
 				}
 			}
@@ -506,10 +656,26 @@ func TestCursorACPEventMapping(t *testing.T) {
 		if answered != 4 {
 			t.Fatalf("answered %d of the turn's four approval requests", answered)
 		}
+		var names []string
+		for _, card := range run.cards {
+			names = append(names, card.ToolName)
+			if seen[card.ToolUseID] != 2 {
+				t.Errorf("card %s is about %q, which is no card of the turn", card.ToolName, card.ToolUseID)
+			}
+		}
+		if want := []string{"Bash", "Bash", "mcp__p0probe__record", "WebFetch"}; !reflect.DeepEqual(names, want) {
+			t.Fatalf("cards = %q, want %q", names, want)
+		}
 	})
 	t.Run("plan", func(t *testing.T) {
 		first, then := cursorTurns(cursorMessage("turn-1", "plan the change"))
-		run := runCursorSession(t, cursorRunOptions{recording: "plan-and-ask-modes-concurrent/modes", session: "<UUID_2>", first: first, then: then})
+		run := runCursorSession(t, cursorRunOptions{recording: "plan-and-ask-modes-concurrent/modes", session: "<UUID_2>", first: first, then: then,
+			approve: func(card cursorTestCard) cursorTestDecision {
+				if card.ToolName == "ExitPlanMode" {
+					return cursorTestDecision{Status: "ALLOWED"}
+				}
+				return cursorTestDecision{Status: "DENIED"}
+			}})
 		var plan, card map[string]interface{}
 		var planResult, cardResult map[string]interface{}
 		for _, use := range run.of("turn-1", evToolUse) {
@@ -545,6 +711,17 @@ func TestCursorACPEventMapping(t *testing.T) {
 		}
 		if planAnswer["outcome"] != "accepted" {
 			t.Fatalf("cursor/create_plan answered %v, want accepted", planAnswer)
+		}
+		// Accepted on Orbit's plan card, about the plan's own card.
+		var plans []cursorTestCard
+		for _, c := range run.cards {
+			if c.ToolName == "ExitPlanMode" {
+				plans = append(plans, c)
+			}
+		}
+		if len(plans) != 1 || plans[0].ToolUseID != card["id"] ||
+			!strings.HasPrefix(asString(mapValue(plans[0].Input)["plan"]), "# Add CONTRIBUTING.md") {
+			t.Fatalf("plan cards = %+v", plans)
 		}
 		if len(run.completions) != 1 || run.completions[0].Status != stSucceeded {
 			t.Fatalf("completions = %+v", run.completions)
@@ -1014,8 +1191,8 @@ func TestCursorACPImageAttachments(t *testing.T) {
 			t.Fatalf("prompts = %v", prompts)
 		}
 		want := []interface{}{
-			map[string]interface{}{"type": "text", "text": "[The user uploaded 1 file(s), saved at: " + notes +
-				" - read or process them with your tools as needed.]\n\nwhat is in these?"},
+			map[string]interface{}{"type": "text", "text": cursorFirstPrompt(run.job, "[The user uploaded 1 file(s), saved at: "+notes+
+				" - read or process them with your tools as needed.]\n\nwhat is in these?")},
 			map[string]interface{}{"type": "image", "mimeType": "image/png", "data": base64.StdEncoding.EncodeToString([]byte(image))},
 		}
 		if got := mapValue(prompts[0].Message["params"])["prompt"]; !cursorJSONEqual(t, got, want) {
@@ -1037,7 +1214,7 @@ func TestCursorACPImageAttachments(t *testing.T) {
 		defer server.Close()
 		job := &ClaimedSession{SessionID: cursorTestSessionID}
 		blocks, refs := prepareCursorPrompt(context.Background(), NewTransport(server.URL, "synthetic-runner-token"), job,
-			&RunInboxResponse{Content: "look", Attachments: []TurnAttachment{{ID: "att-image", MimeType: "image/png", FileName: "shot.png"}}}, false, nil)
+			&RunInboxResponse{Content: "look", Attachments: []TurnAttachment{{ID: "att-image", MimeType: "image/png", FileName: "shot.png"}}}, false, nil, "")
 		shot := filepath.Join(uploadsDir(cursorTestSessionID), "shot.png")
 		want := []map[string]interface{}{{"type": "text", "text": "[The user uploaded 1 file(s), saved at: " + shot +
 			" - read or process them with your tools as needed.]\n\nlook"}}
@@ -1075,7 +1252,7 @@ func TestCursorACPShellTurns(t *testing.T) {
 		t.Fatalf("prompts = %v", prompts)
 	}
 	text := asString(mapValue(mapValue(prompts[0].Message["params"])["prompt"].([]interface{})[0])["text"])
-	if want := "<bash-input>echo cursor-shell-ok</bash-input>\n<bash-stdout>cursor-shell-ok\n</bash-stdout>\n\nwhat did it print?"; text != want {
+	if want := cursorFirstPrompt(run.job, "<bash-input>echo cursor-shell-ok</bash-input>\n<bash-stdout>cursor-shell-ok\n</bash-stdout>\n\nwhat did it print?"); text != want {
 		t.Fatalf("prompt text = %q, want %q", text, want)
 	}
 }

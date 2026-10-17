@@ -35,19 +35,15 @@ import {
   type ManagedRunnerEligibility,
 } from './managed-runner-eligibility';
 import { MANAGED_RUNNER_GATE, managedRunnerDisabledError, type ManagedRunnerGate } from './managed-runner-gate';
-import type { ManagedRunnerProfile } from './managed-runner-profile';
-import {
-  MANAGED_RUNNER_NAME,
-  MANAGED_WORKSPACE_DIR,
-  MANAGED_WORKSPACE_NAME,
-  managedPvcName,
-} from './managed-runner-resources';
+import { MANAGED_RUNNER_NAME, MANAGED_WORKSPACE_DIR, MANAGED_WORKSPACE_NAME } from './managed-runner-resources';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
 import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason } from './managed-runner-status';
 
 export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
+
+type AvailableRuntime = Extract<ManagedRunnerRuntime, { available: true }>;
 
 /**
  * The owner's side of managed runners: the status read and the requested transitions
@@ -132,7 +128,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     try {
       if (await this.prisma.managedRunner.findUnique({ where: { ownerId: user.id }, select: { id: true } })) return;
       if (!(await this.eligibility.eligible(user.id))) return;
-      await this.createMapping(user.id, `sign-in:${randomUUID()}`, runtime.profile);
+      await this.createMapping(user.id, `sign-in:${randomUUID()}`, runtime);
       runtime.worker.kick();
     } catch (error) {
       this.log.warn(`managed runner intent not recorded at sign-in for owner ${user.id}; an explicit ensure records it: ${(error as Error).message}`);
@@ -148,7 +144,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     const runtime = this.operable();
     await this.refuseDisabledOwner(ownerId);
     const mapping = (await this.prisma.managedRunner.findUnique({ where: { ownerId } }))
-      ?? (await this.createEligibleMapping(ownerId, idempotencyKey, runtime.profile));
+      ?? (await this.createEligibleMapping(ownerId, idempotencyKey, runtime));
     if (mapping.desiredState === 'DELETED' || mapping.managementState === 'DELETING' || mapping.managementState === 'DELETED') {
       throw new ConflictException({
         code: MANAGED_RUNNER_TRANSITION_REFUSED,
@@ -278,7 +274,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   }
 
   /** The enabled runtime, or the refusal of a server that has none. Checked before anything is written. */
-  private operable(): Extract<ManagedRunnerRuntime, { available: true }> {
+  private operable(): AvailableRuntime {
     if (!this.gate.enabled) throw managedRunnerDisabledError();
     if (!this.runtime?.available) throw new ServiceUnavailableException(managedRunnerUnavailableReason());
     return this.runtime;
@@ -301,9 +297,9 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   }
 
   /** An explicit ensure's new mapping, after the decision that the owner may have one. */
-  private async createEligibleMapping(ownerId: string, idempotencyKey: string, profile: ManagedRunnerProfile): Promise<ManagedRunner> {
+  private async createEligibleMapping(ownerId: string, idempotencyKey: string, runtime: AvailableRuntime): Promise<ManagedRunner> {
     if (!(await this.eligibility.eligible(ownerId))) throw new ForbiddenException(managedRunnerNotEligibleReason());
-    return this.createMapping(ownerId, idempotencyKey, profile);
+    return this.createMapping(ownerId, idempotencyKey, runtime);
   }
 
   private revisionConflict(mapping: ManagedRunner): ConflictException {
@@ -317,9 +313,10 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   /**
    * The mapping, the runner row and the default workspace, in one retriable transaction. The runner
    * row starts OFFLINE with a credential nobody holds: the manager issues the real one with the
-   * bootstrap Secret. A concurrent request that loses the owner's unique key reads the winner.
+   * bootstrap credential. The data volume's location and name are the run backend's. A concurrent
+   * request that loses the owner's unique key reads the winner.
    */
-  private async createMapping(ownerId: string, idempotencyKey: string, profile: ManagedRunnerProfile): Promise<ManagedRunner> {
+  private async createMapping(ownerId: string, idempotencyKey: string, { profile, manager: { backend } }: AvailableRuntime): Promise<ManagedRunner> {
     try {
       return await withTransactionRetry(
         this.prisma,
@@ -349,9 +346,9 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
               ownerId,
               runnerId: runner.id,
               defaultWorkspaceId: workspace.id,
-              clusterKey: profile.clusterKey,
-              namespace: profile.kubernetes.namespace,
-              pvcName: managedPvcName(runner.id),
+              clusterKey: backend.location.clusterKey,
+              namespace: backend.location.namespace,
+              pvcName: backend.names(runner.id).volume,
               resourceProfileId: profile.resourceProfileId,
               lastRequestKey: idempotencyKey,
             },

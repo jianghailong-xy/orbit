@@ -1487,9 +1487,10 @@ private struct TaskDetailContent: View {
                         if let trailing = row.trailing { trailingButton(trailing, task, prominent: true) }
                     }
                 }
-                // Said only when the press cannot be taken: a live run's button already says where it goes.
-                if let trailing = row.trailing, !isOpenRun(trailing), !canStart(task),
-                   let hint = runDisabledHint(task) {
+                // Why the press cannot be taken, or — when it can — that it is the task's only start; a
+                // live run's button already says where it goes.
+                if let trailing = row.trailing, !isOpenRun(trailing),
+                   let hint = canStart(task) ? TaskDetailLogic.runNowHint(task) : runDisabledHint(task) {
                     Text(hint).font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }

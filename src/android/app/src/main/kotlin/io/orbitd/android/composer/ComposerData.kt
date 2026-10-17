@@ -46,10 +46,11 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val acknowledgementPending: Boolean = false,
     /** What the provider picked for the session will do, and when, until the next message goes ([EngineCopy.switchNote]). */
     val switchNote: String? = null,
-    /** The tray's presses, by canonical turn id (docs/mocks/steer-tray): a Withdraw asked and not yet answered, and a Steer. */
+    /** The tray's presses, by canonical turn id (docs/mocks/steer-tray): a Withdraw — or a Put back's discard of a receipt — asked and
+     * not yet answered, and a Steer. */
     val withdrawing: Set<String> = emptySet(), val steering: Set<String> = emptySet(),
     /** What the server confirmed before the queue's listing or the runner says so: a message sent into the running turn, drawn on its
-     * way there, and one taken back, gone from the tray. */
+     * way there, and one taken back, gone from the tray — or, put back, from the tail. */
     val steered: Set<String> = emptySet(), val withdrawn: Set<String> = emptySet())
 
 /** Where a credential comes from, as the Provider menu groups it (docs/provider-engine-contract.md §1.3): the engine's own

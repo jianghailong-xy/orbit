@@ -669,6 +669,26 @@ class ComposerModelTest {
         model.close(); assertEquals("a draft\n\n!npm test", rig.cold().state.value.draft.text)
     }
 
+    /** Put back in the composer: a steer that was not delivered gives its words back under whatever the box holds, and nothing is sent.
+     * One known only from the server's receipt is discarded as well — once, however often it is pressed — and gone before the listing
+     * says so. */
+    @Test fun aSteerPutBackComesBackUnderTheDraftAndSendsNothing() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.edit("a draft", 7, 7)
+        model.putBack("then push it to main"); runCurrent()
+        assertEquals("a draft\n\nthen push it to main", model.state.value.draft.text)
+        assertEquals("the cursor after them", "a draft\n\nthen push it to main".length, model.state.value.draft.selectionStart)
+        assertTrue("nothing sent, nothing discarded", rig.calls.none { it.method == HttpMethod.DELETE || it.path.last() in setOf("turns", "resume") })
+        model.putBack("and tag the release", discard = "t-9"); model.putBack("and tag the release", discard = "t-9"); runCurrent()
+        assertEquals("a draft\n\nthen push it to main\n\nand tag the release", model.state.value.draft.text)
+        assertEquals(listOf(listOf("sessions", "s", "turns", "t-9")), rig.calls.filter { it.method == HttpMethod.DELETE }.map { it.path })
+        assertEquals(setOf(io.orbitd.android.navigation.ObjectId.canonical("t-9") ?: "t-9"), model.state.value.withdrawn)
+        assertTrue(model.state.value.withdrawing.isEmpty())
+        assertTrue("still nothing sent", rig.calls.none { it.path.last() in setOf("turns", "resume") })
+        // The words were kept, as everything the box holds is.
+        model.close(); assertEquals("a draft\n\nthen push it to main\n\nand tag the release", rig.cold().state.value.draft.text)
+    }
+
     /** The tray's Steer: the message goes into the running turn, and is drawn on its way there until the listing says so. */
     @Test fun aSteeredMessageIsOnItsWayIntoTheTurnUntilTheListingSaysSo() = runTest {
         val rig = Rig(this); val model = rig.start()

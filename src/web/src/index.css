@@ -20585,19 +20585,176 @@ div.landing-jobs-open {
 .admin-signin-error {
   color: var(--error);
 }
-.admin-signin-badges {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
+/* Admin → Users: one row an account — who, how they sign in, whether they can, when they last used
+   Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
+   (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,
+   whatever the side nav's width: Created first, then Sign-in, Status and Last active. */
+.admin-users-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
 }
-.admin-users-created {
+.admin-users-head .page-title {
+  margin: 0;
+}
+.admin-users-sub {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.admin-users-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.admin-users-search {
+  width: 240px;
+}
+.admin-users-frame {
+  container: admin-users / inline-size;
+}
+.admin-users-table thead th {
+  padding: 10px 12px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.admin-users-table thead th::before {
+  display: none;
+}
+.admin-users-table td {
+  padding: 12px;
+  vertical-align: middle;
+}
+.admin-users-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.admin-users-who > .orbit-avatar {
+  flex: none;
+}
+.admin-users-who-text {
+  min-width: 0;
+  max-width: 280px;
+}
+.admin-users-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-1);
+  font-weight: 500;
+  line-height: 20px;
+}
+.admin-users-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-users-email {
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-users-signin,
+.admin-users-active,
+.admin-users-table td.admin-users-col-created {
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.admin-users-pending {
+  color: var(--warning);
+  white-space: nowrap;
+}
+.admin-users-quiet {
+  color: var(--text-4);
+}
+.admin-users-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.admin-users-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success-solid);
+}
+.admin-users-status-off {
+  color: var(--error);
+}
+.admin-users-status-off::before {
+  background: var(--error);
+}
+.admin-users-table .admin-users-col-actions {
+  width: 1%;
+  text-align: right;
   white-space: nowrap;
 }
 .admin-user-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: inline-flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 4px;
+}
+/* A disabled account reads as set aside; its Enable and menu do not. */
+.admin-users-off .admin-users-who,
+.admin-users-off .admin-users-signin,
+.admin-users-off .admin-users-active,
+.admin-users-table .admin-users-off td.admin-users-col-created {
+  opacity: 0.55;
+}
+.admin-users-table td.admin-users-none {
+  padding: 32px 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+/* Each step is the width the columns still shown need at most (a 280px account, its widest text in
+   every other column, Enable or View as beside the menu), with some to spare. */
+@container admin-users (max-width: 929px) {
+  .admin-users-table .admin-users-col-created {
+    display: none;
+  }
+}
+@container admin-users (max-width: 819px) {
+  .admin-users-table .admin-users-col-signin {
+    display: none;
+  }
+}
+@container admin-users (max-width: 679px) {
+  .admin-users-table .admin-users-col-status {
+    display: none;
+  }
+}
+@container admin-users (max-width: 589px) {
+  .admin-users-table .admin-users-col-active {
+    display: none;
+  }
+}
+@container admin-users (max-width: 479px) {
+  .admin-users-who-text {
+    max-width: 200px;
+  }
+}
+@media (max-width: 768px) {
+  .admin-users-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-users-search {
+    flex: 1;
+    width: auto;
+  }
 }
 /* Add user: the fields stacked 8px apart. */
 .admin-user-form {
@@ -21282,13 +21439,18 @@ div.landing-jobs-open {
   flex: none;
   font-size: 12px;
 }
+/* The label hugs what the line says — the native row's HStack has no Spacer either. On auto margin it
+   floated to the trailing edge, a thousand pixels from the job it names on a wide window, reading as a
+   column of its own; hover brightens it a step, with the row's background under the pointer. */
 .bgwake-details-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: none;
-  margin-left: auto;
   font-size: 12px;
+}
+.bgwake-row:hover .bgwake-details-label {
+  color: var(--text-2);
 }
 .bgwake-caret {
   flex: none;

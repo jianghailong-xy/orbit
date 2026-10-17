@@ -96,7 +96,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         "thinking" -> "Thinking"
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
         "tool_result" -> "Tool output"
-        "interrupt" -> "Interrupted"
+        // Nobody pressed Stop on a turn the runner tore down while restarting (runner-go's watchShutdownDrain): say what did.
+        "interrupt" -> if (event.fields.string("reason") == "runner_restart") "Interrupted — the runner restarted" else "Interrupted"
         "error", "auth_error" -> "Error"
         "notice" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
@@ -220,6 +221,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) { MarkdownText(text, open = open) }
                 TextButton(onClick = { if (text.length > COPY_TEXT_LIMIT) copyOverflow = text else clipboard.setText(AnnotatedString(text)) }) { Text("Copy message") }
             }
+        } else if (event.type == "interrupt") {
+            // The title is the whole row, as on web and iOS: the payload is the runner's bookkeeping (the request a Stop answered, the
+            // restart's reason), which the body below would print as raw JSON.
         } else {
             cards.forEach { TranscriptCardView(it, open, shown) }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
@@ -241,6 +245,13 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 Text("Sent by another Orbit session, not by you", style = MaterialTheme.typography.bodySmall)
                 sender.string("fromSessionId")?.let { id -> TextButton(onClick = { open("orbit-session:$id") }) { Text("Open sender session") } }
             }
+            // How a steer of the reader's came out; words that never reached the engine are offered back to the composer.
+            row.steer?.let { steer ->
+                val words = shown.personWords().trim()
+                val composer = console?.composer?.takeIf { steer.delivery == "failed" && words.isNotEmpty() }
+                val loaded = composer?.state?.collectAsState()?.value?.loaded == true
+                SteerStateLine(steer, putBack = composer?.takeIf { loaded }?.let { box -> { box.putBack(words) } })
+            }
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         }
     }
@@ -252,6 +263,36 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             LazyColumn { items(row.children.filter { !(it.event.type == "tool_use" && it.event.toolId() in shownAgents) }, key = { it.key }) {
                 TranscriptRowView(it, model, live, open) } }
         } }
+    }
+}
+
+/**
+ * How a steer of the reader's came out, under its words (web `SteerState` and `UserBubble`'s undelivered line, OrbitApp's meta line): its
+ * state in every client's words — in the warning tone once it did not land or nobody can say it did, the server's reason a long press
+ * away — then [why] it did not land in the sender's words, and [putBack], its words' way back to the composer.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SteerStateLine(steer: SteerOutcome, why: String? = null, putBack: (() -> Unit)? = null) {
+    val undelivered = SteerDelivery.undelivered(steer.delivery)
+    val tone = if (undelivered) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.testTag("steer-state")) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val label = @Composable {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (undelivered) Text("⚠", Modifier.clearAndSetSemantics { }, color = tone, style = MaterialTheme.typography.labelSmall)
+                    Text(SteerDelivery.label(steer.delivery), color = tone, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            val reason = steer.reason?.takeIf { undelivered && it.isNotBlank() }
+            if (reason == null) label()
+            else TooltipBox(TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above), tooltip = { PlainTooltip { Text(reason) } },
+                state = rememberTooltipState()) { label() }
+            putBack?.let { TextButton(onClick = it, Modifier.testTag("steer-state:put-back")) {
+                Text(SteerDelivery.PUT_BACK, style = MaterialTheme.typography.labelSmall)
+            } }
+        }
+        why?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

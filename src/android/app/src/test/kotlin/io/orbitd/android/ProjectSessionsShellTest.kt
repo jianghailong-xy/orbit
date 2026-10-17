@@ -334,6 +334,29 @@ class ProjectSessionsShellTest {
         compose.onNode(drawerRow("Launch")).assert(hasContentDescription("5 waiting for you"))
     }
 
+    /** A05f: the drawer's projects as M2's iOS draws them (`CompactShell.projectRows`, `projectRow`, `projectsRow`): under "Projects" and
+     * how many there are; the one waiting on you first, though the server lists it last (`ProjectAttention.drawerProjects`); the other
+     * marked running, its coordinator's turn under way in the Open list (`drawerMark`, `coordinatorPulses`); and the Projects row
+     * counting the projects waiting on you, not their items (`needsYouCount`). The spinner turns only while the drawer is on screen. */
+    @Test fun theDrawersProjectsAreHeadedOrderedMarkedAndCountedAsOnIOS() {
+        ProjectShell.coordinatorWorking = true
+        ProjectShell.quietAttention = """{"ownerItems":[{"kind":"COORDINATOR_QUESTION","count":2,"oldestWaitingSince":"2026-10-05T00:00:00Z"}]}"""
+        signIn(); openAlpha()
+        openDrawer(); await { exists(drawerRow("Quiet")) && exists(drawerRow("Launch")) }
+        await { compose.onAllNodesWithTag("drawer-project-running:${ProjectShell.LAUNCH}", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("drawer-group:Projects").assert(hasText("Projects")).assert(hasText("2"))
+        assertEquals(listOf("Quiet", "Launch"), drawerProjectRows())
+        compose.onNode(drawerRow("Launch")).assert(hasContentDescription("Running"))
+        compose.onNode(drawerRow("Quiet")).assert(hasContentDescription("2 waiting for you"))
+        compose.onNodeWithTag("projects-drawer-count", useUnmergedTree = true).assert(hasText("1")).assert(hasContentDescription("1 waiting on you"))
+        compose.onNode(drawerRow("Projects")).assert(hasContentDescription("1 waiting on you"))
+        // Closed, the drawer stays composed: its spinner goes, its counts stay.
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.onAllNodesWithTag("drawer-project-running:${ProjectShell.LAUNCH}", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithTag("drawer-project-needs-you:${ProjectShell.QUIET}", useUnmergedTree = true).assertExists()
+    }
+
     /** A wait on the fixture or the store, not the screen: it idles the UI on every look, or the store's coroutines (on the main
      * looper) would never run. */
     private fun settled(condition: () -> Boolean) = await { compose.waitForIdle(); condition() }
@@ -355,6 +378,9 @@ class ProjectSessionsShellTest {
         await { exists(hasText("Open Session") and hasAnyAncestor(isDialog())) }
     }
     private fun drawerRow(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+    /** The drawer's project rows, top to bottom. */
+    private fun drawerProjectRows() = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).fetchSemanticsNodes()
+        .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.map { it.text }?.firstOrNull { it == "Launch" || it == "Quiet" } }
     private fun openDrawer() { compose.onNodeWithContentDescription("Open navigation").performClick(); compose.waitForIdle() }
     private fun openAlpha() {
         await { exists(hasTestTag("workspace:${ProjectShell.ALPHA}")) }

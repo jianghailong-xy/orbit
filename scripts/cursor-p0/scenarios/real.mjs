@@ -2,7 +2,7 @@
 // Prompts are written so each step is observable on its own: a file the step creates, a marker an
 // MCP call records, a permission request it raises. Checks state what the CLI did, given what the
 // model attempted; a step the model never attempted fails its check rather than passing silently.
-import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, readdirSync, statSync, chmodSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, readdirSync, statSync, chmodSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { sleep, textOf, toolCalls, AUTO_MODEL } from '../lib/harness.mjs';
@@ -317,35 +317,86 @@ export const real = [
   {
     name: 'shell-wrapper-env', real: 1,
     async run(ctx) {
-      // D4 option: the CLI runs with an account HOME, agent commands get the runner user's HOME back
-      // through a SHELL wrapper (whose path must contain "bash" for the CLI to use it).
+      // D4 approach A as P3 ships it (src/runner-go/cursor_launch.go: writeCursorShellWrapper, prepareCursorLaunch):
+      // the CLI runs on an account HOME, and SHELL is orbit-bash, which puts the runner user's HOME back and
+      // unsets the CLI's own variables before it execs bash. The CLI only takes a $SHELL whose path names bash.
       const slot = ctx.slot('a');
       const work = ctx.repo('work');
+      // The runner user's HOME, stood in for by a directory of the run's: what lands in it is visible here,
+      // and the real one is never touched. Each HOME has a login profile that says whose it is.
       const realHome = join(ctx.dir, 'real-home');
       mkdirSync(realHome, { recursive: true });
-      mkdirSync(join(ctx.dir, 'tools'), { recursive: true });
-      const wrapper = join(ctx.dir, 'tools', 'orbit-bash');
+      writeFileSync(join(realHome, '.bash_profile'), 'export ORBIT_P0_PROFILE_HOME=real\n');
+      writeFileSync(join(slot.home, '.bash_profile'), 'export ORBIT_P0_PROFILE_HOME=account\n');
+      const wrapper = join(ctx.dir, 'bin', 'orbit-bash');
+      mkdirSync(join(ctx.dir, 'bin'), { recursive: true });
+      // The wrapper logs its own invocations (P0b): macOS has no strace, so the "which shell ran the
+      // commands, with -c or -ilc" checks read this log there.
       const wrapperRan = join(ctx.dir, 'wrapper-ran.log');
-      // Without strace (macOS) the wrapper proves its use by logging its own invocation.
-      const marker = process.platform === 'linux' ? '' : `echo ran >> '${wrapperRan}'\n`;
-      writeFileSync(wrapper, `#!/bin/bash\n# Agent commands get the runner user's HOME back, without Cursor credentials or account dirs.\n${marker}export HOME='${realHome}'\nunset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR AGENT_CLI_CREDENTIAL_STORE\nexec /bin/bash "$@"\n`);
-      chmodSync(wrapper, 0o755);
+      writeFileSync(wrapper, '#!/bin/sh\n' +
+        '# Orbit: the shell Cursor CLI runs an agent\'s commands in. The CLI itself runs with a HOME of\n' +
+        '# the session\'s own; its commands get the real one back, without the CLI\'s own variables.\n' +
+        `printf '%s\n' "$*" >> '${wrapperRan}'\n` +
+        `HOME='${realHome.replace(/'/g, `'"'"'`)}'\n` +
+        'export HOME\n' +
+        'unset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR\n' +
+        'exec \'/bin/bash\' "$@"\n');
+      chmodSync(wrapper, 0o700);
+      // An account session carries a token (CURSOR_AUTH_TOKEN), a key session the key: this one carries both,
+      // the token exchanged from the key with no prompt, so one turn shows what becomes of each.
+      const ex = ctx.slot('exchange');
+      const q = ctx.acp({ slot: ex, cwd: work, label: 'exchange', envOpts: { store: 'file' } });
+      await ctx.initialize(q);
+      const qn = await ctx.newSession(q, work);
+      await q.dispose();
+      const authFile = process.platform === 'darwin' ? join(ex.home, '.cursor', 'auth.json') : join(ex.xdgConfig, 'cursor', 'auth.json');
+      if (!ctx.check('a token is exchanged from the key without a prompt (file store, session/new)', !!qn.result && existsSync(authFile))) return;
+      const token = JSON.parse(readFileSync(authFile, 'utf8')).accessToken;
+      ctx.red.secret(token, 'ACCESS_TOKEN');
+      rmSync(authFile);
+      // P3's fixed layer (§16.3): no XDG_* variables, credentials in memory, no browser, direnv or debug log.
+      const user = process.env.USER ?? 'root';
+      const env = cursorEnv(slot, { layout: 'config-data', apiKey: ctx.key, store: 'memory', extra: { SHELL: wrapper, CURSOR_AUTH_TOKEN: token,
+        DIRENV_DISABLE: '1', CURSOR_AGENT_DISABLE_DEBUG_LOG: '1', USER: user, LOGNAME: user } });
       const asked = [];
       const straceFile = join(ctx.dir, 'turn.strace');
-      const p = ctx.acp({ slot, cwd: work, label: 'wrapper', onRequest: recordingPolicy(asked, () => 'allow-once'), envOpts: { store: 'memory', extra: { SHELL: wrapper } },
+      const p = ctx.acp({ slot, cwd: work, env, label: 'wrapper', onRequest: recordingPolicy(asked, () => 'allow-once'),
         wrap: straceWrap(straceFile) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, work);
-      const t = await ctx.promptAndWait(p, n.result.sessionId, 'Run these two shell commands, then reply DONE: `printenv HOME > home.txt` and `env | cut -d= -f1 | sort > env-names.txt`.', 'SHELL wrapper named *bash*: HOME and variable names agent commands see');
-      const home = existsSync(join(work, 'home.txt')) ? readFileSync(join(work, 'home.txt'), 'utf8').trim() : null;
+      if (!ctx.check('session/new succeeds with both CURSOR_API_KEY and CURSOR_AUTH_TOKEN set', !!n.result?.sessionId, n.error)) return;
+      const t = await ctx.promptAndWait(p, n.result.sessionId,
+        'Run these two shell commands exactly as written, one tool call each, then reply DONE: ' +
+        '`printf \'%s\\n\' "HOME=$HOME" "SHELL=$SHELL" "PROFILE=$ORBIT_P0_PROFILE_HOME" "CANARY=$ORBIT_P0_CANARY" "PATH=$PATH" > probe.txt` and ' +
+        '`env | cut -d= -f1 | sort > env-names.txt`.', 'D4 A: P3 orbit-bash as SHELL; HOME, profile and variable names agent commands see');
+      const probe = Object.fromEntries((existsSync(join(work, 'probe.txt')) ? readFileSync(join(work, 'probe.txt'), 'utf8').trim().split('\n') : [])
+        .map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
       const names = existsSync(join(work, 'env-names.txt')) ? readFileSync(join(work, 'env-names.txt'), 'utf8').trim().split('\n') : [];
       const st = parseStrace(straceFile);
-      const shells = [...new Set(st.execs.filter(e => e.ok && /bash/.test(e.path)).map(e => `${e.path.replace(ctx.dir, '<RUN>')} ${e.argv.slice(1, 3).join(' ')}`))];
-      ctx.note('agent command environment under SHELL=<dir>/orbit-bash', { stopReason: t.response.result?.stopReason, home, names, shellsExecuted: shells, wrapperMarkerExists: existsSync(wrapperRan), permissionRequests: asked.map(a => a.title) });
-      ctx.check('the wrapper runs the agent\'s commands (SHELL path containing "bash" is used)', existsSync(wrapperRan) || shells.some(x => x.includes('orbit-bash')));
-      ctx.check('agent commands see the wrapper\'s HOME (runner user\'s), not the CLI\'s account HOME', home === realHome, home);
-      ctx.check('…and none of the Cursor credentials or account directories the wrapper unset', names.length > 0 && !names.some(x => ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN', 'XDG_CONFIG_HOME', 'CURSOR_CONFIG_DIR', 'CURSOR_DATA_DIR', 'AGENT_CLI_CREDENTIAL_STORE'].includes(x)), names.filter(x => /CURSOR|XDG|AGENT_CLI/.test(x)));
-      ctx.check('the CLI itself still runs on the account HOME (its state file is there)', existsSync(join(slot.home, '.cursor', 'agent-cli-state.json')));
+      const shells = st.execs.filter(e => e.ok && (/bash/.test(e.path) || e.path === '/bin/sh' || e.path === '/usr/bin/sh'))
+        .map(e => `${e.path.replace(ctx.dir, '<RUN>')} ${e.argv.slice(1, 4).join(' ')}`.trim());
+      // On macOS (no strace) the wrapper's own log stands in for the execve trace.
+      const wrapperInvocations = existsSync(wrapperRan) ? readFileSync(wrapperRan, 'utf8').trim().split('\n').filter(Boolean) : [];
+      const ranWrapper = process.platform === 'darwin' ? wrapperInvocations.length > 0 : shells.some(x => x.includes('orbit-bash'));
+      const ranSnapshotAndCommand = process.platform === 'darwin'
+        ? wrapperInvocations.some(x => /\s-(il|li)c\b/.test(x)) && wrapperInvocations.some(x => /\s-c\b/.test(x))
+        : shells.some(x => x.includes('orbit-bash') && /\s-(il|li)c\b/.test(x)) && shells.some(x => x.includes('orbit-bash') && /\s-c\b/.test(x));
+      const removed = ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN', 'XDG_CONFIG_HOME', 'CURSOR_CONFIG_DIR', 'CURSOR_DATA_DIR'];
+      const cliVars = names.filter(x => /CURSOR|AGENT|XDG|DIRENV|NO_OPEN_BROWSER|SHELL|ORBIT/.test(x));
+      ctx.note('agent command environment under SHELL=<RUN>/bin/orbit-bash', { stopReason: t.response.result?.stopReason, probe, names, cursorAndOrbitNames: cliVars,
+        shellsExecuted: [...new Set(shells)], wrapperInvocations, permissionRequests: asked.map(a => a.title), answer: textOf(t.updates, 'agent_message_chunk').slice(-200) });
+      ctx.note('variables the CLI process had that the commands do not see', Object.keys(env).filter(k => !names.includes(k)).sort());
+      ctx.note('files in the stand-in for the runner user\'s HOME after the turn', ctx.tree(realHome));
+      ctx.check('both commands ran', Object.keys(probe).length > 0 && names.length > 0, { probe: Object.keys(probe), names: names.length });
+      ctx.check('the CLI starts orbit-bash (a #!/bin/sh script whose path names bash) for the agent\'s commands', ranWrapper, [...new Set(shells)]);
+      ctx.check('…for the login-shell snapshot (-ilc) as well as for each command (-c)', ranSnapshotAndCommand,
+        process.platform === 'darwin' ? wrapperInvocations : [...new Set(shells)]);
+      ctx.check('agent commands see the runner user\'s HOME (the wrapper\'s), not the CLI\'s account HOME', probe.HOME === realHome, probe.HOME);
+      ctx.check('…and its login profile, not the account HOME\'s', probe.PROFILE === 'real', probe.PROFILE);
+      ctx.check('…and none of CURSOR_API_KEY, CURSOR_AUTH_TOKEN, XDG_CONFIG_HOME, CURSOR_CONFIG_DIR, CURSOR_DATA_DIR', names.length > 0 && !names.some(x => removed.includes(x)), names.filter(x => removed.includes(x)));
+      ctx.check('a workspace variable still reaches them (the canary)', probe.CANARY === 'inherited' && names.includes('ORBIT_P0_CANARY'));
+      ctx.check('the CLI itself still runs on the account HOME: its state file is there, nothing of Cursor\'s in the commands\' HOME',
+        existsSync(join(slot.home, '.cursor', 'agent-cli-state.json')) && !existsSync(join(realHome, '.cursor')) && !existsSync(join(realHome, '.config', 'cursor')));
       ctx.fixture(p, 'wrapper');
     },
   },
@@ -431,12 +482,13 @@ export const real = [
       ctx.fixture(p, 'modes');
     },
   },
-  {
-    name: 'ask-question', real: 1,
+  // In agent mode (the default) and, run only if agent mode raises no question, in plan mode.
+  ...[['ask-question', 'agent'], ['ask-question-plan-mode', 'plan']].map(([name, mode]) => ({
+    name, real: 1,
     async run(ctx) {
       const slot = ctx.slot('a');
       const work = ctx.repo('work');
-      const asked = [], questions = [];
+      const asked = [], questions = [], plans = [];
       let first = true;
       const p = ctx.acp({ slot, cwd: work, label: 'ask', envOpts: { store: 'memory' }, onRequest: recordingPolicy(asked, msg => {
         // The fallback path turns a question into a permission request whose options are the answers.
@@ -458,18 +510,29 @@ export const real = [
           entry.reply = 'answered';
           return { result: { outcome: { outcome: 'answered', answers: (msg.params.questions ?? []).map(q => ({ questionId: q.id, selectedOptionIds: [q.options[q.options.length - 1].id] })) } } };
         },
+        'cursor/create_plan': msg => { plans.push(msg.params); return { result: { outcome: { outcome: 'accepted' } } }; },
       }) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, work);
       const sid = n.result.sessionId;
+      if (mode !== 'agent') {
+        const m = await p.request('session/set_mode', { sessionId: sid, modeId: mode });
+        if (!ctx.check(`session/set_mode ${mode}`, !!m.result, m.error)) return;
+      }
       const t = await ctx.promptAndWait(p, sid,
         'Use your ask-question tool twice, one question per tool call, and wait for each answer: first ask "Pick a fruit" with the options apple and banana; ' +
-        'after that answer arrives, ask "Pick a color" with the options red and blue. Then reply with exactly: fruit=<answer>, color=<answer>.', 'cursor/ask_question: unanswered 30 s then error (fallback), then answered');
+        'after that answer arrives, ask "Pick a color" with the options red and blue. Then reply with exactly: fruit=<answer>, color=<answer>.', `cursor/ask_question (${mode} mode): unanswered 30 s then error (fallback), then answered`);
       const answer = textOf(t.updates, 'agent_message_chunk');
-      ctx.note('questions', { questions, fallbackPermissionRequests: asked, stopReason: t.response.result?.stopReason, answer: answer.slice(-300), tools: toolCalls(t.updates).map(x => ({ title: x.title, kind: x.kind, statuses: x.statuses })) });
+      // Which tools the turn's stored context offered: the dynamic-tool namespaces (§6), AskQuestion among them or not.
+      const store = ctx.storeBlobs(slot.config, sid);
+      const contextText = (store?.blobs ?? []).filter(b => ['system', 'user'].includes(b.json.role)).map(b => JSON.stringify(b.json.content)).join('\n').replace(/\\"/g, '"');
+      const namespaces = Object.fromEntries([...contextText.matchAll(/<namespace name="([^"]+)" tools="([^"]*)"/g)].map(m => [m[1], m[2].split(/,\s*/)]));
+      ctx.note('questions', { mode, questions, fallbackPermissionRequests: asked, createPlan: plans, stopReason: t.response.result?.stopReason, answer: answer.slice(-300),
+        tools: toolCalls(t.updates).map(x => ({ title: x.title, kind: x.kind, statuses: x.statuses })) });
+      ctx.note('tools offered in the stored context (dynamic-tool namespaces)', { namespaces, mentionsAskQuestion: /AskQuestion|ask_question/i.test(contextText) });
       if (questions.length === 0) {
-        // Measured 2026-10-16: in ACP agent mode the server offered no AskQuestion tool.
-        ctx.check('the server offered no AskQuestion tool in agent mode: no cursor/ask_question, the model asks in plain text', /AskQuestion isn.t available|ask conversationally|not available/i.test(answer), answer.slice(-200));
+        // Measured 2026-10-16 (Free plan, agent mode): the server offered no AskQuestion tool.
+        ctx.check(`no cursor/ask_question in ${mode} mode: the model says it has no such tool and asks in plain text`, /AskQuestion isn.t available|ask conversationally|not available|don.t have|do not have|no .*tool/i.test(answer), answer.slice(-200));
         ctx.fixture(p, 'ask');
         return;
       }
@@ -480,7 +543,7 @@ export const real = [
       ctx.check('…and so does the fallback selection (first answer used)', /fruit\s*=\s*banana/i.test(answer), answer.slice(-120));
       ctx.fixture(p, 'ask');
     },
-  },
+  })),
   {
     name: 'subagent-and-todos', real: 1,
     async run(ctx) {
@@ -543,7 +606,10 @@ export const real = [
       ctx.fixture(p, 'background');
     },
   },
-  ...['baseline', 'with-flags'].map(variant => ({
+  // with-flags is the run the contract asked for; the single-flag variants separate the two flags' effects
+  // on the stored context if with-flags leaves that open.
+  ...[['baseline', []], ['with-flags', ['--disable-project-configs', '--exclude-workspace-context']],
+    ['disable-project-configs', ['--disable-project-configs']], ['exclude-workspace-context', ['--exclude-workspace-context']]].map(([variant, args]) => ({
     name: `repo-config-${variant}`, real: 1,
     async run(ctx) {
       const repo = join(ctx.dir, 'repo');
@@ -555,39 +621,48 @@ export const real = [
       const asked = [];
       // The flags act on different things (cli.json vs. the context sent upstream), so one run with
       // both still tells their effects apart: permission prompts vs. codewords in the stored context.
-      const args = variant === 'baseline' ? [] : ['--disable-project-configs', '--exclude-workspace-context'];
+      const disableProjectConfigs = args.includes('--disable-project-configs');
       const straceFile = join(ctx.dir, 'turn.strace');
       const p = ctx.acp({ slot, cwd: repo, label: 'repo', args, onRequest: recordingPolicy(asked, () => 'allow-once'), envOpts: { store: 'memory' },
         wrap: straceWrap(straceFile) });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, repo);
+      if (!ctx.check(`session/new succeeds with ${args.join(' ') || 'no flags'}`, !!n.result?.sessionId, n.error ?? { exit: p.exit, stderr: p.stderr.slice(-300) })) return;
       const sid = n.result.sessionId;
       const markersBefore = readLines(paths.markerLog).length;
       const t = await ctx.promptAndWait(p, sid,
-        'Four steps, one tool call each: 1) Run the shell command `touch hooked.txt`. 2) Append the line "# probe" to app.py. 3) Read the file sub/note.txt. ' +
-        '4) Reply with every codeword (strings that start with P0-) that appears anywhere in your instructions, rules or skills, comma-separated, or "none".', `repo configs (${variant})`);
+        'Five steps, one tool call each: 1) Run the shell command `touch hooked.txt`. 2) Run the shell command `mkdir made-dir`. 3) Append the line "# probe" to app.py. ' +
+        '4) Read the file sub/note.txt. 5) Reply with every codeword (strings that start with P0-) that appears anywhere in your instructions, rules or skills, comma-separated, or "none".', `repo configs (${variant})`);
       await sleep(5000);
+      const commands = [...p.updatesFor(sid)].reverse().find(u => u.sessionUpdate === 'available_commands_update')?.availableCommands?.map(c => c.name) ?? [];
       await p.dispose();
-      const markers = readLines(paths.markerLog).map(m => `${m.source}:${m.event}`);
+      const markerLines = readLines(paths.markerLog);
+      const markers = markerLines.map(m => `${m.source}:${m.event}`);
       const store = ctx.storeBlobs(slot.config, sid);
       const context = JSON.stringify(store?.blobs?.filter(b => ['system', 'user'].includes(b.json.role)).map(b => b.json.content) ?? []);
       const inContext = Object.fromEntries(Object.entries(CODEWORDS).map(([k, w]) => [k, context.includes(w)]));
       const answer = textOf(t.updates, 'agent_message_chunk');
       const st = parseStrace(straceFile);
       const programs = [...new Set(st.execs.map(e => `${e.path.replace(/.*\//, '')} ${e.argv.slice(1, 4).join(' ')}`.trim()))];
-      ctx.note('repo configuration', { variant, stopReason: t.response.result?.stopReason, markersAtStartup: markersBefore, markers, permissionRequests: asked,
+      const bySource = {};
+      for (const m of markerLines) (bySource[m.source] ??= []).includes(m.event) || bySource[m.source].push(m.event);
+      ctx.note('repo configuration', { variant, args, stopReason: t.response.result?.stopReason, markersAtStartup: markersBefore, hookEventsBySource: bySource, markers, permissionRequests: asked,
         codewordsInStoredContext: inContext, codewordsInAnswer: Object.fromEntries(Object.entries(CODEWORDS).map(([k, w]) => [k, answer.includes(w)])), answer: answer.slice(-500),
-        mcpServersStarted: [...new Set(readLines(paths.mcpLog).filter(l => l.event === 'launch').map(l => l.server))], programs,
+        mcpServersStarted: [...new Set(readLines(paths.mcpLog).filter(l => l.event === 'launch').map(l => l.server))], availableCommands: commands, programs,
+        hookEnvironment: markerLines.slice(0, 1).map(m => ({ home: m.home, xdgConfig: m.xdgConfig, cursorConfigDir: m.cursorConfigDir, canary: m.canary })),
         tools: toolCalls(t.updates).map(x => ({ title: x.title, kind: x.kind, statuses: x.statuses })) });
       ctx.check('the turn ran', t.response.result?.stopReason === 'end_turn' && existsSync(join(repo, 'hooked.txt')));
       const touchAsked = asked.some(a => /touch hooked/.test(a.title ?? ''));
-      if (variant !== 'baseline') ctx.check('--disable-project-configs: the repo\'s cli.json allow entry is ignored (`touch` asks)', touchAsked);
-      else ctx.check('the repo\'s .cursor/cli.json widens the allowlist: `touch` runs without a permission request', !touchAsked);
+      const mkdirAsked = asked.some(a => /mkdir made-dir/.test(a.title ?? ''));
+      if (disableProjectConfigs) ctx.check('--disable-project-configs: the repo\'s cli.json allow entry is ignored (`touch` asks)', touchAsked);
+      else ctx.check('the repo\'s .cursor/cli.json widens the allowlist: `touch` runs without a permission request', !touchAsked && existsSync(join(repo, 'hooked.txt')));
+      ctx.check('the repo\'s .claude/settings.json permissions are not read on the ACP path (`mkdir`, allowed only there, asks)', mkdirAsked, asked.map(a => a.title));
       ctx.check('repo .cursor/hooks.json never runs in ACP', !markers.some(m => m.startsWith('repo-cursor-hooks')));
       ctx.check('repo .cursor/worktrees.json, environment.json and .envrc never run', !markers.some(m => /repo-(worktrees|environment|envrc)/.test(m)));
-      ctx.note('hook sources that did run', [...new Set(markers.map(m => m.split(':')[0]))]);
+      ctx.check('the repo\'s .cursor/mcp.json server does not start (never approved)', !readLines(paths.mcpLog).some(l => l.event === 'launch' && l.server === 'repo-mcp'));
+      ctx.note('hook sources that did run', Object.keys(bySource));
       ctx.note('codewords present in the stored model context', inContext);
-      if (variant !== 'baseline') ctx.note('--exclude-workspace-context: workspace rules still in the stored context?', inContext.agents || inContext.ruleAlways);
+      if (args.includes('--exclude-workspace-context')) ctx.note('--exclude-workspace-context: workspace rules still in the stored context?', inContext.agents || inContext.ruleAlways);
       ctx.fixture(p, 'repo');
     },
   })),
@@ -597,7 +672,10 @@ export const real = [
       const slot = ctx.slot('a');
       const work = ctx.repo('work');
       const proxy = await ctx.proxy();
-      const env = ctx.env(slot, { store: 'memory', extra: { HTTPS_PROXY: proxy.url, HTTP_PROXY: proxy.url, NO_PROXY: '127.0.0.1,localhost', NODE_USE_ENV_PROXY: '1' } });
+      // The CLI's own debug log (§8.1) goes to the run's TMPDIR, for what it says about the failure.
+      const tmp = join(ctx.dir, 'tmp');
+      mkdirSync(tmp, { recursive: true });
+      const env = ctx.env(slot, { store: 'memory', extra: { HTTPS_PROXY: proxy.url, HTTP_PROXY: proxy.url, NO_PROXY: '127.0.0.1,localhost', NODE_USE_ENV_PROXY: '1', TMPDIR: tmp } });
       const p = ctx.acp({ slot, cwd: work, env, label: 'netdrop' });
       await ctx.initialize(p);
       const n = await ctx.newSession(p, work);
@@ -616,7 +694,16 @@ export const real = [
       if (!resp) resp = await Promise.race([t.promise, sleep(180000).then(() => ({ localTimeout: true }))]);
       const phaseB = { ms: Date.now() - restoredAt, updates: countKinds(p.updates.slice(beforeB).map(u => u.update)) };
       const after = p.updates.slice(t.from).map(u => u.update);
-      ctx.note('network drop', { streamingBeforeCut: streaming, response: resp, phaseA, phaseB, kinds: countKinds(after), tail: textOf(after, 'agent_message_chunk').slice(-400), stderrTail: p.stderr.slice(-600) });
+      // Every message chunk after the cut as sent, and the last one: the shape P5b classifies (§12, §16.6).
+      const chunksAfterCut = p.updates.slice(before).filter(u => u.update.sessionUpdate === 'agent_message_chunk').map(u => u.update.content?.text ?? '');
+      const lastChunk = [...after].reverse().find(u => u.sessionUpdate === 'agent_message_chunk')?.content?.text ?? null;
+      ctx.note('network drop', { streamingBeforeCut: streaming, response: resp, phaseA, phaseB, kinds: countKinds(after), tail: textOf(after, 'agent_message_chunk').slice(-400),
+        chunksAfterCut: chunksAfterCut.length > 40 ? [...chunksAfterCut.slice(0, 20), `… ${chunksAfterCut.length} in all`, ...chunksAfterCut.slice(-20)] : chunksAfterCut, lastChunk, stderrTail: p.stderr.slice(-600) });
+      const logDir = join(tmp, `cursor-agent-logs-${process.getuid()}`);
+      const logLines = existsSync(logDir) ? readdirSync(logDir).filter(f => f.includes(`-${p.pid}-`)).flatMap(f => readFileSync(join(logDir, f), 'utf8').split('\n')) : [];
+      const failureLines = logLines.filter(l => /error|retr(y|ies)|ECONN|socket|network|timed? ?out|abort|unavailable|deadline|reconnect/i.test(l));
+      ctx.note('CLI debug log lines about the failure (first 40 and last 40)', { lines: logLines.length, matching: failureLines.length,
+        excerpt: (failureLines.length > 80 ? [...failureLines.slice(0, 40), '…', ...failureLines.slice(-40)] : failureLines).map(l => l.slice(0, 400)) });
       ctx.check('a network loss mid-stream ends the prompt within 120 s or the turn resumes once the network is back (no endless hang)', !resp.localTimeout && !resp.timeout, { phaseA, phaseB, resp });
       ctx.note('error surface: JSON-RPC error vs stopReason + text', resp.error ? 'json-rpc error' : resp.result?.stopReason);
       const l = await p.request('session/list', {});

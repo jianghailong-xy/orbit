@@ -1,0 +1,73 @@
+<!doctype html>
+<!-- Design board Web 4 (T0, Cursor engine): a Cursor API key — the vendor gallery card, the connect form, and a
+     key Cursor rejects. Real-page captures ("现在" main e00629fd4; "改后" + prototype.patch). Not shipped
+     code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web 4 · Cursor API key: gallery card, connect form, invalid key</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="kit.js"></script>
+<script src="shots/marks.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Web 4 · Cursor API key：画廊多一张「Cursor」；表单写明只跑 Cursor CLI；key 无效时连接页和 key 行都说清楚</h1>
+  <p class="m-sub zh">Cursor User API Key 是第三种凭据（所有者决定 1）：存在 Orbit 里、加密，<b>只跑 Cursor CLI</b>，Cursor CLI 也只认 Cursor key 和 Cursor 账号（provider-engine 兼容表加一行）。按 Cursor 套餐计费。校验用 runner 上的 <code>agent models</code>（契约 §9：约 3.5 s，不花请求）：有效退出 0；无效 key 是 "The provided API key is invalid."；断网是 "Failed to reach the Cursor API"——这两种要分开写，后者不说 key 坏了。全部是真实页面截图。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① Infrastructure → Connect another provider</div>
+    <div class="frames" id="s1"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② Connect Cursor（/providers/new/cursor）</div>
+    <div class="frames" id="s2"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 连接时检查不过：key 无效 vs 连不上 Cursor</div>
+    <div class="frames" id="s3"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">④ 存下以后 key 被吊销：API keys 表里的那一行</div>
+    <div class="frames" id="s4"></div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">⑤ 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const frame = (kind, label, html, cap = '') => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '改后' ? ' new' : ''}">${kind}</span>${label}</div>${html}${cap ? `<p class="m-cap zh" style="max-width:900px">${cap}</p>` : ''}</div>`;
+document.getElementById('s1').innerHTML =
+  frame('现在', '九张厂商卡 + Custom', shot('w4-gallery-now', { width: 904 })) +
+  frame('改后', 'Cursor 排在 Moonshot 之后（有自己 engine 的厂商一组）', shot('w4-gallery-new', { width: 904, marks: [{ box: 'card', n: 1, pad: 3 }] }));
+document.getElementById('s2').innerHTML =
+  frame('改后', '粘 key；写清楚只跑 Cursor CLI、谁拿得到它', shot('w4-connect', { width: 680, marks: [{ box: 'idbar', n: 2, pad: 3 }, { box: 'works', n: 3, pad: 3 }, { box: 'who', n: 4, pad: 3 }] }));
+document.getElementById('s3').innerHTML =
+  frame('改后', 'key 无效：不给「Save anyway」', shot('w4-connect-invalid', { width: 692, marks: [{ box: 'err', n: 5, pad: 3 }] })) +
+  frame('改后', '连不上 Cursor：可以先存', shot('w4-connect-unreachable', { width: 692 }));
+document.getElementById('s4').innerHTML =
+  frame('改后', 'Cursor 组：Cursor 正常，Cursor 2 被拒', shot('w4-keys-new', { width: 900, marks: [{ box: 'bad', n: 6, pad: 3 }] }),
+    '行上的检查结果来自最近一次 <code>agent models</code>：会话启动时也会因 <code>-32603 "Failed to initialize session services"</code> 起不来，runner 用 <code>agent models</code> 二次判定是 key 坏了还是网络（契约 §12、§16.6），结果写回这一行。');
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>画廊卡「Cursor」</b>：副标题沿用今天的规则——有机器登了 Cursor CLI 时写「Already signed in on hpc」（同 Anthropic、OpenAI：不用 key 也能跑）；都没有时写它能跑的 engine，只有「Cursor CLI」；连上 key 后「Connected」。图标同 engine（Cursor 的立方体标，待定）。'],
+  [2, '<b>身份条</b>：「Cursor API · models from Cursor CLI on each machine」。模型目录不在 Orbit 里维护，来自每台机器上 Cursor CLI 的 ACP 目录（按账号或 key 读，契约 §10）。'],
+  [3, '<b>Works with</b>：只有一行 Cursor CLI，「Cursor CLI only; sessions on this key are billed to its Cursor plan」。不像 DeepSeek key 能跑三个 engine。'],
+  [4, '<b>Who gets this key</b>：命令能读到它（<code>CURSOR_API_KEY</code> 在 CLI 的环境里，agent 跑的命令继承，契约 §8.3）；连接时由一台装了 Cursor CLI 的 runner 检查，不花请求。key 不进日志、事件、证据。'],
+  [5, '<b>key 无效</b>：「Cursor rejected this key: “The provided API key is invalid.” Check it on cursor.com and paste it again.」，不给「Save anyway」（今天的 Save anyway 是为不回应 ping 的端点准备的，这里检查结果是确定的）。连不上 Cursor 时保留 Save anyway。'],
+  [6, '<b>存下之后被拒</b>：key 行加一行红字「Rejected by Cursor · 4m ago · Paste a new key」（样式同 DeepSeek 的「Balance unavailable」行）；连不上时写「Couldn’t reach Cursor to check this key · Retry」。'],
+  ['·', '<b>不变的：</b>按厂商分组、Enabled / Last used / Edit / Delete、停用或删除前问影响（KeyImpact）、Advanced 里的 Endpoint（<code>https://api2.cursor.sh</code>，只读展示）。'],
+]);
+finish();
+</script>
+</body>
+</html>

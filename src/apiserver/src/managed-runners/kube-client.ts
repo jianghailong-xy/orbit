@@ -1,14 +1,15 @@
 /**
- * The narrow Kubernetes surface the managed runner manager uses: PVCs, Secrets and Pods in the one
- * configured namespace (get, create, delete, list, watch); a read of a PV, whose CSI volume handle
- * is part of a data volume's identity; a list of VolumeAttachments, which says whether that volume
- * is still attached to a node; and a read of a ConfigMap, the only way a fencing receipt reaches the
- * manager (it can read one, never write one). Nothing else — no cluster-scoped writes, no exec, no
- * node or storage administration.
+ * The narrow Kubernetes surface KubernetesBackend (kubernetes-backend.ts) uses: PVCs, Secrets and
+ * Pods in the one configured namespace (get, create, delete, list, watch); a read of a PV, whose CSI
+ * volume handle is part of a data volume's identity; a list of VolumeAttachments, which says whether
+ * that volume is still attached to a node; and a read of a ConfigMap, the only way a fencing receipt
+ * reaches the manager (it can read one, never write one). Nothing else — no cluster-scoped writes,
+ * no exec, no node or storage administration.
  *
  * Two implementations: `kube-http-client.ts`, constructed only when the feature is enabled and an
  * explicit context and namespace are configured; and the test fake in
- * `test-support/fake-kube-client.ts`. The manager is written against this interface alone.
+ * `test-support/fake-kube-client.ts`. KubernetesBackend is written against this interface alone, and
+ * the manager against the run backend's (managed-runner-backend.ts).
  */
 
 export interface KubeObjectMeta {

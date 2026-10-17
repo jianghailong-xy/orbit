@@ -45,12 +45,11 @@ import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
 import {
+  ACCOUNT_MOVE_CAPABILITY,
   ANTIGRAVITY_ACCOUNT_LOGIN_V1,
   CLAUDE_ACCOUNT_MOVE_V1,
-  CODEX_ACCOUNT_MOVE_V1,
-  KIMI_ACCOUNT_MOVE_V1,
 } from '../providers/account-move-capability';
-import { accountEnvVar } from '../providers/account';
+import { ACCOUNT_CHOICE, ACCOUNT_PINNED, accountEnvVar } from '../providers/account';
 import { sessionAccountPausedUntil, type WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
@@ -85,7 +84,7 @@ import {
   IntegrationJobResultResponse,
   isUsageLimitErrorText,
   parseQuotaResetAt,
-  planUsageBlockedUntil,
+  usageLimitResetsAt,
   workflowLaunchReceipt,
   type PlanUsage,
   PermissionMode,
@@ -4812,12 +4811,14 @@ export class RunnerApiController {
           poolKeyId: true,
           poolCodexAccountId: true,
           model: true,
-          // Which of the runner's Codex or Kimi accounts a turn its usage limit ended ran on, and
-          // whether it was picked by hand — see `usageLimit` below.
+          // Which of the runner's Codex, Kimi or Cursor CLI accounts a turn its usage limit ended ran on,
+          // and whether it was picked by hand — see `usageLimit` below.
           codexAccount: true,
           codexAccountPinned: true,
           kimiAccount: true,
           kimiAccountPinned: true,
+          cursorAccount: true,
+          cursorAccountPinned: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -5261,13 +5262,20 @@ export class RunnerApiController {
       // the turn's own record and reports it as the turn's error, in the words this reads
       // (kimi_acp.go kimiFailureSentence).
       //
-      // Asked of the session's engine, on the runner's own sign-in for it only: a Codex or Kimi session
-      // on a key or a pool spends no account of the runner's, and has none to be moved off.
+      // A built-in Cursor CLI session too. Cursor answers its usage limit with a sentence and an ordinary
+      // end; the runner reports it as the turn's error (cursor_events.go cursorTurnFailure). No runner
+      // carries a Cursor CLI conversation to another account yet (CURSOR_ACCOUNT_MOVE_V1), so it waits for
+      // its account's included usage to reset (quotaRetryAt).
+      //
+      // Asked of the session's engine, on the runner's own sign-in for it only: a Codex, Kimi or Cursor
+      // CLI session on a key or a pool spends no account of the runner's, and has none to be moved off.
       const runsOnLogin = isBuiltinProvider(current.provider, current.providerBuiltin)
         && (recordedEngine(current.engine) ?? current.provider) === current.provider;
       const usageLimitEngine = runsOnLogin && current.provider === AgentProvider.CODEX
         ? 'codex' as const
-        : runsOnLogin && current.provider === AgentProvider.KIMI ? 'kimi' as const : null;
+        : runsOnLogin && current.provider === AgentProvider.KIMI
+          ? 'kimi' as const
+          : runsOnLogin && current.provider === AgentProvider.CURSOR ? 'cursor' as const : null;
       const usageLimit =
         failSession
         && completedTurn?.kind === 'message'
@@ -5701,7 +5709,7 @@ export class RunnerApiController {
           // (the events path attaches it, as it does a pool's).
           ...(usageLimit?.move
             ? {
-                ...(usageLimitEngine === 'kimi' ? { kimiAccount: usageLimit.move.to } : { codexAccount: usageLimit.move.to }),
+                ...(usageLimitEngine ? { [ACCOUNT_CHOICE[usageLimitEngine]]: usageLimit.move.to } : {}),
                 poolSwitchNotice: usageLimit.move.notice,
               }
             : {}),
@@ -6860,7 +6868,9 @@ export class RunnerApiController {
         quotaSpent && accountEnvVar(current.provider) && current.workspaceId
           ? await tx.workspace.findUnique({
               where: { id: current.workspaceId },
-              select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
+              select: {
+                env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+              },
             })
           : null;
       // A pool credential that ended the run is waited out the same way, from the pool's rows rather than
@@ -7810,12 +7820,13 @@ export class RunnerApiController {
         codexAccount: true,
         claudeAccount: true,
         claudeAccountPinned: true,
-        // The Kimi account the run spent, whose quota alone says when it frees up (quotaRetryAt).
+        // The Kimi or Cursor CLI account the run spent, whose quota alone says when it frees up (quotaRetryAt).
         kimiAccount: true,
+        cursorAccount: true,
         poolSwitchNotice: true,
         poolCodexAccountId: true,
         poolKeyId: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true } },
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, cursorAccount: true } },
       },
     });
     if (!session) return {};
@@ -7898,16 +7909,18 @@ export class RunnerApiController {
   }
 
   /**
-   * The retry a built-in Codex or Kimi session's usage limit arms: at once, on another of the runner's
-   * accounts with room, when its workspace leaves the account to Orbit (accountAfterUsageLimit) and its
-   * runner can carry the conversation there (CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1) — or at this
-   * account's reset, or another's that comes first (quotaRetryAt). Null when no reset can be read
-   * either: nothing says when to try again, and the session stays FAILED, one message away from resuming.
+   * The retry a built-in Codex, Kimi or Cursor CLI session's usage limit arms: at once, on another of the
+   * runner's accounts with room, when its workspace leaves the account to Orbit (accountAfterUsageLimit)
+   * and its runner can carry the conversation there (CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1,
+   * CURSOR_ACCOUNT_MOVE_V1 — which no runner declares before Cursor CLI's conversations are proved to
+   * move, docs/cursor-runtime-contract.md §13.3) — or at this account's reset, or another's that comes
+   * first (quotaRetryAt). Null when no reset can be read either: nothing says when to try again, and the
+   * session stays FAILED, one message away from resuming.
    */
   private async usageLimitRetry(
     tx: UsageLimitTransaction,
     runnerId: string,
-    engine: 'codex' | 'kimi',
+    engine: 'codex' | 'kimi' | 'cursor',
     session: {
       ownerId: string;
       provider: string;
@@ -7915,6 +7928,8 @@ export class RunnerApiController {
       codexAccountPinned: boolean;
       kimiAccount: string | null;
       kimiAccountPinned: boolean;
+      cursorAccount: string | null;
+      cursorAccountPinned: boolean;
       workspaceId: string | null;
     },
     text: string,
@@ -7927,18 +7942,17 @@ export class RunnerApiController {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true },
+          select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true, cursorAccount: true },
         })
       : null;
-    const own = engine === 'kimi'
-      ? { account: session.kimiAccount, pinned: session.kimiAccountPinned }
-      : { account: session.codexAccount, pinned: session.codexAccountPinned };
-    const move = runner?.capabilities.includes(engine === 'kimi' ? KIMI_ACCOUNT_MOVE_V1 : CODEX_ACCOUNT_MOVE_V1)
-      ? accountAfterUsageLimit(engine, own, workspace, runner.engines, runner.planUsage, now, runner.accountPauses)
+    const own = { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] };
+    const carries = !!runner?.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
+    const move = carries
+      ? accountAfterUsageLimit(engine, own, workspace, runner!.engines, runner!.planUsage, now, runner!.accountPauses)
       : null;
     if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice(engine, move, runner) } };
-    const elsewhere = runner?.capabilities.includes(engine === 'kimi' ? KIMI_ACCOUNT_MOVE_V1 : CODEX_ACCOUNT_MOVE_V1)
-      ? accountAfterUsageLimitAt(engine, own, workspace, runner.engines, runner.planUsage, now, runner.accountPauses)
+    const elsewhere = carries
+      ? accountAfterUsageLimitAt(engine, own, workspace, runner!.engines, runner!.planUsage, now, runner!.accountPauses)
       : null;
     const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace, elsewhere);
     return at ? { retryAt: at } : null;
@@ -7971,11 +7985,27 @@ export class RunnerApiController {
    * (accountAfterUsageLimitAt), from a caller that just found none with room to move it to. Whichever
    * comes first, it or this account's own reset, is when the retry goes — and on another account, the
    * retry's dispatch moves the session there (accountBeforeDispatch).
+   *
+   * Cursor CLI says neither: its sentence names no time ("Upgrade your plan to continue"), and its
+   * snapshot counts the account spent only once the runner has seen this very turn, in a heartbeat after
+   * it. So its account's own reset is when the dashboard says its included usage resets
+   * (usageLimitResetsAt: GetCurrentPeriodUsage's period end, or a paid plan's includedUsageResetsAt —
+   * docs/cursor-runtime-contract.md §11). An account the dashboard has not answered for names no reset,
+   * and nothing is armed: the card offers a manual retry.
    */
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null; antigravityAccount?: string | null; kimiAccount?: string | null },
+    session: {
+      ownerId: string;
+      provider: string;
+      providerBuiltin?: boolean;
+      codexAccount: string | null;
+      claudeAccount?: string | null;
+      antigravityAccount?: string | null;
+      kimiAccount?: string | null;
+      cursorAccount?: string | null;
+    },
     text: string,
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null | undefined,
     elsewhere: Date | null = null,
@@ -7998,7 +8028,7 @@ export class RunnerApiController {
     const own =
       pool ??
       parseQuotaResetAt(text, now) ??
-      (!onRunnerLogin ? null : planUsageBlockedUntil(
+      (!onRunnerLogin ? null : usageLimitResetsAt(
         withEnginePlanUsage(runner?.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner?.engines)),
         session.provider,
         now,
@@ -8010,6 +8040,7 @@ export class RunnerApiController {
             claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
             antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
             kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
+            cursorAccount: session.cursorAccount ?? workspace?.cursorAccount,
           },
           runner?.engines,
         ),

@@ -1,35 +1,39 @@
-# Cursor CLI（`agent acp`）运行时契约（P0a Linux + P0b macOS）
+# Cursor CLI（`agent acp`）运行时契约（P0a、P0c，Linux；P0b，macOS）
 
-**状态**：项目「Cursor CLI 原生接入」（`34gyHIZv301nDWxKP9XkO`）P0a（Linux）与 P0b（macOS）的产物。P0c、T0、P1–P6 按这份文件实现。
+**状态**：项目「Cursor CLI 原生接入」（`34gyHIZv301nDWxKP9XkO`）P0a 的产物，P0c（`34h3xGGSqUnA6DTMj1iop`）补测后修订，P0b（macOS）补了 §18。T0、P1–P6 按这份文件实现。
 改这里的任何一条结论，要同时改依赖它的任务。已定的设计（作业指导里的所有者决定）不在这里重新论证。
 
-**实测版本**：**Cursor CLI `2026.10.14-941492e`**。
-- linux/x64，HPC（内核 `6.12.107+deb13-amd64`，24 核，root）。tarball：`https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz`，183,861,376 字节，
-  SHA-256 `6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d`。
+**实测版本**：**Cursor CLI `2026.10.14-941492e`**，linux/x64，HPC（内核 `6.12.107+deb13-amd64`，24 核，root）。
+- tarball：`https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz`，183,861,376 字节，
+  SHA-256 `6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d`。2026-10-17 01:40 UTC 重新下载，仍可取到，哈希不变。
+- **后续任务都固定用它。** 官方安装脚本 `https://cursor.com/install` 在 2026-10-17 01:40 UTC 给的是 `2026.10.16-e3cb207`（官方 2026-10-16 发布），两版的差异见 §1.3。
 - darwin/arm64，orbit-macos（macOS 27.0.1，Apple M2；P0b）。tarball：`…/darwin/arm64/agent-cli-package.tar.gz`，178,006,204 字节，
-  SHA-256 `c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77`。macOS 结论见 §18。
-- 2026-10-17 再取 `https://cursor.com/install`，脚本仍指向这个版本，没有更新的构建。**后续任务都固定用它。**
+  SHA-256 `c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77`（2026-10-17 在 orbit-macos 上测得）。macOS 结论见 §18。
 - Linux 解包后 458 个文件，586,293,819 字节（macOS：450 个文件，596 MB，§18.1）。`index.js` SHA-256 `27776c58…2113482`，启动脚本 `cursor-agent` SHA-256 `2ccc9a8e…a233`，
   自带 `node` SHA-256 `e0e46d3a…62a4`。全部文件哈希见 `/mnt/data/cursor-p0/dl/2026.10.14-941492e/files.sha256`（Linux）与 macOS 证据目录（§18）。
 
 **方法**：
 - 真 CLI 加所有者的 Cursor User API Key，跑脚本 [`scripts/cursor-p0/reproduce.mjs`](../scripts/cursor-p0/reproduce.mjs)，结果在
-  [`docs/evidence/cursor-cli/2026.10.14-941492e/`](evidence/cursor-cli/2026.10.14-941492e/)。
-- 每个场景一个 `scenarios/<名>.json`（断言和数据）和一个 `protocol/<名>.ndjson`（双向 JSON-RPC 录制，已脱敏）。下文 `` `场景名` `` 指这些文件。
-  回放样本在 [`src/runner-go/testdata/cursor/`](../src/runner-go/testdata/cursor/)。
+  [`docs/evidence/cursor-cli/2026.10.14-941492e/`](evidence/cursor-cli/2026.10.14-941492e/)（P0a）和它下面的 [`p0c/`](evidence/cursor-cli/2026.10.14-941492e/p0c/README.md)（P0c），
+  macOS 的结果在 [`docs/evidence/cursor-cli/macos-2026.10.14-941492e/`](evidence/cursor-cli/macos-2026.10.14-941492e/)（P0b）。
+- 每个场景一个 `scenarios/<名>.json`（断言和数据）和一个 `protocol/<名>.ndjson`（双向 JSON-RPC 录制，已脱敏）。下文 `` `场景名` `` 指这些文件，
+  P0c 跑的场景写成 `` `p0c/场景名` ``。回放样本在 [`src/runner-go/testdata/cursor/`](../src/runner-go/testdata/cursor/)，P0c 的在其下 `p0c/`。
 - 所有 CLI 进程都用白名单环境和隔离目录（HOME、CURSOR_CONFIG_DIR、CURSOR_DATA_DIR、XDG_* 都指向 `/mnt/data/cursor-p0/runs/<runId>/<场景>/slots/<槽>/`）。
   每个场景前后核对 runner 用户真实的 `~/.cursor`、`~/.config/cursor`、`~/.local/share/cursor-agent`：起步不存在，结束仍不存在。
 - 源码结论出自固定版本的打包文件，写成 `文件@字节偏移`。缩写：I = `index.js`，A = `6136.index.js`（ACP agent），
   S = `8096.index.js`（内置 `@agentclientprotocol/sdk` 0.14.1），P = `1623.index.js`，Q = `2496.index.js`，C = `7000.index.js`（只有对话模式加载），
-  H = `190.index.js`（hooks）。
+  H = `190.index.js`（hooks），R = `8192.index.js`（只在 `chat` 和 `sandbox-debug` 命令里加载）。`agent acp` 的入口加载 2240、8096、7923、190、1429、2496、1623、6136 这几个分块【源码 I@1740147】，
+  它们都不引用 R。
 - 官方文档：<https://cursor.com/docs/cli/acp>、`/docs/cli/reference/{permissions,authentication,configuration}`（2026-10-17 读取）。
 
-**标签**：【实测】本任务用固定版本真 CLI 测到；【源码】读打包文件得出，没运行验证；【文档】官方文档这么写；
+**标签**：【实测】P0a 或 P0c 用固定版本真 CLI 测到；【源码】读打包文件得出，没运行验证；【文档】官方文档这么写；
 【待验】没能验证（原因写在条目里），实现时不得当作已支持。
 
-**真实 prompt**：一共 **20 次**，全部 Auto 模型（`default[]`），明细见 [`prompts-ledger.json`](evidence/cursor-cli/2026.10.14-941492e/prompts-ledger.json)。
-第 20 次碰到所有者 Free 套餐的免费请求上限（§12、[事故记录](evidence/cursor-cli/2026.10.14-941492e/incidents/quota-exhausted/README.md)），
-账期 2026-10-24 结束前这把 key 发不出能执行的 prompt。所以仓库配置的运行期效果、轮中断网、SHELL 包装隔离、远程登录续聊这几项**没做成**，标【待验】。
+**真实 prompt**：全部 Auto 模型（`default[]`），两个任务各记各的账：
+- P0a **20 次**，账本 `/mnt/data/cursor-p0/ledger/prompts.jsonl`，明细见 [`prompts-ledger.json`](evidence/cursor-cli/2026.10.14-941492e/prompts-ledger.json)。
+  第 20 次碰到所有者 Free 套餐的免费请求上限（§12、[事故记录](evidence/cursor-cli/2026.10.14-941492e/incidents/quota-exhausted/README.md)）。
+- P0c **7 次**，账本 `/mnt/data/cursor-p0/ledger/p0c-prompts.jsonl`（上限 10），明细见 [`p0c/prompts-ledger.json`](evidence/cursor-cli/2026.10.14-941492e/p0c/prompts-ledger.json)。
+  所有者 2026-10-17 已把同一个账号升级为付费套餐（`planName: "Premium"`），P0a 卡住的场景这次都跑完了；只有远程登录续聊（`login-account`）仍未做（§9）。
 
 ---
 
@@ -44,8 +48,8 @@
 4. **一轮**：`session/prompt` 的结果只有 `stopReason`，只会是 `end_turn` 或 `cancelled`，**不带 usage**。
    轮中再发 `session/prompt` 会把当前轮在 6 ms 内以 `cancelled` 结束，再执行新的一条。所以 Orbit 必须自己排队，不发第二条（§3.2）。
    `session/cancel` 4 ms 内得到 `cancelled`，shell 子进程被杀，但**工具卡停在 `in_progress`，不会再有终态更新**（§3.3）。
-5. **运行期错误不是 JSON-RPC 错误**：额度用尽、模型提供方拒答、轮中认证失效，都只是一条 `agent_message_chunk` 文本加 `end_turn`。
-   分类只能靠文本，事故样本见 §12。建会话失败时，无效 key 和断网是同一个 `-32603 "Failed to initialize session services"`，
+5. **运行期错误不是 JSON-RPC 错误**：额度用尽、模型提供方拒答、轮中断网（P0c 实测）、轮中认证失效，都只是一条以 `"\n\n"` 开头的
+   `agent_message_chunk` 加 `end_turn`。分类只能靠文本，样本见 §12。建会话失败时，无效 key 和断网是同一个 `-32603 "Failed to initialize session services"`，
    要用 `agent models` 的退出信息区分（§12）。
 6. **恢复**：会话库在 `<CURSOR_CONFIG_DIR>/acp-sessions/<id>/`（`store.db` + `meta.json`），第一次 prompt 时才建 `store.db`。
    `session/load` 先把整段历史作为 `session/update` 重放（`user_message_chunk`、合并后的正文和思考、`replay-<轮>-<步>` 工具卡），再返回结果。
@@ -56,6 +60,7 @@
    - 选项是 `allow-once` / `allow-always` / `reject-once`。`allow-always` 写进**用户** `cli-config.json` 的 `permissions.allow`。
    - `--force`：全部不问。`--auto-review`：ACP 上无效，等于默认。
    - **plan 和 ask 模式都不是只读**：plan 挡住了写文件，但 shell 和 MCP 照常走权限请求；ask 写文件连问都不问。
+   - **仓库的 `.cursor/cli.json` 在运行期生效**，能放宽白名单；`--disable-project-configs` 让它失效（P0c 实测，§7.2）。
 8. **MCP**（§6）：
    - `session/new` 的 `mcpServers` 注入 stdio 服务器，不需要批准。工具经 `CallDynamicTool` 以「服务器名」命名空间出现，每次调用都问权限。
      ACP 上只看得到 `rawOutput: {success:true}`，看不到结果内容。`orbit mcp` 实测可用。
@@ -68,7 +73,8 @@
    - TMPDIR 决定调试日志和 worker socket。
    - `AGENT_CLI_CREDENTIAL_STORE=file`（Linux 默认）会把 **API key 本身**连同 access/refresh token 写进 `auth.json`；`memory` 不落盘。
 10. **agent 跑的命令继承 CLI 的全部环境**，包括 `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、HOME、XDG_*、CURSOR_*，外加 `CURSOR_AGENT=1` 等。
-    没有「只换 CLI、不换命令」的开关。D4 的事实和候选方案见 §8.4。
+    没有「只换 CLI、不换命令」的开关，但 **D4 方案 A 成立**（P0c 实测）：CLI 用路径含 `bash` 的 `$SHELL` 跑环境快照和每条命令，
+    P3 的 orbit-bash 让命令拿回真 HOME，看不到 key、token 和账号目录（§8.4）。
 11. **登录**（§9）：`NO_OPEN_BROWSER=1 agent login` 立刻打印 `https://cursor.com/loginDeepControl?challenge=…&uuid=…&mode=login&redirectTarget=cli&supportsSelectedTeamLogin=true`，
     约 27 分钟后放弃，输出 "Login failed or timed out. Please try again."，退出码 1。`status` 只看已存的 token，API key 不算登录。`logout` 只删本地。
     在另一台设备上完成登录【待验】：所有者没有操作。
@@ -116,11 +122,39 @@
   - `AGENT_CLI_UPDATE_CHECK_URL` 可以替换更新查询地址【源码 903@6257】。
   - P3 若担心以后的版本把更新带进 ACP，可以在账号配置里写 `"channel":"static"`，这一点【待验】。
 - **版本核对**【实测】：`agent --version` 输出 `2026.10.14-941492e`。`initialize` 不带 `agentInfo`（§2.2），**版本只能从 `--version` 或安装目录得到**。
-  `agent about --format json` 联网给出 `latestVersion` 和 `latestStatus`（本次是 `up_to_date`）。
+  `agent about --format json` 联网给出 `latestVersion` 和 `latestStatus`：P0a 时是 `up_to_date`，P0c（2026-10-17）时是
+  `update_available`、`latestVersion: "2026.10.16-e3cb207"`【实测 `p0c/install-and-version`】。官方出新版是常态，P3 的健康检查只比 `--version`
+  和固定版本，不看 `latestStatus`；`install-and-version` 也只记录它，不判失败。
 
 ### 1.2 安装体积
 
 tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷一份 CLI：CLI 只读自己的安装目录（实测安装目录设为只读后，全部场景照常运行）。
+
+### 1.3 和新版 `2026.10.16-e3cb207` 的对比（P0c，不花 prompt）
+
+- **来源**【实测】：官方安装脚本在 2026-10-17 01:40 UTC 给的是 `2026.10.16-e3cb207`
+  （`https://downloads.cursor.com/lab/2026.10.16-e3cb207/${OS}/${ARCH}/agent-cli-package.tar.gz`）。linux/x64 tarball 183,721,050 字节，
+  SHA-256 `3aa3f48cd7a3909a98c9b3f2a4085f0c021088bf826690b22c61f424c843e552`（官方不公布哈希，这是下载时算的）；解包 460 个文件，585,824,095 字节。
+  固定版本的 tarball 同一时刻仍能从 downloads.cursor.com 取到，哈希不变。
+- **场景对比**【实测】：不花 prompt 的 14 个场景在两版上各跑一遍，固定版本的结果在 [`p0c/`](evidence/cursor-cli/2026.10.14-941492e/p0c/README.md)，
+  新版的在 [`docs/evidence/cursor-cli/2026.10.16-e3cb207/p0c/`](evidence/cursor-cli/2026.10.16-e3cb207/p0c/README.md)，逐项对比是那里的 `comparison.json`。
+  - 13 个场景的断言和记录都相同：握手、认证、会话管理（下面第 1 条除外）、模型目录（两版都是 46 个，记录到的样本和 Opus 5.5 的参数选项相同；Free 和付费套餐下也一样）、凭据存储、目录变量、
+    失败形状（含 `--disable-project-configs` 下的无效 cli.json）、团队固定、MCP 和 hooks 的来源、启动时的进程与外连、登录链接、用量接口、信号、调试日志。
+    各子命令的 `--help` 文本相同。
+  - **不同 1**：`session/new` 不带 `mcpServers` 时，固定版本回 `-32603`、`data` 是 zod 3 的 issue 数组；新版回 `-32602 "Invalid params"`、
+    `data` 是 zod 4 的格式 `{"_errors":[],"mcpServers":{"_errors":["Invalid input: expected array, received undefined"]}}`。
+    原因是内置的 ACP SDK 0.14.1 改为依赖 zod 4.6.5（固定版本是 3.25.76）【源码 A】。Orbit 总带 `mcpServers`，不受影响；参数校验错误的 `data` 都不要解析。
+  - **不同 2**：`session/new` 期间多调一个 `DashboardService/GetTeamReposOrEmptyIfNotInTeam`。
+  - **不同 3**：列工作区文件的 `rg --files` 不再带 `--follow`，不跟软链接。
+  - 其余差异是运行之间的噪音：statsig 缓存大小、worker socket 路径里的哈希、空闲时 `TrackEvents`、`GetUserPrivacyMode` 的次数。
+- **包的变化**【实测文件对比；源码】：
+  - 409 个文件不变，47 个变了；新增 `.npmrc`（`ignore-scripts=true`）、`7853.index.js`、`8044.index.js`、`9227.index.js`，去掉 `159.index.js`、`2496.index.js`。
+    `node`、启动脚本 `cursor-agent` 不变；`package.json` 多了一份运行时依赖清单。
+  - `agent acp` 加载的分块里 2496（Q）换成了 7853，其余相同。契约里 Q@ 的偏移只适用于固定版本。
+  - ACP agent（A，`6136.index.js`）只多 37 字节：变量改名、zod 版本、`shell-exec` 模块路径、版本字符串，外加一个 `lastFramePath` 字段。
+    ACP 方法和 `cursor/*` 扩展、§12 的固定句子、`$SHELL` 的选法（§8.3）都没变。
+- **结论**：固定版本不变。新版没有 Orbit 需要的新行为。发 prompt 的场景没有在新版上跑，它在轮次上的表现【待验】；
+  以后升级要先回归发 prompt 的场景，特别是 `shell-wrapper-env`（D4）和 `network-drop-mid-turn`（§12 的句子）。
 
 ---
 
@@ -133,19 +167,22 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
   CLI 另写一份调试日志到 `$TMPDIR/cursor-agent-logs-<uid>/`（§8.2），里面没有 key 和 token【实测 `debug-log-location`】。
 - **ACP 路径认的选项**：
   - 【实测】`--force`、`--model`、`--api-key`、`--auth-token`、`--disable-indexing`、`--disable-codebase-ref`。
-  - `--disable-project-configs`：【实测】它不影响启动时的 MCP 和 hooks；对 cli.json 的运行期效果【待验】。
+  - `--disable-project-configs`：【实测 `p0c/repo-config-with-flags`】运行期让仓库 `.cursor/cli.json` 失效（它放行的 `touch` 重新要权限）；
+    hooks、MCP、规则、技能、斜杠命令都不受影响（§7.2）。P0a 已测到它不影响启动时的 MCP 和 hooks。
   - 【源码】`-e/--endpoint`（`CURSOR_API_ENDPOINT`）、`--website-url`、`--agent-endpoint`、`-k`、`--debug`、`--workspace`【A@53243、A@82879、I@1691193】。
 - **ACP 路径不认的选项**：
   - 【实测】`--auto-review`（§5）、`--approve-mcps`（§6）。
-  - 【源码】`--yolo`、`--mode`/`--plan`、`-H`、`--sandbox`、`--disable-auto-update`、`--exclude-workspace-context`（不传给 ACP 的请求）【A 中零引用】。
-    `--exclude-workspace-context` 的实际效果【待验】。
+  - 【源码】`--yolo`、`--mode`/`--plan`、`-H`、`--sandbox`、`--disable-auto-update`【A 中零引用】。
+  - `--exclude-workspace-context`：`agent acp` 接受它，但**没有可见效果**【实测 `p0c/repo-config-with-flags`】：带不带它，会话库存下的首轮上下文
+    除了路径逐字相同，规则、AGENTS/CLAUDE、技能都还在。源码里 ACP 不把它放进请求【A 中零引用】。
 - **`--model` 的两种结果**【实测 `failure-shapes-without-prompt`】：
   - 未知模型：第一次 `session/new` 时进程直接 exit 1，stderr 列出可用模型名，`session/new` 收不到回复。
   - 旧式名（如 `gpt-5.5`）：解析成带参数的变体。
   - **Orbit 不要用 `--model`**，改用 `session/set_config_option`，失败时只拿到一个错误，进程不退。
 - **项目 `.cursor/cli.json` 无效时，进程在回复 `initialize` 前 exit 1**【实测】，stderr 为 `Invalid project config at …: schema validation failed`。
   合法的 cli.json 只能有 `permissions`，而且 `allow`、`deny` 两个数组都得有【源码 I@3735328、I@3726634】。
-  仓库能用一个坏文件让 Cursor 会话起不来，P5c 要么带 `--disable-project-configs`，要么先校验。
+  仓库能用一个坏文件让 Cursor 会话起不来。**带 `--disable-project-configs` 时同一个坏文件不再影响启动**，`initialize` 和 `session/new` 照常应答
+  【实测 `p0c/failure-shapes-without-prompt`，新版 `2026.10.16-e3cb207` 相同】。P5c 的受保护模式本来就带这个参数；不带的模式（bypass/auto）要先校验，或者也带上它。
 - **`session/new` 冷启动 8–11 s**【实测：8.0–11.1 s】，其间 CLI 调约十个 RPC（§14.1），之后还会拉起 worker 子进程（§14.3）。
 
 ### 2.2 `initialize`【实测 `signed-out-handshake`、`parameterized-model-picker`】
@@ -213,8 +250,18 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
 - **轮中再发 prompt**：A 正在跑 `sleep 43`，发出 B。A 在 6 ms 内返回 `{"stopReason":"cancelled"}`，A 的 shell 子进程被杀；
   B 正常执行，1.9 s 后 `end_turn`。CLI 不替客户端排队。**P5b：轮中消息由 Orbit 排队，当前轮结算后再发**（与项目范围「不支持轮中插话」一致）。
 - 第二轮记得第一轮【实测：第二轮正确复述第一轮读到的暗号】。
-- **后台命令**：源码说后台 shell 和子代理的跟进步骤在同一个 prompt 请求里跑完，prompt 返回后不会自己开新的一轮【源码 A@15706、A@23155】。
-  这一点【待验】：该场景撞上额度用尽，没跑成。
+- **后台命令**【实测 `p0c/background-shell-and-commit`】：
+  - 模型用 `Shell` 工具加 `block_until_ms: 0` 把命令放到后台（会话库里的工具参数；ACP 的 rawInput 只有 `{command}`）。
+  - 批准后 14 ms，工具卡就以 `completed` 结束，rawOutput 是 `{exitCode: 0, stdout: "", stderr: ""}`，而命令还要跑约 20 s。
+    给模型的工具结果是 `Background command started successfully. Shell ID: … PID: …`，输出写到 `<CURSOR_DATA_DIR>/projects/<slug>/terminals/<Shell ID>.txt`。
+    **ACP 上看不出这张卡的命令还在跑**，`exitCode: 0` 不代表命令跑完或成功。
+  - prompt 不等后台命令：`end_turn` 后 16.9 s 命令才写出文件。之后 40 s 内**没有任何 `session/update`**，后台命令结束也不开新的一轮。
+    这和源码一致：后台 shell 和子代理的跟进步骤都在发起它的那个 prompt 请求里跑完【源码 A@15706、A@23155】。
+  - 后台命令在轮次结束后照常运行【实测】。CLI 退出或被杀之后它们会怎样【待验】；Orbit 不依赖它：§3.4 的每会话进程作用域（P5b 跟进）
+    在 CLI 结束时回收它启动的全部后代，后台命令也在其中。会话还在、只是轮次结束时，它们照常运行。
+- **轮外更新**【实测：P0a 和 P0c 全部 27 轮的录制，[`p0c/analysis/turn-endings.json`](evidence/cursor-cli/2026.10.14-941492e/p0c/analysis/turn-endings.json)】：
+  没有 prompt 在跑、也没在 `session/load` 重放时，来过的更新只有 `available_commands_update`、`current_mode_update`（客户端 `set_mode` 之后）和
+  一条迟到的 `session_info_update`。没有正文、思考或工具更新，也就是**没有 Cursor 自己发起的轮次**。
 
 ### 3.3 取消【实测 `cancel-mid-tool`】
 
@@ -239,6 +286,22 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
   - 不要依赖关闭 stdin。
   - 杀进程后，按进程组或 cgroup 清理 CLI 启动的命令。CLI 跑命令用 detached 进程组【源码 I@7388762】，**单杀 CLI 的进程组也清不干净**，要按会话作用域清（例如每会话一个 systemd scope）。
 - 团队切换（§13.2）后 CLI 会自己 exit 0。
+- **每会话进程作用域（P5b 跟进，已实现，`src/runner-go/session_scope*.go`）**：
+  - **Linux**：CLI 跑在一个 keeper 进程下面。keeper 就是 runner 二进制本身（`/proc/self/exe session-scope`），先把自己设为
+    child subreaper（`PR_SET_CHILD_SUBREAPER`），再启动 CLI。孤儿由最近的 subreaper 收养，不交给 init，所以会话起的进程不管换到
+    哪个进程组或会话，都一直是 keeper 的后代。
+    - CLI 一结束（Stop 后进程被结束、会话结束、崩溃、租约丢失、runner 停止），keeper 就杀掉并回收剩下的全部后代，然后按 CLI 的方式退出
+      （同样的退出码，或死于同一个信号），runner 读到的退出状态和以前一样。
+    - runner 没了（keeper 的控制 socket 断开）：keeper 替 runner 给 CLI 发 SIGTERM，10 s 后连同剩下的一起杀掉。
+    - keeper 是 runner 的子进程，留在 runner 的 cgroup 里：systemd 下 runner 重启（`KillMode=mixed`）照样清掉残留进程，OOM 照样算在
+      runner 的单元上（`OOMPolicy=stop`）。不需要 `Delegate=`、systemd scope、root 或额外部署步骤。
+    - Stop 被 CLI 回答时进程不结束（Orbit 的中断约定）：Cursor 自己给正在跑的命令的进程组发 SIGTERM【源码 I@7372443、I@7371872】。
+      命令从这个进程组再脱离出去的进程，等会话进程结束时由作用域回收。CLI 自己也起脱离的常驻进程（例如 code server，
+      detached + unref【源码 `3548.index.js`@292811】），所以 Stop 时不能按“不在 CLI 的进程组里”去清。
+    - 例外：keeper 本身被单独 SIGKILL（不是经 runner 的进程树清理）时，它的后代交给 init。
+  - **macOS 和其他非 Linux 平台**：没有 child subreaper，做不到同等保证，退回进程组清理：CLI 是自己进程组的组长，结束时杀这个进程组，
+    再按父子关系杀还找得到的后代。CLI 崩溃后被 launchd 收养、又不在 CLI 进程组里的命令找不到，会留下来。
+  - 其他 engine 不用作用域，仍是原来的进程组清理（`session_process_tree_unix.go`）。
 
 ### 3.5 恢复与重放【实测 `multi-turn-tools-default`、`crash-recover-and-move`、`crash-continue-and-shell-wrapper`】
 
@@ -278,7 +341,7 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
 | `subagent_spawned` | `subagentSessionId, name, task, capabilities, _meta.cursor{toolCallId, agentId, model}` | 需要客户端声明 subagents。子代理自己的更新用 `sessionId=<agentId>` 发来 |
 | `subagent_state_update` | `subagentSessionId, state, _meta.cursor{…}` | 实测 `completed`；源码还有 `failed`/`cancelled`/`disconnected`（A@62640） |
 | `session_info_update` | `title` | 服务端起的标题，如 `"Protocol Probe"`；可能晚于 prompt 回复 |
-| `available_commands_update` | `availableCommands:[{name, description}]` | 实测是内置技能和全局命令（`copy-request-id`、`worktree`、`best-of-n`、`autopilot`……）；用户和仓库的命令、技能也会加进来【源码 A@6047】 |
+| `available_commands_update` | `availableCommands:[{name, description}]` | 实测是内置技能和全局命令（`copy-request-id`、`worktree`、`best-of-n`、`autopilot`……），**仓库的 `.cursor/commands/*.md` 和 `.cursor/skills/*` 也会加进来**【实测 `p0c/repo-config-baseline`：`p0cmd`、`p0skill`；源码 A@6047】 |
 | `current_mode_update` | `currentModeId` | 只在客户端 `set_mode` 后出现；模型自己切模式不发【源码 P@89140】 |
 | `config_option_update` | — | **从不发送**【源码：A 中零引用】，以 `set_config_option` 的回复为准 |
 | `usage_update` | — | **从不发送**【源码】，上下文用量显示为不可用（与项目范围一致） |
@@ -307,12 +370,17 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
 | `cursor/update_todos` | agent→client，带 id（实测 0、2） | `{toolCallId, todos:[{id,content,status}], merge}` | 回任意 result（实测回 `{}`）。CLI 不等这个应答【源码 A@79843】 | 【实测 `subagent-and-todos`】。**文档写的是不需应答的通知，wire 上实际是请求** |
 | `cursor/task` | 同上（实测 id 1） | `{toolCallId, description, prompt, subagentType:{custom:{unspecified:{}}}, model:"default", agentId, durationMs}` | 同上 | 【实测】 |
 | `cursor/create_plan` | 带 id，**阻塞** | `{toolCallId, name, overview, plan, todos, isProject, phases}` | `{outcome:{outcome:"accepted", planUri?}}` 或 `{outcome:{outcome:"rejected", reason}}`。客户端报错或不给 planUri 时，CLI 自己写计划文件到 `~/.cursor/plans/`【源码 A@50270、P@93387】 | 【实测：plan 模式收到请求，回 accepted 后正常结束】 |
-| `cursor/ask_question` | 带 id，**阻塞** | `{toolCallId, title, questions:[{id,prompt,options:[{id,label}],allowMultiple}]}` | `{outcome:{outcome:"answered", answers:[{questionId, selectedOptionIds}]}}`、`skipped` 或 `cancelled`。回 `-32601` 时退回到每个单选题一个 `session/request_permission`，选项是答案加 `__ask_question_skip__`【源码 A@46698】 | **【待验】**：ACP agent 模式下服务端没给模型 AskQuestion 工具，模型说没有这个工具，改用正文提问（[`analysis/ask-question.json`](evidence/cursor-cli/2026.10.14-941492e/analysis/ask-question.json)） |
+| `cursor/ask_question` | 带 id，**阻塞** | `{toolCallId, title, questions:[{id,prompt,options:[{id,label}],allowMultiple}]}` | `{outcome:{outcome:"answered", answers:[{questionId, selectedOptionIds}]}}`、`skipped` 或 `cancelled`。回 `-32601` 时退回到每个单选题一个 `session/request_permission`，选项是答案加 `__ask_question_skip__`【源码 A@46698】 | **【实测】从没收到**：Free 套餐的 agent 模式（[`analysis/ask-question.json`](evidence/cursor-cli/2026.10.14-941492e/analysis/ask-question.json)）、付费套餐的 agent 模式和 plan 模式（`p0c/ask-question`、`p0c/ask-question-plan-mode`），服务端都没给模型 AskQuestion 工具，模型说没有这个工具。plan 模式的提示里明写 "All questions to the user should be asked using the AskQuestion tool"，工具仍然没有。请求形状、不应答和回退只有【源码】 |
 | `cursor/generate_image` | 带 id | `{toolCallId, description, filePath, referenceImagePaths}` | 同 update_todos | 【源码 A@79662】 |
 
 - **不应答的后果**：`create_plan`、`ask_question` 和权限请求一样没有超时，不应答这一轮就一直挂着【源码 S@6078003】。
   **P5c：这些请求必须应答，审批卡撤回时回 `cancelled`。**
 - 子代理里的提问一律被拒（"Interactive questions are not supported in ACP subagent mode"）【源码 A@72944】。
+- **模型自己切模式不问客户端**【源码】：主会话的交互查询里，提问、计划、web fetch、web search 各有处理，其余（含 `switchModeRequestQuery`）交给默认处理【A@13214】，
+  默认处理直接回 `switchModeApproved`【P@89140】，客户端收不到任何请求，也没有 `current_mode_update`（§4.1）。客户端能看到的只有一张工具卡：
+  kind `switch_mode`，title `Switch Mode: <目标模式>`【A@90395、A@99976】。子代理里的切换一律被拒（"Subagent mode switches require host approval"）。
+  会话里 `cursor` 动态工具命名空间确实有 `SwitchMode`（"Switch between modes: Agent and Plan"）【实测：`p0c/repo-config-baseline` 的会话库上下文】。
+  模型主动调用它的实际表现【待验】，影响见 §5.4 的 plan 一行。
 
 ---
 
@@ -375,6 +443,10 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 - 写法：`Shell(<cmd>)` 或 `Shell(<cmd>:<args glob>)`、`Read(<path glob>)`、`Write(<path glob>)`、`Mcp(<server>:<tool>)`、`WebFetch(<host>|*.<domain>|*)`、
   `WebSearch(<词>)`【I@4599617、I@4637731、I@3588695；文档 permissions】。
 - deny 在 allow 和 Run Everything 之前生效，是硬拒绝，不弹请求【I@4630779、I@4633585】。这一点【待验】，Orbit 可以用它做强制。
+- **仓库 `.cursor/cli.json` 的 allow 在运行期生效**【实测 `p0c/repo-config-baseline`：仓库写了 `Shell(touch)`，`touch` 不再发权限请求】，
+  `--disable-project-configs` 让它失效【实测 `p0c/repo-config-with-flags`】。
+- **`.claude/settings.json` 的 `permissions` 不进 ACP**【实测：只在仓库 `.claude/settings.json` 里放行的 `mkdir` 照样发权限请求；
+  源码：读 Claude 权限的代码在 R（只有对话模式加载）R@32044】。
 - 写入工作区外、写受保护的配置文件（`**/.cursor/**/cli.json`、`.git/hooks/**`、`.vscode/**` 等）会问；`.cursorignore` 永远拒写【I@4607423、I@4607747、I@4605514】。
 - `approvalMode` 可取 `allowlist|unrestricted|auto-review`（cli-config）。ACP 只区分 `unrestricted`（跳过写和 MCP 的请求）和其余（都按白名单）【Q@15998】。
   `unrestricted`【待验】。
@@ -390,7 +462,7 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 | `acceptEdits` | 能：默认白名单。工作区写不问，shell/MCP/fetch 由 Orbit 审批卡应答 | 【实测】 |
 | `dontAsk` | 部分：默认白名单 + Orbit 对每个请求自动 `reject-once`。工作区写仍会发生 | 【实测】 |
 | `default`（编辑前要问） | **不能**：工作区写永远不问，ACP 没有把它变成请求的开关（`promptWorkspaceWrites` 不经配置传入【源码 I@4607944】） | 【实测 + 源码】 |
-| `plan` | 只能组合：`set_mode plan` 挡写文件（服务端，实测一次）+ Orbit 对每个请求自动拒绝 | 【实测】 |
+| `plan` | 只能组合：`set_mode plan` 挡写文件（服务端，实测一次）+ Orbit 对每个请求自动拒绝。**注意**：模型能用 `SwitchMode` 自己切回 agent 模式，CLI 不问客户端就批准（§4.2），之后工作区写文件不再被挡；Orbit 至少要盯住 kind `switch_mode` 的工具卡 | 【实测】；切模式【源码，待验】 |
 | 只读 | 同 plan；或在账号 `cli-config.json` 写 deny 规则（如 `Write(**)`、`Shell(*)`） | deny 规则【源码，待验】 |
 
 ---
@@ -444,25 +516,46 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 - **无效的 `.cursor/cli.json` 让进程启动即退出**（§2.1）。
 - CLI 自己的 git 调用强制 `core.hooksPath=/dev/null`【源码 I@3954566】，所以 `git status` 这类上下文收集不会触发仓库的 git hook。
 
-### 7.2 【待验】（额度用尽，没能运行；源码依据如下）
+### 7.2 运行期（P0c 实测）
 
-- **`.cursor/cli.json` 的运行期效果**：合法的 cli.json 和用户配置深度合并，**数组整体替换**【I@3726438】。仓库因此能整体换掉用户的 allow 和 deny，
-  比如写 `Shell(*)` 放行所有命令。没有信任门槛，ACP 也加载【I@3723669】。`--disable-project-configs` 只关掉 cli.json，不影响 hooks、MCP、rules【I@1678628】。
-  **P5c 的建议**：受保护模式一律加 `--disable-project-configs`。
-- **hooks**：
-  - ACP 读「项目」hooks 的位置是 `<data>/projects/<slug>/.cursor/hooks.json`，**不是仓库的 `.cursor/hooks.json`**【A@67933、A@69807】。
-  - 用户级 `$HOME/.cursor/hooks.json`、Claude 格式的 `~/.claude/settings.json` 和 `<repo>/.claude/settings*.json` 的 hooks 在会话中运行，不需批准，
-    不受 `--disable-project-configs` 影响，在沙箱外执行【H@74123、H@74367、H@73009】。
-  - 事件在 prompt 和工具执行时触发（beforeShellExecution、afterFileEdit、stop……，共 21 种）【I@3957000】。
-  - 夹具仓库（[`lib/fixture.mjs`](../scripts/cursor-p0/lib/fixture.mjs)）和场景 `repo-config-baseline` / `repo-config-with-flags` 已备好，额度恢复后补测。
-- **rules 和指令**：
-  - 从工作区一直往上到 `/`，每层的 `.cursor/rules/`、`AGENTS.md`、`CLAUDE.md`、`CLAUDE.local.md` 都当作始终生效的规则加载，
-    包括 HOME 和根目录【I@4359231、I@4359359】。
-  - `.cursorrules` 只在 git 根目录加载【I@4358272】；仓库内的嵌套规则也会扫描【I@4343204】。
-  - Orbit worktree 在 `/root/.orbit/worktrees/<id>` 下，`/root/AGENTS.md` 之类的文件也会被读进来。
-  - 实测里看到 `<rules><user_rules>` 段中有服务端给的提交和 PR 规则（会话库上下文），说明规则段确实拼进了用户消息。
-- **`--exclude-workspace-context`**：作为请求字段 `exclude_workspace_context` 发给服务端，裁剪在服务端做【I@5099680】。但 ACP 不把它传进请求【A 中零引用】，
-  预计在 ACP 下无效。
+场景 `p0c/repo-config-baseline`（不带参数）和 `p0c/repo-config-with-flags`（`--disable-project-configs --exclude-workspace-context`），各一轮。
+夹具仓库（[`lib/fixture.mjs`](../scripts/cursor-p0/lib/fixture.mjs)）的每个配置文件都带暗号，每个能执行东西的位置都调用标记脚本；
+槽目录（CLI 的 HOME、CURSOR_CONFIG_DIR、CURSOR_DATA_DIR）里也放了 hooks、MCP 和规则。这一轮让模型跑 `touch`、`mkdir`、改文件、读子目录文件，再报出它看到的暗号。
+暗号是否进了上下文，看会话库存下的首轮消息，再对照模型的回答。
+
+| 仓库或槽里的配置 | 运行期效果 | `--disable-project-configs` |
+| --- | --- | --- |
+| 仓库 `.cursor/cli.json`（`allow: Shell(ls), Shell(touch)`） | **生效**：`touch` 不发权限请求 | 失效：`touch` 发权限请求 |
+| 仓库 `.claude/settings.json` 的 `permissions.allow`（`Bash(mkdir:*)`） | 不读：`mkdir` 照样发权限请求（§5.3） | 同左 |
+| 仓库 `.cursor/hooks.json`、`.claude/settings.json` 的 hooks（SessionStart、PreToolUse、Stop） | 都没运行 | 同左 |
+| `$HOME/.cursor/hooks.json`、`<CURSOR_DATA_DIR>/projects/<slug>/.cursor/hooks.json` | **运行**，不需批准：每个工具 `preToolUse`/`postToolUse`，每条 shell `beforeShellExecution`/`afterShellExecution`，每次读文件 `beforeReadFile`，每段思考 `afterAgentThought`。hook 拿到的是 CLI 自己的环境（HOME 是 CLI 的 HOME） | 不受影响 |
+| `$CURSOR_CONFIG_DIR/hooks.json`、`$HOME/.cursor/projects/<slug>/.cursor/hooks.json` | 不读 | 同左 |
+| `$HOME/.claude/settings.json` 的 hooks（只放了 SessionStart） | 没运行；ACP 一轮里根本没有 `sessionStart`、`stop`、`beforeSubmitPrompt`、`afterAgentResponse` 事件，所以这一条说明不了 Claude 格式的用户 hooks 读不读 | — |
+| 仓库 `.cursor/mcp.json` | 不启动（没批准过） | 同左 |
+| `$HOME/.cursor/mcp.json` | 启动 | 同左 |
+| `$CURSOR_CONFIG_DIR/mcp.json`、`<data>/projects/<slug>/.cursor/mcp.json`、`$HOME/.cursor/projects/<slug>/.cursor/mcp.json` | 不读 | 同左 |
+| 仓库 `.cursor/worktrees.json`、`.cursor/environment.json`、`.envrc` | 都没运行（`.envrc` 只触发 `direnv export json`，见 §7.1） | 同左 |
+| 仓库 `AGENTS.md`、`CLAUDE.md`、`CLAUDE.local.md`、`.cursorrules`、`.cursor/rules/*.mdc`（`alwaysApply: true`） | **进首轮上下文**：`<rules><always_applied_workspace_rules>`，每条带文件绝对路径 | 不受影响 |
+| `.cursor/rules/*.mdc`（只有 description） | 首轮上下文里只列路径和 description（`<agent_requestable_workspace_rules>`），模型需要时自己读（实测读了一次） | 不受影响 |
+| `.cursor/rules/*.mdc`（只有 `globs: "*.py"`） | 不在首轮上下文，这一轮也没出现（模型用 shell 改了 `app.py`，没走编辑工具） | 同左 |
+| 子目录 `sub/AGENTS.md` | 不在首轮上下文；模型读了 `sub/note.txt` 之后，回答里出现了它的暗号（两次都是） | 不受影响 |
+| 仓库 `.cursor/skills/*/SKILL.md` | description 进首轮上下文（`<agent_skills>`），并成为斜杠命令 | 不受影响 |
+| 仓库 `.cursor/commands/*.md` | 不进上下文，成为斜杠命令（`available_commands_update`） | 不受影响 |
+| `$HOME/.cursor/rules/*.mdc`（`alwaysApply: true`）、`$HOME/AGENTS.md`、`$CURSOR_CONFIG_DIR/rules/*.mdc` | **都不进上下文**，模型也没报出它们的暗号 | — |
+
+- 首轮上下文里的 `<user_rules>` 是服务端给的规则（git 提交、PR 的写法），不是本机文件。
+- `--exclude-workspace-context` 没有可见效果：两次运行存下的首轮上下文除了路径逐字相同（§2.1）。
+- 源码依据：cli.json 和用户配置深度合并、数组整体替换【I@3726438】，没有信任门槛【I@3723669】（实测只验证了仓库的 allow 会生效，
+  仓库能不能借整体替换去掉用户的条目没有单独测）；ACP 读「项目」hooks 的位置是 `<data>/projects/<slug>/.cursor/hooks.json`【A@67933、A@69807】，
+  Claude 格式的项目 hooks 按同一个项目目录找 `.claude/settings*.json`【H@74185、H@74307】，和实测吻合。
+- 从工作区往上到 `/` 每层的 `AGENTS.md`、`CLAUDE.md`、`.cursor/rules/` 都会读【源码 I@4359231、I@4359359】。夹具的上层目录没有这些文件，所以没有测到；
+  Orbit worktree 在 `/root/.orbit/worktrees/<id>` 下，`/root/AGENTS.md` 之类的文件会进上下文，这一点【待验】。
+
+**对 P5c 的含义**：
+- 受保护模式加 `--disable-project-configs`，仓库就不能用 cli.json 放行命令。仓库的 hooks.json、mcp.json、Claude 格式的 hooks 和权限在 ACP 上本来就不生效。
+- 能在 ACP 上执行东西的 hooks 和 MCP 只来自 CLI 的 HOME 和 CURSOR_DATA_DIR。P3 让这两个都是会话自己的目录，仓库碰不到；不要往里放用户的 hooks 或 MCP。
+- 仓库的规则、AGENTS/CLAUDE、技能和斜杠命令总会到模型那里，没有开关能挡（它们是指令，不执行东西）。
+- Orbit 的 agent 指令**不能**放在会话目录的用户级 rules 里（`$HOME/.cursor/rules`、`$HOME/AGENTS.md` 都不读），只能走首轮 prompt 前缀（P5c 规则 7）。
 
 ---
 
@@ -505,8 +598,11 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
   另外经过 `bash -ilc` 快照：PATH 被登录 shell 的 profile 改写。
 - MCP 服务器例外：只拿到 HOME、PATH 和声明的 env（§6）。
 - **CLI 怎么选 shell**：
-  - `$SHELL` 的路径含 `bash` 才用它，否则从 PATH 找 bash。zsh 同理【源码 I@7385715、I@7424080】。
+  - `$SHELL` 的路径含 `bash` 才用它，否则从 PATH 找 bash。zsh 同理，而且**先比 zsh**：路径里同时有 `zsh` 和 `bash` 时按 zsh 处理【源码 I@7385715、I@7424080】。
   - 每条命令先用这个 shell 跑一次 `-ilc` 拍环境快照，再 `-c` 执行【实测 strace：`bash -O extglob -ilc` 后 `bash -O extglob -c`】。
+    P0c 用包装脚本作 `$SHELL` 时，快照和每条命令都经过它【实测 `p0c/shell-wrapper-env`】。
+  - 快照是登录 shell，读的是**它看到的 HOME** 下的 profile；命令的 PATH 等变量来自这个快照（实测 PATH 被 `/etc/profile` 改写，profile 里 export 的变量命令也看得到）。
+  - `__CURSOR_SANDBOX_ENV_RESTORE` 只是一段 `unset`/`export` CURSOR_CONVERSATION_ID、CURSOR_REQUEST_ID 的 shell 代码，不带别的变量【实测】。
 
 ### 8.4 D4：按账号隔离而不改变 agent 命令的环境
 
@@ -517,7 +613,8 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
    - API key：`CURSOR_API_KEY` + memory 存储【实测】。
    - 登录账号：登录时用账号自己的 `XDG_CONFIG_HOME` 跑 `agent login`（独立进程，没有 agent 命令），会话时读出那份 `auth.json` 的 accessToken，
      以 `CURSOR_AUTH_TOKEN` + memory 存储注入【实测：注入后 `session/new` 成功、不落盘】。
-   - 两种情况下，凭据都在命令环境里可见。agent 和 runner 是同一个系统用户，本来也能读到磁盘上的凭据，这和其他引擎的 key 注入属于同一类暴露。
+   - 不加包装时，凭据在命令环境里可见。agent 和 runner 是同一个系统用户，本来也能读到磁盘上的凭据，这和其他引擎的 key 注入属于同一类暴露。
+     用方案 A 时命令看不到它们（见下）。
 3. **但只要 CLI 的 HOME 是真 HOME，Cursor 就会**：
    - 写 runner 用户的 `~/.cursor/`：`agent-cli-state.json`、按账号下发的 `skills-cursor/`、`ai-tracking` 库；
    - 读 `~/.cursor/mcp.json`（并启动其中的服务器）、`hooks.json`、`rules`、`commands`；
@@ -527,22 +624,47 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 4. **登录 token 不刷新**：CLI 只会用 API key 重新换 token，没有用 refresh token 刷新的流程【源码 I@1661040】。
    浏览器登录的有效期等于 access token 的有效期，过期要重新登录。登录 token 的实际寿命【待验】：所有者没有完成登录。
 
-**候选方案**（所有者选择；P4b 实现前要补验 A）：
+**方案 A 成立（Linux，P0c 实测）**：CLI 用账号自己的 HOME，命令经 SHELL 包装拿回真 HOME。
 
-- **A. CLI 用账号自己的 HOME，命令经 SHELL 包装拿回真 HOME。**
-  - 包装脚本放在路径含 `bash` 的位置（例如 `<runner>/bin/orbit-bash`），内容是 `export HOME=<真 HOME>; unset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR; exec /bin/bash "$@"`，
-    再把 `SHELL` 指向它。
-  - 源码表明每条命令和环境快照都由这个 shell 执行，所以包装生效后，命令看到的 HOME 和环境都与普通会话相同。
-  - **【待验】**：唯一一次实测用的包装名叫 `orbit-shell`，不含 `bash`，CLI 没用它，命令仍看到账号 HOME 和全部 Cursor 变量
-    （[`analysis/crash-continue-and-shell-wrapper.json`](evidence/cursor-cli/2026.10.14-941492e/analysis/crash-continue-and-shell-wrapper.json)）。
-    改名后的场景 `shell-wrapper-env` 已写好，额度恢复后一次 prompt 即可验证。
-  - 风险：依赖 CLI 选 shell 的内部规则，每次升级版本都要回归。
+- **做法**（P3 实现，P4b 按 P0c 的两处调整改为每个会话一份，`src/runner-go/cursor_launch.go` 的 `writeCursorShellWrapper`）：
+  `<会话目录>/cursor/bin/orbit-bash` 是一个 `#!/bin/sh` 脚本，CLI 的 `SHELL` 指向它。内容依次是：
+  `HOME=<真 HOME>; export HOME`；`unset` CLI 的凭据和目录（`CURSOR_API_KEY CURSOR_AUTH_TOKEN CURSOR_CONFIG_DIR CURSOR_DATA_DIR`）以及下面要还原的变量；
+  再把要还原的变量逐个写回「其他引擎的会话里命令看到的值」（工作区设了就用工作区的，否则用 runner 自己的，两边都没有就保持未设）；最后 `exec /bin/bash "$@"`。
+  P3 原来是所有会话共用 `<orbit home>/cursor/bin/orbit-bash`，内容固定为 `HOME=<真 HOME>; export HOME; unset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR; exec /bin/bash "$@"`。
+- **实测**（`p0c/shell-wrapper-env`：同样的包装脚本，放在 `<RUN>/bin/orbit-bash`；CLI 的环境按 P3 的固定层设置，同时带 `CURSOR_API_KEY` 和
+  用这把 key 换来的 `CURSOR_AUTH_TOKEN`；一轮跑两条命令）：
+  - CLI 用包装脚本跑环境快照和每条命令：strace 依次是 `orbit-bash -O extglob -ilc` → `/bin/bash -O extglob -ilc`、`orbit-bash -O extglob -c` → `/bin/bash -O extglob -c`。
+  - 命令看到的 HOME 是包装脚本写的真 HOME，登录快照读的也是真 HOME 的 profile（真 HOME 的 `.bash_profile` 里 export 的变量出现在命令环境里，账号 HOME 的没有）。
+  - 命令环境里**没有** `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、`CURSOR_CONFIG_DIR`、`CURSOR_DATA_DIR`（`XDG_CONFIG_HOME` P3 本来就不设）。工作区变量照常可见。
+  - CLI 自己仍跑在账号 HOME 上（`agent-cli-state.json` 写在账号 HOME）；这一轮之后真 HOME 里只有原来的 `.bash_profile`，没有 `.cursor`、`.config/cursor`。
+- **命令仍看得到的 Cursor 和 Orbit 变量**：Orbit 固定层的 `AGENT_CLI_CREDENTIAL_STORE=memory`、`NO_OPEN_BROWSER=1`、`DIRENV_DISABLE=1`、
+  `CURSOR_AGENT_DISABLE_DEBUG_LOG=1`、`SHELL=<orbit-bash>`；CLI 给每条命令补的 `CURSOR_AGENT`、`CURSOR_CONVERSATION_ID`、`CURSOR_REQUEST_ID`、
+  `CURSOR_INVOKED_AS`、`CURSOR_RIPGREP_PATH`、`AGENT_TRANSCRIPTS`（指向账号数据目录）、`NODE_COMPILE_CACHE`（指向账号 HOME 的缓存）、
+  `GLOBAL_AGENT_ENVIRONMENT_VARIABLE_NAMESPACE`、`__CURSOR_SANDBOX_ENV_RESTORE`、`NO_COLOR`、`FORCE_COLOR`、`_ZO_DOCTOR`。
+- **和普通会话的差别，P4b 的处理**（【约定】P4b 实现；用假 CLI 验证，`TestCursorSessionBorrowsItsAccountAndCommandsKeepTheirEnvironment`）：
+  - **还原**：所有 `XDG_*`（XDG 基础目录 7 个，加上 runner 或工作区设了的其他 `XDG_*`）、`DIRENV_DISABLE`、`NODE_COMPILE_CACHE`、`AGENT_CLI_CREDENTIAL_STORE`、
+    `NO_OPEN_BROWSER`、`CURSOR_AGENT_DISABLE_DEBUG_LOG`。它们在 CLI 的环境里是给 CLI 用的（固定层，或启动脚本把编译缓存指向 CLI 的 HOME），
+    命令拿回的是其他引擎的会话里的值。于是 gh、git 按真 HOME 和原来的 `XDG_CONFIG_HOME` 找配置，direnv hook 照常，node 的编译缓存不写进会话目录。
+  - **保留**：`SHELL` 仍指向 orbit-bash。命令里再起 `$SHELL` 得到的还是这份还原后的环境；换回用户自己的 SHELL 没有实测过（CLI 用自己进程的 SHELL 选 shell）。
+  - **还不一样的**：P3 白名单以外的 runner 变量（例如 `SSH_AUTH_SOCK`、`EDITOR`），命令看不到，除非登录 profile 自己设；工作区设了 `HOME` 时命令仍拿到 runner 用户的真 HOME；
+    Cursor 自己给每条命令加的变量（`CURSOR_AGENT`、`TERM=dumb` 等，§8.3）任何 Cursor 会话都有。
+- **路径断言**：CLI 用 `includes("zsh")` 先判 zsh、再用 `includes("bash")` 判 bash，看的是整条路径【源码 I@7424080、I@7385715】。
+  包装的路径（含 Orbit 的 home）里有 `zsh` 或没有 `bash` 时，runner 拒绝启动会话（`CURSOR_CONFIG_CONFLICT`），不让 CLI 换一个 bash、在 CLI 自己的 HOME 上带着凭据跑命令。
+- **hooks 不经过包装**：CLI 直接 exec hook 命令（strace：`mark.sh <参数>`，不经 `sh -c`，也不经 `$SHELL`），hook 拿到的 HOME、XDG_CONFIG_HOME、
+  CURSOR_CONFIG_DIR 都是 CLI 自己的【实测 `p0c/repo-config-baseline`；凭据在不在 hook 的环境里没有记录】。ACP 只从 CLI 的 HOME 和 CURSOR_DATA_DIR
+  读 hooks（§7.2），P3 让两者都是会话自己的目录（P4b 的账号会话也一样，只借用账号的登录，§16.2），仓库放不进 hook。
+- **依赖与风险**：CLI 只在 `$SHELL` 的路径含 `bash`、不含 `zsh` 时用它（§8.3）。新版 `2026.10.16-e3cb207` 的这段代码不变（§1.3）。
+  每次升级都要回归 `shell-wrapper-env`。
+- macOS 上的表现由 P0b 验证。
+
+**其他方案**（A 不成立时的退路，Linux 上不再需要）：
+
 - **B. 真 HOME + CURSOR_CONFIG_DIR/CURSOR_DATA_DIR + memory 存储 + 注入 key 或 token**：命令环境不变，凭据和会话分开。
-  代价是第 3 条的副作用（写和读真 `~/.cursor`）。要选 B，所有者必须接受这一点，或者 runner 给 `~/.cursor` 做只读保护（没有验证）。
-- **C. Linux mount namespace**：给 CLI 进程单独挂载账号目录到 `~/.cursor` 和 `~/.config/cursor`，命令环境不变。只有 root runner 能用，【待验】。
+  代价是第 3 条的副作用（写和读真 `~/.cursor`）。
+- **C. Linux mount namespace**：给 CLI 进程单独挂载账号目录到 `~/.cursor` 和 `~/.config/cursor`。只有 root runner 能用，【待验】。
 - **D. 该平台只支持 Default 账号**（作业指导的退路）。
 
-**建议**：先在 P4b 用一次 prompt 补验 A。A 成立就用 A（Linux）。A 不成立，就请所有者在 B（接受副作用）和 D 之间选。
+**建议**：Linux 用 A（P4b）。A 在 macOS 上不成立时，再请所有者为 macOS 在 B 和 D 之间选。
 
 ---
 
@@ -561,9 +683,16 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
     challenge 是 PKCE S256，verifier 只在本进程里【源码 I@3715277】。轮询 `GET ${api}/auth/poll?uuid=…&verifier=…`【I@3716301】需要 verifier，
     别人拿到链接也取不到 token。
   - 没人完成时，两次独立计时分别在 **1,632 s 和 1,636 s（约 27.2 分钟）**后打印 `Login failed or timed out. Please try again.`，退出码 1；期间不写任何凭据。
-- **在另一台设备上完成登录**【待验】：2026-10-16 已把链接发给所有者（任务评论 + 通知），27 分钟内没有完成。
+    P4b 2026-10-17 又测两次：链接分别在启动后 5.9 s、2.8 s 打印（机器负载高），之后 **1,543 s 和 1,562 s（约 26 分钟）**放弃。
+  - **为什么会变**【源码 I@3715823 `waitForResult`】：CLI 最多轮询 150 次，每次之间停 `min(1 s × 1.2^n, 10 s)`，光停顿就是 1,418 s（23.6 分钟），
+    再加 150 次请求各自的往返时间，所以链接能用多久取决于网络。连续 3 次轮询失败（非 404 或网络错误）也会提前放弃，打印的是同一句 `Login failed or timed out`。
+  - **P4b 的做法**【约定】：上报的 `expiresAt` 是链接打印时刻加 23 分钟（`cursorLoginLinkLifetime`，不超过源码下限，界面的倒计时不会多报）；
+    打印这句时距链接已超过 23 分钟的，上报为 `reason: expired`（"The sign-in link expired before anyone signed in with it."），更早的算轮询失败，另给说明；
+    中继自己最多等 29 分钟（`cursorLoginRelayTimeout`，长于实测的 1,636 s、短于控制面 30 分钟的清扫），到点结束 CLI 的进程树，也报 `expired`。
+- **在另一台设备上完成登录**【待验】：2026-10-16 已把链接发给所有者（任务评论 + 通知），27 分钟内没有完成；P4b 2026-10-17 03:25 UTC、03:51 UTC 又各发一次，都没有人用。
   源码表明成功后存 `accessToken`/`refreshToken`（不存 apiKey），打印 `Logged in as <email>`，再调 `GetMe` 写入 `authInfo`【3541@493、3541@3010】。
-  **P4b 的登录中继**：把链接原样交给用户，最长等 27 分钟，成功与否看 `agent login` 的退出码；之后用 `status --format json` 核对。
+  **P4b 的登录中继**：把链接原样交给用户，最长等 29 分钟，成功与否看 `agent login` 的退出码；退出码 0 之后读回账号目录里存下的登录（有 accessToken、没过期）核对，
+  和会话借用时读的是同一份。`status --format json` 读的也只是这份已存的 token（§8.2），所以不再另起一个 CLI 去问。
 - **`agent status --format json`**【实测】：
   - 未登录：`{"status":"unauthenticated","isAuthenticated":false,"hasAccessToken":false,"hasRefreshToken":false,"message":"Not logged in"}`
   - 已存 token：`status:"authenticated"`，外加 `userInfo{email,userId,firstName,lastName,createdAt}`
@@ -601,7 +730,7 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 - **`cursor/list_available_models`**【实测】：返回 46 个 `{value, name, configOptions}`，每个模型带自己的参数定义，可以不建会话就拿到目录。
 - **`agent models` / `--list-models`**【实测】：输出另一套命名（如 `claude-opus-5-5-high-fast`），和 ACP 的值不同，**P3 的模型目录应以 ACP 为准**。
 - **Auto 实际用了哪个模型**：ACP 上看不到。会话库里 assistant 消息的 `providerOptions.cursor.modelName` 记着，实测一次是 `cursor-grok-4.5-high`。
-- 不同账号或 key 的模型目录是否不同【待验】：只有一个账号。源码里目录来自服务端 `GetUsableModels`、`AvailableModels`，按账号或团队下发【6436@5778、6436@5997】。
+- 不同账号或 key 的模型目录是否不同【待验】：只有一个账号。同一个账号从 Free 升到付费套餐后，目录仍是同样的 46 个模型【实测 `p0c/api-key-session-management`】。源码里目录来自服务端 `GetUsableModels`、`AvailableModels`，按账号或团队下发【6436@5778、6436@5997】。
   **P3 应按账号读目录，不要共享缓存。**
 
 ---
@@ -622,20 +751,27 @@ body: {}
 | 方法 | 状态 | 实测返回的字段 |
 | --- | --- | --- |
 | `GetCurrentPeriodUsage` | 200 | `billingCycleStart/End`（毫秒时间戳字符串）、`planUsage{autoPercentUsed, apiPercentUsed, totalPercentUsed, remainingBonus, bonusTooltip}`、`spendLimitUsage{pooledLimit, pooledRemaining, individualLimit, limitType, overallLimit, overallRemaining}`、`displayThreshold`、`displayMessage`、`autoModelSelectedDisplayMessage`、`namedModelSelectedDisplayMessage`、`autoBucketModels` |
-| `GetPlanInfo` | 200 | `planInfo{planName:"Free", price, billingCycleEnd}`、`nextUpgrade{tier, name, includedAmountCents, price, …}` |
-| `GetHardLimit` | 200 | `noUsageBasedAllowed: true` |
+| `GetPlanInfo` | 200 | Free：`planInfo{planName:"Free", price, billingCycleEnd}`、`nextUpgrade{tier, name, includedAmountCents, price, …}`。付费（P0c）：`planInfo{planName:"Premium", price:"", billingCycleEnd, includedUsagePeriod:"INCLUDED_USAGE_PERIOD_WEEKLY", includedUsageResetsAt}`、`nextUpgrade{tier:"super", …}`、`isMerged:true` |
+| `GetHardLimit` | 200 | Free：`noUsageBasedAllowed: true`；付费：`hardLimit: 2147483647` |
 | `GetUsageLimitPolicyStatus` / `GetUsageLimitStatusAndActiveGrants` | 200 | `canConfigureSpendLimit`、`canAdjustOnDemand`、`recommendedOnDemandLimitCents`… |
 | `GetUserPrivacyMode` | 200 | `privacyMode: PRIVACY_MODE_USAGE_DATA_TRAINING_ALLOWED`（即 3） |
 | `GetMe` | 200 | 身份字段（证据里只留字段名） |
 | 原始 API key 当 bearer | **401** | `{"code":"unauthenticated", details:[{type:"aiserver.v1.ErrorDetails", debug:{error:"ERROR_NOT_LOGGED_IN", details:{title:"Authentication error", …, analyticsMetadata:{actionRequired:"login"}}}}]}` |
 
 - 交互式 CLI 的 `/usage` 命令也是调 `GetCurrentPeriodUsage` + `GetHardLimit` + `GetPlanInfo`【源码 C@876991】。ACP 不调这些接口。
+- **付费套餐下的读数**【实测 `p0c/usage-api` 和 [`p0c/analysis/usage-before-prompts.json`](evidence/cursor-cli/2026.10.14-941492e/p0c/analysis/usage-before-prompts.json)】：
+  - 包含用量按周算：`GetCurrentPeriodUsage` 的 `billingCycleStart/End` 是这一周（2026-10-17 01:32 到 10-24 01:32 UTC），等于 `GetPlanInfo` 的
+    `includedUsageResetsAt`；`planInfo.billingCycleEnd` 是月度账期（11-17）。`spendLimitUsage` 只剩 `{limitType:"user"}`。
+  - 发 7 次 Auto prompt 前后，`autoPercentUsed`、`apiPercentUsed`、`totalPercentUsed` 都是 0，`displayMessage` 都是 "You've used 0% of your included usage"。
+    这些是整数百分比；Auto 用量是不计入，还是太小被舍成 0，分不出来（只允许用 Auto，没测其他模型）。
+  - 所以**付费套餐上读到 0% 也不能当作没用过**。
 - **读不到的**：
   - **Free 套餐的请求上限**：第 20 次 prompt 碰到 "You've hit your free requests limit"（§12）时，`GetCurrentPeriodUsage` 仍是 `totalPercentUsed: 0`、
     `displayMessage: "You've used 0% of your included usage"`【实测】。这个上限的用量和剩余在这些接口里都没有。
   - 团队用量（`GetTeamSpend` 等）没有团队账号，【待验】。
 - **P6a 的建议**：
-  - 每个账号用自己的 token 读 `GetCurrentPeriodUsage` 和 `GetPlanInfo`。显示百分比和账期；Free 套餐的请求上限显示为不可用，不显示成 0。
+  - 每个账号用自己的 token 读 `GetCurrentPeriodUsage` 和 `GetPlanInfo`。显示服务端给的百分比和周期（付费套餐按周，用 `includedUsageResetsAt`）；
+    Free 套餐的请求上限显示为不可用，不显示成 0。百分比是 0 时不要据此判断「没用过」或排序选账号。
   - 额度拦截以实际碰到的「额度用尽」轮次（§12）为准，按服务端给的重置日期（chatMessage 里有，只在 CLI 调试日志中可见）或账期结束时间解除。
   - 用 API key 的会话也能这样读（同一个换 token 流程）。
 
@@ -653,14 +789,17 @@ body: {}
 | 模型提供方拒答 | `agent_message_chunk` `"\n\nRequest blocked We are unable to complete this request because it was blocked under the model provider's usage guidelines. Try a less sensitive prompt."` + `end_turn` | **【实测】**（[事故记录](evidence/cursor-cli/2026.10.14-941492e/incidents/provider-refusal-after-crash/README.md)） | 内容被拒：不重试 |
 | 轮中认证失效 | `Please sign in to continue` 或 `Error: [unauthenticated] …` + `end_turn` | 【源码 A@15087、A@15425】，【待验】 | 需要重新登录 |
 | 模型不可用 | `set_config_option` → `-32602 Invalid model value: <值>`；`--model <未知>` → 进程 exit 1 | 【实测】 | 模型不可用 |
-| 轮中断网 | 非可重试错误时为 `Error: …` 文本 + `end_turn`；传输层先按 `nal_agent_retries` 重试 | 【源码 A@15603；调试日志】，**【待验】**（场景 `network-drop-mid-turn` 已写好） | 网络 |
+| 轮中断网 | 断网 6 ms 后，一条 `agent_message_chunk` `"\n\nError: RetriableError: [canceled] http/2 stream closed with error code CANCEL (0x8)"`，然后 `stopReason:"end_turn"`。之前已流出的正文照常保留。CLI 不重试（调试日志：`Stream ended without turnEnded — connection likely dropped mid-stream`、`decision=THROW RetriableError`、`willRetry:false`、`transportFailureKind: socket_reset`），网络恢复后也不续上；进程不退，下一个请求照常应答 | **【实测 `p0c/network-drop-mid-turn`】**（代理切断全部连接、拒绝新连接）；源码 A@15603 | 网络。CLI 自己把它叫 RetriableError，但这一轮不再重试；要不要自动重发由 Orbit 定（轮中可能已经执行过工具）。P5b 现在按一般的 `Error: …` 报失败（"Cursor CLI failed this turn: …"），建议把 `Error: RetriableError:` 开头的归为网络故障 |
 | 进程崩溃 | 收不到 prompt 回复，stdout 关闭 | 【实测】 | 进程异常：结算未终态工具，保留恢复 id |
 | 团队已切换 | `-32603`，`message:"Your team has switched to <名>. Create a new session to continue."`，进程随后 exit 0 | 【实测 `team-pin`】 | 需要新会话或换账号 |
 | 项目配置无效 | 进程在回复 `initialize` 前 exit 1，stderr `Invalid project config at …` | 【实测】 | 仓库配置错误 |
 | 未知会话、方法不存在 | `-32603 details "Session <id> not found"` / `-32601` | 【实测】 | 编程错误 |
 
-- **运行期错误一律是文本加 `end_turn`**【实测三类：额度、拒答、（源码）认证】。服务端的结构化信息（错误码、标题、重置时间）只出现在 CLI 调试日志里。
-  **P5b：按上面三类固定句子分类，其余 `end_turn` 当作正常结束。**这些句子是英文固定文案，跟版本走，升级要回归。
+- **运行期错误一律是文本加 `end_turn`**【实测三类：额度、拒答、断网；认证只有源码】。服务端的结构化信息（错误码、标题、重置时间）只出现在 CLI 调试日志里。
+  **P5b：按上面的固定句子分类，其余 `end_turn` 当作正常结束。**这些句子是英文固定文案，跟版本走，升级要回归。
+- **有没有误判**【实测 [`p0c/analysis/turn-endings.json`](evidence/cursor-cli/2026.10.14-941492e/p0c/analysis/turn-endings.json)】：P0a 和 P0c 录下的 27 轮里，
+  以 `"\n\n"` 开头的正文块只出现在额度用尽、断网、模型拒答这 3 轮，而且都是最后一块。用 P5b 的 `cursorTurnFailure` 判每轮最后一块，
+  只有这 3 轮判为失败，另外 24 轮（正常结束、取消、崩溃、未知会话被拒）都不是；这 24 轮里也没有一个正文块以 `"\n\n"` 开头。
 - 调试日志里有服务端的结构化错误（ErrorDetails），但它是 CLI 的内部文件，格式不稳定，**不建议当接口用**。
 
 ---
@@ -748,14 +887,18 @@ body: {}
 
 ### 14.4 提交署名（D2）
 
-- **【待验】**：commit 场景撞上额度用尽，没有实测到 trailer 文本。
+- **【实测 `p0c/background-shell-and-commit`】没有 trailer**：默认设置（`attributeCommitsToAgent` 没改，客户端照常发 `commitAttributionMessage:"enabled"`）下，
+  agent 用 `git commit -m "$(cat <<'EOF' … EOF)"` 提交，提交信息只有 `p0 attribution probe`，没有任何 trailer。
+  会话库存下的提示里也没有 trailer 的要求：服务端给的 `<user_rules>` 里 `committing-changes-with-git` 一节只要求用 HEREDOC 传提交信息，
+  示例在正文后留了一个空行，全文没有 trailer、Co-authored-by、Made-with 之类的字样。只测了一次（Auto 模型，个人账号）。
 - **【源码】**：
   - `attribution.attributeCommitsToAgent`（默认 true）只让客户端在请求里带 `commitAttributionMessage:"enabled"`【I@4693233、I@4694065】，
     trailer 文本由服务端提示模型写，打包文件里找不到任何 trailer、git hook 或 GIT_* 变量。
   - 管理员可以关掉；拿团队设置失败时也按关掉处理【I@4773670】。
 - **【文档】**："adds a trailer to agent commits"。
-- **建议**：沿用默认（作业指导 D2 的默认）。所有者要求关闭时，在账号 `cli-config.json` 写 `"attribution":{"attributeCommitsToAgent":false,"attributePRsToAgent":false}`。
-  P8 冒烟里核对一次实际的 trailer。
+- **建议**：沿用默认（作业指导 D2）。按这次实测，默认下 ACP 会话的提交不带 Cursor 的 trailer，D2「保留它自己的 trailer」实际上没有东西可保留；
+  界面和文档不要承诺提交里会出现 Cursor 的署名。所有者要求关闭时，在账号 `cli-config.json` 写
+  `"attribution":{"attributeCommitsToAgent":false,"attributePRsToAgent":false}`。P8 冒烟时再看一次，服务端可能按账号或模型改提示。
 
 ---
 
@@ -797,6 +940,11 @@ body: {}
 ```
 
 - 派发变量：`ORBIT_CURSOR_ACCOUNT_DIR=<账号目录>`，做法同 `ORBIT_ANTIGRAVITY_GOOGLE_DIR`。runner 读它，从 CLI 的环境里删掉。
+- **P4b 的实现**（`src/runner-go/cursor_account_slot.go`）：账号目录里只有 `agent login` 用的 `home/`、`config/`、`xdg-config/`（HOME、CURSOR_CONFIG_DIR、
+  XDG_CONFIG_HOME，凭据存 file），登录存在 `xdg-config/cursor/auth.json`。会话不在账号目录里跑：P3 起每个会话的 `config/`、`data/`、`home/` 都在会话自己的目录里，
+  会话只借用账号的登录，读出 accessToken 以 `CURSOR_AUTH_TOKEN` 加 memory 存储交给 CLI，什么都不写回账号目录。
+  会话的记录（`meta.json` 的 `cursorAccountDir`）写下借用的账号，移除时据此拒绝。runner 只读已存的登录，从不刷新（§8.4 第 4 条）。
+  只在 Linux 上保留 Default 以外的账号（D4 方案 A）；其他平台不声明 `cursor-account-login/v1`、`cursor-account-remove/v1`，只有 Default（方案 D），等 P0b。
 - API key 凭据（P2）不建账号目录。会话用自己的 `config/`、`data/`（放在会话 scratch 下，续聊时复用），key 以 `CURSOR_API_KEY` 注入，用 memory 存储。
 
 ### 16.3 启动参数
@@ -823,15 +971,16 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
   3. 契约固定的变量（HOME、SHELL、CURSOR_CONFIG_DIR、CURSOR_DATA_DIR、AGENT_CLI_CREDENTIAL_STORE=memory、NO_OPEN_BROWSER、DIRENV_DISABLE、
      CURSOR_AGENT_DISABLE_DEBUG_LOG、Orbit 的会话变量），以及 Orbit 选定的凭据。工作区设了同名变量也以这一层为准。
 - **凭据的选法**，依次：
-  1. 派发的 key（P2：`ORBIT_CURSOR_API_KEY`，以 `CURSOR_API_KEY` 交给 CLI）；之后的账号 token（P4b）也在这一档。
-     Orbit 选了凭据时，工作区带来的 `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN` 都换掉。
+  1. 派发的 key（P2：`ORBIT_CURSOR_API_KEY`，以 `CURSOR_API_KEY` 交给 CLI）；其次是派发的账号（P4b：`ORBIT_CURSOR_ACCOUNT_DIR` 指向 Default 以外的账号）
+     已存登录的 accessToken，以 `CURSOR_AUTH_TOKEN` 交给 CLI。这个账号没登录、登录已过期（剩余不足 300 s 也算），或者不是这台 runner 的账号时，会话以
+     `Failed to authenticate: …` 拒绝，不退回 Default 或工作区的凭据。Orbit 选了凭据时，工作区带来的 `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN` 都换掉。
   2. 工作区环境变量里的 `CURSOR_API_KEY` 或 `CURSOR_AUTH_TOKEN`，原样经第 2 层传入。这与 server 的登录预检（`CREDENTIAL_ENV_KEYS.cursor`）
      和 `OWN_CREDENTIAL_KEYS.cursor` 一致，runner 的 `hasInjectedCredentials(cursor)` 读的也是这三个变量。
   3. 都没有时，用 Default 账号已存的登录（`<orbit home>/cursor/default/xdg-config/cursor/auth.json` 的 accessToken，以 `CURSOR_AUTH_TOKEN` 注入；
      剩余不足 300 s 算过期，不用）。
   4. 一个都没有：不启动 CLI，会话以「需要登录」（`Failed to authenticate: …`）结束。
-- agent 跑的命令经 orbit-bash（SHELL）执行：还原真 HOME，unset `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、`XDG_CONFIG_HOME`、`CURSOR_CONFIG_DIR`、
-  `CURSOR_DATA_DIR`；工作区的其他变量照常可见。
+- agent 跑的命令经会话自己的 orbit-bash（SHELL）执行：还原真 HOME，unset `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、`CURSOR_CONFIG_DIR`、`CURSOR_DATA_DIR`，
+  把 `XDG_*` 和 Orbit 只给 CLI 设的变量还原成其他引擎会话里的值（P4b，§8.4）；工作区的其他变量照常可见。【实测 `p0c/shell-wrapper-env`，§8.4；hooks 不经过它】
 - `initialize` 用 §2.2 的请求。`session/new` 或 `session/load` 一律带上 `mcpServers`（Orbit MCP 等），load 时重新给。
 - 模型用 `set_config_option`（参数化选择器），不用 `--model`。新会话默认 Auto（`default` / `default[]`）。
 - 健康检查（P3）：`--version` 等于固定版本；`agent models` 退出码 0，说明凭据有效、能联网。不要用 `status`（它不认 API key）。
@@ -850,7 +999,8 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | `available_commands_update` | 斜杠命令列表 |
 | `current_mode_update` | 模式变更回显 |
 | `session/request_permission` | 审批卡；按 §5.2 关联工具卡 |
-| `cursor/ask_question` | 提问卡（【待验】，没有就当作不会发生，但必须能应答） |
+| `cursor/ask_question` | 提问卡。agent 和 plan 模式下都没收到过（§4.2 实测），但必须能应答 |
+| kind `switch_mode` 的工具卡 | 模型自己切了模式，CLI 已自行批准（§4.2，源码）；plan 等受限模式要据此处理（P5c） |
 | `session/prompt` 回复 | 轮次结算：`end_turn`（先检查错误句子）/ `cancelled` |
 | 上下文用量 | 不可用（ACP 不上报） |
 
@@ -861,10 +1011,11 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | `bypassPermissions`、`auto` | `--force` | 照常应答（团队否决时仍会来请求） |
 | `acceptEdits` | 默认 | 审批卡 |
 | `dontAsk` | 默认 | 一律 `reject-once`（工作区写不受控，界面要说明） |
-| `plan` | 默认 + `set_mode plan` | 一律 `reject-once` |
+| `plan` | 默认 + `set_mode plan` | 一律 `reject-once`；模型可能自己切回 agent（§5.4），要盯 `switch_mode` 工具卡 |
 | `default` | — | **不提供**（编辑前要问做不到），或作为 `acceptEdits` 的别名明确告诉用户 |
 
-受保护模式（除 bypass/auto 外）一律加 `--disable-project-configs` 和 `DIRENV_DISABLE=1`。用户级 `~/.cursor` 配置的处理取决于 D4。
+受保护模式（除 bypass/auto 外）一律加 `--disable-project-configs`（实测让仓库 cli.json 失效，§7.2）和 `DIRENV_DISABLE=1`。
+用户级 `~/.cursor` 配置不会进来：D4 用 A，CLI 的 HOME 是会话或账号自己的目录（§8.4）。
 
 ### 16.6 错误分类（P5b）
 
@@ -872,7 +1023,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 
 1. JSON-RPC 错误只出现在建会话或设置阶段。
 2. 轮内错误按固定句子匹配：`Upgrade your plan to continue` 是额度或限流；`Request blocked … usage guidelines` 是内容被拒；
-   `Please sign in to continue` 或 `[unauthenticated]` 是认证。
+   `Please sign in to continue` 或 `[unauthenticated]` 是认证；`Error: RetriableError: …`（实测轮中断网，§12）是网络故障，要不要自动重发见 §12。
 3. 收不到回复、stdout 关闭，是进程异常。
 4. `-32603 "Failed to initialize session services"` 用 `agent models` 二次判定是凭据还是网络。
 
@@ -881,9 +1032,9 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | 待定项 | 事实 | 建议 |
 | --- | --- | --- |
 | D1 索引 | §14.3：只在隐私模式 4 时上传完整文件内容；本账号 0 字节；`--disable-indexing` 不影响功能 | 默认加 `--disable-indexing`；worker 的 npx 下载另行决定 |
-| D2 署名 | §14.4：客户端只发开关，文本由服务端定；没测到实际 trailer | 沿用默认；要关就写账号 cli-config |
+| D2 署名 | §14.4：客户端只发开关，文本由服务端定；实测默认下 ACP 会话的提交没有 trailer | 沿用默认；不承诺提交里有署名；要关就写账号 cli-config |
 | D3 显示名 | CLI 自称 "Cursor Agent" / "Cursor CLI"（`about` 标题 "About Cursor CLI"） | 采用 "Cursor CLI"，内部名 `cursor` |
-| D4 隔离 | §8.4：只有 HOME 能挪走 `~/.cursor`，命令环境继承一切；凭据可以用环境变量注入 | 先补验 A（SHELL 包装）；不成立就请所有者在 B 和 D 之间选 |
+| D4 隔离 | §8.4：只有 HOME 能挪走 `~/.cursor`；方案 A（SHELL 包装）在 Linux 实测成立：命令拿回真 HOME，看不到 key 和 token | Linux 用 A；macOS 等 P0b，A 不成立再请所有者在 B 和 D 之间选 |
 | D5 换账号 | §13：同一身份下搬运加续聊实测可行；团队固定在进程上；跨账号没测 | 验证前只允许没说过话的会话换账号 |
 
 ---
@@ -892,26 +1043,30 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 
 ### 17.1 待验（实现不得当作已支持）
 
-1. 仓库配置的运行期效果：cli.json 放宽白名单、hooks 在 prompt 和工具执行时的触发来源、rules/AGENTS/CLAUDE 进入上下文、`--disable-project-configs` 和 `--exclude-workspace-context` 的运行期效果。
-   场景 `repo-config-baseline`、`repo-config-with-flags` 已写好（额度用尽）。
-2. 轮中断网的形状（场景 `network-drop-mid-turn`）。
-3. D4 方案 A：SHELL 包装（场景 `shell-wrapper-env`）。
-4. `cursor/ask_question` 的实际触发和不应答表现（服务端在 agent 模式不给 AskQuestion）。
-5. 提交署名的 trailer 文本；后台命令结束后是否开新一轮（场景 `background-shell-and-commit` 撞上额度用尽）。
-6. 远程设备完成登录；浏览器登录 token 的寿命和过期表现；`agent logout` 对登录账号的效果（场景 `login-account`）。
-7. 跨账号或跨团队续聊（D5），以及不同账号的模型目录差异。
-8. 团队管理员否决 Run Everything（没有团队账号）；限流的形状；轮中认证失效的形状。
-9. deny 规则的强制力；`approvalMode: unrestricted`；`channel: static`；`--disable-codebase-ref` 对回答质量的影响；用别的 cwd load 会话。
-10. 审批进行中取消、审批中断开连接的行为。
+P0c（2026-10-17，付费套餐，7 次 prompt）已补完 P0a 卡住的场景：仓库配置的运行期效果和两个参数（§7.2、§2.1）、轮中断网（§12）、
+D4 方案 A（§8.4）、`cursor/ask_question`（§4.2）、提交署名和后台命令（§14.4、§3.2）。还没验证的：
+
+1. 远程设备完成登录；浏览器登录 token 的寿命和过期表现；`agent logout` 对登录账号的效果（场景 `login-account`，要所有者亲自登录一次，1 次 prompt）。
+   P4b（2026-10-17）又请所有者登录两次，两次的链接都没人用，分别在 1,543 s、1,562 s 后过期（§9）。
+2. 跨账号或跨团队续聊（D5），以及不同账号的模型目录差异。
+3. 团队管理员否决 Run Everything（没有团队账号）；限流的形状；轮中认证失效的形状；断网以外的网络故障（DNS 失败、代理报错、慢网）会不会被重试（§12）。
+4. deny 规则的强制力；`approvalMode: unrestricted`；`channel: static`；`--disable-codebase-ref` 对回答质量的影响；用别的 cwd load 会话。
+5. 审批进行中取消、审批中断开连接的行为。
+6. `cursor/ask_question` 真来时的形状、不应答和回退（agent、plan 模式都没触发过，只有源码，§4.2）。
+7. 模型自己用 `SwitchMode` 切模式（源码：CLI 不问客户端就批准）的实际表现，尤其是 plan 模式被切走后能不能写文件（§4.2、§5.4）。
+8. 仓库能不能借 cli.json 数组整体替换去掉用户的 allow 条目；工作区上层目录（例如 Orbit worktree 上面的 `/root`）的 `AGENTS.md`、`CLAUDE.md`、
+   `.cursor/rules/` 是否进上下文；Claude 格式的用户 hooks（`$HOME/.claude/settings.json`）在 ACP 的工具事件上会不会运行（§7.2）。
+9. 后台命令在 CLI 退出或被杀之后的去向（§3.2）。
+10. 付费套餐下非 Auto 模型会不会推动用量百分比（§11）。
 11. macOS：P0b 交付了 §18（安装、quarantine、目录、Keychain 机制与 launchd 行为、登录、D4 建议）。P0b 运行期所有者的 key 没放到 orbit-macos，带凭据的场景未跑（清单见 §18.8），由 macOS 跟进任务补测：核心场景（4 次 Auto prompt）、零 prompt 批次、Keychain 条目实测。Linux arm64、其他发行版。
 
-额度在 2026-10-24 重置（或换一个付费账号的 key），然后执行：
+P0c 跑过的命令（固定版本，P0c 账本）：
 
 ```sh
-node scripts/cursor-p0/reproduce.mjs --only repo-config-baseline,repo-config-with-flags,network-drop-mid-turn,shell-wrapper-env,background-shell-and-commit,ask-question
+node scripts/cursor-p0/reproduce.mjs --only shell-wrapper-env,repo-config-baseline,repo-config-with-flags,network-drop-mid-turn,background-shell-and-commit,ask-question,ask-question-plan-mode
 ```
 
-需要 6 次 prompt。所有者完成登录后，再加 `login-account`（1 次）。
+剩下要花 prompt 的：所有者完成登录后的 `login-account`（1 次），以及第 7 条（1 次，场景还没写）。
 
 ### 17.2 运行期断言写错的场景（事后分析）
 
@@ -931,11 +1086,19 @@ node scripts/cursor-p0/reproduce.mjs --only repo-config-baseline,repo-config-wit
 
 `crash-continue-and-shell-wrapper` 是旧的场景定义（现拆成 `crash-continue` 和 `shell-wrapper-env`），`summary.json` 里标 `current:false`。
 
+P0c 的 21 个场景运行期断言全部成立，没有事后分析。P0c 改过的场景定义：`install-and-version` 不再断言固定版本就是最新版，只记录
+`latestVersion`、`latestStatus`，并结束安装器留下的 `cleanup-install-versions` 进程；`shell-wrapper-env` 改用 P3 的 orbit-bash 原文和 P3 的固定层环境，
+同时带 key 和 token；`repo-config-*` 多了 `mkdir` 一步（只有 `.claude/settings.json` 放行它）和槽目录里的用户级规则；`ask-question` 记录会话库给出的工具，
+另有 plan 模式的版本；`network-drop-mid-turn` 记录断网后的每个正文块和 CLI 调试日志里的失败原因；`failure-shapes-without-prompt` 加了
+「`--disable-project-configs` 下无效的 cli.json」一项。
+
 ### 17.3 证据边界
 
-- 所有【实测】都来自一个 Free 套餐的个人账号（不属于任何团队，隐私模式 3），一把 User API Key，Auto 模型。付费套餐、团队账号、其他隐私模式的表现可能不同。
+- P0a 的【实测】来自一个 Free 套餐的个人账号（不属于任何团队，隐私模式 3），一把 User API Key，Auto 模型。
+  P0c 的【实测】来自同一个账号升级后的付费套餐（`Premium`，用量按周计），同一把 key，Auto 模型。团队账号、其他隐私模式的表现可能不同。
 - Auto 会路由到不同的模型，正文措辞每次不同。断言只看 CLI 的行为（权限请求、工具卡、文件、副作用日志），不看模型说了什么，例外都注明了。
-- 本次的真实 prompt 账本：20 次。第 2、3 次是脚本缺陷造成的（`--selftest` 驱动了真 CLI），它们的协议录制丢失，产物事后检查过（见 [exploration/README.md](evidence/cursor-cli/2026.10.14-941492e/exploration/README.md)）。
+- P0a 的真实 prompt 账本：20 次。第 2、3 次是脚本缺陷造成的（`--selftest` 驱动了真 CLI），它们的协议录制丢失，产物事后检查过（见 [exploration/README.md](evidence/cursor-cli/2026.10.14-941492e/exploration/README.md)）。
+- P0c 的真实 prompt 账本：7 次，每次对应一个场景，录制都在 `p0c/protocol/`。
 
 ---
 
@@ -952,8 +1115,7 @@ node scripts/cursor-p0/reproduce.mjs --only repo-config-baseline,repo-config-wit
   Developer ID 签名（TeamIdentifier `HX7739G8FX`）；`rg`、`cursorsandbox`、`crepectl` 是 Anysphere 签名（`DCNK4UB866`）；
   **`cursor-agent-sea` 未签名**（它不进 ACP 路径，且自己以 137 退出，见下）。
 - `agent install <版本> <prefix>` 在 macOS 同样可用，装出的 `index.js` 与 tarball 逐字节相同【实测】。
-- `about --format json`：`latestStatus` 从 P0a 的 `up_to_date` 变成了 **`update_available`**（2026-10-16 官方发布了 `2026.10.16-e3cb207`）。
-  项目仍固定 2026.10.14-941492e，是否升级由 P0c 对比后另行决定【实测】。
+- `about --format json`：`latestStatus` 报 `update_available`、`latestVersion: "2026.10.16-e3cb207"`——与 P0c 在 Linux 上的观测一致，见 §1.3 的两版对比【实测】。
 
 ### 18.2 quarantine 对启动的影响【实测 `macos-quarantine`】
 
@@ -1039,7 +1201,7 @@ runner 以 launchd 服务运行时（本机 orbit runner 就运行在 `gui/501` 
 
 **事实**（macOS 新增的，其余同 §8.4）：
 
-1. **SHELL 选择规则与 Linux 相同**【源码 darwin 包同一段代码】：`$SHELL` 路径含 `bash` 就用它，否则从 PATH 找 bash；每条命令先 `-ilc` 快照环境再执行。所以 orbit-bash 包装（路径含 `bash`）会被采用——源码级结论；实测（`shell-wrapper-env`，1 次 prompt）在 P0b 运行期 key 未到，**未运行**（§17.1，并入 macOS 跟进任务）。
+1. **SHELL 选择规则与 Linux 相同**【源码 darwin 包同一段代码】：`$SHELL` 路径含 `bash` 就用它，否则从 PATH 找 bash；每条命令先 `-ilc` 快照环境再执行。所以 orbit-bash 包装（路径含 `bash`）会被采用——**Linux 上 P0c 已实测成立（§8.4）**；macOS 的实测（`shell-wrapper-env`，1 次 prompt）在 P0b 运行期 key 未到，**未运行**（§17.1，并入 macOS 跟进任务）。
 2. **方案 A 的「CLI 用账号 HOME」与默认 Keychain 存储冲突**：`/usr/bin/security` 按 HOME 解析钥匙串，账号 HOME 下保存凭据会弹框或挂 30 s（§18.4）。但这不影响 §16.3 的既定设计——契约本来就固定 `AGENT_CLI_CREDENTIAL_STORE=memory` 加注入 token/key，根本不碰 Keychain。
 3. **Keychain 不能用于多账号隔离**（条目 per-user 全局，§18.4）。macOS 上三种凭据的落盘方案：
    - API key：`CURSOR_API_KEY` + memory 存储（同 Linux）。
@@ -1076,6 +1238,9 @@ runner 以 launchd 服务运行时（本机 orbit runner 就运行在 `gui/501` 
 | [`prompts-ledger.json`](evidence/cursor-cli/2026.10.14-941492e/prompts-ledger.json) | 真实 prompt 账本 |
 | [`manifest.json`](evidence/cursor-cli/2026.10.14-941492e/manifest.json) | 上述文件的 SHA-256 |
 | [`src/runner-go/testdata/cursor/`](../src/runner-go/testdata/cursor/) | 单进程回放样本（README、INDEX） |
-| [`evidence/cursor-cli/macos-2026.10.14-941492e/`](evidence/cursor-cli/macos-2026.10.14-941492e/) | P0b 的 macOS 证据：自己的 `summary.json`、`scenarios/`、`protocol/`、`prompts-ledger.json`、`login-timing/` |
+| [`p0c/`](evidence/cursor-cli/2026.10.14-941492e/p0c/README.md) | P0c：同样结构的场景结果、录制、`summary.json`、`prompts-ledger.json`（P0c 账本），以及 `analysis/turn-endings.json`、`analysis/usage-before-prompts.json` |
+| [`src/runner-go/testdata/cursor/p0c/`](../src/runner-go/testdata/cursor/p0c/INDEX.md) | P0c 发真实 prompt 的场景的回放样本 |
+| [`docs/evidence/cursor-cli/2026.10.16-e3cb207/p0c/`](evidence/cursor-cli/2026.10.16-e3cb207/p0c/README.md) | 新版 `2026.10.16-e3cb207` 的不花 prompt 场景，以及和固定版本的对比 `comparison.json`（§1.3） |
+| [`evidence/cursor-cli/macos-2026.10.14-941492e/`](evidence/cursor-cli/macos-2026.10.14-941492e/) | P0b 的 macOS 证据：自己的 `summary.json`、`scenarios/`、`protocol/`、`prompts-ledger.json`、`login-timing/`、`probe/` |
 
 复现命令见 [`scripts/cursor-p0/README.md`](../scripts/cursor-p0/README.md)。

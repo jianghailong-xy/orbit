@@ -413,6 +413,20 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 	if bin == providerOpenCode {
 		return ""
 	}
+	// Cursor CLI runs on the credential its launch chooses (cursorLaunchCredential): a key, the login of the
+	// account the session borrows, or the workspace's own. It is read here the way the launch reads it,
+	// without asking Cursor: `agent models` would put a network round trip in front of every session.
+	if bin == providerCursor {
+		job := &ClaimedSession{Provider: providerCursor, Agent: AgentExecConfig{Provider: providerCursor, Env: agentEnv}}
+		credential, _, err := cursorLaunchCredential(job)
+		if err != nil {
+			return err.Error()
+		}
+		if credential == "" && !hasInjectedCredentials(bin, agentEnv) {
+			return cursorSignedOutMessage()
+		}
+		return ""
+	}
 	if hasInjectedCredentials(bin, agentEnv) {
 		return ""
 	}

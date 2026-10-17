@@ -428,6 +428,8 @@ type Restorations = ReadonlyMap<string, readonly ResolvedSource[]>;
  * run's work away. What grew with the space — the near neighbours — is read before the transaction opens
  * (`ChangesetNeighbours`); this is the margin for what cannot move out, not room for a slow query:
  * wiki-scale.pg.spec.ts holds the transaction well under the old 5 s without it.
+ *
+ * An anchor check's transaction (`recordAnchorChecks`) has the same budget, for the reason given there.
  */
 const CHANGESET_TRANSACTION = { timeout: 15_000, maxWait: 5_000 };
 
@@ -2879,6 +2881,16 @@ export class WikiService {
    * at once, and — unless a challenge of it is already open — a system challenge is filed in the same
    * transaction, through `recordChangeset` like any other write: origin maintenance and no session, so
    * it counts against no session's quota. A Tiered pitfall the check leaves verified may become Auto.
+   *
+   * EACH ENTRY'S TRANSACTION HAS A CHANGESET'S BUDGET (`CHANGESET_TRANSACTION`), not Prisma's 5 s. It is a
+   * dozen statements and commits in tens of milliseconds, but on a loaded database one statement of it can
+   * take seconds by itself: on 2026-10-16 (run 6e62f826, 16:37:35) and 2026-10-17 (run 34cadf93, 02:38:31) a
+   * statement of one entry's transaction ran past the default, the `wikiEntry.findFirst` after it found the
+   * transaction expired (5000 ms; 6674 and 6002 ms passed), and the canary's run failed whole at its anchors
+   * step. No lock wait was logged either time. A check that breaks an anchor files a changeset of one op in
+   * it, and the worst lock wait four days of log_lock_waits recorded was 12.1 s (docker-compose.yml): 15 s
+   * holds both. What still runs past it is a P2028, which the server's run takes as the platform's and tries
+   * again (`maintenance.job.server.failureKinds`).
    */
   async recordAnchorChecks(
     caller: { ownerId: string; sessionId: string | null; jobId?: string | null },
@@ -2904,7 +2916,7 @@ export class WikiService {
         const outcome = await withTransactionRetry(
           this.prisma,
           (tx) => this.applyAnchorCheck(tx, caller, space, shape.ref, at, item, literals),
-          loggedRetry(this.logger, 'wiki.recordAnchorChecks'),
+          loggedRetry(this.logger, 'wiki.recordAnchorChecks', { transaction: CHANGESET_TRANSACTION }),
         );
         outcomes.push(outcome);
         if (outcome.status === 'recorded') wrote = true;

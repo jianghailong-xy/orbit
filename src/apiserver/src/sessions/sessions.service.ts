@@ -253,7 +253,7 @@ import {
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
-import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
+import { ACCOUNT_MOVE_CAPABILITY, cursorMoveRefusal } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
   CURRENT_WORK_INTERRUPTED,
@@ -7939,6 +7939,10 @@ export class SessionsService {
         if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:cursor')) {
           throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
         }
+        // D5, as on a live switch (updateConfig): revived on another key or sign-in, a conversation it
+        // has would have to go with it.
+        const refusal = next.changed ? cursorMoveRefusal(current, current.assignedRunner) : null;
+        if (refusal) throw new ConflictException(refusal);
         normalizeBuiltinPermissionMode(
           resumeRuntime,
           next.model ?? current.model ?? '',
@@ -8458,6 +8462,12 @@ export class SessionsService {
         provider: dto.provider,
         model: dto.model,
       });
+      // D5: a Cursor CLI session that has talked moves to another key, or between a key and the runner's
+      // sign-in, only on a runner that carries its conversation there — none does yet.
+      if (next.changed && next.engine === AgentProvider.CURSOR) {
+        const refusal = cursorMoveRefusal(session, session.assignedRunner);
+        if (refusal) throw new ConflictException(refusal);
+      }
       const accounts = await this.accountOnProviderSwitch(tx, id, next, dto.account);
       const poolRuntime = next.credential?.kind === 'pool' ? next.credential.engine : null;
       // Resolved on the session's own engine: the switch moved the credential, not the CLI.
@@ -8680,9 +8690,11 @@ export class SessionsService {
    * A move is spawn-only, as a provider is: the account IS the engine's environment. On a live session
    * a `reload` naming the engine re-spawns it on the new account once no turn is in flight, and the
    * runner carries the conversation across (CODEX_ACCOUNT_MOVE_V1, CLAUDE_ACCOUNT_MOVE_V1); a runner
-   * that declares neither is refused the move, since it would resume where the conversation is. An
-   * ended or unclaimed one just stores it, for the claim that runs it next — at once, if it was waiting
-   * out the old account's reset. The next engine start says so in the transcript.
+   * that declares neither is refused the move, since it would resume where the conversation is. A
+   * Cursor CLI session is refused only once it has talked (cursorMoveRefusal): before that it has no
+   * conversation to carry. An ended or unclaimed one just stores it, for the claim that runs it next —
+   * at once, if it was waiting out the old account's reset. The next engine start says so in the
+   * transcript.
    */
   async switchAccount(ownerId: string, id: string, account: unknown) {
     if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
@@ -8702,6 +8714,10 @@ export class SessionsService {
           provider: true,
           providerBuiltin: true,
           retryAt: true,
+          // Whether a Cursor CLI session has a conversation to carry (cursorMoveRefusal).
+          numTurns: true,
+          runtimeSessionId: true,
+          engineTurnActive: true,
           codexAccount: true,
           codexAccountPinned: true,
           claudeAccount: true,
@@ -8768,7 +8784,11 @@ export class SessionsService {
         if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner)}`;
       }
       const moves = to !== current;
-      if (moves && !runnerCarriesAccounts(runner, engine)) {
+      // A Cursor CLI session that has not talked has no conversation to carry, so it moves on any runner;
+      // one that has, only on a runner that carries it (D5).
+      const cursorRefusal = moves && engine === AgentProvider.CURSOR ? cursorMoveRefusal(session, runner) : null;
+      if (cursorRefusal) throw new ConflictException(cursorRefusal);
+      if (moves && engine !== AgentProvider.CURSOR && !runnerCarriesAccounts(runner, engine)) {
         throw new ConflictException(
           "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
         );
@@ -9135,6 +9155,7 @@ export class SessionsService {
     claudeAccount: true,
     codexAccount: true,
     kimiAccount: true,
+    cursorAccount: true,
     // At most one, by the unique index behind Project.coordinatorSessionId. Nothing in the database
     // keeps a coordinator in its workspace since 0164, so the move is what has to.
     coordinatorForProject: { select: { id: true } },
@@ -9153,7 +9174,10 @@ export class SessionsService {
       },
     },
     workspace: {
-      select: { env: true, claudeAccount: true, codexAccount: true, kimiAccount: true, enableWorktree: true, defaultMergeTarget: true },
+      select: {
+        env: true, claudeAccount: true, codexAccount: true, kimiAccount: true, cursorAccount: true, enableWorktree: true,
+        defaultMergeTarget: true,
+      },
     },
     assignedRunner: { select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true } },
   } satisfies Prisma.SessionSelect;

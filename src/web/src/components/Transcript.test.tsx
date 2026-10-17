@@ -2010,6 +2010,41 @@ describe('failed tool call body', () => {
 
     expect(html).toContain('chat-tool-status err');
     expect(html).not.toContain('chat-tool-status running');
+    // agy's interrupt carries no payload at all, and it is still the reader's Stop.
+    expect(html).toContain('<div class="chat-note" data-seq="2">⊘ interrupted</div>');
+  });
+});
+
+// One conversation with both kinds of interrupt, as session 34dLFOCjLz8KqyCiaECec recorded them on
+// 2026-10-13: the owner's Stop at 05:39:50 (claude's interrupt answers it with the Stop's requestId),
+// then at 05:55:06 the runner restarting under a turn still in flight, which it marks
+// `reason: runner_restart` before tearing the turn down (runner-go's watchShutdownDrain). Nobody
+// pressed Stop the second time, so its row must not read like the first.
+describe('an interrupt row says what stopped the turn', () => {
+  const conversation = () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'user', turnId: 't1', ts: '2026-10-13T05:39:31.000Z', payload: { text: 'Why was it sent twice?' } },
+          { seq: 2, type: 'assistant', turnId: 't1', ts: '2026-10-13T05:39:44.000Z', payload: { text: 'Reading the delivery path.' } },
+          { seq: 3, type: 'interrupt', turnId: 't1', ts: '2026-10-13T05:39:50.000Z', payload: { requestId: 'req-22-1' } },
+          { seq: 4, type: 'turn_end', turnId: 't1', ts: '2026-10-13T05:39:50.100Z', payload: { subtype: 'interrupted' } },
+          { seq: 5, type: 'user', turnId: 't2', ts: '2026-10-13T05:52:10.000Z', payload: { text: 'Carry on.' } },
+          { seq: 6, type: 'assistant', turnId: 't2', ts: '2026-10-13T05:54:58.000Z', payload: { text: 'Back on the delivery path.' } },
+          { seq: 7, type: 'interrupt', turnId: 't2', ts: '2026-10-13T05:55:06.571Z', payload: { reason: 'runner_restart' } },
+        ]}
+      />,
+    );
+    return new JSDOM(html).window.document;
+  };
+  const row = (seq: number) => conversation().querySelector(`.chat-note[data-seq="${seq}"]`)?.textContent;
+
+  it("draws the reader's own Stop as interrupted", () => {
+    expect(row(3)).toBe('⊘ interrupted');
+  });
+
+  it('says the runner restarted when the runner cut the turn short', () => {
+    expect(row(7)).toBe('⊘ interrupted — the runner restarted');
   });
 });
 

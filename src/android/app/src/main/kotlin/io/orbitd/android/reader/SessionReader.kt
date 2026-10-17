@@ -169,9 +169,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it, cards.answered) }.orEmpty()
     }
     // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet — but the reader's own
-    // messages still on their way, which the tray above the composer holds; what Orbit queued keeps its card here.
-    val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
-        queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events).filterNot { it.inTray }
+    // messages still on their way, which the tray above the composer holds; what Orbit queued keeps its card here. After them, the
+    // reader's steers only the server's receipt says were not delivered, until Put back takes one away.
+    val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events, composerState.withdrawing, composerState.withdrawn) {
+        val listed = state.session?.snapshot?.queuedTurns.orEmpty()
+        queuedTail(listed, state.window.events).filterNot { it.inTray } + undeliveredTail(listed, state.window.events).filterNot {
+            (ObjectId.canonical(it.turnId!!) ?: it.turnId) in composerState.withdrawing + composerState.withdrawn
+        }
     }
     // A07-14: the turn the runner has taken, until its echo or its end — drawn where the echo will land, as the echo will be.
     val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
@@ -367,7 +371,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
                     if (live != null) items(queued, key = { it.key }) { turn ->
-                        QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy) { turnId ->
+                        QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy,
+                            putBack = if (turn.delivery != null && composerState.loaded) ({
+                                composer.putBack(turn.event.fields.string("text").orEmpty(), discard = turn.turnId)
+                            }) else null) { turnId ->
                             composer.control("turns/$turnId", HttpMethod.DELETE)
                         }
                     }

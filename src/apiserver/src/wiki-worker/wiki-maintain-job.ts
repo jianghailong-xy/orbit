@@ -13,6 +13,7 @@ import {
   type WikiRepoOpKind,
   type WikiReviewMode,
 } from '@orbit/shared';
+import { classifyTransactionFault } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
 import { anchorCheckRefs, anchorDiffNames, listWikiAnchorsForJob, type WikiAnchorDiffNames, type WikiAnchorProof } from '../wiki/wiki-anchors';
 import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition } from '../wiki/wiki-docs-material';
@@ -115,7 +116,8 @@ import { verifyWikiOps } from './wiki-verify-job';
  * and the plan proposal whole, as the runner's does.
  *
  * HOW IT FAILS (§5.5). A failure of the platform — the runner away, a read or a request past its limit, the
- * worker stopping — is thrown as infra: the job is tried again on the backoff and NOTHING is counted against
+ * database closing or refusing a unit of work under the run (P2028, `asStop`), the worker stopping — is
+ * thrown as infra: the job is tried again on the backoff and NOTHING is counted against
  * the space's streak. A failure of the work — the model's answers, the server's refusals — ends the run
  * through the finish route, which counts it, so three in a row tell the owner, and the job fails as content.
  * Every call is a breakpoint: the pair `(step, unit)` is a request's identity, so a replayed job reuses the
@@ -2086,13 +2088,22 @@ export function wikiMaintainEndpointIsLocal(baseUrl: string): boolean {
   return host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan');
 }
 
-/** One error as a stop: a WikiJobInfraError is the platform's, everything else the run's. */
+/**
+ * One error as a stop: a WikiJobInfraError is the platform's, and so is the database failing under the run
+ * (contract `maintenance.job.server.failureKinds`) — `classifyTransactionFault`'s TRANSIENT, a conflict it rolled
+ * back that outlasted the transaction's own retries, and RESOURCE: a transaction that could not start in time or
+ * that its timeout closed (P2028), no connection in time (P2024), a connection or resource SQLSTATE (classes 08,
+ * 53, 57, 58). Each rolled back whole, so the replay finds nothing half-written; the run is not ended and nothing
+ * is counted against the space. Everything else is the run's. Until 2026-10-17 that was every error but a
+ * WikiJobInfraError, and a P2028 at the anchors step failed the canary's runs 6e62f826 and 34cadf93 as content.
+ */
 function asStop(error: unknown, step = 'context'): WikiMaintainStop {
   if (error instanceof WikiMaintainStop) return error;
   if (error instanceof WikiJobInfraError) return new WikiMaintainStop(step, error, 'infra');
   if (error instanceof WikiJobContentError) return new WikiMaintainStop(step, error, 'content');
   const wrapped = error instanceof Error ? error : new Error(String(error));
-  return new WikiMaintainStop(step, wrapped, 'content');
+  const fault = classifyTransactionFault(error);
+  return new WikiMaintainStop(step, wrapped, fault.retryable || fault.family === 'RESOURCE' ? 'infra' : 'content');
 }
 
 /** sha256 in lowercase hex. */
