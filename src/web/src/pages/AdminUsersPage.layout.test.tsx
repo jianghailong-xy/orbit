@@ -22,7 +22,7 @@ vi.mock('../api', async (importOriginal) => ({
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api } = await import('../api');
-const { AdminUsersPage, DELETE_USER, DISABLE_USER, ENABLE_USER, RESET_PASSWORD, VIEW_AS } = await import('./AdminUsersPage');
+const { AdminUsersPage, DELETE_USER, DISABLE_USER, ENABLE_USER, RESET_PASSWORD, UPDATE_WIKI_DOCS, VIEW_AS } = await import('./AdminUsersPage');
 
 interface Row {
   id: string;
@@ -217,11 +217,11 @@ describe('Admin → Users · one row an account', { timeout: 60_000 }, () => {
       expect(button(rowOf(email), VIEW_AS), email).toBeUndefined();
       expect(button(rowOf(email), ENABLE_USER), email).toBeUndefined();
     }
-    expect(await menuOf('dev@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', 'Unlink Google', 'Make admin', DISABLE_USER, DELETE_USER]);
-    expect(await menuOf('gone@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', 'Make admin', DELETE_USER]);
-    expect(await menuOf('ops@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', 'Make member', DISABLE_USER, DELETE_USER]);
+    expect(await menuOf('dev@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', UPDATE_WIKI_DOCS, 'Unlink Google', 'Make admin', DISABLE_USER, DELETE_USER]);
+    expect(await menuOf('gone@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', UPDATE_WIKI_DOCS, 'Make admin', DELETE_USER]);
+    expect(await menuOf('ops@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', UPDATE_WIKI_DOCS, 'Make member', DISABLE_USER, DELETE_USER]);
     // Your own account cannot be disabled or deleted, so its menu does not offer either.
-    expect(await menuOf('admin@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', 'Make member']);
+    expect(await menuOf('admin@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', UPDATE_WIKI_DOCS, 'Make member']);
   });
 
   it('resets a password once asked, then shows the one-time password', async () => {

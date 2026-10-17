@@ -221,6 +221,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // The subject has no Google account linked: the administrator is answered its sign-in methods as they are.
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   'PATCH /admin/providers/:id': { request: (of) => ({ params: { id: of.adminProviderId }, body: { label: 'renamed by the census' } }) },
+  // The wiki's support routes (contract `plan.jobs.rebuild.support`): the member's spaces read, and the administrator's
+  // own space's build asked for — answered WIKI_RUNNER_EXECUTES under the census's default executor, and refused 403
+  // to a member either way.
+  'GET /admin/wiki/users/:id/spaces': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  'POST /admin/wiki/spaces/:id/plan/build': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: { reason: 'the census' } }) },
   'DELETE /admin/providers/:id': { request: (of) => ({ params: { id: of.spare.adminProviderId } }) },
 
   // ── workspaces, under both of their names ────────────────────────────────────────────────────
@@ -664,6 +669,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /wiki/spaces/:id/plan/versions/:version/confirm': {
     request: (of) => ({ params: { id: of.wikiSpaceId, version: of.wikiPlanVersion }, body: {} }),
+  },
+  // The version in force (1, the census's confirmed one): the owner is answered WIKI_RUNNER_EXECUTES under the default
+  // executor, never a 404.
+  'POST /wiki/spaces/:id/plan/versions/:version/build': {
+    request: (of) => ({ params: { id: of.wikiSpaceId, version: 1 }, body: {} }),
   },
   'POST /wiki/spaces/:id/plan/edits': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
   'POST /wiki/spaces/:id/plan/redraft': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
