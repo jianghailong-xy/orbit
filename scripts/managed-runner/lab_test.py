@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The single-machine lab's pins and rendered objects (lab/lab.env, lab/render.py), offline."""
 
+import asyncio
 import base64
 import importlib.util
 import json
@@ -18,6 +19,9 @@ spec.loader.exec_module(render)
 spec = importlib.util.spec_from_file_location("lab_single_writer", LAB / "single-writer.py")
 single_writer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(single_writer)
+spec = importlib.util.spec_from_file_location("lab_api_gate", LAB / "api-gate.py")
+api_gate = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(api_gate)
 FSID = "03082086-c9eb-11f1-8363-525400123456"
 
 
@@ -130,6 +134,62 @@ class SingleWriterLabTest(unittest.TestCase):
         source = single_writer.payload_source()
         self.assertIn("Path('/var/lib/orbit/home/storage-verification')", source)
         self.assertNotIn('Path("/var/lib/orbit/storage-verification")', source)
+
+
+class ApiGateTest(unittest.TestCase):
+    """lab/api-gate.py (T04) on loopback sockets: a stand-in upstream answers every chunk it receives."""
+
+    def test_lose_answer_takes_one_large_request_and_the_reads_after_it_then_passes(self):
+        def record(kind, length):
+            return bytes([kind, 3, 3]) + length.to_bytes(2, "big") + b"x" * length
+
+        async def scenario(state_dir):
+            async def answer(reader, writer):
+                while await reader.read(65536):
+                    writer.write(b"ANSWER")
+                    await writer.drain()
+                writer.close()
+            upstream = await asyncio.start_server(answer, "127.0.0.1", 0)
+            gate = api_gate.Gate(upstream.sockets[0].getsockname()[1], state_dir)
+            front = await asyncio.start_server(gate.handle, "127.0.0.1", 0)
+            port = front.sockets[0].getsockname()[1]
+
+            async def ask(*records):
+                reader, writer = await asyncio.open_connection("127.0.0.1", port)
+                for item in records:
+                    writer.write(item)
+                await writer.drain()
+                try:
+                    got = await asyncio.wait_for(reader.read(100), 3)
+                except (ConnectionError, asyncio.TimeoutError):
+                    got = b""
+                writer.close()
+                return got
+
+            api_gate.write_control(state_dir, {"mode": "lose-answer", "minBytes": 1000, "skip": 1, "then": 1})
+            seen = [
+                await ask(record(22, 300), record(23, 60)),   # a handshake and a small request: answered
+                await ask(record(23, 1500)),                  # the first large one is skipped
+                await ask(record(23, 1500)),                  # the next loses its answer
+                await ask(record(23, 53), record(23, 600)),   # and so does the read after it, whatever its size
+                await ask(record(23, 53), record(23, 600)),   # then it passes again
+            ]
+            log = Path(state_dir, api_gate.LOG)
+            for _ in range(100):  # each connection's line is written once both its sides have closed
+                if log.exists() and len(log.read_text().splitlines()) == len(seen):
+                    break
+                await asyncio.sleep(0.05)
+            front.close()
+            upstream.close()
+            return seen
+
+        with tempfile.TemporaryDirectory() as state_dir:
+            seen = asyncio.run(scenario(state_dir))
+            self.assertEqual(seen, [b"ANSWER", b"ANSWER", b"", b"", b"ANSWER"])
+            self.assertEqual(api_gate.read_control(state_dir)["mode"], "pass")
+            log = [json.loads(line) for line in Path(state_dir, api_gate.LOG).read_text().splitlines()]
+            self.assertEqual([entry["lost"] for entry in log], [False, False, "record of 1500 bytes", "follower", False])
+            self.assertEqual([entry["end"] for entry in log][2:4], ["answer lost", "answer lost"])
 
 
 if __name__ == "__main__":

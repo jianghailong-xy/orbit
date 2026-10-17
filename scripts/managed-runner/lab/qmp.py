@@ -4,6 +4,11 @@
   qmp.py SOCKET powerdown       ACPI power button: the guest shuts down cleanly
   qmp.py SOCKET status          run state of the VM
   qmp.py SOCKET balloon-stats   guest memory statistics reported through virtio-balloon
+  qmp.py SOCKET hostfwd-remove HOSTPORT
+                                take a 127.0.0.1 port forward of the user network away (an outage
+                                of what the guest serves there; nothing else in the VM changes)
+  qmp.py SOCKET hostfwd-add HOSTPORT GUESTPORT
+                                put it back
 """
 
 import json
@@ -39,11 +44,27 @@ class Monitor:
         return reply.get("return")
 
 
+def hostfwd(monitor, line, done):
+    """One user-network forward command of the human monitor: `done` tells its answer when it worked
+    (hostfwd_add says nothing, hostfwd_remove "host forwarding rule for ... removed")."""
+    answer = monitor.call("human-monitor-command", **{"command-line": line}).strip()
+    if not done(answer):
+        raise RuntimeError(f"{line}: {answer}")
+    print(json.dumps({"done": line, "answer": answer}))
+
+
 def main():
-    if len(sys.argv) != 3 or sys.argv[2] not in ("powerdown", "status", "balloon-stats"):
+    command = sys.argv[2] if len(sys.argv) > 2 else None
+    ports = sys.argv[3:]
+    valid = {"powerdown": 0, "status": 0, "balloon-stats": 0, "hostfwd-remove": 1, "hostfwd-add": 2}
+    if command not in valid or len(ports) != valid[command] or not all(p.isdigit() for p in ports):
         sys.exit(__doc__)
     monitor = Monitor(sys.argv[1])
-    if sys.argv[2] == "powerdown":
+    if command == "hostfwd-remove":
+        hostfwd(monitor, f"hostfwd_remove net0 tcp:127.0.0.1:{ports[0]}", lambda answer: answer.endswith(" removed"))
+    elif command == "hostfwd-add":
+        hostfwd(monitor, f"hostfwd_add net0 tcp:127.0.0.1:{ports[0]}-:{ports[1]}", lambda answer: answer == "")
+    elif sys.argv[2] == "powerdown":
         monitor.call("system_powerdown")
         print("powerdown requested")
     elif sys.argv[2] == "status":

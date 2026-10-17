@@ -1205,3 +1205,40 @@ Left to later work, or not shown here:
 - After the channel has been recreated, `docker compose down -v` leaves the empty probe volume behind; the runbook
   says so.
 - What a runner may reach on the host and its LAN (D5's finding 6) waits for the owner.
+
+## Implementation record: Kubernetes reconciliation in the lab
+
+Recorded 2026-10-17 for the real-environment task T04: the manager against the single-machine lab's real k3s
+([the evidence](evidence/managed-runner-manager-lab/2026-10-17/README.md), [the lab page](managed-runner-lab.md#manager-reconciliation-t04)),
+and the two Kubernetes findings T02a left to it. The Kubernetes changes are in `kubernetes-backend.ts` and its helpers,
+and one rule is in the shared state machine. Kubernetes behaviour is otherwise unchanged.
+
+| Area | As implemented |
+| --- | --- |
+| A deleted Pod's stop report | Every Pod the manager creates carries its finalizer `orbit.dev/managed-runner-stop-report`. Before, an operator's `kubectl delete`, an eviction or `kubectl drain` fenced a runner whose kubelet had reported it stopped: the kubelet's terminal report stayed in the API for under a second after its final delete, and the manager looks every `pollIntervalSeconds` (T02a). Now the object stays, ended, with that report until the manager has recorded it. A terminal Pod the finalizer holds is not reported as being removed, so the gate goes on to `removeInstance`. That deletes the Pod by UID and then takes the finalizer off with a JSON Patch (`test` of the UID and of the finalizer, then `remove`), and the next generation starts by itself, as for a crash. A patch whose test fails (409 or 422) is read again on the next pass. A Pod whose finalizer was stripped and that vanished is still gone without a proof, and fences. So is one its node cannot report on, once the control plane marks it terminal. Its object stays until an operator taking over removes the finalizer (deploy README, "Fencing receipt"), and the receipt is then read as before. The manager's Role gains `patch` on Pods, and nothing else: not `update`, not `pods/status`, not `pods/ephemeralcontainers`. The admission guard allows the patch, which changes no identity field. `runner-pod.yaml.example` carries the finalizer, and its spec still matches the built Pod. |
+| An unreachable backend | A backend that could not be reached at all spends no attempt, in any state, on both backends: the budget counts tries that failed, not an outage. Before, a two-minute VM restart spent four attempts of a STARTING runner, and one of about 15 minutes would have ended it `FAILED RETRY_EXHAUSTED` (T02a). "Not reached" means no request got there. The failure is `{ retryable: true, unreachable: true }`, from `KubeUnreachableError` (the HTTPS transport tracks `secureConnect`: refused, reset, timed out or unresolved before the TLS session was up) and from `DockerChannelUnreachable` with `connected: false` (no socket connection). The pass is said as `TRANSIENT` and tried again after the backoff of the attempt it is on, pass after pass. A backend that was reached and answered 5xx or 429, or gave no answer after the request went out, still spends an attempt while provisioning. The observing states (READY, DRAINING, FENCING, FAILED) spent nothing already (D2). The startup deadline still runs through an outage. |
+| What clients show | Nothing changed. During an outage a READY runner stays "Managed runner ready" (it keeps heartbeating to Orbit), and a STARTING one says the transient sentence. A FENCING one shows "Waiting for an operator" and its fence reason, unchanged, because a pass that only looks writes no lastError. The outage itself is only in the server log, one warn line per pass. |
+
+Verified on 2026-10-17:
+
+- `managed-runner-recovery.pg.spec.ts` (8) on both backends and (9) on Kubernetes (above in the evidence). With the
+  manager's rule undone, (8) fails on both backends. With the finalizer undone, (9) fails FENCING instead of a restart.
+  All 12 managed-runner pg specs and the unit suite pass on the change, and `kube-http-transport.spec.ts` runs the real
+  transport on loopback.
+- In the lab, all of the following, with the database and k3s agreeing after every step and never two Pods on a volume:
+  - two replicas and 32 concurrent sign-ins and ensures;
+  - a wait for capacity;
+  - a PVC create and a Pod create whose answers were lost after k3s applied them;
+  - a Secret create committed while both controllers were SIGKILLed;
+  - a stopped instance left behind while no controller ran;
+  - 150 s outages while READY and while STARTING;
+  - a killed runner process and a VM restart, after which the kubelet itself reported both Pods stopped;
+  - a delete, an eviction and a force delete;
+  - a Pod gone with no report;
+  - one owner against another;
+  - the switch unset and `false` with live resources.
+
+Left to later work, or not shown here: everything across nodes; the operator's path out of FENCING (an accepted receipt,
+or the finalizer removal on a node that cannot report), since on one node a power-off stops the cluster; PodGC on a real
+unreachable node; READY with a real runtime (a stand-in login was used); a real API server answering 5xx while
+provisioning; and what an operator sees of an outage while FENCING (the log only).
