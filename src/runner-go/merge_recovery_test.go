@@ -140,7 +140,7 @@ func TestMergeRecoveryPreviewOfAMatchingTargetPushesOnlyTheSession(t *testing.T)
 }
 
 func TestMergeRecoveryRejectsChangedPreview(t *testing.T) {
-	for _, which := range []string{"local", "remote", "source", "candidate", "checkpoint", "check configuration"} {
+	for _, which := range []string{"local", "remote", "rewritten remote", "source", "candidate", "checkpoint", "check configuration"} {
 		t.Run(which, func(t *testing.T) {
 			repo, bare, req := recoveryFixture(t)
 			preview := mergeToMain(req).Recovery
@@ -157,6 +157,14 @@ func TestMergeRecoveryRejectsChangedPreview(t *testing.T) {
 				mustGit(t, other, "config", "user.email", "test@orbit")
 				commitFile(t, other, "later.txt", "later", "later remote")
 				mustGit(t, other, "push", "origin", "main")
+			case "rewritten remote":
+				other := t.TempDir()
+				mustGit(t, other, "clone", bare, ".")
+				mustGit(t, other, "config", "user.name", "test")
+				mustGit(t, other, "config", "user.email", "test@orbit")
+				mustGit(t, other, "reset", "--hard", "HEAD~1")
+				commitFile(t, other, "later.txt", "later", "rewritten remote")
+				mustGit(t, other, "push", "--force", "origin", "main")
 			case "source":
 				mustGit(t, repo, "checkout", req.Branch)
 				commitFile(t, repo, "later.txt", "later", "later source")

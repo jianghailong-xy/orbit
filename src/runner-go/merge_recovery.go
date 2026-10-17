@@ -159,21 +159,26 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		return recoveryError(r, "PREVIEW_FAILED", err.Error())
 	}
 	r.PreviewID = hex.EncodeToString(nonce)
-	// Recheck repairs and check failures without discarding their private work. Shared refs
-	// must still match, and the saved checkout must really belong to our recovery branch.
+	ff, _ := git(root, "config", "--get", "merge.ff")
+	// Recheck repairs and check failures without discarding their private work, even though the
+	// targets move on meanwhile — origin does many times a day. The saved checkout must really
+	// belong to our recovery branch. Unfinished there, the repair is reported as it stands; finished,
+	// it is carried to the tips just read when carriesRepair allows. Anything else starts over.
 	prior := req.Recovery
-	repaired := prior != nil && prior.RepoRoot == root && prior.SourceSha == r.SourceSha && prior.LocalSha == r.LocalSha && prior.RemoteSha == r.RemoteSha &&
-		strings.HasPrefix(prior.RepairBranch, "orbit/recovery/") && prior.RepairWorktree != "" && branchWorktree(root, prior.RepairBranch) == prior.RepairWorktree
-	if repaired {
+	carried := false
+	if repairCheckout(root, target, prior) {
+		if inspectRepoRoot(prior.RepairWorktree).State != repoStateClean {
+			return unfinishedRepair(r, prior)
+		}
+		carried = carriesRepair(root, r, prior, ff == "only")
+	}
+	if carried {
 		r.RepairBranch, r.RepairWorktree, r.Phase = prior.RepairBranch, prior.RepairWorktree, prior.Phase
 		r.RebaseBaseSha = prior.RebaseBaseSha
-		if state := inspectRepoRoot(r.RepairWorktree); state.State != repoStateClean {
-			return recoveryError(r, "REPAIR_IN_PROGRESS", "finish and commit the repair before checking again")
+		if err := mergeMovedTargets(root, r, prior); err != nil {
+			return recoveryConflict(r, "TARGET_SYNC", err)
 		}
-		tip, e := git(root, "rev-parse", "--verify", "refs/heads/"+prior.RepairBranch)
-		repaired = e == nil && targetContainsSource(root, r.LocalSha, tip) && targetContainsSource(root, r.RemoteSha, tip)
-	}
-	if !repaired {
+	} else {
 		r.Phase = "TARGET_SYNC"
 		r.RepairBranch = "orbit/recovery/" + r.PreviewID
 		r.RepairWorktree = filepath.Join(worktreesDir(), mergeRecoveryWorktreePrefix+r.PreviewID)
@@ -186,7 +191,6 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		if canonical, err := filepath.EvalSymlinks(r.RepairWorktree); err == nil {
 			r.RepairWorktree = canonical
 		}
-		ff, _ := git(root, "config", "--get", "merge.ff")
 		if ff == "only" && r.AddsMergeCommit {
 			return recoveryError(r, "LINEAR_HISTORY_REQUIRED", "merge.ff=only disallows this target-history merge; prepare a separate PR candidate")
 		}
@@ -197,17 +201,23 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		}
 	}
 	if state := inspectRepoRoot(r.RepairWorktree); state.State != repoStateClean {
+		r.Conflicts = unresolvedPaths(r.RepairWorktree)
 		return recoveryError(r, "REPAIR_IN_PROGRESS", "finish and commit the repair before checking again")
 	}
 	syncSha, _ := git(r.RepairWorktree, "rev-parse", "HEAD")
-	if !(repaired && prior.Phase == "SOURCE_REPLAY") && !targetContainsSource(root, r.SourceSha, syncSha) {
-		r.RebaseBaseSha = syncSha
-		// Move only our private branch to the source before replay. The source itself stays put.
-		if _, err := git(r.RepairWorktree, "reset", "--hard", r.SourceSha); err != nil {
-			return recoveryError(r, "PREVIEW_FAILED", gitStderr(err))
-		}
-		if _, err := replaySource(r.RepairWorktree, syncSha, anchor, r.SourceSha, landed); err != nil {
-			return recoveryConflict(r, "SOURCE_REPLAY", err)
+	// A carried branch keeps the source replay that already ran on it — the replay its repair
+	// resolved, with any moved target merged in on top. Otherwise the source is replayed now.
+	if r.RebaseBaseSha == "" || !targetContainsSource(root, r.RebaseBaseSha, syncSha) {
+		r.RebaseBaseSha = ""
+		if !targetContainsSource(root, r.SourceSha, syncSha) {
+			r.RebaseBaseSha = syncSha
+			// Move only our private branch to the source before replay. The source itself stays put.
+			if _, err := git(r.RepairWorktree, "reset", "--hard", r.SourceSha); err != nil {
+				return recoveryError(r, "PREVIEW_FAILED", gitStderr(err))
+			}
+			if _, err := replaySource(r.RepairWorktree, syncSha, anchor, r.SourceSha, landed); err != nil {
+				return recoveryConflict(r, "SOURCE_REPLAY", err)
+			}
 		}
 	}
 	r.Phase = "SOURCE_REPLAY"
@@ -240,8 +250,11 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 	return recoveryError(r, "READY", "review the extra local commits and complete candidate diff before syncing and merging")
 }
 
+// recoveryRemoteTip reads origin/<target> as origin has it now. The fetch is forced, as the remote's
+// default refspec is: a target rewritten on origin is read as rewritten — a check then starts over,
+// and an apply refuses on the changed tip — instead of failing the fetch on every check after it.
 func recoveryRemoteTip(root, target string) (string, error) {
-	if _, err := git(root, "fetch", "origin", "refs/heads/"+target+":refs/remotes/origin/"+target); err != nil {
+	if _, err := git(root, "fetch", "origin", "+refs/heads/"+target+":refs/remotes/origin/"+target); err != nil {
 		return "", err
 	}
 	return git(root, "rev-parse", "--verify", "refs/remotes/origin/"+target)
@@ -276,6 +289,133 @@ func recoveryConflict(r *MergeRecovery, phase string, err error) mergeOutcome {
 		return recoveryError(r, "PREVIEW_FAILED", gitStderr(err))
 	}
 	return recoveryError(r, "CONFLICT", "resolve the "+phase+" conflict in the saved repair worktree")
+}
+
+// repairCheckout reports whether the previous check's repair is still checked out where it said:
+// one of this repository's recovery branches for this target, in its saved checkout. Mid-rebase,
+// as a SOURCE_REPLAY conflict leaves it, that checkout's HEAD is detached and git names no branch
+// for it; the rebase's own head-name then says whose rebase it is.
+func repairCheckout(root, target string, prior *MergeRecovery) bool {
+	if prior == nil || prior.RepoRoot != root || prior.TargetBranch != target ||
+		!strings.HasPrefix(prior.RepairBranch, "orbit/recovery/") || prior.RepairWorktree == "" {
+		return false
+	}
+	if _, err := os.Stat(prior.RepairWorktree); err != nil {
+		return false
+	}
+	if branchWorktree(root, prior.RepairBranch) == prior.RepairWorktree {
+		return true
+	}
+	if !worktreeRegistered(root, prior.RepairWorktree) {
+		return false
+	}
+	for _, rebase := range []string{"rebase-merge", "rebase-apply"} {
+		p, err := git(prior.RepairWorktree, "rev-parse", "--git-path", rebase+"/head-name")
+		if err != nil {
+			continue
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(prior.RepairWorktree, p)
+		}
+		if name, err := os.ReadFile(p); err == nil && strings.TrimSpace(string(name)) == "refs/heads/"+prior.RepairBranch {
+			return true
+		}
+	}
+	return false
+}
+
+// unfinishedRepair answers a check whose repair checkout is still mid-merge, mid-rebase or holding
+// uncommitted edits. Whatever moved since, nothing is created or removed, and the answer is the
+// repair as the previous check left it — branch, checkout, phase, and the source and target tips
+// it is being synchronized with, which the next check carries it from once it is finished — with
+// what is left to resolve there.
+func unfinishedRepair(r, prior *MergeRecovery) mergeOutcome {
+	return recoveryError(&MergeRecovery{TargetBranch: r.TargetBranch, RepoRoot: r.RepoRoot, PreviewID: r.PreviewID, CheckedAt: r.CheckedAt,
+		SourceSha: prior.SourceSha, LocalSha: prior.LocalSha, RemoteSha: prior.RemoteSha, RebaseBaseSha: prior.RebaseBaseSha,
+		LocalCommits: prior.LocalCommits, RemoteCommits: prior.RemoteCommits, AddsMergeCommit: prior.AddsMergeCommit,
+		RepairBranch: prior.RepairBranch, RepairWorktree: prior.RepairWorktree, Phase: prior.Phase,
+		Conflicts: unresolvedPaths(prior.RepairWorktree)}, "REPAIR_IN_PROGRESS", "finish and commit the repair before checking again")
+}
+
+// unresolvedPaths is what keeps a repair checkout from being checked: its unmerged files, or, with
+// none, the files changed there and not committed — at most repoStatePathCap of those.
+func unresolvedPaths(dir string) []string {
+	unmerged, _ := git(dir, "diff", "--name-only", "--diff-filter=U")
+	if paths := splitLines(unmerged); len(paths) > 0 {
+		return paths
+	}
+	changed, _ := git(dir, "diff", "--name-only", "HEAD")
+	paths := splitLines(changed)
+	return paths[:min(len(paths), repoStatePathCap)]
+}
+
+// carriesRepair answers whether a finished repair is carried to this check instead of redone: it
+// repaired this same source, each target only moved forward from the tip it was synchronized with
+// (a force push or a reset starts over), and its branch still holds both of those tips. Under
+// merge.ff=only, which rules out the merge commits that take moved targets in, only a branch that
+// already holds the new tips is carried.
+func carriesRepair(root string, r, prior *MergeRecovery, linear bool) bool {
+	tip, err := git(root, "rev-parse", "--verify", "refs/heads/"+prior.RepairBranch)
+	if err != nil || prior.SourceSha != r.SourceSha {
+		return false
+	}
+	for _, moved := range [][2]string{{prior.LocalSha, r.LocalSha}, {prior.RemoteSha, r.RemoteSha}} {
+		before, now := moved[0], moved[1]
+		if !targetContainsSource(root, before, now) || !targetContainsSource(root, before, tip) || linear && !targetContainsSource(root, now, tip) {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeMovedTargets brings a carried repair's branch up to the target tips this check read, in the
+// repair checkout: the local target's tip, then origin's, each merged in where the branch lacks it
+// (origin's alone when it carries the local one). The branch already holds the tips it was
+// repaired against and every resolution made there, so only commits that came since can conflict.
+func mergeMovedTargets(root string, r, prior *MergeRecovery) error {
+	merges := []struct{ name, tip string }{{"local " + r.TargetBranch, r.LocalSha}, {"origin/" + r.TargetBranch, r.RemoteSha}}
+	if targetContainsSource(root, r.LocalSha, r.RemoteSha) {
+		merges = merges[1:]
+	}
+	for _, m := range merges {
+		head, _ := git(r.RepairWorktree, "rev-parse", "HEAD")
+		if targetContainsSource(root, m.tip, head) {
+			continue
+		}
+		if _, err := git(r.RepairWorktree, "merge", "--ff", "--no-edit", "-m", "Merge "+m.name+" into "+r.TargetBranch, m.tip); err != nil {
+			holdMergedTips(root, r, prior)
+			return err
+		}
+	}
+	return nil
+}
+
+// holdMergedTips makes a carried repair stopped by a failed merge record what its branch holds
+// once that merge is dealt with: a target tip it has not taken in — the one whose merge was
+// refused, or origin's while the local target's merge is in conflict — stays at the tip the repair
+// already held, so the next check carries the repair on from there instead of starting over.
+func holdMergedTips(root string, r, prior *MergeRecovery) {
+	held := func(tip string) bool {
+		for _, ref := range []string{"HEAD", "MERGE_HEAD"} {
+			if at, err := git(r.RepairWorktree, "rev-parse", "-q", "--verify", ref); err == nil && targetContainsSource(root, tip, at) {
+				return true
+			}
+		}
+		return false
+	}
+	local, remote := held(r.LocalSha), held(r.RemoteSha)
+	if local && remote {
+		return
+	}
+	if !local {
+		r.LocalSha = prior.LocalSha
+	}
+	if !remote {
+		r.RemoteSha = prior.RemoteSha
+	}
+	r.LocalCommits, _ = recoveryCommits(root, r.RemoteSha, r.LocalSha)
+	r.RemoteCommits, _ = recoveryCommits(root, r.LocalSha, r.RemoteSha)
+	r.AddsMergeCommit = !targetContainsSource(root, r.LocalSha, r.RemoteSha) && !targetContainsSource(root, r.RemoteSha, r.LocalSha)
 }
 
 func applyMergeRecovery(root string, req MergeCommand) mergeOutcome {
