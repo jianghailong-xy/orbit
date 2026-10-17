@@ -84,8 +84,10 @@ test('P4a a Cursor CLI run is judged on the account dispatch gives it, and Autom
   assert.equal(runAccount('cursor', {}, { cursorAccount: WORK }, ENGINES), WORK);
   assert.equal(runAccount('cursor', {}, { cursorAccount: 'c0ffee42' }, ENGINES), 'default');
   assert.equal(runAccount('cursor', null, null, ENGINES), 'default');
-  // A key or token of the workspace's own spends no account.
-  assert.equal(runAccount('cursor', { CURSOR_API_KEY: 'key_x' }, { cursorAccount: WORK }, ENGINES), null);
+  // A key or token of the workspace's own spends no account — unless the run is on an account picked for
+  // it, whose login the runner hands the CLI in the key's place (contract §16.3; P6a).
+  assert.equal(runAccount('cursor', { CURSOR_API_KEY: 'key_x' }, null, ENGINES), null);
+  assert.equal(runAccount('cursor', { CURSOR_API_KEY: 'key_x' }, { cursorAccount: WORK }, ENGINES), WORK);
   // Automatic is a workspace that picked none; it starts a session on Default while nothing reports
   // Cursor CLI's quota. A workspace that picked one decides, and Orbit does not choose.
   assert.equal(workspaceLeavesAccountToOrbit('cursor', { env: {} }, ENGINES), true);

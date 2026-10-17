@@ -615,7 +615,7 @@ func TestCursorAccountRemovalRefusedWhileASessionUsesIt(t *testing.T) {
 		t.Fatalf("accounts in use = %v, want only Work", live)
 	}
 
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, work.ID, live); err == nil || !strings.Contains(err.Error(), "in use") {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, live); err == nil || !strings.Contains(err.Error(), "in use") {
 		t.Fatalf("removing Work under a running session = %v, want it refused", err)
 	}
 	if _, err := cursorStoredLogin(work.Dir); err != nil {
@@ -626,7 +626,7 @@ func TestCursorAccountRemovalRefusedWhileASessionUsesIt(t *testing.T) {
 	}
 
 	// That session over, Work goes: its directory and its record, nothing else.
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, work.ID, cursorAccountKind.liveDirs([]string{onDefault, onKey})); err != nil {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, cursorAccountKind.liveDirs([]string{onDefault, onKey})); err != nil {
 		t.Fatalf("removing Work: %v", err)
 	}
 	for _, path := range []string{work.Dir, filepath.Join(home, ".orbit", "cursor-accounts", work.ID+".json")} {
@@ -637,10 +637,10 @@ func TestCursorAccountRemovalRefusedWhileASessionUsesIt(t *testing.T) {
 	if added := addedCursorSlots(t); len(added) != 1 || added[0].ID != team.ID || cursorTreeDigest(t, team.Dir) != teamDigest {
 		t.Fatalf("removing Work changed the other accounts: %v", added)
 	}
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, work.ID, nil); err != nil {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, nil); err != nil {
 		t.Fatalf("a redelivered removal: %v", err)
 	}
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, accountSlotDefaultID, nil); err == nil {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, accountSlotDefaultID, nil); err == nil {
 		t.Fatal("Default was removable")
 	}
 	if cursorTreeDigest(t, cursorDefaultAccountDir()) != defaultDigest {
@@ -962,7 +962,7 @@ func TestCursorDefaultAccountDirectoryIsUnchanged(t *testing.T) {
 	ask(1, "initialize")
 	ask(2, "session/new")
 	stop()
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, work.ID, nil); err != nil {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if after := cursorTreeDigest(t, cursorDefaultAccountDir()); after != before {
@@ -1021,5 +1021,25 @@ func TestCursorAccountsAreKeptOnlyOnLinux(t *testing.T) {
 	const def = "2026-10-17T04:42:00.000Z"
 	if got := relay.signInWith(t, r, LoginCommand{Attempt: def}, "approve"); got[len(got)-1].Status != loginDone {
 		t.Fatalf("on macOS Default's sign-in = %+v", got)
+	}
+}
+
+// D5 (owner, 2026-10-17): whether Cursor continues a conversation under another account or key is not known
+// yet (§13.2), so this runner does not declare cursor-account-move/v1, and the control plane refuses a Cursor
+// CLI session that has talked another account or key here. A session's conversation stays in its own
+// directory whichever it runs on (cursor_launch.go), so once two real identities show it continues, the
+// declaration is all a move needs.
+func TestCursorRunnerDoesNotDeclareAccountMove(t *testing.T) {
+	declared := map[string]bool{}
+	for _, capability := range strings.Split(runnerCapabilitiesV1, ",") {
+		declared[capability] = true
+	}
+	for _, other := range []string{"codex-account-move/v1", "claude-account-move/v1", "kimi-account-move/v1"} {
+		if !declared[other] {
+			t.Fatalf("this runner no longer declares %s (%q)", other, runnerCapabilitiesV1)
+		}
+	}
+	if declared["cursor-account-move/v1"] {
+		t.Fatalf("this runner declares cursor-account-move/v1 before two real identities showed a Cursor conversation continues (D5): %q", runnerCapabilitiesV1)
 	}
 }

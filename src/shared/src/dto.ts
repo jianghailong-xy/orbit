@@ -413,9 +413,28 @@ export interface PlanUsageRateLimitReset {
  *   usages.limit_month_code   → monthCode
  *
  * Its other accounts are under `accounts`, by id, the way Codex's and Claude's are.
+ *
+ * Cursor CLI's (`PlanUsage.cursor`, provider `cursor`) is read per account, with that account's own
+ * saved sign-in, from Cursor's dashboard: `GetCurrentPeriodUsage` and `GetPlanInfo`
+ * (docs/cursor-runtime-contract.md §11). It names its account (`account`), the plan (`planName`) and
+ * the account's included usage this period (`includedUsage`), and no window: Cursor's percentages do
+ * not say whether an account can run — 0% both for an account that used nothing and for one whose
+ * use Cursor does not count there (Auto, the Free plan's requests) — so an account is spent only once
+ * a turn on it met Cursor's usage limit, until its included usage resets (`includedUsage`). Every
+ * other account is under `accounts`, by id, as for the engines above.
  */
 export interface PlanUsageSnapshot {
   provider?: AgentProvider;
+  /** Cursor CLI only: the account this snapshot is about — `default`, or the id of an account the
+   *  runner added, the same as its key under `accounts` (RunnerEngineAccount.id). Absent from a
+   *  snapshot that holds only other accounts. */
+  account?: string;
+  /** Cursor CLI only: the plan the account is on, in Cursor's words (`GetPlanInfo` `planInfo.planName`:
+   *  "Free", "Pro", "Premium", …). Absent when GetPlanInfo did not answer. */
+  planName?: string;
+  /** Cursor CLI only: the account's included usage this period (PlanUsageIncludedUsage). Absent when
+   *  Cursor's dashboard has not answered for the account and no turn on it has met its limit. */
+  includedUsage?: PlanUsageIncludedUsage;
   /** Rolling 5-hour session limit. */
   fiveHour?: PlanUsageWindow;
   /** 7-day all-models limit. */
@@ -442,8 +461,8 @@ export interface PlanUsageSnapshot {
   /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
    *  older runners and from non-Codex snapshots. */
   rateLimitReset?: PlanUsageRateLimitReset;
-  /** The snapshot of every other account on the runner — of Codex, Claude Code, Antigravity or Kimi
-   *  Code — keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
+  /** The snapshot of every other account on the runner — of Codex, Claude Code, Antigravity, Kimi
+   *  Code or Cursor CLI — keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
    *  (codexAccountSnapshot). An entry never carries a reset block — reset is Default's alone. Absent
    *  from older runners, and until the runner has read an account other than Default. */
   accounts?: Record<string, PlanUsageSnapshot>;
@@ -452,6 +471,38 @@ export interface PlanUsageSnapshot {
   buckets?: PlanUsageBucket[];
   /** ISO-8601 when the runner fetched this. */
   fetchedAt?: string;
+}
+
+/**
+ * One Cursor CLI account's included usage this period, as Cursor's dashboard reports it to that
+ * account's own token (docs/cursor-runtime-contract.md §11). Every field is absent when Cursor did not
+ * send it: what was not read is unavailable, never 0.
+ */
+export interface PlanUsageIncludedUsage {
+  /** How long a period is, as Cursor names it (`GetPlanInfo` `planInfo.includedUsagePeriod`):
+   *  `weekly` for INCLUDED_USAGE_PERIOD_WEEKLY (measured on a paid plan), `monthly` for
+   *  INCLUDED_USAGE_PERIOD_MONTHLY. Absent when Cursor names none — the Free plan, whose period is its
+   *  billing month. */
+  period?: 'weekly' | 'monthly';
+  /** ISO-8601: when this period began (`GetCurrentPeriodUsage` `billingCycleStart`). */
+  startsAt?: string;
+  /** ISO-8601: when the included usage resets — `GetPlanInfo` `planInfo.includedUsageResetsAt` where
+   *  Cursor sends it (a paid plan's week), else the end of the period `GetCurrentPeriodUsage` reports
+   *  (`billingCycleEnd`: the Free plan's billing month, whose end is when its requests come back).
+   *  Never `planInfo.billingCycleEnd`, which on a paid plan is the billing month, not the week. A
+   *  spent account runs again then, and a retry Cursor's usage limit armed fires then. */
+  resetsAt?: string;
+  /** Share of the included usage used, in percent, as Cursor reports it (`GetCurrentPeriodUsage`
+   *  `planUsage.totalPercentUsed`). Present only above 0: Cursor reports 0% for an account that used
+   *  nothing and for one whose use it does not count there (Auto, the Free plan's requests), so a 0 is
+   *  no reading — shown as unavailable, and never taken for room when accounts are ranked. A reading
+   *  never says the account is spent, at 100% neither: past its included usage a paid plan can go on,
+   *  on demand. */
+  percentUsed?: number;
+  /** ISO-8601: when a turn on this account last met Cursor's usage limit ("Upgrade your plan to
+   *  continue", contract §12) within this period. The account is spent from then until `resetsAt`; a
+   *  later turn on it that ends well takes it back, and so does the next period. */
+  limitReachedAt?: string;
 }
 
 /**
@@ -479,6 +530,10 @@ export interface PlanUsage extends PlanUsageSnapshot {
   /** Kimi Code's accounts: Default's windows as the snapshot's own, every other account's under
    *  `accounts` (the mapping from Kimi's `usages` is on PlanUsageSnapshot). */
   kimi?: PlanUsageSnapshot;
+  /** Cursor CLI's accounts: Default's snapshot as its own, every other account's under `accounts`
+   *  (the mapping from Cursor's dashboard is on PlanUsageSnapshot and PlanUsageIncludedUsage). Only
+   *  ever nested here, as Kimi Code's is. */
+  cursor?: PlanUsageSnapshot;
   /** Antigravity's Google accounts. Never in a heartbeat's own planUsage: a runner reports it with the
    *  engine's health (RunnerEngineHealth.planUsage), and a reader that weighs every engine's quota the
    *  same way folds it in here first (withEnginePlanUsage). */
