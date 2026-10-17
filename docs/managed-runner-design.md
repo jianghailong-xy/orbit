@@ -73,6 +73,12 @@ Keep `.env.example`, root Compose, `/upgrade`, release workflows, installation s
 `ORBIT_MANAGED_RUNNERS_ENABLED=false`; no default entry point forwards an inherited session variable
 as an opt-in or installs Kubernetes, Rook, Ceph, CSI, or managed workloads.
 
+Revised by the account owner on 2026-10-17 for new deployments ("Implementation record: new
+deployments"): the code's default stays off, and so does every deployment whose `.env` does not say
+`true`, but a fresh install writes the switch on with the Docker backend and its Compose profile.
+`/upgrade` never writes it. The default entry points may reference the Docker backend, and still
+reference or install nothing of Kubernetes, Rook, Ceph or CSI.
+
 ## Identity and durable mapping
 
 For an enrolled user, the mapping is:
@@ -447,6 +453,13 @@ sandbox/VM runtime and its Ceph attach path. Confirm whether separate tenant nam
 at rest, egress mediation, and backup key isolation are required; do not claim the invited-test
 profile satisfies unspecified public isolation requirements.
 
+For the Docker backend of a new deployment, the account owner decided on 2026-10-17 that every
+account is eligible by default, those created by open sign-up included, except a disabled one. The
+owner is aware that the containers share the host's kernel, which is no strong isolation from a
+malicious public user, and the deployer bears that risk; the deployment documentation
+([self-hosting](self-hosting.md#isolation-and-its-limits)) says so. The rule is `EVERY_ACCOUNT` in
+`managed-runner-eligibility.ts`, asked only about accounts that are not disabled.
+
 ## Retention explicit deletion and backup
 
 Sleeping, stopping, moving nodes, replacing images, login retry, disabling the feature, and deleting
@@ -548,7 +561,9 @@ Subsequent implementation places optional templates under `deploy/managed-runner
 operations under a separate managed-runner test entry point. These paths are proposed, not installed
 by this design. They must not be imported by root Compose, `/upgrade`, default start/release scripts,
 or normal installation. Application templates refer to an already approved StorageClass/CSI and
-never install a backend as a side effect. Infrastructure variants have separate entry points.
+never install a backend as a side effect. Infrastructure variants have separate entry points. (Since
+2026-10-17 the Docker backend's channel and image are the exception, in a Compose profile a fresh
+install switches on: "Implementation record: new deployments".)
 
 Before any mutating test command, the operator supplies an authorized environment manifest naming
 the exact kubeconfig context/API server identity, namespace allowlist, node allowlist, test Ceph
