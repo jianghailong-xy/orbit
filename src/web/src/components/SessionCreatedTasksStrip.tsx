@@ -13,7 +13,7 @@ import {
 import { encodeId } from '../lib/idCodec';
 import { pageHref } from '../lib/orbitLink';
 import { sessionCreatedTasksQuery, watchesQuery } from '../lib/queries';
-import { isLiveWatch, stripStaleLine, waitsBeyondTasks, watchedTasks, watchesFollowing } from '../lib/watches';
+import { isLiveWatch, taskStaleLines, watchedTasks, watchesFollowing } from '../lib/watches';
 import { TaskStatusPill } from './TaskStatusPill';
 import { relTime } from './Transcript';
 import { useNow } from './WatchParts';
@@ -21,8 +21,9 @@ import { useNow } from './WatchParts';
 /**
  * The session's Tasks card, above the composer between Background processes and the branch bar: the
  * tasks this session's agent created (`GET /sessions/:id/created-tasks`) and the tasks its live
- * watches wait on, one row each, folded to one line and opened to a list — so a task a confirmation
- * card filed does not scroll out of reach with the conversation. A watched row carries an eye
+ * watches wait on, directly or through their run sessions (`watchedTasks`), one row each, folded to
+ * one line and opened to a list — so a task a confirmation card filed does not scroll out of reach
+ * with the conversation. A watched row carries an eye
  * (orange while its watch goes unchecked) and comes first; one created elsewhere says so where its
  * age would be. Drawn in the Background processes tray's own shell (`.bg-tray`) with the task list's
  * status pill; the mock is docs/mocks/session-tasks-watch-merge-ios.png.
@@ -53,14 +54,7 @@ export function SessionCreatedTasksStrip({
   const card = sessionTaskCard(data, watchedTasks(waitingOn, now));
   if (!card) return null;
   // A watch the Watching strip doesn't draw says here when nobody is checking it.
-  const staleLines = [
-    ...new Set(
-      waitingOn
-        .filter((w) => !waitsBeyondTasks(w))
-        .map((w) => stripStaleLine(w, now))
-        .filter((line): line is string => line !== null),
-    ),
-  ];
+  const staleLines = taskStaleLines(waitingOn, now);
   // One task is named rather than counted, as the Watching row names its one target.
   const single = card.counts.total === 1 && card.rows.length === 1 ? card.rows[0] : undefined;
   const toggle = () => setOpen((o) => !o);

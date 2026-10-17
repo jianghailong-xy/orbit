@@ -100,6 +100,26 @@ class SessionTaskCardTest {
         assertEquals(emptyList<String>(), summary(f.watch(id = "W3", targets = listOf(f.target("T1")))).taskStaleLines(f.now))
     }
 
+    /** A watch the Watching card keeps for a session that runs no task lists a task's run session in it as that task, once — by the
+     * task's title and pill, opening the task — as its line counts it. */
+    @Test fun aWatchingCardListsARunSessionAsItsTask() {
+        val child = JsonObject(f.target("S9", kind = "SESSION", title = "Deploy main") + ("targetTask" to JsonNull))
+        val run = JsonObject(f.target("S1", kind = "SESSION", title = "Task: Ship it", status = f.status("AWAITING_INPUT")) +
+            ("targetTask" to buildJsonObject { put("id", "T1"); put("title", "Ship it"); put("status", f.status("IN_PROGRESS")) }))
+        val mixed = f.watch(id = "W1", predicate = f.composite("ANY_OF", f.all("SESSION_TURN_SETTLED"), f.all("TASK_TERMINAL")),
+            targets = listOf(child, run, f.target("T1", title = "Ship it")))
+        val watching = requireNotNull(summary(mixed).beyondTasks) { "the child keeps the Watching card" }
+        val listed = WatchProjection.stripTargets(watching.watches[0])
+        assertEquals(listOf("S9", "T1"), listed.map { it.targetResourceId })
+        assertEquals(listOf(WatchTargetKind.SESSION, WatchTargetKind.TASK), listed.map { it.targetKind })
+        assertEquals("Ship it", listed[1].targetTitle)
+        assertNotNull("the task's own pill", WatchProjection.stripPill(listed[1]))
+        assertNull("not its run session's glyph", WatchProjection.stripGlyph(listed[1]))
+        // The line counts the same two: a session, and a task that is not done while its run waits.
+        assertEquals("all 2 targets", watching.lineTargetWord)
+        assertEquals(listOf("0/2 done"), watching.lineParts.map { it.text })
+    }
+
     @Test fun oneTaskIsNamedAndTheEyeCountsTheWatchedRows() {
         val created = buildJsonObject {
             put("total", 1); put("running", 1); put("failed", 0); put("done", 0)

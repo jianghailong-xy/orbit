@@ -93,6 +93,41 @@ class WatchStripCopyParityTest {
         }
     }
 
+    /** A task's run session is a target on that task above the composer and in the session's words: its eye on the task's row, no
+     * Watching card of its own, one target where the task and its run are both waited on — the cases the web (`watchedTasks`,
+     * `waitsBeyondTasks`, `taskStaleLines`, `watchingSessions`) and OrbitKit (`WatchSessionSummary`) are proved against. */
+    @Test fun aTasksRunSessionFoldsIntoThatTaskAsTheFixtureDoes() {
+        val fold = fixture.cases("fold")
+        assertTrue(fold.size >= 5)
+        fold.forEach { c ->
+            val case = c.text("case")
+            val watches = c["watches"]!!.jsonArray.mapIndexed { index, w ->
+                val watch = w.jsonObject
+                val targets = watch["targets"]!!.jsonArray.map { t ->
+                    val target = t.jsonObject
+                    val json = WatchFixture.target(target.text("id"), kind = target.text("kind"), state = target["state"]?.jsonPrimitive?.content ?: "OBSERVED",
+                        title = target.text("title"), status = target["status"] as? JsonObject)
+                    // The session's task as the case gives it, null included; left out, as an older server leaves it out.
+                    target["task"]?.let { JsonObject(json + ("targetTask" to it)) } ?: json
+                }
+                WatchFixture.watch(id = "W$index", state = watch.text("state"), observer = "OBSERVER", predicate = watch["predicate"]!!.jsonObject,
+                    targets = targets, lastEvaluatedAt = watch["lastEvaluatedAt"]?.jsonPrimitive?.contentOrNull, createdAt = watch.text("createdAt"))
+            }
+            val summary = WatchSessionSummary.of("OBSERVER", watches)!!
+            val watched = summary.watchedTasks(now).map {
+                buildJsonObject {
+                    put("id", it.id); put("title", it.title); put("status", it.standing?.status)
+                    put("running", it.standing?.running ?: false); put("queued", it.standing?.queued ?: false); put("stale", it.stale)
+                }
+            }
+            assertEquals(case, c["watchedTasks"]!!.jsonArray.toList(), watched)
+            assertEquals(case, c["strip"]!!.jsonArray.map { "W${it.jsonPrimitive.int}" }, summary.beyondTasks?.watches?.map { it.id }.orEmpty())
+            assertEquals(case, c["taskStaleLines"]!!.jsonArray.map { it.jsonPrimitive.content }, summary.taskStaleLines(now))
+            assertEquals(case, c.text("word"), summary.word)
+            assertEquals(case, c.text("line"), summary.rowLine)
+        }
+    }
+
     /** A session target's word is the one its own header's glyph says for that run state. */
     @Test fun aSessionTargetsWordIsItsHeadersGlyphs() {
         val words = fixture["sessionWords"]!!.jsonObject
