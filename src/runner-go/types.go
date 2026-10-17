@@ -433,6 +433,10 @@ type HeartbeatResponse struct {
 	// planes and whenever this beat claimed nothing; nothing acts on it until this binary declares
 	// wiki-repo-op/v1.
 	WikiRepoOps []WikiRepoOpCommand `json:"wikiRepoOps,omitempty"`
+	// Cursor API keys somebody is waiting to have checked, each handed over once (cursor_key_check.go).
+	// Nil from older control planes, and from any that has not heard this binary declare
+	// cursor-key-check/v1.
+	CursorKeyChecks []CursorKeyCheckCommand `json:"cursorKeyChecks,omitempty"`
 	// ManagedSleep: the manager is draining this managed instance to sleep (managed_sleep.go). Nil
 	// from older control planes and for every other runner; nothing acts on it unless this process is
 	// a managed instance.
