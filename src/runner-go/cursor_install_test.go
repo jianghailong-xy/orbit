@@ -84,6 +84,10 @@ func runFakeCursorAgent(dir string) int {
 	fakeCursorWriteState(args)
 	switch {
 	case len(args) > 0 && (args[0] == "--version" || args[0] == "-v"):
+		// A build slow to say its version, as one on a loaded machine is.
+		if mode, _ := os.ReadFile(filepath.Join(dir, "version-mode")); strings.TrimSpace(string(mode)) == "slow" {
+			time.Sleep(2 * time.Second)
+		}
 		version := os.Getenv(fakeCursorVersionEnv)
 		if version == "" {
 			version = cursorSupportedVersion
@@ -162,6 +166,10 @@ func fakeCursorModels(dir string) int {
 		return 1
 	case "garbled":
 		fmt.Fprintln(os.Stderr, "something went sideways")
+		return 1
+	case "hang":
+		// A Cursor API that never answers: the CLI waits on it until something stops it.
+		time.Sleep(60 * time.Second)
 		return 1
 	case "invalid-key":
 		// A key Cursor refuses, as P0a recorded it (failure-shapes-without-prompt), colours and all.

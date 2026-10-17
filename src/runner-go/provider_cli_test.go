@@ -375,7 +375,7 @@ func TestProviderCLIHelpSpeaksOfProtocolsAndEngines(t *testing.T) {
 		if spec.Tool != "provider_create" && spec.Tool != "provider_update" {
 			continue
 		}
-		if !strings.Contains(strings.Join(spec.Arguments, " "), "--runtime <claude|codex|kimi|antigravity> (the protocol") {
+		if !strings.Contains(strings.Join(spec.Arguments, " "), "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol") {
 			t.Fatalf("%s capability arguments = %v", spec.Tool, spec.Arguments)
 		}
 	}

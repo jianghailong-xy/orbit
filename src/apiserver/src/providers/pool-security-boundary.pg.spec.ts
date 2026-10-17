@@ -1267,6 +1267,7 @@ exec sleep 300
       await ask(bearer, 'GET', 'providers/mine/:id/key', at, undefined, 404);
       await ask(bearer, 'GET', 'providers/mine/:id/balance', at, undefined, 404);
       await ask(bearer, 'GET', 'providers/mine/:id/usage', at, undefined, 404);
+      await ask(bearer, 'POST', 'providers/mine/:id/key-check', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);
@@ -1278,6 +1279,8 @@ exec sleep 300
       // A runner's answer about the Cursor key a session of its own runs on, about no session of theirs:
       // refused before anything is read.
       await ask(runner, 'POST', 'runner/sessions/:id/cursor-key-check', { id: randomUUID() }, { state: 'VALID', keyFingerprint: '0123456789abcdef' }, 403);
+      // A runner's answer to a Cursor key check nobody handed it: it settles nothing.
+      await ask(runner, 'POST', 'runner/cursor-key-check-result', {}, { checkId: '0'.repeat(32), state: 'VALID', keyFingerprint: '0123456789abcdef' }, 200);
 
       // What each of them makes of their own.
       await ask(bearer, 'POST', 'providers/test', {}, { baseUrl: ANTHROPIC, apiKey: subscription(), model: 'claude-opus-5', runtime: 'claude' }, 201);
