@@ -32,8 +32,9 @@ public enum StickySummary {
     public static let yourQuestion = "\(arrow)Your question"
 
     /// Whether the bar may point back at this turn at all — every turn may but a watch's wake, a
-    /// background job's news or a wakeup coming due, each a line inside the answer rather than the
-    /// head of one. Where somebody also typed words on a background wake's turn, those are a bubble
+    /// background job's news, a wakeup coming due or the owner's answer handed to the coordinator,
+    /// each a line inside the answer rather than the head of one (web: the line carries no
+    /// `data-sticky-label`). Where somebody also typed words on a background wake's turn, those are a bubble
     /// under the line, and the bar names them the way it names any question; a watch's wake is the
     /// whole of its turn's words, so nobody's are there.
     ///
@@ -42,8 +43,10 @@ public enum StickySummary {
                                 itemCard: OpenItemDelivery? = nil,
                                 taskStart: TaskStart? = nil,
                                 startedCard: ProjectStarted? = nil,
-                                sessionMessage: SessionMessage? = nil) -> Bool {
+                                sessionMessage: SessionMessage? = nil,
+                                ownerAnswer: OwnerAnswer? = nil) -> Bool {
         if sessionMessage != nil || itemCard != nil || taskStart != nil || startedCard != nil { return true }
+        if ownerAnswer != nil { return false }
         if WatchWakeText.parse(text) != nil { return false }
         guard BackgroundWakeText.carriesWake(note) else { return true }
         return BackgroundWakeCard.drawsBubble(text: text)
@@ -88,6 +91,14 @@ public enum StickySummary {
             return (arrow + summary.label, summary.text)
         }
         return (yourQuestion, text)
+    }
+
+    /// The label as the iPhone draws it, in a capsule between the nav bar's back and menu buttons
+    /// (`ConsoleView.stickyQuestion`): the arrow alone over the person's own words — the capsule has
+    /// no room to say whose they are, and needs none — and a card's title as it stands over anything
+    /// else, so the capsule can't pass a card off as something the reader typed.
+    public static func compactLabel(_ label: String) -> String {
+        label == yourQuestion ? arrow.trimmingCharacters(in: .whitespaces) : label
     }
 }
 

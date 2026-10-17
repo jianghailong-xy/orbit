@@ -326,4 +326,107 @@ final class TailPinningTests: XCTestCase {
         let measured = TailScrollSample(offset: 300, contentHeight: 1507, bottomGap: 468, topInset: 148)
         XCTAssertFalse(follows(measured, from: atQuestion))
     }
+
+    // MARK: - The floor rising under a composer band that floats over the list (iOS 26)
+
+    /// The keyboard arriving, as measured on the iOS 26 simulator: the list snapped from a 427.6pt
+    /// frame back to 874 with 436pt floating over its bottom, the content kept its place against the
+    /// frame (offset 1090.3 to 644), and the last answer sat 436 below the top of the composer.
+    private let keyboardRising = TailScrollSample(offset: 1090.3, contentHeight: 1518, bottomGap: 0,
+                                                  topInset: 62, bottomInset: 0)
+    private let underTheComposer = TailScrollSample(offset: 644, contentHeight: 1518, bottomGap: 436,
+                                                    topInset: 62, bottomInset: 436)
+
+    func testTheKeyboardLiftingAFloatingBandIsFollowed() {
+        XCTAssertTrue(pinned(underTheComposer, from: keyboardRising, evidence: .reported),
+                      "nobody scrolled, so the pin holds — and the tail is out of view")
+        XCTAssertTrue(follows(underTheComposer, from: keyboardRising))
+    }
+
+    func testTheComposerGrowingALineUnderAFloatingBandIsFollowed() {
+        // Each line the draft wraps onto lifts the floor 22pt under an offset nothing moves.
+        let atTail = TailScrollSample(offset: 1080, contentHeight: 1518, bottomGap: 0, topInset: 62, bottomInset: 436)
+        let grown = TailScrollSample(offset: 1080, contentHeight: 1518, bottomGap: 22, topInset: 62, bottomInset: 458)
+        XCTAssertTrue(follows(grown, from: atTail))
+    }
+
+    func testARisingFloorCarriesOnlyAReaderAtTheTail() {
+        XCTAssertFalse(follows(underTheComposer, from: keyboardRising, pinned: false),
+                       "a reader who had scrolled up keeps their place")
+        XCTAssertFalse(follows(underTheComposer, from: keyboardRising, moving: true),
+                       "and nothing is followed while the list moves")
+        // …and no further than the floor rose, past the slack: a pinned reading that far up is a
+        // jump that kept its pin (see above), and a floor rising under it doesn't make it the tail.
+        let farUp = TailScrollSample(offset: 300, contentHeight: 1518, bottomGap: 780, topInset: 62, bottomInset: 436)
+        XCTAssertFalse(follows(farUp, from: keyboardRising))
+    }
+
+    // MARK: - The composer band folding to its bar while the reader goes back (iOS 26 phones)
+
+    /// The owner's phone: a 956pt list over 4000pt of content. Open, the band and its foot float
+    /// 214pt over the list's bottom, over the screen's 34; folded, its 36pt bar and the same foot do.
+    private let openInset = 248.0
+    private let foldedInset = 80.0
+
+    /// The reader `up` points back from the tail, read with the band open or folded over the list.
+    private func back(_ up: Double, folded: Bool = false) -> TailScrollSample {
+        let inset = folded ? foldedInset : openInset
+        let offset = 4000 + openInset - 956 - up
+        let gap = 4000 + inset - (offset + 956)
+        return TailScrollSample(offset: offset, contentHeight: 4000, bottomGap: gap, topInset: 116,
+                                bottomInset: inset)
+    }
+
+    private func folds(_ sample: TailScrollSample, pinned: Bool = false) -> Bool {
+        TailPinning.foldsBand(pinned: pinned, sample: sample, foldedInset: foldedInset)
+    }
+
+    func testTheBandStaysOpenAtTheTail() {
+        XCTAssertFalse(folds(back(0), pinned: true))
+        XCTAssertFalse(folds(back(0, folded: true), pinned: true))
+    }
+
+    /// The pin lets go at the first point of a scroll up, but the band gives back 168pt when it
+    /// folds: this close to the tail the reader would be past the end, the list springing back into
+    /// the room — or, a little further, back inside the pin's slack, which opens the band again.
+    func testAShortScrollUpLeavesTheBandOpen() {
+        XCTAssertFalse(folds(back(120)), "folded, the reader would be 48pt past the end")
+        XCTAssertFalse(folds(back(200)))
+        XCTAssertTrue(pinned(back(200, folded: true), from: back(200), wasPinned: false, evidence: .reported),
+                      "folded there, the reader would be 32pt from the tail: pinned again")
+    }
+
+    func testAReaderFarEnoughBackFoldsTheBand() {
+        XCTAssertTrue(folds(back(300)))
+        // …and the folded band leaves them where the pin cannot reach them: nothing moved, and the
+        // tail is further off than the pin's slack.
+        XCTAssertFalse(pinned(back(300, folded: true), from: back(300), wasPinned: false, evidence: .reported))
+        XCTAssertTrue(folds(back(300, folded: true)), "and it stays folded")
+    }
+
+    /// The reading is the rows against the list's own frame, so the band folding or opening — which
+    /// moves only the inset — cannot change the answer and set it flapping.
+    func testFoldingTheBandCannotAnswerItsOwnQuestion() {
+        for up in stride(from: 0.0, through: 600, by: 4) {
+            XCTAssertEqual(folds(back(up)), folds(back(up, folded: true)), "\(up)pt back")
+        }
+    }
+
+    /// On the way down the band opens where it folded: as the tail comes up to the list's bottom
+    /// edge, before the pin catches it. Nothing is followed — the reader carries on into the room.
+    func testTheBandOpensAsTheTailComesBackUpToTheBottomEdge() {
+        XCTAssertTrue(folds(back(280, folded: true)), "112pt from the folded tail")
+        XCTAssertFalse(folds(back(260, folded: true)), "92pt from it: the band opens")
+        XCTAssertFalse(pinned(back(260), from: back(260, folded: true), wasPinned: false, evidence: .reported))
+        XCTAssertFalse(follows(back(260), from: back(260, folded: true), pinned: false))
+    }
+
+    /// A phone with no home indicator keeps less under a folded bar, so its reader goes further back
+    /// before the band folds.
+    func testTheFoldedInsetDecidesHowFarBackTheBandFolds() {
+        let noIndicator = 46.0
+        let sample = back(270)
+        XCTAssertTrue(TailPinning.foldsBand(pinned: false, sample: sample, foldedInset: foldedInset))
+        XCTAssertFalse(TailPinning.foldsBand(pinned: false, sample: sample, foldedInset: noIndicator))
+    }
 }

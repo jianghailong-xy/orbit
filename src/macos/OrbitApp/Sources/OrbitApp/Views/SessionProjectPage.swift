@@ -732,6 +732,9 @@ private struct ProjectMergeCardView: View {
             switch shape {
             case .checking:
                 if let landing { landingRow(landing) }
+                if let line = PromotionCards.onPassLine(merge.current) {
+                    Text(line).font(.orbitMeta).foregroundStyle(.secondary)
+                }
             case .asking:
                 if let view = merge.current { asking(view) }
             case .merging:

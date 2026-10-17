@@ -68,7 +68,7 @@ func (s engineSpec) loginArgvFor(binPath string) []string {
 // loginHint is the one-line sign-in guidance shown in reports: the interactive
 // command plus the headless alternative for a background service.
 func (s engineSpec) loginHint() string {
-	if s.apiKeyEnv != "" {
+	if s.apiKeyEnv != "" || len(s.loginArgs) == 0 {
 		return s.loginHeadless
 	}
 	return s.loginCmd() + "   (headless: " + s.loginHeadless + ")"
@@ -163,6 +163,19 @@ var engineSpecs = []engineSpec{
 		apiKeyEnv:     "ORBIT_DSH_API_KEY",
 		loginHeadless: "connect a DeepSeek API key in Orbit; only a real model request validates it",
 	},
+	{
+		name: "Cursor CLI",
+		bin:  providerCursor,
+		exe:  cursorEntryPoint,
+		// The runner fetches and unpacks the pinned build itself, into Orbit's own version directory
+		// (cursor_install.go), and never runs Cursor's installer or `agent update`.
+		installCmd: cursorInstallDescription,
+		updateCmd:  cursorInstallDescription,
+		installAlt: "run `orbit doctor` on this runner",
+		// No sign-in argv: the Default account signs in under Orbit's own directory, never the user's
+		// ~/.config/cursor (docs/cursor-runtime-contract.md §16.2).
+		loginHeadless: cursorLoginHint(),
+	},
 }
 
 // agyUpdateCmd is `agy update`, pointed at a Gemini directory of the runner's own.
@@ -248,6 +261,10 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 			h.installError = err.Error()
 		}
 		return h // Auth is unknown; neither an API key nor ACP authenticate proves login.
+	}
+	if spec.bin == providerCursor {
+		checkCursor(&h)
+		return h
 	}
 	// Prefer the service PATH (what the runner uses; includes ~/.local/bin). Fall
 	// back to the doctor's own PATH so a binary in an unusual dir still registers as
@@ -554,6 +571,17 @@ func runInstallCmd(spec engineSpec, proxyVars []envVar) bool {
 		}
 		return true
 	}
+	if spec.bin == providerCursor {
+		engineInstall.mu.Lock()
+		defer engineInstall.mu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
+		defer cancel()
+		if err := installCursor(ctx, proxyVars); err != nil {
+			fmt.Printf("  ✗ install failed (%s)\n", err)
+			return false
+		}
+		return true
+	}
 	cmd := exec.Command("sh", "-c", spec.installCmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -665,9 +693,10 @@ func runDoctor(fix bool, proxyVars []envVar) []engineHealth {
 			fmt.Printf("  %s\n", formatEngineLine(healths[i]))
 		}
 		// Sign-in pass: anything installed but not confirmed signed in. An API-key engine has no
-		// sign-in to run; the hints below say where its key goes.
+		// sign-in to run, and neither has one with no sign-in argv of its own (Cursor CLI, whose Default
+		// account signs in under Orbit's directory); the hints below say what to do instead.
 		for i := range healths {
-			if !healths[i].installed || healths[i].auth == authYes || healths[i].spec.apiKeyEnv != "" {
+			if !healths[i].installed || healths[i].auth == authYes || healths[i].spec.apiKeyEnv != "" || len(healths[i].spec.loginArgs) == 0 {
 				continue
 			}
 			if !signInEngine(healths[i].spec, healths[i].path) {
@@ -690,6 +719,9 @@ func formatEngineLine(h engineHealth) string {
 		if h.installed {
 			return fmt.Sprintf("✓ %s (%s) — request authentication unverified", h.spec.name, h.version)
 		}
+	}
+	if h.spec.bin == providerCursor && h.installError != "" {
+		return fmt.Sprintf("✗ %s — %s", h.spec.name, h.installError)
 	}
 	if !h.installed {
 		return fmt.Sprintf("✗ %s — not installed", h.spec.name)

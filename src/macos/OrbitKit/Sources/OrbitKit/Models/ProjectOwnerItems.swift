@@ -676,6 +676,12 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     /// older than the rule — both are "no moment", never an error.
     public let decidedAt: String?
     public let merged: Merged?
+    /// What a passing check leads to, while this candidate is being checked: `MERGE` when the
+    /// project's Automatic setting will merge it into main itself (§3.3 M-T11), `ASK` when the owner
+    /// will be asked first. Read as the project stands now, so switching Automatic mid-check changes it
+    /// on the next poll (`@orbit/shared`'s `onPass`). Nil in every other state, and from a server older
+    /// than the field — the checking card then says nothing about what comes next.
+    public let onPass: String?
 
     public struct Execution: Codable, Equatable, Sendable {
         public let state: String
@@ -706,7 +712,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
                 taskIds: [String] = [], tasks: [PromotionTask] = [], checks: [IntegrationCheckResult] = [],
                 conflicts: [String] = [], blockedReason: String? = nil, landsAs: String? = "MERGE_COMMIT",
                 askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
-                merged: Merged? = nil, execution: Execution? = nil) {
+                merged: Merged? = nil, execution: Execution? = nil, onPass: String? = nil) {
         self.promotionId = promotionId
         self.state = state
         self.sourceRef = sourceRef
@@ -725,6 +731,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.execution = execution
         self.decidedAt = decidedAt
         self.merged = merged
+        self.onPass = onPass
     }
 
     public init(from decoder: Decoder) throws {
@@ -747,6 +754,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         execution = try c.decodeIfPresent(Execution.self, forKey: .execution)
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
         merged = try c.decodeIfPresent(Merged.self, forKey: .merged)
+        onPass = try c.decodeIfPresent(String.self, forKey: .onPass)
     }
 }
 

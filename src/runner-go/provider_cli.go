@@ -22,11 +22,37 @@ import (
 
 // engineNames are the engines a session or a task can name (docs/provider-engine-contract.md §0):
 // the CLI on the runner that runs it, beside the provider its credential comes from. One list, so the
-// CLI flags, the MCP schemas and the help all name the same six.
-var engineNames = []string{providerClaude, providerCodex, providerKimi, providerAntigravity, providerOpenCode, providerDsh}
+// CLI flags, the MCP schemas and the help all name the same seven.
+var engineNames = []string{providerClaude, providerCodex, providerKimi, providerAntigravity, providerOpenCode, providerDsh, providerCursor}
 
-// engineArgument is how capabilities spell an --engine value: claude|codex|kimi|antigravity|opencode|dsh.
+// engineArgument is how capabilities spell an --engine value: claude|codex|kimi|antigravity|opencode|dsh|cursor.
 func engineArgument() string { return "--engine <" + strings.Join(engineNames, "|") + ">" }
+
+// providerProtocols are the protocols a provider's `runtime` names (the field keeps its old name), which
+// decide the engines its key runs on: what `--runtime` and the MCP schemas accept.
+var providerProtocols = []string{providerClaude, providerCodex, providerKimi, providerAntigravity, providerCursor}
+
+// cursorKeyPreset and cursorAPIBaseURL are @orbit/shared's Cursor preset (providerPresets.ts): a Cursor User
+// API Key, which Cursor CLI alone runs on, and the API that CLI trades it for a token at.
+const (
+	cursorKeyPreset  = "cursor-api"
+	cursorAPIBaseURL = "https://api2.cursor.sh"
+)
+
+// providerCreateRequired completes a provider create's body and names the fields it must then carry. A
+// Cursor key goes in under the Cursor preset, as the web's connect form puts one in, on Cursor's own API
+// unless an endpoint is given; its models are Cursor CLI's own on each runner, so it lists none. Every other
+// key names its endpoint and the models it serves.
+func providerCreateRequired(body map[string]interface{}) []string {
+	if body["runtime"] != providerCursor {
+		return []string{"label", "baseUrl", "apiKey", "models"}
+	}
+	body["presetSlug"] = cursorKeyPreset
+	if _, ok := body["baseUrl"]; !ok {
+		body["baseUrl"] = cursorAPIBaseURL
+	}
+	return []string{"label", "apiKey"}
+}
 
 // nullableEngineEnum is engineNames as a JSON-schema enum that also takes null: what a task's engine
 // pin accepts, null clearing it.
@@ -43,6 +69,7 @@ const providerHelp = `orbit provider — list and configure the providers sessio
 Usage:
   orbit provider list [--json]
   orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]
+  orbit provider create --label LABEL --runtime cursor (--api-key KEY | --api-key-file -) [--json]
   orbit provider update SLUG [options]
   orbit provider delete SLUG [--json]
 
@@ -57,10 +84,10 @@ Usage:
 
 A provider is where a session's credential comes from; the engine is the CLI that runs it
 (--engine: claude for Claude Code, codex for Codex, kimi for Kimi Code, antigravity for
-Antigravity CLI, opencode for OpenCode, dsh for DeepSeek Harness). This reports every slug
-accepted by --provider on 'orbit session create', 'orbit task create', 'orbit task update'
-and 'orbit task batch-pin', each with "engines": the engines it can run, the one it runs on
-when no engine is named first.
+Antigravity CLI, opencode for OpenCode, dsh for DeepSeek Harness, cursor for Cursor CLI).
+This reports every slug accepted by --provider on 'orbit session create', 'orbit task
+create', 'orbit task update' and 'orbit task batch-pin', each with "engines": the engines it
+can run, the one it runs on when no engine is named first.
 
 The built-in entries (builtin true) are each engine's own sign-in on the runner; opencode is
 OpenCode's own configuration, and dsh is DeepSeek Harness on the account's first enabled
@@ -73,23 +100,28 @@ this list is refused with "provider not available".
 
 Usage:
   orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]
+  orbit provider create --label LABEL --runtime cursor (--api-key KEY | --api-key-file -) [--json]
 
 Options:
   --label TEXT        (required) Display name. The slug sessions and tasks name it by is derived
                       from it — read it back from this command's output.
   --runtime PROTOCOL  The protocol the endpoint speaks (the flag keeps its old name): claude
                       (default; the Anthropic Messages API, e.g. vLLM's /v1/messages), codex (the
-                      OpenAI Responses API), kimi (Moonshot's API) or antigravity (the Gemini API).
+                      OpenAI Responses API), kimi (Moonshot's API), antigravity (the Gemini API)
+                      or cursor (a Cursor User API Key).
                       It decides which engines can run the key, not one engine: the protocol's
-                      own CLI and OpenCode, DeepSeek Harness too for a DeepSeek key, and only
-                      Claude Code for a Claude subscription token.
-  --base-url URL      (required) The endpoint as an engine running on the key will call it. It is
-                      resolved on the machine the session runs on: http://127.0.0.1:8000 is that
-                      runner's own port.
+                      own CLI and OpenCode, DeepSeek Harness too for a DeepSeek key, only
+                      Claude Code for a Claude subscription token, and only Cursor CLI for a
+                      Cursor key. A Cursor key goes in under the Cursor preset and needs neither
+                      --base-url (Cursor's own API) nor --models (Cursor CLI's own, on each
+                      runner).
+  --base-url URL      (required, but for a Cursor key) The endpoint as an engine running on the key
+                      will call it. It is resolved on the machine the session runs on:
+                      http://127.0.0.1:8000 is that runner's own port.
   --api-key KEY       The key the endpoint expects. An endpoint that checks none still needs a
                       non-empty placeholder.
   --api-key-file -    Read the key from stdin instead, keeping it out of argv and shell history.
-  --models JSON       (required) The models it serves, as a JSON array:
+  --models JSON       (required, but for a Cursor key) The models it serves, as a JSON array:
                         [{"value":"<model id>","label":"<name>","contextWindow":<tokens>,
                           "reasoningLevels":["low","medium","xhigh"]}]
                       contextWindow reaches Claude Code as the model's real window, which it
@@ -112,8 +144,8 @@ Usage:
 
 Options:
   --label TEXT
-  --runtime PROTOCOL  claude, codex, kimi or antigravity: the protocol the endpoint speaks, as on
-                      create. Refused while an open session or a task pin uses the key on an
+  --runtime PROTOCOL  claude, codex, kimi, antigravity or cursor: the protocol the endpoint speaks,
+                      as on create. Refused while an open session or a task pin uses the key on an
                       engine the new protocol cannot run
   --base-url URL
   --api-key KEY       Replace the stored key; omit to keep it.
@@ -141,8 +173,8 @@ session this is put on a confirmation card first.
 
 var providerCLICapabilities = []cliCapabilitySpec{
 	{Tool: "provider_list", Argv: []string{"orbit", "provider", "list"}, Usage: "orbit provider list [--json]", Arguments: []string{"--json"}},
-	{Tool: "provider_create", Argv: []string{"orbit", "provider", "create"}, Usage: "orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]", Arguments: []string{"--label <text> (required)", "--runtime <claude|codex|kimi|antigravity> (the protocol the endpoint speaks: Anthropic Messages, OpenAI Responses, Moonshot or Gemini; it decides which engines can run the key)", "--base-url <url> (required; resolved on the runner the session runs on)", "--api-key <key> | --api-key-file - (required)", "--models <json array> (required; [{value,label,contextWindow?,reasoningLevels?}])", "--default-model <model id>", "--json"}, Mutates: true},
-	{Tool: "provider_update", Argv: []string{"orbit", "provider", "update"}, Usage: "orbit provider update SLUG [options]", Arguments: []string{"[slug] (required)", "--label <text>", "--runtime <claude|codex|kimi|antigravity> (the protocol the endpoint speaks)", "--base-url <url>", "--api-key <key> | --api-key-file -", "--models <json array> (replaces the list)", "--default-model <model id>", "--json"}, Mutates: true},
+	{Tool: "provider_create", Argv: []string{"orbit", "provider", "create"}, Usage: "orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]", Arguments: []string{"--label <text> (required)", "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol the endpoint speaks: Anthropic Messages, OpenAI Responses, Moonshot, Gemini or a Cursor User API Key; it decides which engines can run the key)", "--base-url <url> (required but for --runtime cursor; resolved on the runner the session runs on)", "--api-key <key> | --api-key-file - (required)", "--models <json array> (required but for --runtime cursor; [{value,label,contextWindow?,reasoningLevels?}])", "--default-model <model id>", "--json"}, Mutates: true},
+	{Tool: "provider_update", Argv: []string{"orbit", "provider", "update"}, Usage: "orbit provider update SLUG [options]", Arguments: []string{"[slug] (required)", "--label <text>", "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol the endpoint speaks)", "--base-url <url>", "--api-key <key> | --api-key-file -", "--models <json array> (replaces the list)", "--default-model <model id>", "--json"}, Mutates: true},
 	{Tool: "provider_delete", Argv: []string{"orbit", "provider", "delete"}, Usage: "orbit provider delete SLUG [--json]", Arguments: []string{"[slug] (required)", "--json"}, Mutates: true},
 }
 
@@ -221,7 +253,7 @@ type providerCLIWriteFlags struct {
 func registerProviderWriteFlags(fs *flag.FlagSet) *providerCLIWriteFlags {
 	return &providerCLIWriteFlags{
 		label:        fs.String("label", "", "display name; the slug is derived from it"),
-		runtime:      fs.String("runtime", "", "the protocol the endpoint speaks: claude, codex, kimi or antigravity"),
+		runtime:      fs.String("runtime", "", "the protocol the endpoint speaks: claude, codex, kimi, antigravity or cursor"),
 		baseURL:      fs.String("base-url", "", "the endpoint, resolved on the runner the session runs on"),
 		apiKey:       fs.String("api-key", "", "the key the endpoint expects"),
 		apiKeyFile:   fs.String("api-key-file", "", "read the key from stdin (-)"),
@@ -310,11 +342,10 @@ func cliProviderCreate(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	for _, required := range []struct{ key, flag string }{
-		{"label", "--label"}, {"baseUrl", "--base-url"}, {"apiKey", "--api-key or --api-key-file"}, {"models", "--models"},
-	} {
-		if _, ok := body[required.key]; !ok {
-			return fmt.Errorf("%s is required", required.flag)
+	flags := map[string]string{"label": "--label", "baseUrl": "--base-url", "apiKey": "--api-key or --api-key-file", "models": "--models"}
+	for _, required := range providerCreateRequired(body) {
+		if _, ok := body[required]; !ok {
+			return fmt.Errorf("%s is required", flags[required])
 		}
 	}
 	t, err := cliTransport()

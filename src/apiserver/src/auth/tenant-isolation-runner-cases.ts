@@ -319,6 +319,11 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { replaces: 'not its title', title: 'named by the census' } }),
   },
+  // A session not on a Cursor key: its own runner is answered `recorded: false`, and nothing is written.
+  'POST /runner/sessions/:id/cursor-key-check': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { state: 'INVALID', keyFingerprint: '0123456789abcdef' } }),
+  },
   'POST /runner/sessions/:id/turns/:turnId/suggestion': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.turnSessionId, turnId: of.runner.shellTurnId } }),
@@ -1300,6 +1305,9 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'plan usage (codex-reset-relay.ts:211)',
   'POST /runner/claude-history-result body transcripts[].claudeSessionId':
     'a transcript file on the reporting machine, stored as that machine\'s own history scan (runner-api.controller.ts:1707)',
+  'POST /runner/cursor-key-check-result body checkId':
+    'the token this process minted for one Cursor key check it handed the reporting machine, held in memory beside '
+    + 'that machine: an answer naming a check handed to any other settles nothing (cursor-key-check-relay.ts:129)',
   'POST /runner/sessions/:id/approvals body toolUseId':
     'the engine\'s id for one tool call, a key only within the session the path names (runner-api.controller.ts:3867)',
   'POST /runner/sessions/:id/approvals body backgroundJobId':

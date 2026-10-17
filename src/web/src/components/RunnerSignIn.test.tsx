@@ -33,6 +33,8 @@ describe('the name each login engine signs in under', () => {
       codex: 'Codex',
       kimi: 'Kimi Code',
       antigravity: 'Antigravity',
+      // Named like every engine, though no page offers its sign-in yet (webShowsEngine).
+      cursor: 'Cursor CLI',
     });
   });
 

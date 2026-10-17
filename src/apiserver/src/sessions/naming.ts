@@ -385,9 +385,10 @@ export const ENGINE_NAMING_INSTRUCTIONS =
  * provider holds no key the server may spend (`configuredRow` is the configured row the session's
  * provider names, null for a built-in engine or a pool), since either of those named it at creation
  * (SessionsService.beautifySessionLater) — and only on an engine with a way to answer: Claude Code's
- * own generate_session_title, a Codex side thread. A session whose title is not the one cut from its
- * prompt has a real one already — given by a person, a task, a project, or an earlier naming — and so
- * does any session that opened with no words.
+ * own generate_session_title, a Codex side thread, or the title Cursor CLI gives a session in its first
+ * turn (session_info_update, docs/cursor-runtime-contract.md §3.2), which its runner reports only when asked.
+ * A session whose title is not the one cut from its prompt has a real one already — given by a person,
+ * a task, a project, or an earlier naming — and so does any session that opened with no words.
  */
 export function engineNamingJob(
   session: { title: string; prompt: string; taskId: string | null; titleManagedByProject: boolean; model: string | null },
@@ -395,7 +396,7 @@ export function engineNamingJob(
   configuredRow: HeldKeyRow | null,
 ): SessionNamingJob | undefined {
   if (process.env.DEEPSEEK_API_KEY?.trim()) return undefined;
-  if (runtime !== AgentProvider.CLAUDE && runtime !== AgentProvider.CODEX) return undefined;
+  if (runtime !== AgentProvider.CLAUDE && runtime !== AgentProvider.CODEX && runtime !== AgentProvider.CURSOR) return undefined;
   if (session.taskId || session.titleManagedByProject) return undefined;
   if (!session.prompt.trim() || session.title !== titleFromPrompt(session.prompt)) return undefined;
   if (configuredRow && heldKeyOf(configuredRow, session.model?.trim() || undefined, true)) return undefined;

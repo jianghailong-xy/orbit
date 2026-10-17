@@ -136,6 +136,9 @@ export class CriterionUnlandedProducer {
             select: {
               id: true,
               status: true,
+              // Which of the task's deliveries this is: one sent back and delivered again is a new
+              // fact even when nothing else under the criterion moved (`deliveryVersion`).
+              progress: { select: { lifecycleEpoch: true } },
               // What the landing fold reads about the task itself, from the module that decides
               // what "landed" means. Spread rather than spelled, so this fact cannot come to say
               // "still on the line" about a criterion the fold calls LANDED. The fold's other half
@@ -182,7 +185,9 @@ export class CriterionUnlandedProducer {
       .map((definition) => criterionUnlandedFact(
         definition.projectId,
         criterionKeyOf(definition.id),
-        definition.servingTasks.map((task) => ({ taskId: task.id, status: task.status })),
+        definition.servingTasks.map((task) => ({
+          taskId: task.id, status: task.status, lifecycleEpoch: task.progress?.lifecycleEpoch ?? 0,
+        })),
         landed.get(definition.id) ?? 'UNKNOWN',
       ))
       .filter((fact): fact is WakeFact => fact !== null);

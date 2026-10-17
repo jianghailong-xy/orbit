@@ -1,21 +1,29 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { MoreOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, listUserAccessTokens, revokeUserAccessToken, type AccessToken } from '../api';
+import { api, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
 import { AdminNav } from '../components/AdminNav';
+import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Checkbox } from '../components/ui/Checkbox';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { Dialog } from '../components/ui/Dialog';
 import { Input } from '../components/ui/Input';
-import { Popconfirm } from '../components/ui/Popconfirm';
+import { Menu, type MenuItem } from '../components/ui/Menu';
 import { Spinner } from '../components/ui/Spinner';
 import { TableEmptyRow, TableFrame } from '../components/ui/Table';
+import { Textarea } from '../components/ui/Textarea';
 import { fullDate } from '../lib/accessTokens';
 import { authMethodsQuery } from '../lib/googleLink';
 import { meQuery, type SignInMethods } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+import { ago } from '../lib/watches';
+
+/** What an account last used Orbit through: one of its apps, or an access token. */
+type ActiveVia = 'web' | 'ios' | 'macos' | 'android' | 'token';
 
 interface AdminUser {
   id: string;
@@ -27,6 +35,8 @@ interface AdminUser {
   signInMethods?: SignInMethods;
   /** When an administrator disabled the account; null while it is not, absent from a server that predates disabling. */
   disabledAt?: string | null;
+  /** When the account last used Orbit, and through what; null when it never has, absent from a server that predates it. */
+  lastActive?: { at: string; via: ActiveVia } | null;
 }
 interface CreateResult {
   email: string;
@@ -38,6 +48,12 @@ export const GOOGLE_SIGN_IN_ONLY = 'Google sign-in only';
 export const UNLINK_GOOGLE = 'Unlink Google';
 export const DISABLE_USER = 'Disable';
 export const ENABLE_USER = 'Enable';
+export const DELETE_USER = 'Delete';
+export const RESET_PASSWORD = 'Reset password';
+export const VIEW_AS = 'View as';
+export const START_VIEWING = 'Start viewing';
+/** A row's menu of every other action, named for the account it acts on. */
+export const MORE_ACTIONS = 'More actions';
 /**
  * What the Add-user dialog says under **Google sign-in only** (design §5.2): only a Gmail or Google
  * Workspace address is one Google vouches for, so only that address can be linked by it. Any other
@@ -48,26 +64,84 @@ export const GOOGLE_SIGN_IN_ONLY_HINT =
   + 'Gmail or Google Workspace address — Google has to vouch for it. Any other address leaves this account '
   + 'with no way to sign in: give them a password instead.';
 
+const ACTIVE_VIA: Record<ActiveVia, string> = {
+  web: 'Web',
+  ios: 'iOS app',
+  macos: 'Mac app',
+  android: 'Android app',
+  token: 'Access token',
+};
+const MONTH = 30 * 24 * 60 * 60 * 1000;
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The account as the list names it: its name, or the part of its email before the @ while it has none. */
+const nameOf = (u: AdminUser) => u.name.trim() || u.email.split('@')[0];
+
+/** The account: its photo's place, its name, a mark for you and for an administrator, and its email. */
+function UserCell({ user, you }: { user: AdminUser; you: boolean }) {
+  return (
+    <div className="admin-users-who">
+      <Avatar size={32}>{nameOf(user).charAt(0).toUpperCase()}</Avatar>
+      <div className="admin-users-who-text">
+        <div className="admin-users-name">
+          <span className="admin-users-name-text">{nameOf(user)}</span>
+          {you && <Badge tone="blue">You</Badge>}
+          {user.role === 'ADMIN' && <Badge tone="gold">Admin</Badge>}
+        </div>
+        <div className="admin-users-email" title={user.email}>
+          {user.email}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * How an account signs in (docs/google-sign-in-design.md §5.6: the list shows it, so an unusual
  * sign-up stands out): a password, a Google account linked — named on hover — or, for an account
  * without either yet, Google only, waiting for its first Google sign-in to link one.
  */
-function SignInBadges({ methods }: { methods?: SignInMethods }) {
+function SignInCell({ methods }: { methods?: SignInMethods }) {
   const { password, google } = methods ?? { password: true, google: null };
+  if (!password && !google) {
+    return (
+      <span className="admin-users-pending" title="No password: the Google account of this email address is linked at its first Google sign-in">
+        Google · pending
+      </span>
+    );
+  }
   return (
-    <span className="admin-signin-badges">
-      {password && <Badge>Password</Badge>}
-      {google && (
-        <Badge tone="blue" title={google.email}>
-          Google
-        </Badge>
-      )}
-      {!password && !google && (
-        <Badge tone="warning" title="No password: the Google account of this email address is linked at its first Google sign-in">
-          Google · pending
-        </Badge>
-      )}
+    <span className="admin-users-signin">
+      {password && 'Password'}
+      {password && google && ' · '}
+      {google && <span title={google.email}>Google</span>}
+    </span>
+  );
+}
+
+function StatusCell({ disabledAt }: { disabledAt?: string | null }) {
+  return disabledAt ? (
+    <span className="admin-users-status admin-users-status-off" title={`Disabled on ${fullDate(disabledAt)}`}>
+      Disabled
+    </span>
+  ) : (
+    <span className="admin-users-status">Active</span>
+  );
+}
+
+/**
+ * When the account last used Orbit (an app or an access token), as "3h ago", a date once it is over a month,
+ * or Never; the exact time and what it was through on hover. An app's use is recorded at most hourly, so a
+ * person using Orbit right now can read as up to an hour ago.
+ */
+function LastActiveCell({ last, now }: { last?: AdminUser['lastActive']; now: number }) {
+  if (last === undefined) return <span className="admin-users-quiet">—</span>;
+  if (last === null) return <span className="admin-users-quiet">Never</span>;
+  const exact = new Date(last.at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  return (
+    <span className="admin-users-active" title={`${exact} · ${ACTIVE_VIA[last.via] ?? last.via}`}>
+      {now - Date.parse(last.at) > MONTH ? fullDate(last.at) : ago(last.at, now)}
     </span>
   );
 }
@@ -83,14 +157,19 @@ export function AdminUsersPage() {
   });
   // A Google-only account is offered only while Google sign-in is on: otherwise it could not sign in.
   const googleOn = useQuery(authMethodsQuery()).data?.google === true;
-  // An administrator cannot disable their own account, so their row does not offer it.
+  // An administrator cannot disable or delete their own account, so their row does not offer it.
   const meId = useQuery(meQuery()).data?.id;
+  // On a phone a row keeps only its menu, which then starts with the row's own action.
+  const phone = useMediaQuery(PHONE_QUERY);
 
+  const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [googleOnly, setGoogleOnly] = useState(false);
   const [tokensOf, setTokensOf] = useState<AdminUser | null>(null);
+  const [viewAs, setViewAs] = useState<AdminUser | null>(null);
+  const [reason, setReason] = useState('');
   const [confirm, confirmation] = useConfirm();
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin', 'users'] });
@@ -114,7 +193,7 @@ export function AdminUsersPage() {
   };
 
   const createMut = useMutation({
-    mutationFn: (body: { email: string; name?: string; force?: boolean; passwordless?: boolean }) =>
+    mutationFn: (body: { email: string; name?: string; passwordless?: boolean }) =>
       api<CreateResult>('/admin/users', { method: 'POST', body }),
     onSuccess: (r) => {
       invalidate();
@@ -122,11 +201,28 @@ export function AdminUsersPage() {
       setEmail('');
       setName('');
       setGoogleOnly(false);
-      announce(r.reset ? `Password reset for ${r.email}` : `Created ${r.email}`, r.generatedPassword);
+      announce(`Created ${r.email}`, r.generatedPassword);
     },
-    onError: (e: Error, { force }) =>
-      message.error(force ? "Couldn't reset the password" : "Couldn't create the user", e.message),
+    onError: (e: Error) => message.error("Couldn't create the user", e.message),
   });
+  /**
+   * Reset a password, once confirmed: the new one-time password is shown after the question closes (one
+   * dialog at a time), and a refusal is said in the question.
+   */
+  const askReset = async (u: AdminUser) => {
+    let reset: CreateResult | undefined;
+    const confirmed = await confirm({
+      title: `Reset ${u.email}'s password?`,
+      description: 'A new one-time password is generated and shown once. Their current password stops working.',
+      confirmText: RESET_PASSWORD,
+      onConfirm: async () => {
+        reset = await api<CreateResult>('/admin/users', { method: 'POST', body: { email: u.email, force: true } });
+      },
+    });
+    if (!confirmed || !reset) return;
+    invalidate();
+    announce(`Password reset for ${reset.email}`, reset.generatedPassword);
+  };
 
   const roleMut = useMutation({
     mutationFn: ({ id, role }: { id: string; role: 'MEMBER' | 'ADMIN' }) =>
@@ -144,8 +240,17 @@ export function AdminUsersPage() {
       invalidate();
       message.success('User deleted');
     },
-    onError: (e: Error) => message.error("Couldn't delete the user", e.message),
   });
+  /** Delete, once confirmed; a refusal (an account that still owns things) is said in the question. */
+  const askDelete = (u: AdminUser) =>
+    void confirm({
+      title: `Delete ${u.email}?`,
+      description:
+        'This cannot be undone. It fails while the account owns runners, workspaces or tasks; disable it instead to keep them out.',
+      confirmText: DELETE_USER,
+      danger: true,
+      onConfirm: () => deleteMut.mutateAsync(u.id),
+    });
 
   const unlinkMut = useMutation({
     mutationFn: (u: AdminUser) => api(`/admin/users/${u.id}/identities/google`, { method: 'DELETE' }),
@@ -193,81 +298,90 @@ export function AdminUsersPage() {
       { onError: (e: Error) => message.error("Couldn't enable the account", e.message) },
     );
 
-  const columns: { key: string; title: string; end?: boolean; cell: (u: AdminUser) => ReactNode }[] = [
-    { key: 'email', title: 'Email', cell: (u) => u.email },
-    { key: 'name', title: 'Name', cell: (u) => u.name },
-    { key: 'role', title: 'Role', cell: (u) => <Badge tone={u.role === 'ADMIN' ? 'gold' : 'default'}>{u.role}</Badge> },
-    {
-      key: 'status',
-      title: 'Status',
-      cell: (u) =>
-        u.disabledAt ? (
-          <Badge tone="error" title={`Disabled on ${fullDate(u.disabledAt)}`}>
-            Disabled
-          </Badge>
-        ) : (
-          <Badge>Active</Badge>
-        ),
+  /**
+   * View Orbit as the user, read-only, to debug what they see: the server answers a token for 30
+   * minutes and records the reason. The app loads again as them, so nothing read as the administrator
+   * stays on screen; the banner over every page brings the administrator back.
+   */
+  const viewAsMut = useMutation({
+    mutationFn: ({ user, why }: { user: AdminUser; why: string }) =>
+      api<{ accessToken: string }>(`/admin/users/${user.id}/impersonate`, { method: 'POST', body: { reason: why } }),
+    onSuccess: ({ accessToken }) => {
+      startImpersonation(accessToken);
+      location.href = '/';
     },
-    { key: 'signIn', title: 'Sign-in', cell: (u) => <SignInBadges methods={u.signInMethods} /> },
-    { key: 'createdAt', title: 'Created', cell: (u) => <span className="admin-users-created">{fullDate(u.createdAt)}</span> },
-    {
-      key: 'actions',
-      title: '',
-      end: true,
-      // A row of actions that wraps rather than widening the table past the page.
-      cell: (u) => (
-        <div className="admin-user-actions">
-          <Popconfirm
-            title={`Reset ${u.email}'s password?`}
-            onConfirm={() => createMut.mutate({ email: u.email, force: true })}
-            trigger={<Button size="small">Reset password</Button>}
-          />
-          <Button size="small" onClick={() => setTokensOf(u)}>
-            Access tokens
+    onError: (e: Error, { user }) => message.error(`Couldn't view Orbit as ${user.email}`, e.message),
+  });
+  const openViewAs = (u: AdminUser) => {
+    setReason('');
+    setViewAs(u);
+  };
+
+  /**
+   * A row's actions: the one it is most often opened for, in sight — View as, or Enable on a disabled account;
+   * none on your own account or another administrator's, which cannot be viewed — and every other in its menu,
+   * the ones that lock an account out or remove it last and apart.
+   */
+  const actions = (u: AdminUser) => {
+    const you = u.id === meId;
+    const own = you || u.role === 'ADMIN'
+      ? null
+      : u.disabledAt
+        ? { label: ENABLE_USER, run: () => enable(u), busy: disabledMut.isPending && disabledMut.variables?.user.id === u.id }
+        : { label: VIEW_AS, run: () => openViewAs(u), busy: false };
+    const items: MenuItem[] = [
+      ...(phone && own ? [{ key: 'own', label: own.label, onSelect: own.run }, { type: 'separator', key: 'own-end' }] as MenuItem[] : []),
+      { key: 'reset', label: RESET_PASSWORD, onSelect: () => void askReset(u) },
+      { key: 'tokens', label: 'Access tokens', onSelect: () => setTokensOf(u) },
+      ...(u.signInMethods?.google ? [{ key: 'unlink', label: UNLINK_GOOGLE, onSelect: () => askUnlink(u) }] : []),
+      {
+        key: 'role',
+        label: u.role === 'ADMIN' ? 'Make member' : 'Make admin',
+        onSelect: () => roleMut.mutate({ id: u.id, role: u.role === 'ADMIN' ? 'MEMBER' : 'ADMIN' }),
+      },
+      ...(you
+        ? []
+        : ([
+            { type: 'separator', key: 'lock-out' },
+            ...(u.disabledAt ? [] : [{ key: 'disable', label: DISABLE_USER, danger: true, onSelect: () => askDisable(u) }]),
+            { key: 'delete', label: DELETE_USER, danger: true, onSelect: () => askDelete(u) },
+          ] as MenuItem[])),
+    ];
+    return (
+      <div className="admin-user-actions">
+        {own && !phone && (
+          <Button size="small" loading={own.busy} onClick={own.run}>
+            {own.label}
           </Button>
-          {u.signInMethods?.google && (
-            <Button size="small" onClick={() => askUnlink(u)}>
-              {UNLINK_GOOGLE}
-            </Button>
-          )}
-          <Button
-            size="small"
-            loading={roleMut.isPending}
-            onClick={() => roleMut.mutate({ id: u.id, role: u.role === 'ADMIN' ? 'MEMBER' : 'ADMIN' })}
-          >
-            {u.role === 'ADMIN' ? 'Make member' : 'Make admin'}
-          </Button>
-          {u.disabledAt ? (
-            <Button
-              size="small"
-              loading={disabledMut.isPending && disabledMut.variables?.user.id === u.id}
-              onClick={() => enable(u)}
-            >
-              {ENABLE_USER}
-            </Button>
-          ) : (
-            u.id !== meId && (
-              <Button size="small" danger onClick={() => askDisable(u)}>
-                {DISABLE_USER}
-              </Button>
-            )
-          )}
-          <Popconfirm
-            title={`Delete ${u.email}?`}
-            onConfirm={() => deleteMut.mutate(u.id)}
-            trigger={
-              <Button size="small" danger>
-                Delete
-              </Button>
-            }
-          />
-        </div>
-      ),
-    },
+        )}
+        <Menu
+          align="end"
+          items={items}
+          trigger={
+            <Button size="small" variant="text" icon={<MoreOutlined />} title={MORE_ACTIONS} aria-label={`${MORE_ACTIONS} for ${u.email}`} />
+          }
+        />
+      </div>
+    );
+  };
+
+  const now = Date.now();
+  const columns: { key: string; title: string; className?: string; cell: (u: AdminUser) => ReactNode }[] = [
+    { key: 'user', title: 'User', cell: (u) => <UserCell user={u} you={u.id === meId} /> },
+    { key: 'signIn', title: 'Sign-in', className: 'admin-users-col-signin', cell: (u) => <SignInCell methods={u.signInMethods} /> },
+    { key: 'status', title: 'Status', className: 'admin-users-col-status', cell: (u) => <StatusCell disabledAt={u.disabledAt} /> },
+    { key: 'lastActive', title: 'Last active', className: 'admin-users-col-active', cell: (u) => <LastActiveCell last={u.lastActive} now={now} /> },
+    { key: 'createdAt', title: 'Created', className: 'admin-users-col-created', cell: (u) => fullDate(u.createdAt) },
+    { key: 'actions', title: '', className: 'admin-users-col-actions', cell: actions },
   ];
-  const end = { textAlign: 'right' } as const;
-  const rows = users.data ?? [];
+  const all = users.data ?? [];
+  const wanted = query.trim().toLowerCase();
+  const rows = useMemo(
+    () => (wanted ? all.filter((u) => `${u.name}\n${u.email}`.toLowerCase().includes(wanted)) : all),
+    [all, wanted],
+  );
+  const admins = all.filter((u) => u.role === 'ADMIN').length;
+  const disabled = all.filter((u) => u.disabledAt).length;
   const create = () =>
     email.trim() &&
     createMut.mutate({
@@ -279,19 +393,42 @@ export function AdminUsersPage() {
   return (
     <div className="admin-page">
       <AdminNav />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 className="page-title">Users</h1>
-        <Button variant="primary" onClick={() => setCreateOpen(true)}>
-          Add user
-        </Button>
+      <div className="admin-users-head">
+        <div className="admin-users-heading">
+          <h1 className="page-title">Users</h1>
+          {users.data && (
+            <div className="admin-users-sub">
+              {[
+                plural(all.length, 'account', 'accounts'),
+                plural(admins, 'administrator', 'administrators'),
+                ...(disabled ? [`${disabled} disabled`] : []),
+              ].join(' · ')}
+            </div>
+          )}
+        </div>
+        <div className="admin-users-tools">
+          <Input
+            className="admin-users-search"
+            prefix={<SearchOutlined />}
+            placeholder="Search name or email"
+            aria-label="Search users"
+            value={query}
+            allowClear
+            onClear={() => setQuery('')}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <Button variant="primary" onClick={() => setCreateOpen(true)}>
+            Add user
+          </Button>
+        </div>
       </div>
 
-      <TableFrame loading={users.isLoading}>
-        <table className="orbit-table">
+      <TableFrame className="admin-users-frame" loading={users.isLoading}>
+        <table className="orbit-table admin-users-table">
           <thead>
             <tr>
               {columns.map((column) => (
-                <th key={column.key} scope="col" style={column.end ? end : undefined}>
+                <th key={column.key} scope="col" className={column.className}>
                   {column.title}
                 </th>
               ))}
@@ -299,12 +436,20 @@ export function AdminUsersPage() {
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <TableEmptyRow colSpan={columns.length} />
+              wanted && all.length > 0 ? (
+                <tr className="orbit-table-placeholder">
+                  <td colSpan={columns.length} className="admin-users-none">
+                    No users match “{query.trim()}”
+                  </td>
+                </tr>
+              ) : (
+                <TableEmptyRow colSpan={columns.length} />
+              )
             ) : (
               rows.map((user) => (
-                <tr key={user.id}>
+                <tr key={user.id} className={user.disabledAt ? 'admin-users-off' : undefined}>
                   {columns.map((column) => (
-                    <td key={column.key} style={column.end ? end : undefined}>
+                    <td key={column.key} className={column.className}>
                       {column.cell(user)}
                     </td>
                   ))}
@@ -345,6 +490,41 @@ export function AdminUsersPage() {
         </div>
       </Dialog>
       {confirmation}
+
+      <Dialog
+        className="admin-user-dialog"
+        title={viewAs ? `View Orbit as ${viewAs.email}?` : VIEW_AS}
+        open={viewAs !== null}
+        onClose={() => setViewAs(null)}
+        footer={
+          <>
+            <Button onClick={() => setViewAs(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              disabled={!reason.trim()}
+              loading={viewAsMut.isPending}
+              onClick={() => viewAs && viewAsMut.mutate({ user: viewAs, why: reason.trim() })}
+            >
+              {START_VIEWING}
+            </Button>
+          </>
+        }
+      >
+        <div className="admin-user-form">
+          <div>
+            You see Orbit as they see it, read-only, for 30 minutes: nothing can be changed. Starting is recorded
+            with your reason.
+          </div>
+          <Textarea
+            aria-label="Reason"
+            placeholder="Reason, e.g. the support request you are looking into"
+            value={reason}
+            maxLength={500}
+            autoSize={{ minRows: 2, maxRows: 6 }}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
+      </Dialog>
 
       <Dialog
         className="admin-user-dialog"

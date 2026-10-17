@@ -951,8 +951,19 @@ final class ConsoleModel {
     enum ApprovalAnswerPhase: Equatable {
         /// Pressed, optimistically removed, and not yet answered by the door.
         case sending
-        /// The door took it. The card is not coming back.
-        case sent
+        /// The door took it. The card is not coming back, so the sheet draws it as its record from
+        /// what was pressed (`AnsweredApproval`).
+        case sent(AnsweredApproval)
+    }
+
+    /// An approval as it was answered here: the card as it was asked, and the press that answered
+    /// it. The one copy of it there is — the server keeps no record of an approval's question — so
+    /// the record lives as long as this console does.
+    struct AnsweredApproval: Equatable {
+        let approval: PendingApproval
+        let behavior: ApprovalBehavior
+        let answers: [String: [String]]?
+        let at: Date
     }
     /// Sink for a session outcome — the app's toast host, injected by `ConsoleRegistry`.
     @ObservationIgnored var onToast: (ToastRequest) -> Void = { _ in }
@@ -2574,7 +2585,7 @@ final class ConsoleModel {
     /// way out, nor take the draft they are part-way through typing with it — nor the attachments
     /// they have staged (a retry carries its own message's files; see `carried` below).
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
-              overrideAttachments: [TurnAttachment]? = nil) async {
+              overrideAttachments: [TurnAttachment]? = nil, queueForNextTurn: Bool = false) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
@@ -2725,11 +2736,13 @@ final class ConsoleModel {
         // (the Stop button's source), not the stream-reconciled `sessionStatus` — that never reliably
         // reaches `.running` on a cold open of an already-running session. Captured now, before the
         // send revives/advances the status. See `ComposerLogic.willQueue`.
-        let willQueue = ComposerLogic.willQueue(authoritative: authoritative, reconciled: sessionStatus)
+        // Asked for by the Send button's menu, it waits whatever is running (`queueForNextTurn`).
+        let willQueue = queueForNextTurn
+            || ComposerLogic.willQueue(authoritative: authoritative, reconciled: sessionStatus)
         // Optimistic bubble; reconciled by the server's `user` event (matched by the turnId
         // tagged below once POST returns — the runner echoes turnId, not clientTurnId).
         reducer.addOptimisticUser(clientTurnId: clientTurnId, text: text, attachments: turnAttachments,
-                                  queued: willQueue)
+                                  queued: willQueue, shell: shell)
         // Show the tail "working" indicator right away (before the scroll below), and keep it up
         // until the agent's first token — or a send failure — resolves it. `publishStateNow` clears
         // it for a queued send, where the running turn already animates the tail.
@@ -2750,7 +2763,8 @@ final class ConsoleModel {
         let resuming = ComposerLogic.shouldResume(status: sessionStatus, capabilities: sendCapabilities)
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
-                                              text: text, shell: shell, attachmentIds: attachmentIds)
+                                              text: text, shell: shell, attachmentIds: attachmentIds,
+                                              queueForNextTurn: queueForNextTurn)
             // An earlier send's "Couldn't send" is not true any more.
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             managedWorkSent()
@@ -2779,7 +2793,7 @@ final class ConsoleModel {
             if let tid = accepted.turnId {
                 // …and with what the server filed it AS. A message sent during a running turn is
                 // written into that turn (a steer) rather than queued behind it, and the bubble
-                // has to stop saying "Queued" and stop offering a withdraw the server refuses.
+                // has to stop saying "Queued" and trade the queue's Cancel for a steer's Withdraw.
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
                                             steer: SteerDelivery.isSteerKind(accepted.kind))
                 publishStateNow()
@@ -3035,7 +3049,7 @@ final class ConsoleModel {
     /// request carries a `clientTurnId` the server is idempotent on: a retry either queues the
     /// message or is handed back the turn a lost attempt already queued, never a second one.
     private func postTurn(resuming: Bool, clientTurnId: String, text: String, shell: Bool,
-                          attachmentIds: [String]) async throws -> TurnAccepted {
+                          attachmentIds: [String], queueForNextTurn: Bool = false) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
         // identical request, and the pills it reads stay editable while a retry waits.
         let resumeRequest = ResumeRequest(clientTurnId: clientTurnId, content: text,
@@ -3056,7 +3070,8 @@ final class ConsoleModel {
                                           // stopping this exact run, and only for this one send.
                                           stopSessionId: confirmedStopSessionID)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
-                                                 shell: shell, attachmentIds: attachmentIds)
+                                                 shell: shell, attachmentIds: attachmentIds,
+                                                 queueForNextTurn: queueForNextTurn)
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
         // rather than handing the reader a refusal about a situation that is already resolving.
         // The identical request goes back out — same `clientTurnId` — so the server either queues
@@ -3385,8 +3400,12 @@ final class ConsoleModel {
         adoptRunnerSnapshot(runner)
     }
 
+    /// The composer's Stop: end the turn, and end the background work the session left running with
+    /// it — the job, dev server or watcher the stopped turn started is still the thing the person
+    /// pointing at Stop can see running. Explicit on the request, and the only caller that asks for
+    /// it: a plain interrupt kills nothing, and the session itself is not ended by either.
     func interrupt() async {
-        do { try await api.interrupt(sessionID: sessionID) }
+        do { try await api.interrupt(sessionID: sessionID, stopBackgroundWork: true) }
         catch { statusMessage = "Interrupt failed" }
     }
 
@@ -3467,17 +3486,98 @@ final class ConsoleModel {
             // Withdrawing shouldn't silently eat what the user typed (interrupt parity): fold the
             // message back into the composer so it can be edited and resent. Only once the DELETE
             // succeeds — a rejected withdraw means the runner already leased it, so it lands in the
-            // transcript and restoring would duplicate it. Unlike Stop (offered only with an empty
-            // composer), Cancel is reachable mid-draft, so an in-progress draft always wins.
-            // Attachments aren't rehydrated (the composer needs their bytes), matching interrupt.
-            // Except a turn nobody typed — a wake, a delivery — which would land in the composer
-            // as though the user had written it (`ComposerLogic.restorableText`).
-            if let body = ComposerLogic.restorableText(of: bubble),
-               composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                composerText = body
+            // transcript and restoring would duplicate it. Taken back from the tray it comes back as a
+            // withdrawn steer does (decided 2026-10-16, docs/mocks/steer-tray): an explicit press, so
+            // a draft keeps its place above the words rather than losing them to it. A `!cmd` comes
+            // back as the command it was. Attachments aren't rehydrated (the composer needs their
+            // bytes), matching interrupt. Except a turn nobody typed — a wake, a delivery — which
+            // would land in the composer as though the user had written it
+            // (`ComposerLogic.restorableText`).
+            if let words = ComposerLogic.restorableText(of: bubble) {
+                let body = bubble.shell ? "!" + words : words
+                composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? body : composerText + "\n\n" + body
             }
         } catch {
             showTransientStatus("This message is already being processed and can't be withdrawn")
+        }
+    }
+
+    /// Steers asked for back and not yet answered, by turn id: each one's bubble reads
+    /// "Withdrawing…" and offers nothing more until the server answers (`withdrawSteer`).
+    private(set) var withdrawingSteers: Set<String> = []
+
+    /// Queued messages a Steer is out for, by turn id: each one's tray row reads "Sending…" and
+    /// offers nothing more until the server answers (`steerQueued`).
+    private(set) var steeringTurns: Set<String> = []
+
+    /// The tray above the composer (`PendingTray.rows`): the reader's messages nothing has read yet.
+    /// `turnRunning` is the session's authoritative word that a turn is in flight, which the view
+    /// reads as the Stop button does (`ComposerView.sendControls`): Steer is offered only then, and
+    /// only on an engine that can take a message into a running turn.
+    func pendingTrayRows(turnRunning: Bool) -> [PendingTrayRow] {
+        PendingTray.rows(state: state, withdrawing: withdrawingSteers, steering: steeringTurns,
+                         steerOffered: turnRunning && SteerDelivery.runtimeTakesMidTurnSteer(engine))
+    }
+
+    /// The tray's Steer: send a message queued for the next turn into the one running now (web
+    /// parity: `WorkspaceView`'s `steerQueued`). The server makes it the steer it would have been
+    /// (POST …/steer), and the row moves on from there as a steer does; with no turn left to join it
+    /// stays queued, and is told so in the reader's terms.
+    func steerQueued(_ bubble: UserBubble) async {
+        guard let turnId = bubble.turnId, !steeringTurns.contains(turnId) else { return }
+        steeringTurns.insert(turnId)
+        defer { steeringTurns.remove(turnId) }
+        do {
+            try await api.steerQueuedTurn(sessionID: sessionID, turnId: turnId)
+            reducer.markQueuedSteered(turnId: turnId)
+            publishStateNow()
+        } catch {
+            if APIClient.refusalCode(error) == "CURRENT_WORK_UNAVAILABLE" {
+                let detail = APIClient.refusalString(error, "reason") == "STEER_UNSUPPORTED"
+                    ? "This agent can't take a message mid-turn. It stays queued for the next turn."
+                    : "The turn is over or being stopped. It stays queued for the next turn."
+                onToast(ToastRequest(message: "Couldn't send it into this turn", detail: detail, tone: .info))
+            } else {
+                onToast(ToastRequest(message: "Couldn't send it into this turn",
+                                     detail: APIClient.failureReason(error), tone: .error))
+            }
+        }
+    }
+
+    /// Take back a message sent into the running turn while nothing has read it yet — a steer's
+    /// Withdraw (web parity: `WorkspaceView`'s `withdrawSteer`). The same DELETE as `cancelQueued`:
+    /// the server deletes a steer no runner has taken yet, and asks the runner holding one to have
+    /// its engine drop it unread, which only the engine can say it did — so unlike Cancel, nothing
+    /// leaves the screen or comes back until the server answers. Then the bubble goes at once,
+    /// ahead of the runner's own `withdrawn` delivery, and the words go back into the composer
+    /// under whatever is being typed there: an explicit press, so a draft keeps its place above
+    /// them instead of winning over them. Attachments aren't rehydrated (the composer needs their
+    /// bytes), as with Cancel. Offered only for words somebody typed (`SteerDelivery.offersWithdraw`).
+    func withdrawSteer(_ bubble: UserBubble) async {
+        guard let turnId = bubble.turnId, !withdrawingSteers.contains(turnId) else { return }
+        withdrawingSteers.insert(turnId)
+        defer { withdrawingSteers.remove(turnId) }
+        do {
+            try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+            reducer.removeWithdrawnSteer(turnId: turnId)
+            publishStateNow()
+            if let body = ComposerLogic.restorableText(of: bubble) {
+                composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? body : composerText + "\n\n" + body
+            }
+        } catch {
+            // Too late is an answer, not a failure: the engine read it first, so it is part of the
+            // turn now — said in the reader's terms, the server's longer sentence being for the API's
+            // own callers. Anything else left the message where it was, on its way to being read.
+            if APIClient.refusalCode(error) == "STEER_ALREADY_READ" {
+                let reader = engine == "codex" ? "Codex" : engine == "claude" ? "Claude" : "The agent"
+                onToast(ToastRequest(message: "Too late to withdraw",
+                                     detail: "\(reader) has already read it.", tone: .info))
+            } else {
+                onToast(ToastRequest(message: "Couldn't withdraw the message",
+                                     detail: APIClient.failureReason(error), tone: .error))
+            }
         }
     }
 
@@ -3701,7 +3801,8 @@ final class ConsoleModel {
         let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
         do {
             try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req)
-            approvalAnswers[approval.id] = .sent
+            approvalAnswers[approval.id] = .sent(AnsweredApproval(approval: approval, behavior: behavior,
+                                                                  answers: answers, at: Date()))
         }
         catch {
             // Nothing was decided: the press is not what took this card away, and the re-seed below
@@ -3853,6 +3954,11 @@ final class ConsoleModel {
     /// Cards answered or set aside HERE. They do not come back in this window: what is true now is
     /// a fact about the criteria, and what happened is the line left in the conversation.
     private var closedCards: Set<String> = []
+    /// The cards answered HERE, as they were asked when the press went in, by card id: what the
+    /// review sheet that pressed draws as the record (`AnsweredDecisionView`). The read stops
+    /// publishing a question once it is answered, and keeps at most its verdict, so this is the
+    /// one copy of what was asked — kept as long as this console is.
+    private(set) var answeredDecisions: [String: AnsweredDecision] = [:]
     /// The version of the standard set a press HERE confirmed — the one version the confirmation
     /// card's entry in `closedCards` is about (`reopenConfirmationForANewVersion`).
     private var confirmedHereDigest: String?
@@ -4619,9 +4725,11 @@ final class ConsoleModel {
     func decideCriteria(_ row: PendingCriteriaDecisionRow, _ decision: CriteriaDecisionAnswer) async {
         guard let projectID else { return }
         do {
-            _ = try await api.decideCriteriaChange(
+            let result = try await api.decideCriteriaChange(
                 projectID: projectID, intentID: row.intentId,
                 CriteriaDecisions.request(row: row, decision: decision))
+            answeredDecisions[DeliveredDecisionCard(kind: .criteriaDecision(intentID: row.intentId)).id] =
+                .criteria(row, decision, resultingSeal: result.applied ? result.resultingSeal : nil, at: Date())
             close(.criteriaDecision(intentID: row.intentId))
             // The card that was answered HERE gives way to its receipt, which the re-read below
             // draws where the decision happened (`adoptReceipts`). Nothing is written locally: left
@@ -4712,6 +4820,11 @@ final class ConsoleModel {
                                                        note: note, review: review) else { return }
         do {
             _ = try await api.decideOwnerConfirmation(taskID: taskID, request)
+            if decision == .confirm {
+                answeredDecisions[DeliveredDecisionCard(kind: .ownerConfirmation(taskID: taskID,
+                                                                                 requestID: waiting.requestId)).id] =
+                    .ownerConfirmed(ownerConfirmation, waiting, at: Date())
+            }
             close(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
             // Left on screen, the card would go stale into "a later report is waiting", which is
             // the one reading of its own answer this window can be sure is wrong.
@@ -4806,6 +4919,10 @@ final class ConsoleModel {
                                                       decidingSessionID: sessionID) else { return }
         do {
             _ = try await api.decideEvidence(taskID: row.taskId, request)
+            if decision == .confirm {
+                answeredDecisions[DeliveredDecisionCard(kind: .evidenceDecision(
+                    taskID: row.taskId, evidenceRevision: row.evidenceRevision)).id] = .evidence(row, at: Date())
+            }
             close(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
             // The card gives way to its receipt, which the re-read below draws where the decision
             // happened (`adoptEvidenceReceipts`) — and which survives the console being opened
@@ -4826,8 +4943,14 @@ final class ConsoleModel {
     func confirmStandardSet() async {
         guard let projectID, let digest = acceptanceConfirmation?.currentVersion.digest else { return }
         do {
+            let asked = acceptanceConfirmation
             let standing = try await api.confirmAcceptanceCriteria(projectID: projectID,
                                                                    criteriaDigest: digest)
+            if let asked {
+                answeredDecisions[DeliveredDecisionCard(kind: .acceptanceConfirmation).id] =
+                    .acceptance(asked, criteria: projectCriteria.sorted { $0.ordinal < $1.ordinal },
+                                started: projectStarted != true, at: Date())
+            }
             acceptanceConfirmation = standing
             confirmedHereDigest = digest
             close(.acceptanceConfirmation)
@@ -4851,10 +4974,19 @@ final class ConsoleModel {
               let request = row.startRequest, startStanding(itemID) == .live else { return }
         let draft = startDraft(for: row)
         guard draft.complete else { return }
+        let asked = StartedHere(projectTitle: projectTitle, askedAt: row.waitingSince, request: request,
+                                criteria: projectCriteria.sorted { $0.ordinal < $1.ordinal },
+                                plan: StartProject.planView(graph: projectGraph, fallbackCount: projectTaskCount),
+                                escalationSeconds: projectEscalationSeconds,
+                                branches: startIntegration?.branches,
+                                lastMainBranch: startIntegration?.lastMainBranch,
+                                draft: draft, graph: projectGraph)
         do {
             try await api.startProject(projectID: projectID,
                                        StartProject.body(request: request, draft: draft,
                                                          requestId: itemID))
+            answeredDecisions[DeliveredDecisionCard(kind: .startProject(itemID: itemID)).id] =
+                .started(asked, at: Date())
             close(.startProject(itemID: itemID))
         } catch {
             statusMessage = "\(StartProject.notRecorded) — \(APIClient.failureReason(error))."
@@ -4875,6 +5007,9 @@ final class ConsoleModel {
             let next = try await api.confirmAcceptanceCriteria(projectID: projectID,
                                                                criteriaDigest: digest)
             confirmedChangeSummaries[digest] = CriteriaChanges.counts(changes)
+            answeredDecisions[DeliveredDecisionCard(kind: .criteriaChange).id] =
+                .criteriaChange(standing, criteria: projectCriteria.sorted { $0.ordinal < $1.ordinal },
+                                changes: CriteriaChanges.counts(changes), at: Date())
             acceptanceConfirmation = next
             confirmedHereDigest = digest
             close(.criteriaChange)
@@ -5210,6 +5345,40 @@ final class ConsoleModel {
     /// else's ("recorded somewhere else", "approved at another end").
     func answeredHere(_ card: DeliveredDecisionCard) -> Bool {
         closedCards.contains(card.id)
+    }
+
+    /// The card as it was answered here, when this window pressed it (`answeredDecisions`).
+    func answeredDecision(_ card: DeliveredDecisionCard) -> AnsweredDecision? {
+        answeredDecisions[card.id]
+    }
+
+    /// One decision card as this window answered it: what it showed at the press, and the press.
+    enum AnsweredDecision {
+        case evidence(EvidenceDecisionRow, at: Date)
+        case criteria(PendingCriteriaDecisionRow, CriteriaDecisionAnswer, resultingSeal: String?, at: Date)
+        case ownerConfirmed(OwnerConfirmationView?, OwnerConfirmationWaiting, at: Date)
+        /// `started`: the press started the project as well — a project not yet handing work out is
+        /// started by confirming what done means.
+        case acceptance(StandardSetConfirmationStanding, criteria: [ProjectCriteriaDocument.Item],
+                        started: Bool, at: Date)
+        case criteriaChange(StandardSetConfirmationStanding, criteria: [ProjectCriteriaDocument.Item],
+                            changes: String, at: Date)
+        case started(StartedHere, at: Date)
+    }
+
+    /// What the start card was drawn from at the press — the request, the plan and the settings —
+    /// all of which the read stops offering once the project has started.
+    struct StartedHere {
+        let projectTitle: String
+        let askedAt: String?
+        let request: ProjectStartRequest
+        let criteria: [ProjectCriteriaDocument.Item]
+        let plan: StartPlanView
+        let escalationSeconds: Int
+        let branches: ProjectBranchCandidates?
+        let lastMainBranch: ProjectLastMainBranch?
+        let draft: StartSettingsDraft
+        let graph: ProjectDependencyGraph?
     }
 
     /// What a decision leaves behind, in the flow, where it happened — the same place web's

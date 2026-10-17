@@ -230,7 +230,7 @@ Options:
                               task by itself once this instant has come (see below)
   --engine ENGINE             Pin the CLI the run uses: claude (Claude Code), codex (Codex),
                               kimi (Kimi Code), antigravity (Antigravity CLI), opencode
-                              (OpenCode) or dsh (DeepSeek Harness)
+                              (OpenCode), dsh (DeepSeek Harness) or cursor (Cursor CLI)
   --provider SLUG             Pin where the run's credential comes from: an engine's own
                               sign-in, opencode, an account pool or an API key ('orbit provider
                               list'). Named alone, it pins the engine it runs on by default too

@@ -1,0 +1,75 @@
+{
+ "scenario": "crash-continue-and-shell-wrapper",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "recordedAt": "2026-10-16T17:46:34.056Z",
+ "reason": "The wrapper was named orbit-shell. The CLI uses $SHELL only when that path contains \"bash\" (or \"zsh\"; index.js@7385715 `t?.includes(\"bash\")?t:…`) and otherwise runs bash from PATH, so the wrapper never ran. The recall half of the scenario passed.",
+ "basis": "committed protocol recording (seq numbers below) plus files the recorded turn left in its run directory",
+ "checks": [
+  {
+   "name": "recall after crash + move passed in the recorded run",
+   "ok": true
+  },
+  {
+   "name": "agent commands kept the CLI's HOME and every Cursor variable (wrapper unused)",
+   "ok": true
+  }
+ ],
+ "facts": {
+  "recorded": {
+   "crashed session used": {
+    "fromThisRun": true,
+    "runId": "2026-10-16T17-45-08-331Z"
+   },
+   "recall after crash": {
+    "stopReason": "end_turn",
+    "answer": "`sleep 31 && echo crash-finished > crash.txt`"
+   },
+   "agent command environment under the SHELL wrapper": {
+    "stopReason": "end_turn",
+    "home": "<RUN>/slots/c/home",
+    "names": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "AGENT_TRANSCRIPTS",
+     "CURSOR_AGENT",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_CONVERSATION_ID",
+     "CURSOR_DATA_DIR",
+     "CURSOR_INVOKED_AS",
+     "CURSOR_REQUEST_ID",
+     "CURSOR_RIPGREP_PATH",
+     "FORCE_COLOR",
+     "GLOBAL_AGENT_ENVIRONMENT_VARIABLE_NAMESPACE",
+     "HOME",
+     "LANG",
+     "NODE_COMPILE_CACHE",
+     "NO_COLOR",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "PWD",
+     "SHELL",
+     "SHLVL",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME",
+     "_",
+     "_ZO_DOCTOR",
+     "__CURSOR_SANDBOX_ENV_RESTORE"
+    ],
+    "permissionRequests": [
+     "`env | cut -d= -f1 | sort > env-names-after-move.txt`",
+     "`printenv HOME > home-after-move.txt`"
+    ]
+   },
+   "variables the wrapper unset but commands still see (the per-command env is the CLI's, the snapshot only adds exports)": [
+    "AGENT_CLI_CREDENTIAL_STORE",
+    "CURSOR_API_KEY",
+    "CURSOR_CONFIG_DIR",
+    "CURSOR_DATA_DIR",
+    "XDG_CONFIG_HOME"
+   ]
+  }
+ }
+}

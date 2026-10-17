@@ -24,10 +24,13 @@ import kotlinx.serialization.builtins.*
 
 /** The same component and commands can be embedded in Tasks/Projects and Wiki when routed there. [review] draws it as a review's
  * page (A08-2; iOS `ApprovalReviewLayout`'s review path): its words scroll, its buttons stay pinned under them, and its heading is
- * the review's own title rather than a line of the card. */
+ * the review's own title rather than a line of the card. [recorded] — what this window pressed it with — draws it in its review as
+ * the record it became: its words as they were asked, dimmed and read-only, what was picked ticked, and no buttons, inputs or hints;
+ * the review puts who did what where its buttons were. */
 @Composable
 fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState = CardActionState(),
-    open: (String) -> Unit, discuss: ((String) -> Unit)? = null, submit: (CardVerb, CardInput) -> Unit, review: Boolean = false) {
+    open: (String) -> Unit, discuss: ((String) -> Unit)? = null, submit: (CardVerb, CardInput) -> Unit, review: Boolean = false,
+    recorded: CardInput? = null) {
     var note by rememberSaveable(card.key, card.binding) { mutableStateOf("") }
     var noteAction by rememberSaveable(card.key, card.binding) { mutableStateOf<CardVerb?>(null) }
     var selections by rememberSaveable(card.key, card.binding, stateSaver = jsonSaver(MapSerializer(String.serializer(), ListSerializer(String.serializer())))) { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
@@ -64,17 +67,24 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             Text(card.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
             Text(submitted, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
-        Text("From Orbit", style = MaterialTheme.typography.labelSmall)
-        card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
-        if (batchPreview != null) BatchReviewBody(card, open, batchPage) { batchPage = it }
-        else CardBody(card, open, owner = if (card.family == CardFamily.OWNER_CONFIRMATION && CardVerb.CONFIRM_OWNER in card.actions)
-                OwnerForm(ownerAnswers, enabled) { answer -> ownerAnswers = ownerAnswers.filterNot { it.key == answer.key } + answer } else null,
-            reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null)
-        CardDiscussion.context(card)?.let { context ->
+        // A record's words are dimmed, still readable — and what opens (a fold, a task) still opens.
+        Column(Modifier.alpha(if (recorded != null) 0.6f else 1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("From Orbit", style = MaterialTheme.typography.labelSmall)
+            if (recorded == null) card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
+            if (batchPreview != null) BatchReviewBody(card, open, batchPage) { batchPage = it }
+            else CardBody(card, open, owner = when {
+                    card.family != CardFamily.OWNER_CONFIRMATION || CardVerb.CONFIRM_OWNER !in card.actions -> null
+                    recorded != null -> OwnerForm(recorded.ownerAnswers, false) {}
+                    else -> OwnerForm(ownerAnswers, enabled) { answer -> ownerAnswers = ownerAnswers.filterNot { it.key == answer.key } + answer }
+                }, reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null,
+                recorded = recorded != null)
+        }
+        if (card.family == CardFamily.QUESTION && recorded != null) QuestionAnswered(card, recorded)
+        if (recorded == null) CardDiscussion.context(card)?.let { context ->
             if (discuss == null) Text("Conversation discussion is not connected yet.", style = MaterialTheme.typography.bodySmall)
             else TextButton(onClick = { discuss(context) }, enabled = fresh && !result.busy) { Text("Chat about this") }
         }
-        if (card.family == CardFamily.QUESTION && card.actions.isNotEmpty()) {
+        if (card.family == CardFamily.QUESTION && card.actions.isNotEmpty() && recorded == null) {
             approvalQuestions(card.source.obj("input") ?: JsonObject(emptyMap())).forEach { q ->
                 Text(q.header ?: q.question, style = MaterialTheme.typography.titleSmall)
                 if (q.header != null) Text(q.question)
@@ -150,8 +160,11 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     if (review) Column(Modifier.fillMaxSize().testTag(card.key)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp), content = body)
-        HorizontalDivider()
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = doors)
+        // A record's buttons are gone: the review draws who did what in their place.
+        if (recorded == null) {
+            HorizontalDivider()
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = doors)
+        }
     } else Surface(Modifier.fillMaxWidth().testTag(card.key).alpha(if (record) 0.72f else 1f), shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { body(); doors() }
@@ -167,6 +180,26 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             else -> "Stop this watch. It will no longer wait for its condition."
         }) }, confirmButton = { TextButton(modifier = Modifier.testTag("confirm:${verb.name}"), enabled = enabled, onClick = { confirming = null; send(verb) }) { Text(verb.label) } },
         dismissButton = { TextButton(onClick = { confirming = null }) { Text(if (verb == CardVerb.REOPEN_TASK) "Cancel" else "Back") } }) }
+}
+
+/** The questions as they were asked, answered (record-1): each one's options with those picked ticked on a light row and the rest
+ * grey, and words typed instead under YOUR ANSWER, ticked, in quotes. */
+@Composable
+private fun QuestionAnswered(card: InteractionCard, answered: CardInput) {
+    approvalQuestions(card.source.obj("input") ?: JsonObject(emptyMap())).forEachIndexed { index, q ->
+        Text(q.header ?: q.question, style = MaterialTheme.typography.titleSmall)
+        if (q.header != null) Text(q.question)
+        val picked = answered.selections[q.question].orEmpty()
+        q.options.forEachIndexed { option, choice ->
+            ReplayOption("${card.key}:question:$index:option:$option", choice.label, choice.description, recommended = false,
+                chosen = choice.label in picked, words = null, wordsLabel = null)
+        }
+        answered.custom[q.question]?.trim()?.takeIf { it.isNotEmpty() }?.let { own ->
+            Text(CardPreviews.yourAnswer, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ReplayOption("${card.key}:question:$index:own", "“$own”", null, recommended = false, chosen = true, words = null, wordsLabel = null)
+        }
+    }
 }
 
 private fun <T> jsonSaver(serializer: KSerializer<T>) = Saver<T, String>(

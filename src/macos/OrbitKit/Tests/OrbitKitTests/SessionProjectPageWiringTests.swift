@@ -573,6 +573,18 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertFalse(merging.contains("ProgressView"), "the landing row below is this card's moving mark")
     }
 
+    /// The checking card ends on what a passing check leads to (owner decision 2026-10-15): under the
+    /// merge job's row, in the merging card's quiet meta line.
+    func testTheCheckingCardSaysWhatAPassingCheckLeadsToUnderTheMergeJobsRow() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let card = try slice(page, from: "private struct ProjectMergeCardView: View {", to: "\n}\n")
+        let checking = try slice(card, from: "case .checking:\n", to: "case .asking:")
+        let row = try XCTUnwrap(checking.range(of: "if let landing { landingRow(landing) }"))
+        let line = try XCTUnwrap(checking.range(of: "if let line = PromotionCards.onPassLine(merge.current) {"))
+        XCTAssertLessThan(row.lowerBound, line.lowerBound, "the line sits under the merge job's row")
+        XCTAssertTrue(checking.contains("Text(line).font(.orbitMeta).foregroundStyle(.secondary)"))
+    }
+
     /// A blocked candidate's card names what is in front of it — the landing holding the branch,
     /// off the project's own read — instead of leaving "Coordinator is resolving it" as the whole
     /// answer (the owner's report of 2026-10-08).

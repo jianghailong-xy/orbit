@@ -51,12 +51,17 @@ test('every built-in engine is listed alongside the configured providers', async
 
   assert.deepEqual(
     listed.map((p) => p.slug),
-    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh', 'deepseek'],
+    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh', 'cursor', 'deepseek'],
   );
   // Which of the two a slug is, since only one of them takes a label or a model list.
   assert.deepEqual(
     listed.filter((p) => p.builtin).map((p) => p.slug),
-    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh'],
+    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh', 'cursor'],
+  );
+  // Cursor CLI's own sign-in on the runner runs Cursor CLI alone (migration 0426 reserved the slug).
+  assert.deepEqual(
+    listed.find((p) => p.slug === 'cursor'),
+    { slug: 'cursor', runtime: 'cursor', engines: ['cursor'], builtin: true },
   );
   // A built-in runs on itself: Antigravity is agy, not a provider borrowing some other CLI.
   assert.deepEqual(
@@ -93,14 +98,14 @@ test('the query matches the check task and session writes run', async () => {
 
   assert.deepEqual(captured.where, {
     // Not the compatibility rows migrations 0080 and 0367 parked on the two built-in names.
-    slug: { notIn: ['opencode', 'antigravity'] },
+    slug: { notIn: ['opencode', 'antigravity', 'cursor'] },
     AND: [{ OR: [{ enabled: true }, { slug: 'dsh' }] }],
     ownerId: 'user-1',
   });
 
   await serviceFor([], captured, [], 'ADMIN').listUsable('user-1');
   assert.deepEqual(captured.where, {
-    slug: { notIn: ['opencode', 'antigravity'] },
+    slug: { notIn: ['opencode', 'antigravity', 'cursor'] },
     AND: [{ OR: [{ enabled: true }, { slug: 'dsh' }] }],
     OR: [{ ownerId: null }, { ownerId: 'user-1' }],
   });

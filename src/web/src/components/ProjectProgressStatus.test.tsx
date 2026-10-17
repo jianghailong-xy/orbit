@@ -820,6 +820,22 @@ describe('the exception card’s fact block', () => {
     });
     expect(refused).toContain('Git refused to merge it');
     expect(refused).toContain('no paths');
+
+    // An argued exemption is about the task's reason, not about paths: the reason is the row.
+    const REASON = '判据 2 要求先复现修复前的 500，再证明修复后的行为——一条命令的退出码判定不了。';
+    const exemption = card({
+      ...REVIEW,
+      title: `Kept the judgment method Orbit questioned: ${TASK}`,
+      facts: {
+        ...REVIEW.facts!,
+        files: [],
+        review: { reason: 'CRITERION_EXEMPTION_ARGUED', declaredPaths: [], argument: REASON },
+      },
+    });
+    expect(exemption).toContain('Kept the judgment method Orbit questioned');
+    expect(exemption).not.toContain(`Kept the judgment method Orbit questioned: ${TASK}`);
+    expect(exemption).toContain(`<span class="criteria-decision-k">Its reason</span><span class="criteria-decision-v">${REASON}</span>`);
+    expect(exemption).not.toContain('<span class="criteria-decision-k">Declared</span>');
   });
 
   it('names the task in its own row rather than in the heading', () => {

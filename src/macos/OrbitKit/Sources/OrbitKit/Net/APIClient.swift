@@ -145,9 +145,14 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("push/register", body: req)
     }
 
-    /// Drop this device's token (e.g. on sign-out) so it stops receiving pushes.
-    public func unregisterDeviceToken(token: String) async throws {
-        _ = try await postRaw("push/unregister", body: ["token": token])
+    /// Drop this device's token on sign-out so it stops receiving pushes. Best-effort; like
+    /// `revokeRefreshToken` it takes its credential — the signed-out session's access token —
+    /// explicitly, so the caller can clear local storage at once. A 401 is not refreshed: by then the
+    /// store may hold the next sign-in's session, whose registration this must not touch.
+    public func unregisterDeviceToken(token: String, accessToken: String) async {
+        guard var req = try? makeRequest("push/unregister", method: "POST", body: ["token": token]) else { return }
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        _ = try? await rawResponse(req, cancellationAware: false)
     }
 
     // MARK: admin (role-gated; non-admins get 403)
@@ -337,8 +342,13 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/turns", query: [URLQueryItem(name: "view", value: "active")])
     }
 
-    public func interrupt(sessionID: String) async throws {
-        _ = try await postRaw("sessions/\(sessionID)/interrupt", body: Optional<Empty>.none)
+    /// Stop the turn the session is running. `stopBackgroundWork` is the composer's Stop and only
+    /// that: it also ends the background work the session left running (see `SessionStopRequest`).
+    /// Omitted, this is a bodyless interrupt — nothing killed, the engine and its conversation
+    /// left standing.
+    public func interrupt(sessionID: String, stopBackgroundWork: Bool = false) async throws {
+        let body: SessionStopRequest? = stopBackgroundWork ? SessionStopRequest() : nil
+        _ = try await postRaw("sessions/\(sessionID)/interrupt", body: body)
     }
 
     /// Stop the running turn and queue the follow-up in the SAME request (`SessionInterruptRequest`).
@@ -1562,6 +1572,15 @@ public final class APIClient: @unchecked Sendable {
 
     public func withdrawTurn(sessionID: String, turnId: String) async throws {
         _ = try await send(makeRequest("sessions/\(sessionID)/turns/\(turnId)", method: "DELETE",
+                                       body: Optional<Empty>.none))
+    }
+
+    /// Send a message queued for the next turn into the one running now (the tray's Steer). It
+    /// becomes the steer it would have been had it been sent that way; with no turn left to join, or
+    /// an engine or runner that cannot take one, it stays queued and the refusal is
+    /// `CURRENT_WORK_UNAVAILABLE` with its `reason`. Web parity: `steerQueuedTurn`.
+    public func steerQueuedTurn(sessionID: String, turnId: String) async throws {
+        _ = try await send(makeRequest("sessions/\(sessionID)/turns/\(turnId)/steer", method: "POST",
                                        body: Optional<Empty>.none))
     }
 

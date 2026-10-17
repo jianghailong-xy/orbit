@@ -854,10 +854,17 @@ test('(4) an item nobody owes does not hold an automatic landing back; an owed o
       assert.equal(await refusal(), null,
         'the landing goes out: the only open integration item is about a candidate that is gone');
 
+      // A task whose landing on the project branch conflicted, done and not landed: its item is owed,
+      // and still about work that is in nothing this merge carries (owner decision 2026-10-15).
+      const unlanded = await task(stack, w, TaskStatus.DONE, 'unlanded');
+      await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', taskId: unlanded });
+      assert.equal(await refusal(), null,
+        'the landing goes out: a task\'s failed landing on the project branch holds the merge into main back no longer');
+
       const blocked = await candidate(stack, w, 'BLOCKED');
       await openItem(stack, w, { kind: 'INTEGRATION_CONFLICT', promotionId: blocked });
-      assert.equal(await refusal(), 'an integration exception is still open on this project',
-        'an owed integration item still holds it back');
+      assert.equal(await refusal(), 'an exception on this project\'s merge into main is still open',
+        'an owed item on the merge into main still holds it back');
     } finally {
       await stack.db.$disconnect();
     }

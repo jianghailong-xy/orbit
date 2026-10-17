@@ -829,6 +829,59 @@ func TestSessionCurrentWorkSteerTargetFenceRefilesInsteadOfFailing(t *testing.T)
 	}
 }
 
+// The same unread frame when the turn it was aimed at is STOPPED (owner, 2026-10-16: option A). The
+// fence still kills the generation, but the message does not go back to the queue: run as a turn of
+// its own, it would start the work the person just stopped. It is reported undelivered, saying the
+// Stop is why, and its own turn settles as a failed steer.
+func TestSessionCurrentWorkSteerUnreadWhenItsTurnIsStoppedIsNotDelivered(t *testing.T) {
+	// The Stop arrives once the engine holds the steer's frame: the "Waiting to be read" moment.
+	stop := interruptTurn("stop")
+	stop.afterEngineRead = "current-work"
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Emit: "tool_use", ToolUseID: "toolu_A", ToolName: "Bash", Input: map[string]interface{}{"command": "make"}},
+			{Await: "user"}, // CURRENT_WORK bytes reached stdin, but Claude has not replayed them
+			{Await: "control_request", Subtype: ctrlInterrupt},
+			{Emit: "control_response"},
+			{Emit: "result", Subtype: "error_during_execution", Text: "interrupted"},
+			{Await: "user"}, // nothing may reach this fenced process
+		},
+		[]scriptedTurn{
+			messageTurn("turn-A", "do A"),
+			refilableCurrentWorkSteerTurn("current-work", "turn-A", "adjust A only"),
+			stop,
+		}, nil)
+
+	settled := run.turnResult("current-work")
+	if settled == nil || settled.Status != stFailed || settled.Subtype != subtypeSteer {
+		t.Fatalf("CURRENT_WORK settled as %+v, want a failed steer receipt, not a re-file", settled)
+	}
+	states := run.deliveryStates("current-work")
+	if len(states) == 0 || states[len(states)-1] != string(deliveryFailed) {
+		t.Fatalf("CURRENT_WORK delivery states = %v, want terminal failed", states)
+	}
+	for _, state := range states {
+		if state == string(deliveryRequeued) {
+			t.Fatalf("a steer the person stopped was handed back to run as a turn of its own: %v", states)
+		}
+	}
+	reason := ""
+	for _, report := range run.deliveryReports() {
+		if report["turnId"] == "current-work" && report["delivery"] == string(deliveryFailed) {
+			reason, _ = report["reason"].(string)
+		}
+	}
+	if reason != errCurrentWorkTargetInterrupted.Error() || !strings.Contains(reason, "Stop") ||
+		!strings.Contains(settled.Result, reason) {
+		t.Fatalf("the undelivered steer says %q (settled with %q); want the Stop named as the reason", reason, settled.Result)
+	}
+	if got := run.turnResult("turn-A"); got == nil || got.Status != stInterrupted {
+		t.Fatalf("target A settled as %+v, want %s", got, stInterrupted)
+	}
+}
+
 // A steer that arrives with nothing to join, from a control plane that can re-file it. Nothing
 // has been said about this message yet, so the re-file says nothing either: the delivery that
 // runs it writes the one bubble it gets, and a bubble here would show it twice.

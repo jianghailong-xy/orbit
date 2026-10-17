@@ -65,7 +65,11 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).then(shapeModifier).padding(12.dp)
         .testTag("project-merge-card:${shape.name.lowercase()}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (shape) {
-            ProjectMergeCard.Shape.CHECKING -> landing?.let { LandingHeadRow(it, onLanding) }
+            ProjectMergeCard.Shape.CHECKING -> {
+                landing?.let { LandingHeadRow(it, onLanding) }
+                // What a pass leads to, drawn as the merging card's note: the Automatic setting merges it, or it becomes the card that asks.
+                PromotionCards.onPassLine(view)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
             ProjectMergeCard.Shape.ASKING -> view?.let { Asking(it, merge.criteriaMet, tint, now, acting, ::act, merge, onDetails) }
             ProjectMergeCard.Shape.MERGING -> view?.let { Merging(it, tint, landing, onLanding, acting) { act(merge::cancel) } }
             ProjectMergeCard.Shape.BLOCKED -> view?.let {

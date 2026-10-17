@@ -65,6 +65,8 @@ interface Reads {
   /** How many times the whole read asked the task table, for a history that must ask it once. */
   taskQueries?: number;
   merged?: Record<string, unknown>;
+  /** The count of exceptions open on the merge into main, as the checking card's answer asked it. */
+  openOnMain?: { sql: string };
 }
 
 /**
@@ -82,6 +84,15 @@ function prismaStub(
     /** The finished checks of this project, newest first, as how long each one took in ms. */
     runs?: number[];
     execution?: { state: string; phase: string | null; startedAt: Date | null; createdAt: Date } | null;
+    /** What a candidate being checked reads its `onPass` from: the project, its binding, and how many
+     *  exceptions are open on its merge into main. Defaults: Automatic on, not paused, its own branch,
+     *  nothing open. */
+    facts?: {
+      coordinatorEnabled?: boolean;
+      pausedAt?: Date | null;
+      integrationRef?: string;
+      openOnMain?: number;
+    };
     reads?: Reads;
   } = {},
 ): PrismaService {
@@ -136,7 +147,23 @@ function prismaStub(
         }));
       },
     },
-    project: { findFirst: async () => ({ ownerId: 'owner-1' }) },
+    project: {
+      findFirst: async () => ({ ownerId: 'owner-1' }),
+      findUnique: async () => ({
+        coordinatorEnabled: over.facts?.coordinatorEnabled ?? true,
+        pausedAt: over.facts?.pausedAt ?? null,
+      }),
+    },
+    projectCodebase: {
+      findUnique: async () => ({
+        integrationRef: over.facts?.integrationRef ?? 'refs/heads/project/bg-jobs',
+        upstreamRef: 'refs/heads/main',
+      }),
+    },
+    $queryRaw: async (query: { sql: string }) => {
+      reads.openOnMain = query;
+      return [{ open: over.facts?.openOnMain ?? 0 }];
+    },
     $transaction: async (work: (client: unknown) => Promise<unknown>) => work(tx),
   } as unknown as PrismaService;
 }
@@ -420,4 +447,27 @@ test('a project that has merged nothing is answered without reading a task table
 
   assert.deepEqual(view, []);
   assert.equal(reads.taskQueries, undefined);
+});
+
+test('a candidate being checked says what a pass leads to, read off the project as it stands', async () => {
+  const reads: Reads = {};
+  const checking = { state: 'CHECKING', upstreamShaChecked: null, mergeTreeSha: null };
+  assert.equal((await current({ promotion: checking, reads }))?.onPass, 'MERGE',
+    'its own branch, Automatic on, not paused, nothing open on the merge into main: merged by itself');
+  // Only the exceptions on the merge into main are counted: a task that failed to land on the
+  // project branch is in nothing a candidate carries (owner decision 2026-10-15).
+  assert.match(reads.openOnMain?.sql ?? '', /"promotion_id" IS NOT NULL/);
+
+  const asking: Array<[string, NonNullable<Parameters<typeof prismaStub>[0]>['facts']]> = [
+    ['Automatic off', { coordinatorEnabled: false }],
+    ['the project paused', { pausedAt: new Date('2026-10-15T08:00:00.000Z') }],
+    ['an exception open on the merge into main', { openOnMain: 1 }],
+    ['the project integrating on main itself', { integrationRef: 'refs/heads/main' }],
+  ];
+  for (const [what, facts] of asking) {
+    assert.equal((await current({ promotion: checking, facts }))?.onPass, 'ASK', `${what}: a pass asks the owner`);
+  }
+
+  assert.equal((await current({ promotion: { state: 'READY' } }))?.onPass, null,
+    'a candidate past its check says nothing about one');
 });

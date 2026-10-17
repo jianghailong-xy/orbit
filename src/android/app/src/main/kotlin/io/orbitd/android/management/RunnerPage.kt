@@ -665,7 +665,8 @@ internal object RunnerPage {
     }
 
     // engines
-    /** The engines a runner reports on, in the page's order. A runner predating Antigravity keeps its row too, from what
+    /** The engines a runner reports on, in the page's order, then any the page doesn't know yet as reported — but not one this
+     * app does not draw yet (ProviderEngines.androidShowsEngine). A runner predating Antigravity keeps its row too, from what
      * the server says of it (`runner.antigravity`), so the page can say it needs an update. */
     fun engines(runner: JsonObject): List<JsonObject> {
         var reported = runner.list("engines")
@@ -674,7 +675,7 @@ internal object RunnerPage {
             runner.obj("antigravity")?.let { state -> state.bool("installed")?.let { put("installed", it) }; state.str("version")?.let { put("version", it) } }
         }
         return engineOrder.mapNotNull { engine -> reported.firstOrNull { it.str("engine") == engine } } +
-            reported.filter { it.str("engine") !in engineOrder }
+            reported.filter { it.str("engine") !in engineOrder && ProviderEngines.androidShowsEngine(it.str("engine")) }
     }
 
     /** Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY (web runsOnEnvKey): the engine answers yes —

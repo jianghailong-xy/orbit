@@ -590,6 +590,18 @@ export class SessionsController {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
   }
 
+  // Send a message queued for the next turn into the one running now (the tray's Steer). The same
+  // turnId as the DELETE beside it.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/steer')
+  steerTurn(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.steerQueuedTurn(user.userId, id, turnId);
+  }
+
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' }, body: { stopSessionId: 'session' } } })
   @Post(':id/resume')
   resume(

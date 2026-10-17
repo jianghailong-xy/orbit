@@ -12,6 +12,7 @@ import { DSH_PRESET_SLUG } from '../lib/dshRuntime';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { runnersQuery } from '../lib/queries';
+import { webShowsEngine } from '../lib/runnerEngines';
 import { brandForProvider, ENGINE_PRESET } from '../lib/sessionProviderChoices';
 
 /** Just the part of a runner this gallery reads: which engines it is signed into, and its name. */
@@ -163,7 +164,10 @@ export function ProviderGallery() {
 
   return (
     <div className="provider-gallery">
-      {PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG).map((p) => {
+      {/* A vendor whose keys run on no engine this page draws is not offered: Cursor's run on Cursor CLI
+          alone, which the web draws once P7a builds it (webShowsEngine). */}
+      {PROVIDER_PRESETS.filter((p) => p.slug !== DSH_PRESET_SLUG
+        && newKeyEngines({ runtime: p.runtime, presetSlug: p.slug, baseUrl: p.baseUrl }).some(webShowsEngine)).map((p) => {
         const count = connected.get(p.slug) ?? 0;
         return (
           <Link

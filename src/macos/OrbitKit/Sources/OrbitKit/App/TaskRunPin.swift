@@ -26,6 +26,13 @@ public struct TaskRunPin: Equatable, Sendable {
             ?? assigneeEngine
     }
 
+    /// The engines the Engine field lists, in `ProviderEngines.all`'s order: every one these apps draw
+    /// (`ProviderEngines.appleShowsEngine`), and the task's own pin where it is one they don't yet, so
+    /// the field still says what is pinned.
+    public var engineChoices: [String] {
+        ProviderEngines.all.filter { ProviderEngines.appleShowsEngine($0) || $0 == pinnedEngine }
+    }
+
     /// What the Engine field says while no engine is pinned: the assignee's — or, under a provider an
     /// older client pinned alone, that provider's engine (web's placeholder).
     public var inheritedEngine: String {

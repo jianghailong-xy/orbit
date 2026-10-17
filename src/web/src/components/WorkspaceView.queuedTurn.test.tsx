@@ -82,7 +82,7 @@ describe('the server-placement labels in the pending tail', () => {
         onCancel={() => {}}
       />,
     );
-    expect(html).toContain('Delivery could not be confirmed');
+    expect(html).toContain('confirm it was read');
     expect(html).not.toContain('Not delivered');
     expect(html).not.toContain('Cancel');
   });

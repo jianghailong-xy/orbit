@@ -931,7 +931,7 @@ private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonO
                 var more by remember { mutableStateOf(false) }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = openCoordinator, Modifier.weight(1f).testTag("project-coordinator"), enabled = enabled) {
-                        Text(ProjectPage.coordinatorPress(finished, pill.label == "Needs you")) }
+                        Text(ProjectPage.coordinatorPress(finished, coordination.obj("session")?.number("pendingApprovals") ?: 0)) }
                     Box {
                         FilledTonalButton(onClick = { more = true }, enabled = enabled, contentPadding = PaddingValues(horizontal = 12.dp),
                             modifier = Modifier.testTag("project-coordinator-more").semantics { contentDescription = "More coordinator actions" }) { Text("▾") }

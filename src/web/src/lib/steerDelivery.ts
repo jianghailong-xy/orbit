@@ -6,11 +6,16 @@
  * on the queued-turns list. The two look nothing alike to the person who sent one:
  *
  * - a QUEUED message is waiting for its own turn. It has not been read by anything, it can still
- *   be withdrawn, and when it finally runs it gets a reply of its own.
- * - a STEER is already on its way into the turn in progress. It cannot be withdrawn (the engine
- *   may be reading it as we ask), it produces no reply of its own — the running turn's does — and
- *   so how far it got IS the whole visible outcome. Silence here is indistinguishable from a
- *   message that was dropped, which is why every stage has a word for it.
+ *   be cancelled, and when it finally runs it gets a reply of its own.
+ * - a STEER is already on its way into the turn in progress. It produces no reply of its own — the
+ *   running turn's does — and so how far it got IS the whole visible outcome. Silence here is
+ *   indistinguishable from a message that was dropped, which is why every stage has a word for it.
+ *   Until the engine reads it, it can be withdrawn where the engine can drop it unread and say so
+ *   (claude: its runner marks the steer `withdrawable`); once read, it is part of the turn.
+ *
+ * The words follow the read receipts people already know from chat: sending, then waiting to be
+ * read, then read. "Delivering…" used to stand where "Waiting to be read" does, and read as a
+ * message stuck in transit: by then it has arrived, and what it waits for is the engine.
  *
  * The stages are the runner's, not invented here (see RunEventType.USER_DELIVERY): a message is
  * accepted, then handed to the engine, then echoed back by it, which is the only moment it is
@@ -41,14 +46,14 @@ export const isSteerKind = (kind?: string | null): boolean => kind === 'steer';
 export function steerDeliveryState(delivery?: string | null): SteerDeliveryState {
   switch (delivery) {
     case 'written':
-      // The engine has it and the model has not read it yet: `claude` inside a tool call reads
-      // nothing off stdin until that tool finishes, and codex buffers a steer until its next model
-      // request — measured at 31 seconds. Still "on its way", but past us.
-      return { label: 'Delivering…', tone: 'progress' };
+      // The engine has it and the model has not read it yet: `claude` busy in a tool call takes it
+      // into the conversation only when that tool finishes, and codex buffers a steer until its next
+      // model request — measured at 31 seconds. It has arrived; what it waits for is the engine.
+      return { label: 'Waiting to be read', tone: 'progress' };
     case 'acknowledged':
       // The engine echoed it back (claude's --replay-user-messages, codex's userMessage item).
-      // The message is in the conversation.
-      return { label: 'Sent into this turn', tone: 'delivered' };
+      // The message is in the conversation, and the reply this turn gives is the answer to it.
+      return { label: 'Read in this turn', tone: 'delivered' };
     case 'requeued':
       // It missed the turn it was aimed at, and that is provable, so nothing about it was lost:
       // the runner handed it back and it runs as a turn of its own. Progress, not failure — the
@@ -57,10 +62,23 @@ export function steerDeliveryState(delivery?: string | null): SteerDeliveryState
     case 'failed':
       return { label: 'Not delivered', tone: 'failed' };
     case 'unconfirmed':
-      return { label: 'Delivery could not be confirmed', tone: 'failed' };
+      // It reached the engine; whether the engine read it is what nobody can say. Neutral on
+      // purpose: it may have been acted on, and a resend would do the work twice.
+      return { label: "Couldn't confirm it was read", tone: 'failed' };
     default:
       return { label: 'Sending…', tone: 'progress' };
   }
+}
+
+/** The runner's word that the engine dropped a steer unread: its bubble leaves the transcript. */
+export const WITHDRAWN_DELIVERY = 'withdrawn';
+
+/**
+ * Whether to offer taking a steer back: its runner said the engine can drop it unread
+ * (`withdrawable` on its user event), and nothing has read, failed or withdrawn it since.
+ */
+export function offersSteerWithdraw(delivery?: string | null, withdrawable?: boolean): boolean {
+  return withdrawable === true && (delivery == null || delivery === 'enqueued' || delivery === 'written');
 }
 
 /**

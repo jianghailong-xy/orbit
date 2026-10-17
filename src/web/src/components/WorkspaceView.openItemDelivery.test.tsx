@@ -346,12 +346,14 @@ describe('an exception item’s delivery, on its way into the transcript', () =>
     expect(line.querySelector('.chat-queued-tag')?.textContent).toBe('Queued for next turn');
     expect([...line.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['Cancel']);
 
-    // The negative control: a turn that is not a delivery is drawn exactly as it always was, from
-    // its own words — the card is read off the payload, never off what the text looks like.
-    const bubbles = mounted().querySelectorAll<HTMLElement>('.chat-msg.chat-user.chat-queued');
-    expect(bubbles).toHaveLength(1);
-    expect(bubbles[0].querySelector('.md')?.textContent?.trim()).toBe(TYPED);
-    expect(bubbles[0].querySelector('.oic')).toBeNull();
+    // The negative control: a turn that is not a delivery is the reader's own message, waiting in
+    // the tray above the composer as its words — the card is read off the payload, never off what
+    // the text looks like.
+    expect(mounted().querySelectorAll('.chat-msg.chat-user.chat-queued')).toHaveLength(0);
+    const rows = mounted().querySelectorAll<HTMLElement>('.pending-tray-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.pending-tray-text')?.textContent).toBe(TYPED);
+    expect(rows[0].querySelector('.oic')).toBeNull();
     expect(
       [...mounted().querySelectorAll('.chat-user')].some((bubble) =>
         bubble.textContent?.includes('【例外待办】')),
@@ -376,7 +378,7 @@ describe('an exception item’s delivery, on its way into the transcript', () =>
     expect(cardFields(card()!), 'the delivery redrew itself as it left the queue').toEqual(waiting);
     expect(mounted().querySelectorAll('.oic')).toHaveLength(1);
     expect(
-      mounted().querySelectorAll('.chat-msg.chat-user.chat-queued'),
+      mounted().querySelectorAll('.pending-tray-row'),
       'the message typed behind it is still waiting its turn',
     ).toHaveLength(1);
   });

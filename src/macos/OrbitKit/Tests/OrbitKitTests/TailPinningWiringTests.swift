@@ -102,6 +102,34 @@ final class TailPinningWiringTests: XCTestCase {
                       "macOS still infers the reader from the fall, so this is the iOS branch")
     }
 
+    /// On a phone the question shows only while the reader is off the live tail — scrolled up into
+    /// the history, or reading a window opened at a record: at the tail they are following the answer
+    /// to what they just asked (the owner, 2026-10-15). It reads the pin the jump-to-latest disc
+    /// reads, so the two can't disagree about where the tail is. The Mac keeps web's band, which
+    /// shows at the tail too.
+    func testThePhonesQuestionShowsOnlyOffTheLiveTail() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let phone = try section(source, from: "ToolbarItem(placement: .principal) {", to: "#else")
+        XCTAssertTrue(phone.contains("stickyQuestion(q, proxy: proxy)"), "this is the phone's question")
+        XCTAssertTrue(phone.contains("!atBottom || console.detached"),
+                      "the phone's question must wait for the reader to leave the live tail")
+        let mac = try section(source, from: ".safeAreaInset(edge: .top, spacing: 0) {\n            if #available(iOS 18, macOS 15, *)",
+                              to: "#endif")
+        XCTAssertTrue(mac.contains("stickyQuestion(q, proxy: proxy)"), "this is the Mac's band")
+        XCTAssertFalse(mac.contains("atBottom"), "the Mac's band shows at the tail too, as web's does")
+    }
+
+    /// With the capsule in the bar the phone switched the top edge to its hard style on its own — a
+    /// frosted strip and a hairline over the rows (the owner, 2026-10-16: not that, with the capsule
+    /// either). The transcript holds the soft one.
+    func testTheTopEdgeStaysSoftUnderTheCapsule() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let list = try section(source, from: "private var rowsList: some View {", to: "private func follows(")
+        XCTAssertTrue(list.contains(".softTopEdge()"), "the transcript asks for the soft top edge")
+        let edge = try section(source, from: "@ViewBuilder func softTopEdge()", to: "#else")
+        XCTAssertTrue(edge.contains("scrollEdgeEffectStyle(.soft, for: .top)"), "and it is the soft one")
+    }
+
     /// The jump-to-latest button answers "is the tail out of view?", not only "did the reader scroll
     /// up?". The pin un-pins on a scroll UP alone — on purpose, see `TailPinning` — so while the
     /// button read the pin alone it stayed hidden whenever the tail left the view any other way: a
@@ -152,6 +180,28 @@ final class TailPinningWiringTests: XCTestCase {
                         + "a reader who had scrolled up to read")
         XCTAssertTrue(resize.contains("onResize()"),
                       "and the answer has to reach the transcript, which owns the scroll")
+    }
+
+    /// On iOS 26 the composer band floats over the transcript as a safe-area bar (the owner,
+    /// 2026-10-16), and the list runs on under it. Its tail is then read net of the band, and the band
+    /// is read: the pin's gap leaves the band's strip out, and the sample carries the bottom inset so
+    /// the follow hears the keyboard and a growing composer lift it. Counted in, a reader who scrolled
+    /// up by less than the band is tall was still "at the tail" and got pulled back; unread, the
+    /// keyboard left the last answer under the composer (measured: offset 644 against a tail at 1146,
+    /// the frame unchanged — the resize-follow had nothing to hear).
+    func testAFloatingBandIsNettedOutOfTheTail() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let layout = try section(source, from: "private func transcriptAndBand(", to: "private func composerBand(")
+        XCTAssertTrue(layout.contains("if #available(iOS 26.0, *) {\n"
+                                      + "            transcript.safeAreaBar(edge: .bottom, spacing: 0) {\n"
+                                      + "                composerBand(console)"),
+                      "on iOS 26 the band floats over the transcript")
+        let tracker = try section(source, from: "private struct ScrollTracker",
+                                  to: "/// Publishes the id of the item currently under")
+        XCTAssertTrue(tracker.contains("geo.contentSize.height + geo.contentInsets.bottom"),
+                      "the pin's gap is to what the reader can see, net of the band")
+        XCTAssertTrue(tracker.contains("bottomInset: Double(geo.contentInsets.bottom)"),
+                      "and the follow is handed the bottom inset, so a rising floor is followed")
     }
 
     /// …and it has to land as a scroll the way every other out-of-update scroll does (`heldScroll`):

@@ -1,4 +1,4 @@
-import { RunEventType, type KeyDialect } from '@orbit/shared';
+import { RunEventType, type OpenCodeDialect } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
 import { AsyncWorkQueue } from '../common/async-work-queue';
 import { sessionHeldKey, type HeldKey } from '../providers/held-key';
@@ -312,14 +312,14 @@ async function loadRecapEvents(
  * ten to sixty times the price. An endpoint that does not serve the fixed model fails, and the
  * pass degrades to lastAssistantText in silence, which is the whole point of the ceiling.
  */
-const RECAP_HELD_KEY_MODELS: Record<KeyDialect, string> = {
+const RECAP_HELD_KEY_MODELS: Record<OpenCodeDialect, string> = {
   anthropic: 'claude-haiku-4-5-20251001',
   openai: 'gpt-5.1-mini',
   'openai-compatible': 'kimi-k2.6',
   gemini: 'gemini-3.6-flash',
 };
 
-export function recapHeldKeyModel(dialect: KeyDialect): string {
+export function recapHeldKeyModel(dialect: OpenCodeDialect): string {
   return RECAP_HELD_KEY_MODELS[dialect];
 }
 

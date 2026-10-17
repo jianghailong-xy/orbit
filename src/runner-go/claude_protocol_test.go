@@ -58,6 +58,26 @@ func TestUserFrameCarriesProtocolFields(t *testing.T) {
 	}
 }
 
+// A steer's frame is the same frame, named by the turn it delivers: the CLI keeps a uuid it is
+// given, echoes it back, and drops the message by it (cancel_async_message). An ordinary message's
+// frame names nothing — the CLI mints its own.
+func TestUserTurnFrameCarriesTheTurnAsItsUUID(t *testing.T) {
+	content := []map[string]interface{}{{"type": "text", "text": "hello"}}
+	m := decodeFrame(t, userTurnFrame("sess-uuid-1", "0196e000-0000-7000-8000-000000000042", content))
+	if m["uuid"] != "0196e000-0000-7000-8000-000000000042" {
+		t.Errorf("uuid = %v, want the turn's id", m["uuid"])
+	}
+	if m["type"] != "user" || m["session_id"] != "sess-uuid-1" {
+		t.Errorf("frame = %v, want the user frame's own fields", m)
+	}
+	if v, ok := m["parent_tool_use_id"]; !ok || v != nil {
+		t.Errorf("parent_tool_use_id = %v (present=%v), want explicit null", v, ok)
+	}
+	if _, named := decodeFrame(t, userFrame("sess-uuid-1", content))["uuid"]; named {
+		t.Error("an ordinary user frame carried a uuid")
+	}
+}
+
 // Multi-block content (an upload plus text) survives whole and in order — the frame must
 // not flatten or reorder what the caller assembled.
 func TestUserFrameKeepsContentBlockOrder(t *testing.T) {

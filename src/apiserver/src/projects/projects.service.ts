@@ -87,6 +87,7 @@ import {
   criteriaWeakeningSupersessionReason,
 } from './criteria-weakening-intent';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { countOwnerDecisionsBySession } from './owner-decision-signal';
 import {
   type StandardSetConfirmationStanding,
   criteriaFromDefinitions,
@@ -5106,12 +5107,21 @@ export class ProjectsService {
           ? ('COORDINATION_WORKSPACE_TRASHED' as const)
           : null;
 
-    // The cards the conversation is still being asked, counted the way the session list counts them
-    // — one function, so the two surfaces cannot come to different totals for the same row. That
-    // includes a self-driven turn, which stays at AWAITING_INPUT while it runs and whose prompt is
-    // no less blocking for it, and the card a runner-hosted job is still reading on a conversation
-    // that is parked: a coordinator conversation is exactly the shape such a job asks on.
-    const pendingApprovals = session == null ? 0 : await countLiveApprovals(this.prisma, session);
+    // What waits on the owner in this conversation, counted the way the session list counts its row
+    // — the same two reads, so the two surfaces cannot come to different totals for the same row.
+    // The cards it is still being asked: that includes a self-driven turn, which stays at
+    // AWAITING_INPUT while it runs and whose prompt is no less blocking for it, and the card a
+    // runner-hosted job is still reading on a conversation that is parked — a coordinator
+    // conversation is exactly the shape such a job asks on. And the owner decisions drawn in it: a
+    // question it asked with `ask_owner`, an item escalated to the owner, a merge to approve, a
+    // request to start or close the project. Those wait while the conversation is parked, and the
+    // card says "Needs you" off this count alone — a turn that merely ended reads Idle (owner
+    // decision, 2026-10-15), so a question left out here would read as nothing waiting.
+    const pendingApprovals = session == null
+      ? 0
+      : await countLiveApprovals(this.prisma, session)
+        + ((await countOwnerDecisionsBySession(this.prisma, ownerId, { sessionIds: [session.id] }))
+          .get(session.id) ?? 0);
 
     // The two progress rows (§7.2 V9). Read here rather than on their own endpoint because they are
     // the same subject as everything else on this card — what the conversation is doing and whether

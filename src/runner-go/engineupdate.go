@@ -347,6 +347,9 @@ func latestEngineVersion(ctx context.Context, spec engineSpec) string {
 	if spec.bin == providerDsh {
 		return dshSupportedVersion // Fixed P0 admission; never query npm latest.
 	}
+	if spec.bin == providerCursor {
+		return cursorSupportedVersion // The pinned build; Cursor's newer releases are not followed.
+	}
 	if spec.latestURL == "" {
 		return ""
 	}
@@ -496,6 +499,9 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		// repaired in place. Changing the supported version creates another directory.
 		rec := recordEngineUpdate(spec.bin, updateChecked, "Pinned to the P0 supported version; npm latest is not followed.", engineUpdateFacts{installed: dshSupportedVersion, latest: dshSupportedVersion})
 		return rec, spec.name + " — fixed supported version " + dshSupportedVersion
+	}
+	if spec.bin == providerCursor {
+		return updateCursor(ctx, spec, proxyVars)
 	}
 	// Resolve the exact binary the runner would exec (service PATH order) and measure the
 	// version against THAT path before and after: an update that exits 0 without moving
@@ -834,8 +840,8 @@ func recordEngineUpdate(bin, status, message string, facts engineUpdateFacts) En
 // with drift measured only when a command runs, a permanently busy machine can fall arbitrarily
 // far behind while its row says nothing at all.
 func noteEngineDrift(ctx context.Context, spec engineSpec, servicePath string) {
-	if spec.bin == providerDsh {
-		return // Busy dsh sessions stay pinned; no release feed or binary probe runs here.
+	if spec.bin == providerDsh || spec.bin == providerCursor {
+		return // Busy pinned sessions stay pinned; no release feed or binary probe runs here.
 	}
 	binPath, ok := lookPathIn(spec.executable(), servicePath)
 	if !ok {

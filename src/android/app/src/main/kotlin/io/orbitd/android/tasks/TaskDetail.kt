@@ -534,7 +534,8 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
         val runEngine = pinnedEngine ?: pinnedProvider?.let { ProviderEngines.defaultEngineOf(it, data.providers) } ?: assigneeEngine
         PickerRow(EngineCopy.ENGINE, if (pinnedEngine == null && pinnedProvider == null) "${EngineCopy.ASSIGNEES} · ${ProviderEngines.cliName(assigneeEngine)}"
             else ProviderEngines.cliName(runEngine), enabled,
-            listOf<Pair<String?, String>>(null to EngineCopy.ASSIGNEES) + ProviderEngines.ALL_ENGINES.map { it to ProviderEngines.cliName(it) },
+            listOf<Pair<String?, String>>(null to EngineCopy.ASSIGNEES) +
+                ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).map { it to ProviderEngines.cliName(it) },
             details = mapOf(null to ProviderEngines.cliName(assigneeEngine)), tag = "task-engine") { engine ->
             TaskPins.engine(engine, pinnedEngine, pinnedProvider, ProviderEngines.providerEngines(pinnedProvider, data.providers))?.let(pin)
         }

@@ -25,9 +25,11 @@ export const ALL_ENGINES: readonly AgentProvider[] = [
   AgentProvider.ANTIGRAVITY,
   AgentProvider.OPENCODE,
   AgentProvider.DSH,
+  AgentProvider.CURSOR,
 ];
 
-/** Each engine's CLI by its own product name, as the web already shows it (runnerEngines.ts). */
+/** Each engine's CLI by its own product name, as the web already shows it (runnerEngines.ts). Cursor
+ *  CLI's is the runtime contract's proposal (D3); the owner's design board settles it, here alone. */
 export const ENGINE_CLI_NAMES: Readonly<Record<AgentProvider, string>> = {
   [AgentProvider.CLAUDE]: 'Claude Code',
   [AgentProvider.CODEX]: 'Codex',
@@ -35,6 +37,7 @@ export const ENGINE_CLI_NAMES: Readonly<Record<AgentProvider, string>> = {
   [AgentProvider.ANTIGRAVITY]: 'Antigravity CLI',
   [AgentProvider.OPENCODE]: 'OpenCode',
   [AgentProvider.DSH]: 'DeepSeek Harness',
+  [AgentProvider.CURSOR]: 'Cursor CLI',
 };
 
 export function isEngine(value: unknown): value is AgentProvider {
@@ -60,6 +63,7 @@ const NATIVE_ENGINE: Readonly<Record<KeyDialect, AgentProvider>> = {
   openai: AgentProvider.CODEX,
   'openai-compatible': AgentProvider.KIMI,
   gemini: AgentProvider.ANTIGRAVITY,
+  cursor: AgentProvider.CURSOR,
 };
 
 // The WHATWG URL parser every runtime this package runs on provides (Node, browsers); the package
@@ -104,6 +108,8 @@ function keyEngines(key: Extract<EngineCredential, { kind: 'key' }>): AgentProvi
   const dialect = keyDialect(key.runtime);
   if (!dialect) return [];
   if (key.subscriptionToken) return dialect === 'anthropic' ? [AgentProvider.CLAUDE] : [];
+  // A Cursor key is spent by Cursor CLI alone: it is no model API OpenCode could call.
+  if (dialect === 'cursor') return [AgentProvider.CURSOR];
   // A row still on the retired `dsh` runtime ran on DeepSeek Harness, and keeps doing so by default.
   const legacyDsh = key.runtime === AgentProvider.DSH;
   const native = legacyDsh ? AgentProvider.DSH : NATIVE_ENGINE[dialect];

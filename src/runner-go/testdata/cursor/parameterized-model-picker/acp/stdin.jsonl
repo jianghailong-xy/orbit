@@ -1,0 +1,7 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false,"_meta":{"parameterizedModelPicker":true,"subagents":true}},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[]}}
+{"jsonrpc":"2.0","id":3,"method":"session/set_config_option","params":{"sessionId":"<UUID_1>","configId":"model","value":"claude-opus-5-5"}}
+{"jsonrpc":"2.0","id":4,"method":"session/set_config_option","params":{"sessionId":"<UUID_1>","configId":"context","value":"1m"}}
+{"jsonrpc":"2.0","id":5,"method":"session/set_config_option","params":{"sessionId":"<UUID_1>","configId":"context","value":"not-a-value"}}
+{"jsonrpc":"2.0","id":6,"method":"session/set_config_option","params":{"sessionId":"<UUID_1>","configId":"model","value":"default"}}
+{"jsonrpc":"2.0","id":7,"method":"cursor/list_available_models","params":{}}
