@@ -363,6 +363,12 @@ test('(l) the System model\'s address and key are given to the wiki worker and t
 // order: the restricted Docker channel built from its own Dockerfile, under the one profile a fresh install switches
 // on, with no network, no port and two mounts — the Docker socket, which no other service is given, and the managed
 // runners' directory it shares with the apiserver. Changing any of it is a new decision, made here.
+//
+// Amended on 2026-10-17 for task D8 (34hXCWEWAgHqtrxZsMBOh) of the same project, filed from D5's finding that the
+// storage budget measured the disk under the managed runners' directory instead of the one Docker's volumes live on:
+// a third mount, an anonymous volume, read-only, which Docker keeps beside every runner's data volume, and the command
+// naming it to the channel as the disk to measure. The channel gains no write access and no view of Docker's data
+// root, and nothing is declared outside this service, so a deployment without the profile has nothing new.
 test('(m) the Docker channel is exactly the service the owner allowed on 2026-10-17, off unless its profile is on', () => {
   assert.deepEqual(directives(currentServices.get(DOCKER_CHANNEL)), [
     '  docker-channel:',
@@ -374,9 +380,13 @@ test('(m) the Docker channel is exactly the service the owner allowed on 2026-10
     '    container_name: orbit-docker-channel',
     '    restart: unless-stopped',
     '    network_mode: none',
+    '    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]',
     '    volumes:',
     '      - /var/run/docker.sock:/var/run/docker.sock',
     '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"',
+    '      - type: volume',
+    '        target: /var/lib/orbit-docker-volumes',
+    '        read_only: true',
     '    healthcheck:',
     '      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect(\'/var/lib/orbit-managed-runners/channel.sock\')"]',
     '      interval: 5s',

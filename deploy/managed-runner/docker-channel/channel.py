@@ -18,15 +18,19 @@ The rules it keeps, whoever asks:
   - Every volume and container it creates carries `orbit.managed-runner.instance=<instanceId>`. It
     reads, returns, changes and removes nothing without that label.
   - Containers come only from its template: the configured image, UID 10001, every capability
-    dropped, no-new-privileges, a read-only root filesystem, CPU, memory, PID and /tmp limits, the
-    one configured network, and two volumes: the runner's own data volume and its bootstrap volume.
+    dropped, no-new-privileges, a read-only root filesystem, CPU, memory, PID and /tmp limits (an
+    executable tmpfs, nosuid and nodev), the one configured network, and two volumes: the runner's
+    own data volume and its bootstrap volume.
     A request names identities and amounts, never Docker parameters. Privileged mode, capabilities,
     host directories, the Docker socket, host network/PID/IPC, devices and anything else it does
     not know are refused by name. What it is about to create is checked against the same rules,
     and so is what Docker made of it.
   - One container per data volume. Creates are serialized per runner, the name is fixed
     (`mr-<runner uuid>`), and a volume any container refers to, labelled or not, is not mounted
-    again.
+    again. And no more containers than `limits.maxContainers` in all (by default one per CPU and
+    per GiB of the host's memory, whichever is fewer), so the token's holder cannot multiply them.
+  - A data volume is removed only where an operator turned removal on (`allowVolumeRemoval`): the
+    manager never removes one, so by default nobody can through this channel.
   - The runner credential, and the generation and instance UID the runner presents, reach the
     container as read-only files in its bootstrap volume (root-owned, mode 0444), written before it
     starts. The credential is never in an environment, a label or a log line, and the runner is
@@ -34,9 +38,12 @@ The rules it keeps, whoever asks:
     its identity checks.
   - Disk: a Docker local volume has no size limit of its own. Each data volume is measured with
     Docker's own report every `diskCheckSeconds`; the container of a volume over its limit is
-    stopped (with the stop grace), and no container is created for a volume over its limit.
+    stopped (with the stop grace), and no container is created for a volume over its limit. The
+    pool's disk is the filesystem of `diskProbePath` (in Compose an empty volume of its own, which
+    Docker keeps beside the data volumes), or Docker's data root where this process can see it.
 
-Run: `channel.py serve --config <file>` (channel.example.json). Python 3 standard library only.
+Run: `channel.py serve --config <file> [--disk-probe-path <dir>]` (channel.example.json). Python 3
+standard library only.
 """
 
 import argparse
@@ -61,7 +68,10 @@ import traceback
 import urllib.parse
 import uuid
 
-API = "/v1.44"  # Docker Engine 25 and later; every field used here exists in it.
+# Docker Engine 25 and later; every field used here exists in it but one: TmpfsOptions.Options, which makes /tmp
+# executable, came with Engine 27 (API 1.46). An older engine ignores it, and its /tmp stays noexec.
+API = "/v1.44"
+EXEC_TMPFS_ENGINE = 27
 LABEL = "orbit.managed-runner."
 INSTANCE_LABEL = LABEL + "instance"
 KIND_LABEL = LABEL + "kind"
@@ -86,6 +96,7 @@ BOOT_MOUNT = "/run/orbit-bootstrap"
 TMP_MOUNT = "/tmp"
 RUNNER_NAME = "orbit-managed"
 MAX_BODY = 64 * 1024
+GiB = 2 ** 30
 # What the runner needs in its environment, and nothing else: never a credential or a generation.
 RUNNER_ENV_KEYS = (
     "ORBIT_RUNNER_SERVER_URL", "ORBIT_RUNNER_NAME", "ORBIT_RUNNER_MAX_CONCURRENT", "ORBIT_RUNNER_EXPECTED_ID",
@@ -163,7 +174,7 @@ def parse_config(value):
 
     known = {"schemaVersion", "instanceId", "listen", "tokenFile", "dockerSocket", "stateDir", "image", "network",
              "limits", "stopGraceSeconds", "diskCheckSeconds", "diskProbePath", "volumeLimitOverrides", "extraLabels",
-             "socketMode", "logMaxSize", "logMaxFiles"}
+             "socketMode", "logMaxSize", "logMaxFiles", "allowVolumeRemoval"}
     for key in value:
         if key not in known:
             problems.append(f"{key} is not a configuration field")
@@ -187,9 +198,9 @@ def parse_config(value):
         problems.append("listen must be {\"unixSocket\": <absolute path>} or {\"tcp\": {\"host\": \"127.0.0.1\" or \"::1\", \"port\": <port>}}")
     limits = value.get("limits")
     limit_keys = ("maxCpuMillis", "maxMemoryBytes", "maxPids", "maxTmpBytes", "maxVolumeBytes", "maxConcurrent")
-    if not isinstance(limits, dict) or set(limits) != set(limit_keys) or not all(
-            positive(limits[k], 2 ** 53) for k in limit_keys):
-        problems.append(f"limits must give every one of {', '.join(limit_keys)} as a positive integer")
+    if not isinstance(limits, dict) or not set(limit_keys) <= set(limits) <= {*limit_keys, "maxContainers"} or not all(
+            positive(limits[k], 2 ** 53) for k in limits):
+        problems.append(f"limits must give every one of {', '.join(limit_keys)}, and may give maxContainers, as a positive integer")
     if "diskProbePath" in value and not absolute(value["diskProbePath"]):
         problems.append("diskProbePath must be an absolute path")
     overrides = value.get("volumeLimitOverrides", {})
@@ -208,6 +219,8 @@ def parse_config(value):
         problems.append("logMaxSize must look like 10m")
     if "logMaxFiles" in value and not positive(value["logMaxFiles"], 20):
         problems.append("logMaxFiles must be an integer from 1 to 20")
+    if "allowVolumeRemoval" in value and not isinstance(value["allowVolumeRemoval"], bool):
+        problems.append("allowVolumeRemoval must be true or false")
     if problems:
         raise ValueError("; ".join(problems))
     config = dict(value)
@@ -216,7 +229,15 @@ def parse_config(value):
     config.setdefault("socketMode", 0o600)
     config.setdefault("logMaxSize", "10m")
     config.setdefault("logMaxFiles", 3)
+    config.setdefault("allowVolumeRemoval", False)
     return config
+
+
+def default_max_containers(info):
+    """With no limits.maxContainers: one container per CPU and per GiB of memory of the host, whichever is fewer.
+    That holds every runner of a profile giving each at least one CPU and 1 GiB, which is more than the manager's
+    budget (the host less a reserve) can ever start; it reads this cap in /v1/info and plans for no more."""
+    return max(1, min(int(info.get("NCPU") or 0), int(info.get("MemTotal") or 0) // GiB))
 
 
 def read_token(path):
@@ -462,7 +483,10 @@ def container_spec(config, request, instance_uid, extra_labels=None):
                  "VolumeOptions": {"NoCopy": False}},
                 {"Type": "volume", "Source": boot_volume_name(runner_id, generation), "Target": BOOT_MOUNT, "ReadOnly": False,
                  "VolumeOptions": {"NoCopy": True, "Labels": boot_labels}},
-                {"Type": "tmpfs", "Target": TMP_MOUNT, "TmpfsOptions": {"SizeBytes": resources["tmpBytes"], "Mode": 0o1777}},
+                # Executable: builds and test runners (go test among them) run what they write there. Docker keeps it
+                # nosuid and nodev whatever is asked, and takes no option here but exec and noexec.
+                {"Type": "tmpfs", "Target": TMP_MOUNT,
+                 "TmpfsOptions": {"SizeBytes": resources["tmpBytes"], "Mode": 0o1777, "Options": [["exec"]]}},
             ],
             "Binds": [],
             "Devices": [],
@@ -543,6 +567,11 @@ def unsafe(config, spec):
             bad(not runner_of_data_volume(source), "a data volume that is not a managed runner's")
         if target == BOOT_MOUNT:
             bad(not re.fullmatch(r"mr-boot-[0-9a-f-]{36}-g[1-9][0-9]*", source), "a bootstrap volume that is not a managed runner's")
+        if target == TMP_MOUNT and kind == "tmpfs":
+            tmpfs = mount.get("TmpfsOptions") or {}
+            bad(not (tmpfs.get("SizeBytes") or 0) > 0, "a /tmp without a size limit")
+            # None: an engine older than 27 drops the option, and its /tmp stays noexec (prepare warns).
+            bad(tmpfs.get("Options") not in (None, [], [["exec"]]), "/tmp mount options other than exec")
     env = spec.get("Env") or []
     bad(sorted(e.split("=", 1)[0] for e in env) != sorted(RUNNER_ENV_KEYS), "an environment other than the runner's")
     bad(any("docker.sock" in e or "DOCKER_HOST" in e for e in env), "the Docker socket in the environment")
@@ -567,7 +596,8 @@ def unsafe_container(config, inspected, image_env=()):
             "Mounts": [{"Type": m.get("Type"), "Target": m.get("Destination"), "Source": m.get("Name") or m.get("Source") or ""}
                        for m in mounts if m.get("Type") != "tmpfs"]
             + [{"Type": "tmpfs", "Target": target} for target in (host.get("Tmpfs") or {})]
-            + [{"Type": "tmpfs", "Target": m.get("Target")} for m in (host.get("Mounts") or []) if m.get("Type") == "tmpfs"],
+            + [{"Type": "tmpfs", "Target": m.get("Target"), "TmpfsOptions": m.get("TmpfsOptions")}
+               for m in (host.get("Mounts") or []) if m.get("Type") == "tmpfs"],
             "CgroupnsMode": host.get("CgroupnsMode") or "private",
             "IpcMode": host.get("IpcMode") or "private",
         },
@@ -655,6 +685,8 @@ class Channel:
         self._usage_lock = threading.Lock()
         self._stopping = set()
         self._stopping_lock = threading.Lock()
+        self._create_lock = threading.Lock()  # counting the containers and making one are one step
+        self.max_containers = None
         self.host_name = None
         self.network_facts = None
         self.image_env = ()
@@ -665,6 +697,20 @@ class Channel:
         """Check the environment before serving, and finish what a stopped channel left half done."""
         info = self.docker.info()
         self.host_name = info.get("Name") or socket.gethostname()
+        configured = self.config["limits"].get("maxContainers")
+        self.max_containers = configured or default_max_containers(info)
+        log(f"containers of this instance: at most {self.max_containers}"
+            + ("" if configured else " (one per CPU and per GiB of this host's memory, whichever is fewer)"))
+        engine = re.match(r"(\d+)\.", info.get("ServerVersion") or "")
+        if engine and int(engine.group(1)) < EXEC_TMPFS_ENGINE:
+            log(f"warning: Docker {info.get('ServerVersion')} ignores TmpfsOptions.Options: runners' /tmp stays noexec until Docker {EXEC_TMPFS_ENGINE}")
+        probe = self.config.get("diskProbePath")
+        if probe and not os.path.isdir(probe):
+            raise ValueError(f"the disk probe path {probe} is not a directory: the storage budget would measure nothing")
+        root = info.get("DockerRootDir")
+        if not probe and not (root and os.path.isdir(root)):
+            log(f"warning: Docker's data root {root} is not visible here and no disk probe path is set: the storage budget "
+                f"measures the disk under {self.config['stateDir']}, which is right only if Docker's volumes are on it too")
         image = self.docker.image(self.config["image"])
         if not image or image.get("Id") != self.config["image"]:
             raise ValueError(f"the configured image {self.config['image']} is not on this Docker host")
@@ -884,6 +930,10 @@ class Channel:
         return {"holders": self.holders(name)}
 
     def remove_volume(self, name, uid):
+        if not self.config["allowVolumeRemoval"]:
+            # The manager never removes a data volume; with removal off, the token removes none either.
+            raise Refused(403, "REMOVAL_REFUSED", "volume removal is off on this channel: an operator turns it on with "
+                          "allowVolumeRemoval in its configuration (docs/managed-runner-docker-operations.md)")
         runner_id = self.check_volume_name(name)
         with self.lock(runner_id):
             volume = self.read_volume(name)
@@ -1063,12 +1113,18 @@ class Channel:
         problems = unsafe(self.config, spec)
         if problems:  # the template itself: never sent
             raise Refused(500, "TEMPLATE_VIOLATION", f"the container template breaks the channel's rules: {'; '.join(problems)}")
-        try:
-            self.docker.create_container(name, spec)
-        except DockerError as error:
-            if error.status == 409:
-                return None  # a create raced this one: read again
-            raise
+        with self._create_lock:
+            # Every container of this instance, in any state: each one holds its volume until it is removed.
+            count = len(self.docker.containers(labels=[f"{INSTANCE_LABEL}={self.config['instanceId']}"]))
+            if count >= self.max_containers:
+                raise Refused(429, "CONTAINER_LIMIT", f"containers of this instance: {count}, at its limit (limits.maxContainers "
+                              f"{self.max_containers}); another is made only once one of them is removed")
+            try:
+                self.docker.create_container(name, spec)
+            except DockerError as error:
+                if error.status == 409:
+                    return None  # a create raced this one: read again
+                raise
         try:
             inspected = self.docker.container(name)
             problems = unsafe_container(self.config, inspected or {}, self.image_env)
@@ -1183,7 +1239,8 @@ class Channel:
     def info(self):
         return {
             "schemaVersion": 1, "instanceId": self.config["instanceId"], "image": self.config["image"],
-            "network": self.network_facts, "limits": self.config["limits"], "stopGraceSeconds": self.config["stopGraceSeconds"],
+            "network": self.network_facts, "limits": {**self.config["limits"], "maxContainers": self.max_containers},
+            "allowVolumeRemoval": self.config["allowVolumeRemoval"], "stopGraceSeconds": self.config["stopGraceSeconds"],
             "diskCheckSeconds": self.config["diskCheckSeconds"], "host": self.host(),
         }
 
@@ -1400,8 +1457,16 @@ def make_server(config, channel):
     return server
 
 
-def serve(config_path):
+def serve_config(config_path, disk_probe_path=None):
+    """The configuration to serve: the file's, with --disk-probe-path as the deployment's default for diskProbePath."""
     config = load_config(config_path)
+    if disk_probe_path and "diskProbePath" not in config:
+        config["diskProbePath"] = disk_probe_path
+    return config
+
+
+def serve(config_path, disk_probe_path=None):
+    config = serve_config(config_path, disk_probe_path)
     token = read_token(config["tokenFile"])
     channel = Channel(config, Docker(config["dockerSocket"]), token)
     channel.prepare()
@@ -1432,16 +1497,20 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     serve_command = commands.add_parser("serve", help="serve the channel")
     serve_command.add_argument("--config", required=True)
+    serve_command.add_argument("--disk-probe-path", help="where to measure the disk Docker's volumes live on, "
+                               "unless the configuration names diskProbePath (root Compose mounts an empty volume there)")
     check_command = commands.add_parser("check-config", help="validate a configuration file and its token")
     check_command.add_argument("--config", required=True)
     args = parser.parse_args(argv)
+    if getattr(args, "disk_probe_path", None) and not os.path.isabs(args.disk_probe_path):
+        parser.error("--disk-probe-path must be an absolute path")
     try:
         if args.command == "check-config":
             config = load_config(args.config)
             read_token(config["tokenFile"])
             print(json.dumps({"ok": True, "instanceId": config["instanceId"]}))
             return 0
-        serve(args.config)
+        serve(args.config, args.disk_probe_path)
         return 0
     except (OSError, ValueError) as error:
         log(f"error: {error}")

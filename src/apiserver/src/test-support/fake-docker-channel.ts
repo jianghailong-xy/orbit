@@ -48,6 +48,8 @@ export class FakeDockerChannel implements DockerChannel {
     name: 'docker-host-a', cpus: 8, memoryBytes: 16 * 2 ** 30, serverVersion: '29.0',
     disk: { path: '/var/lib/docker', totalBytes: 1000 * 2 ** 30, freeBytes: 600 * 2 ** 30 }, managedVolumeBytes: 0,
   };
+  /** The ceilings /v1/info reports; the real channel always reports `maxContainers` among them. */
+  limits: Record<string, number> = {};
   private failures: Array<{ call: string; failure: Failure }> = [];
 
   /**
@@ -87,7 +89,7 @@ export class FakeDockerChannel implements DockerChannel {
     return {
       schemaVersion: 1, instanceId: this.instanceId, image: this.image,
       network: { name: 'orbit-managed-runners', internal: true, interContainer: false },
-      limits: {}, stopGraceSeconds: 240, diskCheckSeconds: 120, host: this.host,
+      limits: this.limits, stopGraceSeconds: 240, diskCheckSeconds: 120, host: this.host,
     };
   }
 

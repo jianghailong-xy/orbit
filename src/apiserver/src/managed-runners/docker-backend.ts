@@ -96,26 +96,36 @@ export function dockerComputeShare(profile: Pick<DockerRunnerProfile, 'runner'>)
  *
  *   CPU, memory     the host's, less `reserve.cpu` / `reserve.memory` (a quarter each by default)
  *   /tmp            a tmpfs, held in the containers' memory: bounded by the memory budget
- *   containers      as many runners as CPU and memory both fit; the same number of volume slots and users
+ *   containers      as many runners as CPU and memory both fit; the same number of volume slots and users.
+ *                   Never more than the channel will make (`channelMaxContainers`, the `maxContainers` its
+ *                   /v1/info reports): it refuses a container past that, so the pool admits no runner it
+ *                   could not start.
  *   storage         what data volumes could hold: the free space of the disk Docker's volumes live on
  *                   plus what this instance's volumes already hold; `reserve.disk` of that disk (a
  *                   tenth by default) is the headroom kept free. A disk the channel cannot see gives
  *                   no storage until the profile states it.
  */
-export function dockerCapacityBudget(host: ChannelHost, profile: Pick<DockerRunnerProfile, 'runner' | 'capacity'>): CapacityBudget {
+export function dockerCapacityBudget(
+  host: ChannelHost,
+  profile: Pick<DockerRunnerProfile, 'runner' | 'capacity'>,
+  channelMaxContainers?: number,
+): CapacityBudget {
   const stated = profile.capacity ?? {};
+  const containers = typeof channelMaxContainers === 'number' && Number.isSafeInteger(channelMaxContainers) && channelMaxContainers > 0
+    ? channelMaxContainers
+    : Infinity;
   const reserve = { ...DOCKER_DEFAULT_RESERVE, ...stated.reserve };
   const share = dockerComputeShare(profile);
   const cpuMillis = stated.compute?.cpu ? units(stated.compute.cpu, 'milli') : Math.floor(host.cpus * 1000 * (1 - reserve.cpu));
   const memoryBytes = stated.compute?.memory ? units(stated.compute.memory) : Math.floor(host.memoryBytes * (1 - reserve.memory));
   const ephemeralBytes = stated.compute?.ephemeralStorage ? units(stated.compute.ephemeralStorage) : memoryBytes;
-  const fit = Math.max(0, Math.min(Math.floor(cpuMillis / share.cpuMillis), Math.floor(memoryBytes / share.memoryBytes)));
+  const fit = Math.max(0, Math.min(Math.floor(cpuMillis / share.cpuMillis), Math.floor(memoryBytes / share.memoryBytes), containers));
   const disk = host.disk;
   return {
     cpuMillis,
     memoryBytes,
     ephemeralBytes,
-    pods: stated.compute?.pods ?? fit,
+    pods: Math.min(stated.compute?.pods ?? fit, containers),
     attachments: stated.compute?.attachments ?? fit,
     activeUsers: stated.maxActiveUsers ?? fit,
     storageUsableBytes: stated.storage?.usable ? units(stated.storage.usable) : disk ? disk.freeBytes + host.managedVolumeBytes : 0,
@@ -179,7 +189,7 @@ export class DockerBackend implements ManagedRunnerBackend {
         `the channel serves instance ${info.instanceId} with image ${info.image}; this profile names ${this.profile.docker.instanceId} with ${this.profile.runner.image}`,
       );
     }
-    return dockerCapacityBudget(info.host, this.profile);
+    return dockerCapacityBudget(info.host, this.profile, info.limits?.maxContainers);
   }
 
   computeShare(): ComputeAmounts {

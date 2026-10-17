@@ -1,0 +1,45 @@
+== 2026-10-17T17:50:49Z the drill on mr-data-01a14aea-8882-7328-932e-f5fd30d56527 (volume_uid 31572fe3-a0e8-425f-ac3e-024829e27366), checkout 2d16d5f1e60df0d51763af9374940a52aa978a5c
+-- 1-2. the account is disabled and its runner sleeps; nothing refers to the volume
+b@d8-drill.test | t | SLEEPING | SLEEPING | 2 | mr-data-01a14aea-8882-7328-932e-f5fd30d56527 | 31572fe3-a0e8-425f-ac3e-024829e27366 | 
+docker ps -a --filter volume=mr-data-01a14aea-8882-7328-932e-f5fd30d56527: []
+-- 3. a backup first
+archived 8 files
+   total 16
+   -rw-r--r--    1 root     root           366 Oct 17 17:50 mr-data-01a14aea-8882-7328-932e-f5fd30d56527.labels
+   -rw-r--r--    1 root     root           822 Oct 17 17:50 mr-data-01a14aea-8882-7328-932e-f5fd30d56527.sha256
+   -rw-r--r--    1 root     root          1798 Oct 17 17:50 mr-data-01a14aea-8882-7328-932e-f5fd30d56527.tar.gz
+   -rw-r--r--    1 root     root           757 Oct 17 17:50 mr-data-01a14aea-8882-7328-932e-f5fd30d56527.volume.json
+-- removal is off: the channel refuses
+   allowVolumeRemoval lines in channel.json: 0
+{"code": "REMOVAL_REFUSED", "message": "volume removal is off on this channel: an operator turns it on with allowVolumeRemoval in its configuration (docs/managed-runner-docker-operations.md)"} HTTP 403
+   the volume is there: mr-data-01a14aea-8882-7328-932e-f5fd30d56527 uid=31572fe3-a0e8-425f-ac3e-024829e27366
+-- 4. removal turned on: the file checked, the channel started on it
+22:  "allowVolumeRemoval": true
+ Container orbit-docker-channel-run-1f461351c716 Creating 
+ Container orbit-docker-channel-run-1f461351c716 Created 
+{"ok": true, "instanceId": "orbit-92523c8f"}
+ Container orbit-docker-channel Starting 
+ Container orbit-docker-channel Started 
+   docker-channel: healthy
+   volumes the check-config run left behind: []
+-- 5. removed through the channel, by its UID (a wrong UID first)
+{"code": "UID_MISMATCH", "message": "volume mr-data-01a14aea-8882-7328-932e-f5fd30d56527 is not the one with UID 00000000-0000-4000-8000-000000000000"} HTTP 409
+ HTTP 204
+   the probe runner's leftovers (kit/d8.py probe-create):
+ HTTP 204
+ HTTP 204
+-- 6. removal turned off again
+  (no allowVolumeRemoval line)
+ Container orbit-docker-channel-run-bd9808d44f1e Creating 
+ Container orbit-docker-channel-run-bd9808d44f1e Created 
+{"ok": true, "instanceId": "orbit-92523c8f"}
+ Container orbit-docker-channel Starting 
+ Container orbit-docker-channel Started 
+   docker-channel: healthy
+{"code": "REMOVAL_REFUSED", "message": "volume removal is off on this channel: an operator turns it on with allowVolumeRemoval in its configuration (docs/managed-runner-docker-operations.md)"} HTTP 403
+-- afterwards
+docker volume inspect mr-data-01a14aea-8882-7328-932e-f5fd30d56527: gone
+a@d8-drill.test | f | STARTING | mr-data-01a14aea-881f-71ea-ac19-0bcb23607ce2 | 134b861d-f281-4092-a05a-daaaf0732a6f
+b@d8-drill.test | t | SLEEPING | mr-data-01a14aea-8882-7328-932e-f5fd30d56527 | 31572fe3-a0e8-425f-ac3e-024829e27366
+c@d8-drill.test | f | STARTING | mr-data-01a14aec-5404-7642-a53f-dd4be57ecc1b | b7c8e70c-44f5-4a2c-98e9-199b39af2218
+every volume now: b4d9c80c72201b8471d49ff638cb5903876548ba042901ea4e28cdead4aa3a75 c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179 mr-boot-01a14aea-881f-71ea-ac19-0bcb23607ce2-g1 mr-boot-01a14aec-5404-7642-a53f-dd4be57ecc1b-g1 mr-data-01a14aea-881f-71ea-ac19-0bcb23607ce2 mr-data-01a14aec-5404-7642-a53f-dd4be57ecc1b orbit_pg-socket 
