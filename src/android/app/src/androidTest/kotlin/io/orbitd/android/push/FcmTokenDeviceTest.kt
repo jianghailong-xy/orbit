@@ -7,6 +7,7 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -73,14 +74,17 @@ class FcmTokenDeviceTest {
         compose.onNodeWithText("Password").performTextReplacement("controlled-password")
         compose.onNodeWithText("Sign In").performScrollTo().performClick()
         // Waits that need the UI go through the compose rule, which drives recomposition; a plain wait would leave
-        // PushNoticeHost's effect, and with it the permission request, unrun.
-        compose.waitUntil(30_000) { app.session.state.value is AuthState.SignedIn }
+        // PushNoticeHost's effect, and with it the permission request, unrun (bgj_f5f2ecea7621, bgj_3547f4483992).
         // The configured build asks once after the first sign-in (owner decision 34bbkPvI56b7ZUi8cJjX4).
-        val allow = await("system notification permission request", 30_000) { permissionButton() }
+        var allow: AccessibilityNodeInfo? = null
+        instrument.uiAutomation.serviceInfo = instrument.uiAutomation.serviceInfo.apply {
+            flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        }
+        pump("system notification permission request", 30_000) { permissionButton()?.also { allow = it } != null }
         capture("fcm-permission-request")
-        assertTrue(allow.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        assertTrue(allow!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         // Google's token comes over the network; the registration carries it to the server.
-        compose.waitUntil(90_000) { app.push.registration.activeBinding() != null }
+        pump("registration with Google's token", 90_000) { app.push.registration.activeBinding() != null }
         val first = tokens()
         assertTrue("Every registered token has the FCM shape", first.all { it.getValue("fcmShape").jsonPrimitive.boolean })
         assertEquals("One token before rotation", 1, first.map { it.getValue("sha256") }.toSet().size)
@@ -92,7 +96,7 @@ class FcmTokenDeviceTest {
         val before = app.push.registration.activeBinding()!!
         Tasks.await(FirebaseMessaging.getInstance().deleteToken(), 60, TimeUnit.SECONDS)
         val rotated = sha(Tasks.await(FirebaseMessaging.getInstance().token, 60, TimeUnit.SECONDS))
-        compose.waitUntil(60_000) {
+        pump("registration with the rotated token", 60_000) {
             app.push.registration.activeBinding()?.registrationKey.let { it != null && it != before.registrationKey } &&
                 tokens().last().getValue("sha256").jsonPrimitive.content == rotated
         }
@@ -119,10 +123,8 @@ class FcmTokenDeviceTest {
     private fun sha(token: String) = MessageDigest.getInstance("SHA-256").digest(token.encodeToByteArray())
         .joinToString("") { "%02x".format(it) }.take(16)
 
+    /** The system dialog is another app's window: read it through the accessibility tree of every window. */
     private fun permissionButton(): AccessibilityNodeInfo? {
-        val service = instrument.uiAutomation.serviceInfo
-        service.flags = service.flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-        instrument.uiAutomation.serviceInfo = service
         fun find(node: AccessibilityNodeInfo?, depth: Int): AccessibilityNodeInfo? {
             if (node == null || depth > 30) return null
             if (node.isVisibleToUser && node.viewIdResourceName?.endsWith(":id/permission_allow_button") == true) return node
@@ -140,19 +142,26 @@ class FcmTokenDeviceTest {
         finally { disconnect() }
     }
 
+    /** For a process without an Activity (no composition to drive). */
     private fun <T : Any> await(what: String, timeoutMillis: Long, value: () -> T?): T {
         val until = SystemClock.elapsedRealtime() + timeoutMillis
         while (true) {
             value()?.let { return it }
-            if (SystemClock.elapsedRealtime() >= until) {
-                capture("fcm-timeout")
-                shell("dumpsys activity activities").decodeToString().lines()
-                    .filter { "io.orbitd" in it || "ResumedActivity" in it }.forEach { Log.i("A10Fcm", it.trim()) }
-                Looper.getMainLooper().thread.stackTrace.forEach { Log.i("A10Fcm", "main at $it") }
-                fail("Timed out: $what (auth ${app.session.state.value::class.simpleName}, permitted ${app.push.notifications.permitted()})")
-            }
+            if (SystemClock.elapsedRealtime() >= until) timedOut(what)
             SystemClock.sleep(250)
         }
+    }
+    /** While MainActivity is up: waiting through the compose rule keeps recomposition and effects running. */
+    private fun pump(what: String, timeoutMillis: Long, condition: () -> Boolean) {
+        try { compose.waitUntil(timeoutMillis, condition) } catch (_: ComposeTimeoutException) { timedOut(what) }
+    }
+    private fun timedOut(what: String): Nothing {
+        capture("fcm-timeout")
+        shell("dumpsys activity activities").decodeToString().lines()
+            .filter { "io.orbitd" in it || "ResumedActivity" in it }.forEach { Log.i("A10Fcm", it.trim()) }
+        Looper.getMainLooper().thread.stackTrace.forEach { Log.i("A10Fcm", "main at $it") }
+        fail("Timed out: $what (auth ${app.session.state.value::class.simpleName}, permitted ${app.push.notifications.permitted()})")
+        throw AssertionError(what)
     }
 
     /** A release package has no run-as, so the shell user writes the screenshots where the host pulls them. */
