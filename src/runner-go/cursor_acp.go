@@ -4,15 +4,21 @@ package main
 //
 // Each Orbit session runs one resident `agent acp` of the pinned build, prepared by cursor_launch.go:
 // newline-delimited JSON-RPC 2.0 on stdio. The process is initialized once and its conversation opened
-// with session/new, whose id is the session's runtime session id. One prompt runs at a time: a
-// session/prompt sent while another runs cancels it (§3.2), so a message that arrives mid-turn waits
-// here for the turn to settle, and a steer is refused. Each turn settles once, on the prompt's answer —
-// `end_turn` or `cancelled`, never with usage (§3.2) — so no turn reports a cost or a context reading.
+// with session/new, whose id is the session's runtime session id; a later process of the same session
+// continues that conversation with session/load (§3.5) and never opens another in its place. One prompt
+// runs at a time: a session/prompt sent while another runs cancels it (§3.2), so a message that arrives
+// mid-turn waits here for the turn to settle, and a steer is refused. A stop is a session/cancel.
 //
-// Not here yet: continuing a conversation in a new process (session/load) and reading the failures
-// Cursor reports only as text (P5b); approvals through Orbit, Orbit's MCP server and instructions, and
-// the permission modes (P5c). Until then every approval Cursor asks for is declined, so a command or an
-// MCP call that needs one does not run.
+// Each turn settles once (cursorSettlementOutcome): on Cursor's answer to its prompt — `end_turn`, read
+// for the error sentence Cursor CLI ends a failed turn with (cursor_events.go), or `cancelled` — and, when
+// none comes, on Orbit's own stop, the process exiting, or the connection closing. Never with usage (§3.2),
+// so no turn reports a cost or a context reading. A turn whose prompt may have reached Cursor is never
+// sent again: the session's turn ledger (cursorTurnLedger) settles one that an earlier process or runner
+// left unsettled as interrupted, since its tools may already have run.
+//
+// Not here yet: approvals through Orbit, Orbit's MCP server and instructions, and the permission modes
+// (P5c). Until then every approval Cursor asks for is declined, so a command or an MCP call that needs one
+// does not run.
 
 import (
 	"bufio"
@@ -23,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -64,8 +71,9 @@ type cursorWrite struct {
 
 // cursorCallError is a JSON-RPC error Cursor CLI answered a request with.
 type cursorCallError struct {
-	code int
-	text string
+	code   int
+	text   string
+	detail string // the error's data, where Cursor says what failed ("Invalid model value: …")
 }
 
 func (e *cursorCallError) Error() string { return e.text }
@@ -87,6 +95,14 @@ type cursorACPClient struct {
 	readDone chan struct{} // closed once the reader has taken everything the CLI wrote
 	once     sync.Once
 	wg       sync.WaitGroup
+
+	// The process is reaped once, by its watcher: after the reader has taken everything (or when
+	// dispose asks, reapNow), so the wait never closes a pipe with output still in it.
+	stderrDone chan struct{}
+	reapNow    chan struct{}
+	reapOnce   sync.Once
+	exited     chan struct{} // closed once the process has been reaped
+	exit       string        // how it ended ("exit status 1", "signal: killed"); set before exited closes
 
 	// What initialize and the session's configuration reported; the session loop's alone.
 	images        bool          // promptCapabilities.image: images may go in a prompt as they are
@@ -130,12 +146,15 @@ func startCursorACP(ctx context.Context, spec CursorLaunchSpec, mapper *cursorEv
 		return nil, err
 	}
 	a := &cursorACPClient{cmd: cmd, cancel: cancel, stdin: stdin, mapper: mapper, secrets: cursorLaunchSecrets(spec.Env),
-		pending: map[string]cursorPending{}, writes: make(chan cursorWrite, 16), done: make(chan struct{}), readDone: make(chan struct{})}
-	a.wg.Add(3)
+		pending: map[string]cursorPending{}, writes: make(chan cursorWrite, 16), done: make(chan struct{}), readDone: make(chan struct{}),
+		stderrDone: make(chan struct{}), reapNow: make(chan struct{}), exited: make(chan struct{})}
+	a.wg.Add(4)
 	go func() { defer a.wg.Done(); defer close(a.readDone); a.readLoop(stdout) }()
 	go func() { defer a.wg.Done(); a.writeLoop() }()
+	go func() { defer a.wg.Done(); a.watchExit() }()
 	go func() {
 		defer a.wg.Done()
+		defer close(a.stderrDone)
 		sc := bufio.NewScanner(stderr)
 		sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
 		for sc.Scan() {
@@ -193,10 +212,14 @@ func (a *cursorACPClient) deliver(msg cursorRPCMessage) {
 	if !ok {
 		return // its caller gave up waiting
 	}
-	if pending.method == "session/new" && msg.Error == nil {
+	switch {
+	case pending.method == "session/new" && msg.Error == nil:
 		if id := firstString(rawObject(msg.Result), "sessionId"); id != "" {
 			a.mapper.bind(id)
 		}
+	case pending.method == "session/load":
+		// The replay is over: what follows is the session's own again.
+		a.mapper.loaded()
 	}
 	pending.reply <- cursorRPCReply{message: msg}
 }
@@ -267,6 +290,48 @@ func (a *cursorACPClient) closedErr() error {
 		return a.terminalErr
 	}
 	return errors.New("Cursor CLI's ACP connection closed")
+}
+
+// connectionClosed is whether the connection has ended, from either side.
+func (a *cursorACPClient) connectionClosed() bool {
+	select {
+	case <-a.done:
+		return true
+	default:
+		return false
+	}
+}
+
+// watchExit reaps the process once it is done with its output — its stdout read to the end, then its
+// stderr, which a command it left running may hold open, for a moment at most — or once dispose stops
+// waiting for that, and records how the process ended.
+func (a *cursorACPClient) watchExit() {
+	select {
+	case <-a.readDone:
+		select {
+		case <-a.stderrDone:
+		case <-a.reapNow:
+		case <-time.After(cursorExitGrace):
+		}
+	case <-a.reapNow:
+	}
+	err := waitSessionProcessTree(a.cmd)
+	if state := a.cmd.ProcessState; state != nil {
+		a.exit = state.String()
+	} else if err != nil {
+		a.exit = err.Error()
+	}
+	close(a.exited)
+}
+
+// awaitExit is how the process ended, waiting up to wait for it to; "" when it is still running.
+func (a *cursorACPClient) awaitExit(wait time.Duration) string {
+	select {
+	case <-a.exited:
+		return a.exit
+	case <-time.After(wait):
+		return ""
+	}
 }
 
 // post queues a line and returns without waiting for it to be written.
@@ -341,10 +406,11 @@ func (a *cursorACPClient) decode(method string, reply cursorRPCReply) (map[strin
 	}
 	if e := reply.message.Error; e != nil {
 		text := fmt.Sprintf("Cursor CLI's %s failed (%d): %s", method, e.Code, a.redact(e.Message))
-		if detail := a.redact(kimiRPCErrorDetail(e.Data)); detail != "" && detail != e.Message {
+		detail := a.redact(kimiRPCErrorDetail(e.Data))
+		if detail != "" && detail != e.Message {
 			text += ": " + clip(detail, 300)
 		}
-		return nil, &cursorCallError{code: e.Code, text: text}
+		return nil, &cursorCallError{code: e.Code, text: text, detail: detail}
 	}
 	var result map[string]interface{}
 	if json.Unmarshal(reply.message.Result, &result) != nil || result == nil {
@@ -380,6 +446,19 @@ func (a *cursorACPClient) open(ctx context.Context, cwd string) (string, error) 
 	}
 	a.configOptions, _ = result["configOptions"].([]interface{})
 	return id, nil
+}
+
+// load continues the session's conversation in this process (§3.5) in the checkout it was had in. Cursor
+// replays it as session/update before it answers, and the mapper drops all of it: Orbit's transcript
+// already holds that conversation, under ids of its own, which the replay's do not match.
+func (a *cursorACPClient) load(ctx context.Context, sessionID, cwd string) error {
+	a.mapper.load(sessionID)
+	result, err := a.call(ctx, "session/load", map[string]interface{}{"sessionId": sessionID, "cwd": cwd, "mcpServers": []interface{}{}})
+	if err != nil {
+		return err
+	}
+	a.configOptions, _ = result["configOptions"].([]interface{})
+	return nil
 }
 
 // configure puts the session on its model and effort with session/set_config_option, never --model
@@ -431,9 +510,9 @@ func (a *cursorACPClient) prompt(ctx context.Context, sessionID string, blocks [
 }
 
 // dispose ends the process the way it ends cleanly — SIGTERM, which it handles, and its whole tree
-// after a grace (stopCursorProcess) — since closing stdin does not end it (§3.4). What the CLI wrote
-// before it exited is read first: waiting for the process closes its stdout, and a title can still be on
-// its way after the last turn (§3.2).
+// after a grace — since closing stdin does not end it (§3.4). What the CLI wrote before it exited is
+// read first: reaping the process closes its stdout, and a title can still be on its way after the last
+// turn (§3.2).
 func (a *cursorACPClient) dispose() {
 	a.fail(errors.New("the Cursor CLI process was stopped"))
 	_ = a.cmd.Process.Signal(syscall.SIGTERM)
@@ -441,7 +520,13 @@ func (a *cursorACPClient) dispose() {
 	case <-a.readDone:
 	case <-time.After(cursorStopGrace):
 	}
-	stopCursorProcess(a.cmd, a.cancel)
+	a.reapOnce.Do(func() { close(a.reapNow) })
+	select {
+	case <-a.exited:
+	case <-time.After(5 * time.Second):
+		a.cancel()
+		<-a.exited
+	}
 	a.cancel()
 	a.wg.Wait()
 }
@@ -581,20 +666,275 @@ func prepareCursorPrompt(ctx context.Context, t *Transport, job *ClaimedSession,
 	return blocks, refs
 }
 
-// cursorResumeUnsupported is what a session that has already talked is told when its process is gone.
-// Its conversation continues in a new process only through session/load, which this runner does not
-// do yet; a new conversation in its place would drop everything said so far.
-const cursorResumeUnsupported = "This Cursor CLI session cannot continue on this Orbit runner yet: its Cursor CLI process has ended, " +
-	"and this runner cannot reopen a Cursor CLI conversation in a new process. Start a new session to keep working."
-
 // cursorStopGrace is how long a stopped prompt may take to answer before its process is ended instead;
-// Cursor answers a session/cancel within milliseconds (§3.3).
-const cursorStopGrace = 10 * time.Second
+// Cursor answers a session/cancel within milliseconds (§3.3). A variable, for a test to shorten.
+var cursorStopGrace = 10 * time.Second
+
+// cursorExitGrace is how long a turn whose connection ended waits to learn whether the process exited,
+// and how long a process's stderr may stay open after its stdout before the process is reaped anyway.
+const cursorExitGrace = 2 * time.Second
 
 type cursorPromptResult struct {
 	turnID string
 	result map[string]interface{}
 	err    error
+}
+
+// cursorTurnEnd is what is known of how a turn ended when it settles.
+type cursorTurnEnd struct {
+	result  map[string]interface{} // Cursor's answer to the turn's session/prompt; nil when none came
+	err     error                  // why none came, or the JSON-RPC error the prompt was answered with
+	stopped bool                   // Orbit stopped the turn: an interrupt, the session's end or cancel, a shutdown, a reload
+	exit    string                 // how the process ended, when it ended without answering
+	closed  bool                   // the connection ended without an answer while the process went on running
+}
+
+// answered is whether Cursor answered the prompt: with a stop reason, or with a JSON-RPC error.
+func (e cursorTurnEnd) answered() bool {
+	var refused *cursorCallError
+	return e.result != nil || errors.As(e.err, &refused)
+}
+
+// cursorSettlementOutcome is what a turn settles on — the first of these that holds:
+//  1. Cursor's answer to the prompt: end_turn or cancelled, which the mapper reads, or a JSON-RPC error,
+//     which fails the turn: a protocol error is never a success. It outranks Orbit's own stop because
+//     Cursor answers a session/cancel within milliseconds (§3.3): an end_turn that crossed a stop is a
+//     turn that had finished before the stop reached it.
+//  2. Orbit stopped the turn and no answer came before the process was ended: interrupted.
+//  3. The process exited without answering — a crash (§12): failed, with how it exited.
+//  4. The connection ended without an answer while the process went on running: failed.
+//
+// Last comes the lease going to another owner while none of these has happened yet: the turn is not
+// settled here at all, but left prompted in the turn ledger for the runner that holds the lease
+// (cursorTurnLedger). Whichever it is, the prompt is not sent again: its tools may already have run.
+func cursorSettlementOutcome(end cursorTurnEnd) (map[string]interface{}, error) {
+	const notSentAgain = " The turn was not sent again: its tools may already have run."
+	switch {
+	case end.answered():
+		return end.result, end.err
+	case end.stopped:
+		return map[string]interface{}{"stopReason": "cancelled"}, nil
+	case end.exit != "":
+		return nil, fmt.Errorf("Cursor CLI exited during this turn (%s) without answering it.%s", end.exit, notSentAgain)
+	case end.closed:
+		return nil, fmt.Errorf("Cursor CLI's connection ended during this turn without an answer, while the process kept running (%v).%s", end.err, notSentAgain)
+	}
+	return nil, end.err
+}
+
+// The states of a turn in the session's turn ledger.
+const (
+	cursorTurnPrompted = "prompted"
+	cursorTurnSettled  = "settled"
+)
+
+// cursorLedgerSettledKept is how many settled turns the ledger keeps: more than a redelivery reaches back.
+const cursorLedgerSettledKept = 32
+
+type cursorTurnRecord struct {
+	State     string   `json:"state"`
+	Seq       int      `json:"seq"`
+	OpenTools []string `json:"openTools,omitempty"`
+	Status    string   `json:"status,omitempty"`
+	Subtype   string   `json:"subtype,omitempty"`
+	Result    string   `json:"result,omitempty"`
+	Error     string   `json:"error,omitempty"`
+}
+
+// cursorTurnLedger is the session's record of its turns that reached Cursor CLI, kept beside its
+// conversation store (<runs>/<session>/cursor/orbit-turns.json) so that it outlives the process and the
+// runner. Orbit's queue knows a turn was leased, not whether its prompt went out before a crash; this
+// does. A turn is recorded before its prompt is written, so one delivered again — after a runner restart,
+// or to the runner a lease moved to — is never prompted twice: one that settled is reported as it
+// settled, one that did not is settled interrupted, the cards it left open closed.
+type cursorTurnLedger struct {
+	mu    sync.Mutex
+	path  string
+	Seq   int                          `json:"seq"`
+	Turns map[string]*cursorTurnRecord `json:"turns"`
+}
+
+func loadCursorTurnLedger(dir string) (*cursorTurnLedger, error) {
+	l := &cursorTurnLedger{path: filepath.Join(dir, "orbit-turns.json"), Turns: map[string]*cursorTurnRecord{}}
+	data, err := os.ReadFile(l.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return l, nil
+	}
+	if err != nil || json.Unmarshal(data, l) != nil {
+		return nil, fmt.Errorf("CURSOR_CONFIG_CONFLICT: the session's turn ledger %s cannot be read; it is left as it is", l.path)
+	}
+	if l.Turns == nil {
+		l.Turns = map[string]*cursorTurnRecord{}
+	}
+	return l, nil
+}
+
+// update applies change, and writes the ledger when change says it changed it.
+func (l *cursorTurnLedger) update(change func() bool) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !change() {
+		return nil
+	}
+	data, err := json.Marshal(l)
+	if err != nil {
+		return err
+	}
+	return writeFileAtomically(l.path, data, 0o600)
+}
+
+func (l *cursorTurnLedger) get(turnID string) (cursorTurnRecord, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	rec, ok := l.Turns[turnID]
+	if !ok {
+		return cursorTurnRecord{}, false
+	}
+	copied := *rec
+	copied.OpenTools = append([]string(nil), rec.OpenTools...)
+	return copied, true
+}
+
+// prompted records a turn whose prompt is about to be written.
+func (l *cursorTurnLedger) prompted(turnID string) error {
+	return l.update(func() bool {
+		l.Seq++
+		l.Turns[turnID] = &cursorTurnRecord{State: cursorTurnPrompted, Seq: l.Seq}
+		return true
+	})
+}
+
+// tool records a card of a prompted turn opening or closing (cursorEventMapper.onTool).
+func (l *cursorTurnLedger) tool(turnID, toolID string, open bool) {
+	err := l.update(func() bool {
+		rec := l.Turns[turnID]
+		if rec == nil || rec.State != cursorTurnPrompted {
+			return false
+		}
+		if open {
+			rec.OpenTools = append(rec.OpenTools, toolID)
+			return true
+		}
+		for i, id := range rec.OpenTools {
+			if id == toolID {
+				rec.OpenTools = append(rec.OpenTools[:i:i], rec.OpenTools[i+1:]...)
+				return true
+			}
+		}
+		return false
+	})
+	if err != nil {
+		logln("cursor turn ledger:", err)
+	}
+}
+
+// settled records how a turn settled, and forgets the oldest settled turns past cursorLedgerSettledKept.
+func (l *cursorTurnLedger) settled(req TurnCompleteRequest) error {
+	return l.update(func() bool {
+		rec := l.Turns[req.TurnID]
+		if rec == nil {
+			l.Seq++
+			rec = &cursorTurnRecord{Seq: l.Seq}
+		}
+		l.Turns[req.TurnID] = &cursorTurnRecord{State: cursorTurnSettled, Seq: rec.Seq, Status: req.Status,
+			Subtype: req.Subtype, Result: req.Result, Error: req.Error}
+		for {
+			oldest, settled := "", 0
+			for id, rec := range l.Turns {
+				if rec.State == cursorTurnSettled {
+					settled++
+					if oldest == "" || rec.Seq < l.Turns[oldest].Seq {
+						oldest = id
+					}
+				}
+			}
+			if settled <= cursorLedgerSettledKept {
+				return true
+			}
+			delete(l.Turns, oldest)
+		}
+	})
+}
+
+// cursorConversationUnspoken is whether Cursor CLI holds the session's conversation without a word said
+// in it: session/new writes its meta.json and the first prompt its store.db, and session/load answers one
+// without a store "not found" (§3.5) — there is nothing in it to continue.
+func cursorConversationUnspoken(configDir, sessionID string) bool {
+	if sessionID == "" || sessionID != filepath.Base(sessionID) || strings.HasPrefix(sessionID, ".") {
+		return false
+	}
+	dir := filepath.Join(configDir, "acp-sessions", sessionID)
+	if _, err := os.Stat(filepath.Join(dir, "meta.json")); err != nil {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(dir, "store.db"))
+	return errors.Is(err, os.ErrNotExist)
+}
+
+// cursorOpenFailure is how a session ends its start when Cursor CLI would not open or continue its
+// conversation (§2.3, §3.1, §12, §16.6):
+//   - -32000 "Authentication required": the CLI has no credential it can sign in with;
+//   - -32603 "Failed to initialize session services": what an invalid credential and an unreachable Cursor
+//     API both answer. A key is put to `agent models` to tell the two apart, as §9 measured it;
+//   - -32602 `Session "<id>" not found`, to session/load: the CLI holds no such conversation. It is said to
+//     be gone, never replaced by a new one, which would drop everything said in it.
+//
+// Anything else — the account having switched teams among it — is said as Cursor said it.
+func cursorOpenFailure(ctx context.Context, launch CursorLaunchSpec, job *ClaimedSession, method string, err error, report cursorKeyReporter) string {
+	var refused *cursorCallError
+	if !errors.As(err, &refused) {
+		return fmt.Sprintf("Cursor CLI did not answer its %s: %v", method, err)
+	}
+	switch {
+	case refused.code == -32000:
+		return "Failed to authenticate: " + refused.text
+	case refused.code == -32603 && refused.detail == "Failed to initialize session services":
+		switch cursorKeyVerdict(ctx, launch, job, report) {
+		case cursorKeyInvalid:
+			return cursorAPIKeyInvalidMessage
+		case cursorKeyUnreachable:
+			return `Cursor CLI could not reach the Cursor API ("Failed to reach the Cursor API"), so it could not open this session. ` +
+				"Check the runner's network and proxy settings, then send the message again."
+		}
+	case method == "session/load" && refused.code == -32602 && strings.HasSuffix(refused.detail, "not found"):
+		return fmt.Sprintf("Cursor CLI has no conversation %s for this session on this runner (%s), so it cannot continue it here. "+
+			"Orbit does not start a new conversation in its place, which would drop everything said so far: start a new session to keep working.",
+			job.RuntimeSessionID, refused.detail)
+	}
+	return refused.text
+}
+
+// cursorKeyVerdict is what `agent models` says of the API key the session's CLI runs on (checkCursorAPIKey):
+// valid, invalid, unreachable, or "" — no answer it can read, or a session on a login. A dispatched key's
+// answer goes to the control plane, which keeps it on the key, as at the key's first check
+// (checkCursorSessionKey).
+func cursorKeyVerdict(ctx context.Context, launch CursorLaunchSpec, job *ClaimedSession, report cursorKeyReporter) string {
+	var key string
+	for _, entry := range launch.Env {
+		if value, ok := strings.CutPrefix(entry, "CURSOR_API_KEY="); ok {
+			key = value
+		}
+	}
+	if key == "" {
+		return ""
+	}
+	state := checkCursorAPIKey(ctx, launch.Executable, key)
+	if state != "" && report != nil && key == cursorSessionKey(job) {
+		if err := report(job.SessionID, CursorKeyCheckReport{State: state, KeyFingerprint: cursorKeyFingerprint(key)}); err != nil {
+			logln("cursor:", job.SessionID+":", "could not report the API key check:", err)
+		}
+	}
+	return state
+}
+
+// cursorConfigureFailure is how a session ends its start when Cursor CLI would not put it on its model:
+// one the account is not offered is answered -32602 "Invalid model value" (§10).
+func cursorConfigureFailure(err error) string {
+	var refused *cursorCallError
+	if errors.As(err, &refused) && refused.code == -32602 && strings.HasPrefix(refused.detail, "Invalid model value") {
+		return "Cursor CLI does not offer the model this session asks for (" + refused.detail + "). Choose another model, then send the message again."
+	}
+	return "failed to configure the Cursor CLI session: " + err.Error()
 }
 
 func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
@@ -609,15 +949,13 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		p.emit(evError, map[string]interface{}{"message": message})
 		return stFailed, true, false
 	}
-	if p.job.RuntimeSessionID != "" {
-		return fail(cursorResumeUnsupported)
+	// A dispatched API key is checked before anything starts on it, and again when Cursor will not open a
+	// conversation on it; each answer is kept on the key.
+	report := func(sessionID string, report CursorKeyCheckReport) error {
+		return p.t.cursorKeyCheck(sessionID, report)
 	}
 	launch := p.cursorLaunchSpec
 	if launch == nil {
-		// A dispatched API key is checked before anything starts on it; the answer is kept on the key.
-		report := func(sessionID string, report CursorKeyCheckReport) error {
-			return p.t.cursorKeyCheck(sessionID, report)
-		}
 		spec, err := PrepareCursorSessionLaunch(p.ctx, p.job, p.execDir, report)
 		if err != nil {
 			return fail(err.Error())
@@ -627,6 +965,14 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	if !cursorLaunchSignsIn(launch.Env) {
 		return fail("Failed to authenticate: Cursor CLI is not signed in on this runner, and this session brings no Cursor API key. " +
 			"Sign in with: " + cursorLoginHint())
+	}
+	dir, err := cursorSessionDir(p.job.SessionID)
+	var ledger *cursorTurnLedger
+	if err == nil {
+		ledger, err = loadCursorTurnLedger(dir)
+	}
+	if err != nil {
+		return fail(err.Error())
 	}
 
 	var naming sync.WaitGroup
@@ -645,6 +991,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		}()
 	}
 	mapper.onCommands = func(names []string) { slashReg.learnFor(providerCursor, names, nil) }
+	mapper.onTool = ledger.tool
 	app, err := startCursorACP(p.ctx, *launch, mapper, p.emit)
 	if err != nil {
 		return fail("failed to start Cursor CLI: " + err.Error())
@@ -655,22 +1002,34 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	if err := app.initialize(initCtx); err != nil {
 		return fail("Cursor CLI did not start its ACP server: " + err.Error())
 	}
-	sessionID, err := app.open(initCtx, launch.Cwd)
-	if err != nil {
-		var refused *cursorCallError
-		if errors.As(err, &refused) && refused.code == -32000 {
-			return fail("Failed to authenticate: " + err.Error())
+	// A session that has talked continues its conversation, in this process, under the same id. One that
+	// has none opens one, and so does one whose conversation never had a prompt — its turns so far were
+	// shell turns: Cursor cannot load that, and there is nothing in it to lose (§3.5, §13.3).
+	sessionID, method := p.job.RuntimeSessionID, "session/load"
+	switch {
+	case sessionID == "":
+		method = "session/new"
+		sessionID, err = app.open(initCtx, launch.Cwd)
+	case cursorConversationUnspoken(launch.ConfigDir, sessionID):
+		method = "session/new"
+		if sessionID, err = app.open(initCtx, launch.Cwd); err == nil {
+			p.emit(evSystem, map[string]interface{}{"noticeKind": "cursor-conversation-reopened",
+				"notice": "Cursor CLI had not been sent a message in this session's conversation yet, so a new conversation was opened in its place."})
 		}
-		return fail(err.Error())
+	default:
+		err = app.load(initCtx, sessionID, launch.Cwd)
+	}
+	if err != nil {
+		return fail(cursorOpenFailure(p.ctx, *launch, p.job, method, err, report))
 	}
 	p.job.RuntimeSessionID = sessionID
 	writeSessionMeta(p.scratchDir, p.job, p.execDir)
 	if err := app.configure(initCtx, sessionID, p.job.Agent); err != nil {
-		return fail("failed to configure the Cursor CLI session: " + err.Error())
+		return fail(cursorConfigureFailure(err))
 	}
 	// The control plane keeps the runtime session id from this event (runtimeInitSessionId).
 	p.emit(evSystem, map[string]interface{}{"subtype": "init", "provider": providerCursor, "runtime": "acp",
-		"sessionId": sessionID, "cliVersion": launch.Version})
+		"sessionId": sessionID, "cliVersion": launch.Version, "resumed": method == "session/load"})
 
 	pollCtx, pollCancel := context.WithCancel(p.ctx)
 	defer pollCancel()
@@ -715,7 +1074,10 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	var promptWG sync.WaitGroup
 	defer func() { app.fail(errors.New("the Cursor CLI session loop stopped")); promptWG.Wait() }()
 	var activeID string
-	stopped := false // the active turn was stopped here; it settles interrupted whatever Cursor answers
+	// Whether the active turn was stopped here (cursorSettlementOutcome), and when the stop gives up on
+	// Cursor's answer.
+	stopped := false
+	var stopDeadline <-chan time.Time
 	seen := map[string]bool{}
 	var queued []*RunInboxResponse
 	var shellContext []string
@@ -727,22 +1089,64 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		req.BranchSha, req.BranchMerged = effectiveBranchSha(p.job.WT), branchMergedInto(p.job.WT)
 		req.WorktreeBranch = currentBranch(p.job.WT)
 	}
-	// report=false settles only here: after a lease loss the turn is the new owner's to settle.
-	settle := func(done cursorPromptResult, report bool) string {
-		result, err := done.result, done.err
-		if stopped {
-			result, err = map[string]interface{}{"stopReason": "cancelled"}, nil
+	settle := func(done cursorPromptResult) string {
+		end := cursorTurnEnd{result: done.result, err: done.err, stopped: stopped}
+		if !end.answered() && !stopped && app.connectionClosed() {
+			end.exit = app.awaitExit(cursorExitGrace)
+			end.closed = end.exit == ""
+		}
+		result, err := cursorSettlementOutcome(end)
+		if err != nil {
+			err = errors.New(app.redact(err.Error()))
 		}
 		req, ok := mapper.settle(done.turnID, result, err)
-		if ok && report {
+		if ok {
+			// Recorded before it is reported: a redelivery after a crash in between is answered from here.
+			if err := ledger.settled(req); err != nil {
+				logln("cursor turn ledger:", err)
+			}
 			worktree(&req)
 			if err := p.completeTurn(req); err != nil {
 				logln("cursor turn-complete failed for", p.job.SessionID+":", err)
 			}
 		}
-		activeID, stopped = "", false
+		activeID, stopped, stopDeadline = "", false, nil
 		p.setTurn("")
 		return req.Status
+	}
+	// exited ends the loop on the process having gone: a turn it took with it settled as failed, and the
+	// session with it; after an idle exit, the next message continues the conversation in a new process.
+	exited := func(status string) (string, bool, bool) {
+		event := map[string]interface{}{"subtype": "process_exited", "provider": providerCursor, "runtimeSessionId": sessionID}
+		if exit := app.awaitExit(cursorExitGrace); exit != "" {
+			event["exit"] = exit
+		}
+		p.emit(evSystem, event)
+		return stFailed, status == stFailed, false
+	}
+	// A turn delivered again whose prompt an earlier process or runner sent. One that settled is reported
+	// as it settled; one that did not is settled interrupted, the cards it left open closed, and is not
+	// sent again: its tools may already have run.
+	recoverTurn := func(resp *RunInboxResponse, rec cursorTurnRecord) {
+		req := TurnCompleteRequest{TurnID: resp.TurnID, Status: rec.Status, Subtype: rec.Subtype, Result: rec.Result,
+			Error: rec.Error, NumTurns: 1, RuntimeSessionID: sessionID}
+		if rec.State != cursorTurnSettled {
+			for _, id := range rec.OpenTools {
+				p.emitFor(resp.TurnID, evToolResult, map[string]interface{}{"toolUseId": id, "isError": true,
+					"content": "Cursor CLI stopped before this tool reported a result; it may have run."})
+			}
+			req.Status, req.Subtype = stInterrupted, "interrupted"
+			req.Error = "Cursor CLI stopped during this turn, and the turn was not sent again: its tools may already have run."
+			p.emitFor(resp.TurnID, evError, map[string]interface{}{"message": req.Error})
+			p.emitFor(resp.TurnID, evTurnEnd, map[string]interface{}{"subtype": req.Subtype, "numTurns": 1, "recovered": true})
+			if err := ledger.settled(req); err != nil {
+				logln("cursor turn ledger:", err)
+			}
+		}
+		worktree(&req)
+		if err := p.completeTurn(req); err != nil {
+			logln("cursor turn-complete failed for", p.job.SessionID+":", err)
+		}
 	}
 	awaitPrompt := func() cursorPromptResult {
 		select {
@@ -761,6 +1165,12 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		if !p.waitTurnPermit(p.ctx) {
 			return false
 		}
+		if rec, ok := ledger.get(resp.TurnID); ok {
+			p.setTurn(resp.TurnID)
+			recoverTurn(resp, rec)
+			p.setTurn("")
+			return true
+		}
 		if err := mapper.begin(resp.TurnID); err != nil {
 			logln("cursor:", err)
 			return true
@@ -775,13 +1185,16 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		}
 		p.emitFor(activeID, evUser, userEvent)
 		turnID := activeID
+		// Recorded before the prompt is written: from here on, a crash leaves a turn that is not sent again.
+		if err := ledger.prompted(turnID); err != nil {
+			settle(cursorPromptResult{turnID: turnID,
+				err: fmt.Errorf("Orbit could not record this turn before sending it to Cursor CLI, so it was not sent: %v", err)})
+			return true
+		}
 		promptWG.Add(1)
 		go func() {
 			defer promptWG.Done()
 			result, err := app.prompt(p.ctx, sessionID, blocks)
-			if err != nil {
-				err = errors.New(app.redact(err.Error()))
-			}
 			promptDone <- cursorPromptResult{turnID: turnID, result: result, err: err}
 		}()
 		return true
@@ -836,38 +1249,51 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		case <-p.ctx.Done():
 			if activeID != "" {
 				stopped = true
-				settle(<-promptDone, true)
+				settle(<-promptDone)
 			}
 			return stCancelled, true, false
 		case <-p.shutdownCtx.Done():
 			if activeID != "" {
 				stopped = true
 				cancelTurn()
-				settle(awaitPrompt(), true)
+				settle(awaitPrompt())
 			}
 			return stCancelled, true, false
 		case err := <-pollErrors:
-			// Another owner holds the lease: nothing more runs here on this session's behalf, and the
-			// turn is that owner's to settle.
-			app.fail(err)
+			// Another owner holds the lease, and nothing more runs here on this session's behalf. A turn whose
+			// answer — or the error its connection ended with — is in already settles on it; one still running
+			// is the new owner's: it finds the turn prompted in the ledger and settles it without prompting it
+			// again. Nothing of it goes out from here.
 			if activeID != "" {
-				stopped = true
-				settle(<-promptDone, false)
+				select {
+				case done := <-promptDone:
+					settle(done)
+				default:
+					app.fail(err)
+					mapper.abandon(activeID)
+					<-promptDone
+					activeID = ""
+					p.setTurn("")
+				}
 			}
+			app.fail(err)
 			p.onLeaseLost(err)
 			return stFailed, true, false
 		case <-app.done:
-			exited := map[string]interface{}{"subtype": "process_exited", "provider": providerCursor, "runtimeSessionId": sessionID}
-			if activeID == "" {
-				p.emit(evSystem, exited)
-				return stFailed, false, false
+			status := ""
+			if activeID != "" {
+				status = settle(<-promptDone)
 			}
-			status := settle(<-promptDone, true)
-			p.emit(evSystem, exited)
-			// The prompt is not sent again: its tools may already have run.
-			return stFailed, status == stFailed, false
+			return exited(status)
+		case <-stopDeadline:
+			// Cursor answers a cancel within milliseconds (§3.3): one that does not come is a CLI that can no
+			// longer be talked to, so the process is ended, and the turn settles as Orbit stopped it.
+			app.fail(errors.New("Cursor CLI did not answer a stopped prompt"))
+			stopDeadline = nil
 		case done := <-promptDone:
-			settle(done, true)
+			if status := settle(done); app.connectionClosed() {
+				return exited(status)
+			}
 		case resp := <-inbox:
 			switch resp.Kind {
 			case "message", "shell":
@@ -884,12 +1310,13 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				if activeID != "" && !stopped {
 					stopped = true
 					cancelTurn()
+					stopDeadline = time.After(cursorStopGrace)
 				}
 			case "end":
 				if activeID != "" {
 					stopped = true
 					cancelTurn()
-					settle(awaitPrompt(), true)
+					settle(awaitPrompt())
 				}
 				return stSucceeded, true, false
 			case "reload":
@@ -901,7 +1328,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 					if activeID != "" {
 						stopped = true
 						app.fail(errors.New("the session's Cursor CLI environment changed"))
-						settle(<-promptDone, true)
+						settle(<-promptDone)
 					}
 					p.emit(evSystem, map[string]interface{}{"subtype": "reload", "reason": "launch_changed", "provider": providerCursor})
 					return stCancelled, false, true
