@@ -478,6 +478,25 @@ function swallowedMessageError(reported: string | undefined): string {
   const said = reported?.trim();
   return said ? `${sentence}\n\n${said}` : sentence;
 }
+/** Which merge recovery a session's ended turn may owe a check (SessionsService.checkAfterRepairTurn). */
+interface RepairCheckAfter {
+  /** The parent whose recovery a repair session's turn is checked against; null for any other session. */
+  parentSessionId: string | null;
+  /** This session's own recovery: a repair turn's check has been waiting for this session's turn to end. */
+  owesCheck: boolean;
+}
+// Read off the session row the settle locked. Only a repair session (startMergeRepair's server-owned
+// source) triggers one — an ordinary child of the same parent, a task's run or anything else does not —
+// and only for a turn that ended, which a finalize says only of a session it found running one.
+function repairCheckAfter(
+  session: { source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null },
+  turnEnded = true,
+): RepairCheckAfter {
+  return {
+    parentSessionId: turnEnded && session.source === 'merge-repair' ? session.parentSessionId : null,
+    owesCheck: session.mergeRepairTurnEndedAt != null,
+  };
+}
 // Tool-permission approvals: the orbit MCP permission tool blocks on this long-poll
 // until a human decides. DB-polled (approvals are low-frequency; no NOTIFY needed).
 const APPROVAL_LONG_POLL_MS = 25_000;
@@ -4827,6 +4846,11 @@ export class RunnerApiController {
           // What a request this turn leaves unanswered is closed with (NO_REPLY, below): the last
           // thing the session said, which the events flushed before this completion have written.
           lastAssistantText: true,
+          // Whose merge recovery is checked again once this turn has settled: the parent's, when this
+          // is a repair session, and this session's own when a repair turn's check waits for this turn.
+          source: true,
+          parentSessionId: true,
+          mergeRepairTurnEndedAt: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -5903,6 +5927,7 @@ export class RunnerApiController {
         requestsClosed: [...stoppedRequestsClosed, ...requestsClosed],
         reviewToDeliver,
         reviewsAbandoned,
+        repairCheck: repairCheckAfter(current),
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
       transaction: {
@@ -6004,6 +6029,11 @@ export class RunnerApiController {
       // is blocked on this reply. A settle the two-minute window skips is what `recapDue` is for;
       // a session's LAST settle does not come through here at all (RealtimeService.publish).
       void this.recapAfterTurn(sessionId);
+      // And a merge recovery may be owed a check now that this turn has ended — off the response
+      // path as well, for the same reason (SessionsService.checkAfterRepairTurn).
+      if ('repairCheck' in finalized && finalized.repairCheck) {
+        void this.checkRecoveryAfterTurn(sessionId, finalized.repairCheck, new Date());
+      }
     }
     if (
       'taskReclaimed' in finalized
@@ -6079,6 +6109,27 @@ export class RunnerApiController {
       await enqueueRecap({ db: this.prisma, sessionId });
     } catch {
       // The generator already swallows every failure of its own; this covers the reads around it.
+    }
+  }
+
+  /**
+   * After a settled turn (or a finalize that ended one): a repair session's turn ended, so its
+   * parent's merge recovery is checked again; and this session's own turn ended, so a check a repair
+   * turn left waiting for it is taken up. `endedAt` is when the turn ended. NEVER rejects and is never
+   * awaited, like recapAfterTurn: the runner has already been answered, and a check that could not be
+   * queued is logged — the owner's Check again is still there.
+   */
+  private async checkRecoveryAfterTurn(sessionId: string, check: RepairCheckAfter, endedAt: Date): Promise<void> {
+    const checks: Array<[string, Date | null]> = [];
+    if (check.parentSessionId) checks.push([check.parentSessionId, endedAt]);
+    if (check.owesCheck) checks.push([sessionId, null]);
+    for (const [id, turnEndedAt] of checks) {
+      try {
+        await this.sessions?.checkAfterRepairTurn(id, turnEndedAt);
+      } catch (error) {
+        this.logger.warn(`merge recovery check of ${id} after a turn of ${sessionId} was not queued: `
+          + `${error instanceof Error ? error.message : error}`);
+      }
     }
   }
 
@@ -7064,6 +7115,9 @@ export class RunnerApiController {
         dispatchRefused,
         taskId: current.taskId,
         currentWorkTerminalized,
+        // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
+        // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
+        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
       };
     }, loggedRetry(this.logger, 'runnerApi.finalize'));
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
@@ -7086,6 +7140,10 @@ export class RunnerApiController {
     }
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
+    }
+    // As after a settled turn: a merge recovery may be owed a check, off the response path.
+    if ('repairCheck' in outcome && outcome.repairCheck) {
+      void this.checkRecoveryAfterTurn(sessionId, outcome.repairCheck, new Date());
     }
 
     this.realtime.publish(sessionId, {

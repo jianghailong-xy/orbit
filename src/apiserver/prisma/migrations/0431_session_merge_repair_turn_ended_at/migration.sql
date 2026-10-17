@@ -1,0 +1,29 @@
+-- 0431 — the recovery check a repair session's turn is owed, kept while its parent runs a turn.
+--
+-- WHAT IT ADDS
+-- ============
+-- One nullable column on `session`, `merge_repair_turn_ended_at`: when a merge-repair session's turn
+-- ended whose check of THIS session's merge recovery is still owed. The server checks a recovery again
+-- after every repair turn (S1 of the merge-recovery repair loop, project 34hIv3wbdtsxpc5RzDlOk), the way
+-- the owner's Check again does; while the session that owns the recovery runs a turn of its own, when a
+-- merge is refused, the turn's end is kept here and the check is judged again once that turn ends. It is
+-- cleared in the write that takes the check up.
+--
+-- HOW IT WAS GENERATED
+-- ====================
+-- The statement below is Prisma's own output for the new `Session` field, from
+-- `prisma migrate diff --from-schema <schema.prisma before it> --to-schema prisma/schema.prisma --script`.
+-- Not `prisma migrate dev`, for the reason 0418 gives (it would also try to drop 0071's 'PARKED' label).
+--
+-- BACKWARD COMPATIBLE
+-- ===================
+-- A catalog-only ADD COLUMN with no default and no constraint: no row is read, written or backfilled, and
+-- every stored session reads NULL — no check owed. No index, trigger, function, type or constraint is
+-- created, replaced or dropped.
+--
+-- 0431: the highest number on main was 0428 (0428_model_provider_key_check); 0429 was held by
+-- project/34bmzOkov3xN2yLPrnsCk (0429_wiki_plan_job_support_trigger) and 0430 by an unlanded branch
+-- (0430_managed_runner_backend) when this was written (2026-10-17).
+
+-- AlterTable
+ALTER TABLE "session" ADD COLUMN     "merge_repair_turn_ended_at" TIMESTAMP(3);

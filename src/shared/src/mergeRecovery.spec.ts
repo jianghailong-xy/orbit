@@ -73,7 +73,15 @@ describe('merge recovery wire contract', () => {
     expect(prompt).toContain('SOURCE_REPLAY');
     expect(prompt).toContain('file.ts');
     expect(prompt).toContain('Do not push the target.');
-    expect(prompt).toContain('owner will check');
+    expect(prompt).toContain('The owner reviews the complete diff before any target push.');
     expect(mergeRecoveryPrompt(ready, true)).toContain('organize commits on a separate PR candidate');
+  });
+  it('tells a repair that Orbit checks again when its turn ends, to commit, and to ask the owner directly', () => {
+    for (const prompt of [mergeRecoveryPrompt(ready), mergeRecoveryPrompt(ready, true)]) {
+      expect(prompt).toContain('When this turn ends, Orbit checks the recovery again by itself');
+      expect(prompt).toContain('Commit the resolution in the repair worktree');
+      expect(prompt).toContain('ask the owner directly');
+      expect(prompt).not.toContain('owner will check');
+    }
   });
 });
