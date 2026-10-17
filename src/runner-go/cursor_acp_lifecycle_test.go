@@ -271,7 +271,11 @@ func TestCursorACPResume(t *testing.T) {
 			t.Fatalf("the runner asked %q, want initialize and session/load", methods)
 		}
 		load := run.fake.requests(t, "session/load")[0]
-		if !cursorJSONEqual(t, load.Message["params"], map[string]interface{}{"sessionId": "<UUID_8>", "cwd": run.spec.Cwd, "mcpServers": []interface{}{}}) {
+		servers, err := cursorMCPServers(run.job)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cursorJSONEqual(t, load.Message["params"], map[string]interface{}{"sessionId": "<UUID_8>", "cwd": run.spec.Cwd, "mcpServers": servers}) {
 			t.Fatalf("session/load params = %v", load.Message["params"])
 		}
 		for _, event := range run.events {

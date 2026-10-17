@@ -341,6 +341,19 @@ class WatchScreensTest {
         compose.onAllNodesWithTag("session-watches").assertCountEquals(0)
     }
 
+    /** A task's run session is that task (`targetTask`): a wait on it is an eye on the task's row, so it draws no Watching card
+     * either. A session that runs no task keeps the card (`aSessionTargetIsNamedByTheTitleThisClientHolds`). */
+    @Test fun aWaitOnATasksRunSessionDrawsNoWatchingCard() {
+        val run = JsonObject(f.target("S7", kind = "SESSION", title = "Task: Fix the login redirect", status = f.status("RUNNING", running = true)) +
+            ("targetTask" to buildJsonObject { put("id", "T1"); put("title", "Fix the login redirect"); put("status", f.status("IN_PROGRESS", running = true)) }))
+        server.serve({ listOf(row("W1", targets = listOf(run), predicate = f.all("SESSION_TURN_SETTLED"))) })
+        val store = store()
+        load(store)
+        show { WatchingCardStack(store, "S1", titles) { opened += it } }
+        compose.waitUntil(60_000) { store.state.value.summaries.isNotEmpty() }
+        compose.onAllNodesWithTag("session-watches").assertCountEquals(0)
+    }
+
     @Test fun severalTargetsSayWhatTheWaitNeedsAndOpenToTheirRowsMetFirst() {
         // A08-6: a session among the targets is what keeps a wait in the Watching card; its tasks are the Tasks card's eyes too.
         val targets = listOf(f.target("T1", title = "Schema", status = f.status("DONE")),

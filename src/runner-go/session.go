@@ -265,7 +265,11 @@ type sessionMeta struct {
 	// Default. A session moved to another account keeps the one it ran on here until its engine starts
 	// on the new one, its conversation carried there first (writeKimiSessionMeta).
 	KimiCodeHome string `json:"kimiCodeHome,omitempty"`
-	WorkDir      string `json:"workDir"`
+	// CursorAccountDir is the directory of the added Cursor CLI account this session borrows its login
+	// from (cursorSessionAccountDirToRecord): what a removal of that account refuses to take while the
+	// session is running. Empty on Default, and on a key.
+	CursorAccountDir string `json:"cursorAccountDir,omitempty"`
+	WorkDir          string `json:"workDir"`
 	// PreviousWorkDir is the WorkDir before the last write that changed it: where a session moved
 	// to another of this machine's workspaces last ran, and so where its Claude conversation is
 	// (carryMovedClaudeConversation). Each run records its own WorkDir before its engine starts.
@@ -395,6 +399,7 @@ func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout
 		ClaudeConfigDir:      claudeDir,
 		AntigravityGoogleDir: antigravityDir,
 		KimiCodeHome:         kimiHome,
+		CursorAccountDir:     cursorSessionAccountDirToRecord(job),
 		WorkDir:              execDir,
 		PreviousWorkDir:      previousWorkDir,
 		Title:                job.Title,

@@ -179,4 +179,48 @@ class WatchCodableTest {
         assertNull("a target with no id opens nothing", watchTargetRoute(bare.targets.single()))
         assertEquals("Paused · 1 target", WatchProjection.headline(bare))
     }
+
+    /** A session target names the task its session runs (`targetTask`, its id with a `publicId` twin beside it), null when it
+     * runs none, and nothing at all from an older server; a task target carries null (OrbitKit `testDecodesTheTaskASessionTargetRuns`).
+     * Only the first is a target on a task ([waitedOn]), and a task with no standing is no task. */
+    @Test fun decodesTheTaskASessionTargetRuns() {
+        val watch = WatchFixture.server("""
+        {
+          "id":"4ZcDj8QnWm0KxO4hQ2Hn9V","observerType":"SESSION","observerSessionId":"5beHmMJGwRpQhndTZImQL3",
+          "predicateVersion":1,
+          "predicate":{"kind":"ALL","over":"ALL_TARGETS","leaf":"SESSION_TURN_SETTLED"},
+          "mode":"ONE_SHOT","action":"RESUME_SESSION","state":"ACTIVE","generation":0,
+          "expiresAt":"2026-09-15T02:27:18.859Z","nextEvaluateAt":null,
+          "lastEvaluatedAt":"2026-09-14T03:01:02.003Z","idempotencyKey":null,
+          "createdAt":"2026-09-14T02:27:18.859Z","updatedAt":"2026-09-14T03:01:02.003Z",
+          "targets":[
+            {"targetKind":"SESSION","targetResourceId":"34hIEi8dVmbm5Cd8XsBr2","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null,"targetTitle":"Task: Ship the release",
+             "targetStatus":{"status":"RUNNING","running":true,"queued":false},
+             "targetTask":{"id":"34hIEi97xkVk0S4TDo5D8","publicId":"34hIEi97xkVk0S4TDo5D8",
+               "title":"Ship the release","status":{"status":"IN_PROGRESS","running":true,"queued":false}}},
+            {"targetKind":"SESSION","targetResourceId":"34hIEi8dVmbm5Cd8XsBr3","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null,"targetTitle":"A child session","targetTask":null},
+            {"targetKind":"SESSION","targetResourceId":"34hIEi8dVmbm5Cd8XsBr4","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null},
+            {"targetKind":"TASK","targetResourceId":"34hIEi2gz3Kc8wSO1gv8s","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null,"targetTitle":"Another task","targetTask":null},
+            {"targetKind":"SESSION","targetResourceId":"34hIEi8dVmbm5Cd8XsBr5","state":"OBSERVED","targetEpoch":0,
+             "lastEvaluatedAt":null,"targetTask":{"id":"34hIEi97xkVk0S4TDo5D9","title":"No standing"}}
+          ],
+          "matches":[],"expiryDeliveries":[]
+        }
+        """)
+        val run = watch.targets[0]
+        assertEquals(WatchTargetTask("34hIEi97xkVk0S4TDo5D8", "Ship the release", WatchTargetStatus("IN_PROGRESS", true, false)), run.targetTask)
+        assertEquals(WatchTargetKind.TASK, run.waitedOn.targetKind)
+        assertEquals("34hIEi97xkVk0S4TDo5D8", run.waitedOn.targetResourceId)
+        assertEquals("the task's own title, not the session's", "Ship the release", run.waitedOn.targetTitle)
+        assertEquals("IN_PROGRESS", run.waitedOn.targetStatus?.status)
+        assertEquals(run.state, run.waitedOn.state)
+        watch.targets.drop(1).forEach { target ->
+            assertNull(target.targetTask)
+            assertEquals("anything else is itself", target, target.waitedOn)
+        }
+    }
 }
