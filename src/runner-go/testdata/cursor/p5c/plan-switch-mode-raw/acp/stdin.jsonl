@@ -1,0 +1,4 @@
+{"id":"orbit-cursor-1","jsonrpc":"2.0","method":"initialize","params":{"clientCapabilities":{"_meta":{"parameterizedModelPicker":true,"subagents":true},"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"orbit","version":"dev"},"protocolVersion":1}}
+{"id":"orbit-cursor-2","jsonrpc":"2.0","method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[]}}
+{"id":"orbit-cursor-3","jsonrpc":"2.0","method":"session/set_mode","params":{"modeId":"plan","sessionId":"<UUID_1>"}}
+{"id":"orbit-cursor-4","jsonrpc":"2.0","method":"session/prompt","params":{"prompt":[{"text":"Switch yourself to Agent mode now with your SwitchMode tool. Then use your file editing tool to create switched.txt containing the word switched. Do nothing else.","type":"text"}],"sessionId":"<UUID_1>"}}

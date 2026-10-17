@@ -203,13 +203,27 @@ export function branchAfterMove(
 /**
  * The account columns a move writes (§5.1). On the same runner the session stays on the account it
  * actually runs on, written onto the session: an empty column follows the workspace, and a Codex
- * conversation lives in its account's directory (a Claude or Kimi one too). On another runner the
- * columns are cleared and follow the new workspace — an account id names a slot on one machine only.
+ * conversation lives in its account's directory (a Claude or Kimi one too). A Cursor CLI conversation
+ * lives in the session's own, but is not known to continue on another account (D5,
+ * CURSOR_ACCOUNT_MOVE_V1), so it stays where it is too. On another runner the columns are cleared and
+ * follow the new workspace — an account id names a slot on one machine only.
  */
 export function accountsAfterMove(args: {
   sameRunner: boolean;
-  session: { provider: string; claudeAccount: string | null; codexAccount: string | null; kimiAccount: string | null };
-  from: { env: unknown; claudeAccount: string | null; codexAccount: string | null; kimiAccount: string | null } | null;
+  session: {
+    provider: string;
+    claudeAccount: string | null;
+    codexAccount: string | null;
+    kimiAccount: string | null;
+    cursorAccount: string | null;
+  };
+  from: {
+    env: unknown;
+    claudeAccount: string | null;
+    codexAccount: string | null;
+    kimiAccount: string | null;
+    cursorAccount: string | null;
+  } | null;
   runnerEngines: unknown;
 }): {
   claudeAccount?: string | null;
@@ -220,11 +234,14 @@ export function accountsAfterMove(args: {
   antigravityAccountPinned?: boolean;
   kimiAccount?: string | null;
   kimiAccountPinned?: boolean;
+  cursorAccount?: string | null;
+  cursorAccountPinned?: boolean;
 } {
   if (!args.sameRunner) {
     return {
       claudeAccount: null, claudeAccountPinned: false, codexAccount: null, codexAccountPinned: false,
       antigravityAccount: null, antigravityAccountPinned: false, kimiAccount: null, kimiAccountPinned: false,
+      cursorAccount: null, cursorAccountPinned: false,
     };
   }
   // A configured provider or a pool runs on a credential of its own, not on one of the runner's accounts.
@@ -243,6 +260,11 @@ export function accountsAfterMove(args: {
     const choice = { kimiAccount: session.kimiAccount ?? args.from?.kimiAccount };
     const current = runAccount(AgentProvider.KIMI, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { kimiAccount: current } : {};
+  }
+  if (session.provider === AgentProvider.CURSOR) {
+    const choice = { cursorAccount: session.cursorAccount ?? args.from?.cursorAccount };
+    const current = runAccount(AgentProvider.CURSOR, args.from?.env, choice, args.runnerEngines);
+    return typeof current === 'string' ? { cursorAccount: current } : {};
   }
   return {};
 }

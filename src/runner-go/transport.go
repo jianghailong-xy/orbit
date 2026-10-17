@@ -68,11 +68,12 @@ const (
 //
 // Built in init() rather than as a var initializer because the runtime table it reads holds
 // the session drivers, and those reach this header back through the transport: written as one
-// expression it is a package initialization cycle.
+// expression it is a package initialization cycle. Cursor CLI's account operations are declared only
+// where this runner keeps Cursor CLI accounts (cursorAccountCapabilities).
 var runnerCapabilitiesV1 string
 
 func init() {
-	runnerCapabilitiesV1 = strings.Join(append([]string{
+	runnerCapabilitiesV1 = strings.Join(append(append([]string{
 		sessionOrchestrationCredentialV1,
 		sessionTerminalHandoffV1,
 		sessionWorktreeOpsV1,
@@ -103,7 +104,7 @@ func init() {
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
 		cursorKeyCheckCapabilityV1,
-	}, declaredSteerCapabilities()...), ",")
+	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 }
 
 type transportHTTPError struct {

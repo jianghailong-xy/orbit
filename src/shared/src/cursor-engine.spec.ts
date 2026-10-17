@@ -125,10 +125,11 @@ describe('P1 Cursor CLI in the shared engine tables', () => {
     expect(fastModeAvailable(AgentProvider.CURSOR, 'gpt-5.5')).toBe(false);
   });
 
-  it('P1 cursor keeps Accept Edits, Plan, Don’t Ask and Bypass, and refuses Default and Auto with notes', () => {
+  it('P5c cursor keeps Accept Edits, Plan, Auto, Don’t Ask and Bypass, and refuses Default with a note', () => {
     expect(CURSOR_PERMISSION_MODES).toEqual([
       PermissionMode.ACCEPT_EDITS,
       PermissionMode.PLAN,
+      PermissionMode.AUTO,
       PermissionMode.DONT_ASK,
       PermissionMode.BYPASS,
     ]);
@@ -136,37 +137,39 @@ describe('P1 Cursor CLI in the shared engine tables', () => {
     expect(CURSOR_DEFAULT_PERMISSION_MODE).toBe(PermissionMode.ACCEPT_EDITS);
     expect(CURSOR_PERMISSION_MODES).toContain(CURSOR_DEFAULT_PERMISSION_MODE);
     expect(runtimeApprovalSupport(AgentProvider.CURSOR)).toBe('partial');
-    expect(autoAvailable(AgentProvider.CURSOR, 'default[]')).toBe(false);
-    expect(autoAvailable(AgentProvider.CURSOR, 'gpt-5.5', true)).toBe(false);
+    // Auto is the runner's review of each request, on any model.
+    expect(autoAvailable(AgentProvider.CURSOR, 'default[]')).toBe(true);
+    expect(autoAvailable(AgentProvider.CURSOR, 'gpt-5.5', true)).toBe(true);
 
     const of = (mode: PermissionMode, runsAsRoot?: boolean) =>
       derivePermissionSemantics(AgentProvider.CURSOR, mode, 'default[]', runsAsRoot);
     const refusedDefault = of(PermissionMode.DEFAULT);
     expect(refusedDefault).toMatchObject({ mode: 'default', unapproved: 'deny', approvalSupport: 'partial', honored: false });
     expect(refusedDefault.note).toMatch(/cannot ask before it edits a file/);
-    expect(refusedDefault.note).toMatch(/Session configuration is rejected; use Accept Edits, Plan, Don’t Ask or Bypass\.$/);
+    expect(refusedDefault.note).toMatch(/Session configuration is rejected; use Accept Edits, Plan, Auto, Don’t Ask or Bypass\.$/);
     expect(refusedDefault.shortNote).toBe('unsupported on Cursor CLI; session configuration is rejected');
-    const refusedAuto = of(PermissionMode.AUTO);
-    expect(refusedAuto).toMatchObject({ mode: 'auto', unapproved: 'deny', honored: false });
-    expect(refusedAuto.note).toMatch(/no Auto that Orbit can enforce/);
-    expect(refusedAuto.note).toMatch(/Session configuration is rejected/);
-    expect(refusedAuto.shortNote).toBe('unsupported on Cursor CLI; session configuration is rejected');
 
     const acceptEdits = of(PermissionMode.ACCEPT_EDITS);
     expect(acceptEdits).toMatchObject({ unapproved: 'ask', honored: true });
-    expect(acceptEdits.note).toMatch(/^Edits inside the workspace run without asking\. Commands, MCP tools and web fetches ask you first/);
     expect(of(PermissionMode.PLAN)).toMatchObject({ unapproved: 'deny', honored: true });
-    expect(of(PermissionMode.PLAN).note).toMatch(/plans without writing files/);
+    const auto = of(PermissionMode.AUTO);
+    expect(auto).toMatchObject({ mode: 'auto', unapproved: 'allow', honored: true });
+    expect(auto.note).toMatch(/^Edits inside the workspace and in temporary directories run without asking and are not reviewed\. Orbit allows a routine command itself/);
+    // Plan: Cursor's plan mode, every request refused but Orbit's own tools, and the turn stopped when the
+    // model switches out of it (measured: an edit after the switch is written otherwise).
+    expect(of(PermissionMode.PLAN).note).toMatch(/If it switches itself out of Plan, Orbit stops the turn\.$/);
     // Don't Ask holds commands, MCP tools and fetches, but not a write inside the workspace: disclosed.
     const dontAsk = of(PermissionMode.DONT_ASK);
     expect(dontAsk).toMatchObject({ unapproved: 'deny', honored: false });
-    expect(dontAsk.note).toMatch(/edits files inside the workspace without asking in every mode/);
+    expect(dontAsk.note).toMatch(/edits files inside the workspace and in temporary directories without asking in every mode/);
     expect(dontAsk.shortNote).toBe('partly enforced, edits inside the workspace still run');
-    // `--force` runs as root: Bypass is not Claude Code's root refusal here.
+    // `--force` runs as root: Bypass is not Claude Code's root refusal here. When the account's team turns
+    // Run Everything off, Cursor asks anyway, and Orbit asks the person.
     for (const root of [undefined, false, true]) {
-      expect(of(PermissionMode.BYPASS, root)).toEqual({
+      expect(of(PermissionMode.BYPASS, root)).toMatchObject({
         mode: 'bypassPermissions', unapproved: 'allow', approvalSupport: 'partial', honored: true,
       });
+      expect(of(PermissionMode.BYPASS, root).note).toMatch(/Run Everything/);
     }
 
     for (const mode of MODES) {

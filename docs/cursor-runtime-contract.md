@@ -622,9 +622,11 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 
 **方案 A 成立（Linux，P0c 实测）**：CLI 用账号自己的 HOME，命令经 SHELL 包装拿回真 HOME。
 
-- **做法**（P3 已实现，`src/runner-go/cursor_launch.go` 的 `writeCursorShellWrapper`）：`<orbit home>/cursor/bin/orbit-bash` 是一个 `#!/bin/sh` 脚本，
-  内容是 `HOME=<真 HOME>; export HOME; unset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR; exec /bin/bash "$@"`，
-  CLI 的 `SHELL` 指向它。
+- **做法**（P3 实现，P4b 按 P0c 的两处调整改为每个会话一份，`src/runner-go/cursor_launch.go` 的 `writeCursorShellWrapper`）：
+  `<会话目录>/cursor/bin/orbit-bash` 是一个 `#!/bin/sh` 脚本，CLI 的 `SHELL` 指向它。内容依次是：
+  `HOME=<真 HOME>; export HOME`；`unset` CLI 的凭据和目录（`CURSOR_API_KEY CURSOR_AUTH_TOKEN CURSOR_CONFIG_DIR CURSOR_DATA_DIR`）以及下面要还原的变量；
+  再把要还原的变量逐个写回「其他引擎的会话里命令看到的值」（工作区设了就用工作区的，否则用 runner 自己的，两边都没有就保持未设）；最后 `exec /bin/bash "$@"`。
+  P3 原来是所有会话共用 `<orbit home>/cursor/bin/orbit-bash`，内容固定为 `HOME=<真 HOME>; export HOME; unset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR; exec /bin/bash "$@"`。
 - **实测**（`p0c/shell-wrapper-env`：同样的包装脚本，放在 `<RUN>/bin/orbit-bash`；CLI 的环境按 P3 的固定层设置，同时带 `CURSOR_API_KEY` 和
   用这把 key 换来的 `CURSOR_AUTH_TOKEN`；一轮跑两条命令）：
   - CLI 用包装脚本跑环境快照和每条命令：strace 依次是 `orbit-bash -O extglob -ilc` → `/bin/bash -O extglob -ilc`、`orbit-bash -O extglob -c` → `/bin/bash -O extglob -c`。
@@ -635,15 +637,18 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
   `CURSOR_AGENT_DISABLE_DEBUG_LOG=1`、`SHELL=<orbit-bash>`；CLI 给每条命令补的 `CURSOR_AGENT`、`CURSOR_CONVERSATION_ID`、`CURSOR_REQUEST_ID`、
   `CURSOR_INVOKED_AS`、`CURSOR_RIPGREP_PATH`、`AGENT_TRANSCRIPTS`（指向账号数据目录）、`NODE_COMPILE_CACHE`（指向账号 HOME 的缓存）、
   `GLOBAL_AGENT_ENVIRONMENT_VARIABLE_NAMESPACE`、`__CURSOR_SANDBOX_ENV_RESTORE`、`NO_COLOR`、`FORCE_COLOR`、`_ZO_DOCTOR`。
-- **和普通会话仍有的差别**（P4b 决定要不要处理）：
-  - `DIRENV_DISABLE=1` 会让用户自己 profile 里的 direnv hook 失效；
-  - `NODE_COMPILE_CACHE` 让命令里跑的 node 把编译缓存写进账号 HOME；
-  - P3 的白名单不传 runner 自己的 `XDG_*`，包装又 unset `XDG_CONFIG_HOME`：如果 runner 用户的环境本来设了 `XDG_CONFIG_HOME`，命令就看不到它
-    （gh、git 会改用 `~/.config`）。要做到完全不变，包装应写回 runner 自己的值，而不是 unset；
-  - 其余是 Cursor 自己的变量，任何 Cursor 会话都有。
+- **和普通会话的差别，P4b 的处理**（【约定】P4b 实现；用假 CLI 验证，`TestCursorSessionBorrowsItsAccountAndCommandsKeepTheirEnvironment`）：
+  - **还原**：所有 `XDG_*`（XDG 基础目录 7 个，加上 runner 或工作区设了的其他 `XDG_*`）、`DIRENV_DISABLE`、`NODE_COMPILE_CACHE`、`AGENT_CLI_CREDENTIAL_STORE`、
+    `NO_OPEN_BROWSER`、`CURSOR_AGENT_DISABLE_DEBUG_LOG`。它们在 CLI 的环境里是给 CLI 用的（固定层，或启动脚本把编译缓存指向 CLI 的 HOME），
+    命令拿回的是其他引擎的会话里的值。于是 gh、git 按真 HOME 和原来的 `XDG_CONFIG_HOME` 找配置，direnv hook 照常，node 的编译缓存不写进会话目录。
+  - **保留**：`SHELL` 仍指向 orbit-bash。命令里再起 `$SHELL` 得到的还是这份还原后的环境；换回用户自己的 SHELL 没有实测过（CLI 用自己进程的 SHELL 选 shell）。
+  - **还不一样的**：P3 白名单以外的 runner 变量（例如 `SSH_AUTH_SOCK`、`EDITOR`），命令看不到，除非登录 profile 自己设；工作区设了 `HOME` 时命令仍拿到 runner 用户的真 HOME；
+    Cursor 自己给每条命令加的变量（`CURSOR_AGENT`、`TERM=dumb` 等，§8.3）任何 Cursor 会话都有。
+- **路径断言**：CLI 用 `includes("zsh")` 先判 zsh、再用 `includes("bash")` 判 bash，看的是整条路径【源码 I@7424080、I@7385715】。
+  包装的路径（含 Orbit 的 home）里有 `zsh` 或没有 `bash` 时，runner 拒绝启动会话（`CURSOR_CONFIG_CONFLICT`），不让 CLI 换一个 bash、在 CLI 自己的 HOME 上带着凭据跑命令。
 - **hooks 不经过包装**：CLI 直接 exec hook 命令（strace：`mark.sh <参数>`，不经 `sh -c`，也不经 `$SHELL`），hook 拿到的 HOME、XDG_CONFIG_HOME、
   CURSOR_CONFIG_DIR 都是 CLI 自己的【实测 `p0c/repo-config-baseline`；凭据在不在 hook 的环境里没有记录】。ACP 只从 CLI 的 HOME 和 CURSOR_DATA_DIR
-  读 hooks（§7.2），P3 让两者都是会话自己的目录（P4b 的账号会话是账号目录），仓库放不进 hook。
+  读 hooks（§7.2），P3 让两者都是会话自己的目录（P4b 的账号会话也一样，只借用账号的登录，§16.2），仓库放不进 hook。
 - **依赖与风险**：CLI 只在 `$SHELL` 的路径含 `bash`、不含 `zsh` 时用它（§8.3）。新版 `2026.10.16-e3cb207` 的这段代码不变（§1.3）。
   每次升级都要回归 `shell-wrapper-env`。
 - macOS 上的表现由 P0b 验证。
@@ -674,9 +679,16 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
     challenge 是 PKCE S256，verifier 只在本进程里【源码 I@3715277】。轮询 `GET ${api}/auth/poll?uuid=…&verifier=…`【I@3716301】需要 verifier，
     别人拿到链接也取不到 token。
   - 没人完成时，两次独立计时分别在 **1,632 s 和 1,636 s（约 27.2 分钟）**后打印 `Login failed or timed out. Please try again.`，退出码 1；期间不写任何凭据。
-- **在另一台设备上完成登录**【待验】：2026-10-16 已把链接发给所有者（任务评论 + 通知），27 分钟内没有完成。
+    P4b 2026-10-17 又测两次：链接分别在启动后 5.9 s、2.8 s 打印（机器负载高），之后 **1,543 s 和 1,562 s（约 26 分钟）**放弃。
+  - **为什么会变**【源码 I@3715823 `waitForResult`】：CLI 最多轮询 150 次，每次之间停 `min(1 s × 1.2^n, 10 s)`，光停顿就是 1,418 s（23.6 分钟），
+    再加 150 次请求各自的往返时间，所以链接能用多久取决于网络。连续 3 次轮询失败（非 404 或网络错误）也会提前放弃，打印的是同一句 `Login failed or timed out`。
+  - **P4b 的做法**【约定】：上报的 `expiresAt` 是链接打印时刻加 23 分钟（`cursorLoginLinkLifetime`，不超过源码下限，界面的倒计时不会多报）；
+    打印这句时距链接已超过 23 分钟的，上报为 `reason: expired`（"The sign-in link expired before anyone signed in with it."），更早的算轮询失败，另给说明；
+    中继自己最多等 29 分钟（`cursorLoginRelayTimeout`，长于实测的 1,636 s、短于控制面 30 分钟的清扫），到点结束 CLI 的进程树，也报 `expired`。
+- **在另一台设备上完成登录**【待验】：2026-10-16 已把链接发给所有者（任务评论 + 通知），27 分钟内没有完成；P4b 2026-10-17 03:25 UTC、03:51 UTC 又各发一次，都没有人用。
   源码表明成功后存 `accessToken`/`refreshToken`（不存 apiKey），打印 `Logged in as <email>`，再调 `GetMe` 写入 `authInfo`【3541@493、3541@3010】。
-  **P4b 的登录中继**：把链接原样交给用户，最长等 27 分钟，成功与否看 `agent login` 的退出码；之后用 `status --format json` 核对。
+  **P4b 的登录中继**：把链接原样交给用户，最长等 29 分钟，成功与否看 `agent login` 的退出码；退出码 0 之后读回账号目录里存下的登录（有 accessToken、没过期）核对，
+  和会话借用时读的是同一份。`status --format json` 读的也只是这份已存的 token（§8.2），所以不再另起一个 CLI 去问。
 - **`agent status --format json`**【实测】：
   - 未登录：`{"status":"unauthenticated","isAuthenticated":false,"hasAccessToken":false,"hasRefreshToken":false,"message":"Not logged in"}`
   - 已存 token：`status:"authenticated"`，外加 `userInfo{email,userId,firstName,lastName,createdAt}`
@@ -924,6 +936,11 @@ body: {}
 ```
 
 - 派发变量：`ORBIT_CURSOR_ACCOUNT_DIR=<账号目录>`，做法同 `ORBIT_ANTIGRAVITY_GOOGLE_DIR`。runner 读它，从 CLI 的环境里删掉。
+- **P4b 的实现**（`src/runner-go/cursor_account_slot.go`）：账号目录里只有 `agent login` 用的 `home/`、`config/`、`xdg-config/`（HOME、CURSOR_CONFIG_DIR、
+  XDG_CONFIG_HOME，凭据存 file），登录存在 `xdg-config/cursor/auth.json`。会话不在账号目录里跑：P3 起每个会话的 `config/`、`data/`、`home/` 都在会话自己的目录里，
+  会话只借用账号的登录，读出 accessToken 以 `CURSOR_AUTH_TOKEN` 加 memory 存储交给 CLI，什么都不写回账号目录。
+  会话的记录（`meta.json` 的 `cursorAccountDir`）写下借用的账号，移除时据此拒绝。runner 只读已存的登录，从不刷新（§8.4 第 4 条）。
+  只在 Linux 上保留 Default 以外的账号（D4 方案 A）；其他平台不声明 `cursor-account-login/v1`、`cursor-account-remove/v1`，只有 Default（方案 D），等 P0b。
 - API key 凭据（P2）不建账号目录。会话用自己的 `config/`、`data/`（放在会话 scratch 下，续聊时复用），key 以 `CURSOR_API_KEY` 注入，用 memory 存储。
 
 ### 16.3 启动参数
@@ -950,15 +967,16 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
   3. 契约固定的变量（HOME、SHELL、CURSOR_CONFIG_DIR、CURSOR_DATA_DIR、AGENT_CLI_CREDENTIAL_STORE=memory、NO_OPEN_BROWSER、DIRENV_DISABLE、
      CURSOR_AGENT_DISABLE_DEBUG_LOG、Orbit 的会话变量），以及 Orbit 选定的凭据。工作区设了同名变量也以这一层为准。
 - **凭据的选法**，依次：
-  1. 派发的 key（P2：`ORBIT_CURSOR_API_KEY`，以 `CURSOR_API_KEY` 交给 CLI）；之后的账号 token（P4b）也在这一档。
-     Orbit 选了凭据时，工作区带来的 `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN` 都换掉。
+  1. 派发的 key（P2：`ORBIT_CURSOR_API_KEY`，以 `CURSOR_API_KEY` 交给 CLI）；其次是派发的账号（P4b：`ORBIT_CURSOR_ACCOUNT_DIR` 指向 Default 以外的账号）
+     已存登录的 accessToken，以 `CURSOR_AUTH_TOKEN` 交给 CLI。这个账号没登录、登录已过期（剩余不足 300 s 也算），或者不是这台 runner 的账号时，会话以
+     `Failed to authenticate: …` 拒绝，不退回 Default 或工作区的凭据。Orbit 选了凭据时，工作区带来的 `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN` 都换掉。
   2. 工作区环境变量里的 `CURSOR_API_KEY` 或 `CURSOR_AUTH_TOKEN`，原样经第 2 层传入。这与 server 的登录预检（`CREDENTIAL_ENV_KEYS.cursor`）
      和 `OWN_CREDENTIAL_KEYS.cursor` 一致，runner 的 `hasInjectedCredentials(cursor)` 读的也是这三个变量。
   3. 都没有时，用 Default 账号已存的登录（`<orbit home>/cursor/default/xdg-config/cursor/auth.json` 的 accessToken，以 `CURSOR_AUTH_TOKEN` 注入；
      剩余不足 300 s 算过期，不用）。
   4. 一个都没有：不启动 CLI，会话以「需要登录」（`Failed to authenticate: …`）结束。
-- agent 跑的命令经 orbit-bash（SHELL）执行：还原真 HOME，unset `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、`XDG_CONFIG_HOME`、`CURSOR_CONFIG_DIR`、
-  `CURSOR_DATA_DIR`；工作区的其他变量照常可见。【实测 `p0c/shell-wrapper-env`，§8.4；hooks 不经过它】
+- agent 跑的命令经会话自己的 orbit-bash（SHELL）执行：还原真 HOME，unset `CURSOR_API_KEY`、`CURSOR_AUTH_TOKEN`、`CURSOR_CONFIG_DIR`、`CURSOR_DATA_DIR`，
+  把 `XDG_*` 和 Orbit 只给 CLI 设的变量还原成其他引擎会话里的值（P4b，§8.4）；工作区的其他变量照常可见。【实测 `p0c/shell-wrapper-env`，§8.4；hooks 不经过它】
 - `initialize` 用 §2.2 的请求。`session/new` 或 `session/load` 一律带上 `mcpServers`（Orbit MCP 等），load 时重新给。
 - 模型用 `set_config_option`（参数化选择器），不用 `--model`。新会话默认 Auto（`default` / `default[]`）。
 - 健康检查（P3）：`--version` 等于固定版本；`agent models` 退出码 0，说明凭据有效、能联网。不要用 `status`（它不认 API key）。
@@ -1025,6 +1043,7 @@ P0c（2026-10-17，付费套餐，7 次 prompt）已补完 P0a 卡住的场景�
 D4 方案 A（§8.4）、`cursor/ask_question`（§4.2）、提交署名和后台命令（§14.4、§3.2）。还没验证的：
 
 1. 远程设备完成登录；浏览器登录 token 的寿命和过期表现；`agent logout` 对登录账号的效果（场景 `login-account`，要所有者亲自登录一次，1 次 prompt）。
+   P4b（2026-10-17）又请所有者登录两次，两次的链接都没人用，分别在 1,543 s、1,562 s 后过期（§9）。
 2. 跨账号或跨团队续聊（D5），以及不同账号的模型目录差异。
 3. 团队管理员否决 Run Everything（没有团队账号）；限流的形状；轮中认证失效的形状；断网以外的网络故障（DNS 失败、代理报错、慢网）会不会被重试（§12）。
 4. deny 规则的强制力；`approvalMode: unrestricted`；`channel: static`；`--disable-codebase-ref` 对回答质量的影响；用别的 cwd load 会话。

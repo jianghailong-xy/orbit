@@ -1280,7 +1280,7 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
  */
 const PLAN_USAGE_IDS = ['limitId', 'rateLimits[].limitId', 'rateLimitReset.rateLimitResetCredits.credits[].id', 'buckets[].id'];
 const planUsageReadings = Object.fromEntries(
-  ['planUsage.', 'planUsage.claude.', 'planUsage.codex.', 'planUsage.kimi.', 'planUsage.antigravity.', 'engines[].planUsage.']
+  ['planUsage.', 'planUsage.claude.', 'planUsage.codex.', 'planUsage.kimi.', 'planUsage.cursor.', 'planUsage.antigravity.', 'engines[].planUsage.']
     .flatMap((at) => PLAN_USAGE_IDS.map((id) => [
       `POST /runner/heartbeat body ${at}${id}`,
       'a provider\'s own name for one of its rate-limit buckets or credits, not an Orbit row: stored as the reporting '

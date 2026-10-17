@@ -67,6 +67,16 @@ type fakeCursorACPScript struct {
 	// session/cancel then ends the command's process group, as Cursor ends a cancelled command's (§3.3),
 	// unless IgnoreCancel.
 	Spawn bool `json:"spawn,omitempty"`
+	// CancelEndsPrompt answers a session/cancel the way the real CLI does whatever the recording holds:
+	// the session's running prompt is answered `cancelled` at once, the rest of its recorded stream is
+	// dropped, and a request it was waiting on the runner for is no longer waited on (§3.3, §5.2).
+	CancelEndsPrompt bool `json:"cancelEndsPrompt,omitempty"`
+	// Modes answers a session/set_mode the recording does not hold as the CLI answers one (§3.1): a
+	// current_mode_update for the mode asked, then {}.
+	Modes bool `json:"modes,omitempty"`
+	// HoldAfter stops the replay once the runner has answered the request the CLI sent under this recorded
+	// id, until the runner sends anything else: a stop, or the CLI ending, finds the turn still running.
+	HoldAfter string `json:"holdAfter,omitempty"`
 }
 
 // fakeCursorScopeProcessEnv starts this test binary as one of the processes a Spawn script starts
@@ -367,6 +377,7 @@ func runFakeCursorACP(dir string) int {
 	cancelled := map[string]bool{}   // recorded prompts the runner cancelled
 	unanswered := ""                 // the first recorded request the CLI never answered
 	command := 0                     // the command a Spawn script started, which leads its process group
+	held := false                    // HoldAfter's request was answered: nothing more goes out for now
 	for _, request := range requests {
 		if request.unanswered {
 			unanswered = request.id
@@ -381,7 +392,7 @@ func runFakeCursorACP(dir string) int {
 		}
 	}
 	pump := func() {
-		for cursor < len(lines) && waiting == "" {
+		for cursor < len(lines) && waiting == "" && !held {
 			line := lines[cursor]
 			if line.answer != "" && skipped[line.answer] {
 				cursor++
@@ -439,6 +450,9 @@ func runFakeCursorACP(dir string) int {
 		}
 		method, id := asString(msg["method"]), msg["id"]
 		params := mapValue(msg["params"])
+		if method != "" {
+			held = false
+		}
 		switch {
 		case method != "" && id != nil:
 			match := -1
@@ -452,6 +466,13 @@ func runFakeCursorACP(dir string) int {
 				if requests[i].method == method {
 					match = i
 				}
+			}
+			if match < 0 && method == "session/set_mode" && script.Modes {
+				write(map[string]interface{}{"jsonrpc": "2.0", "method": "session/update", "params": map[string]interface{}{
+					"sessionId": firstString(params, "sessionId"),
+					"update":    map[string]interface{}{"sessionUpdate": "current_mode_update", "currentModeId": firstString(params, "modeId")}}})
+				write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "result": map[string]interface{}{}})
+				continue
 			}
 			if match < 0 {
 				write(map[string]interface{}{"jsonrpc": "2.0", "id": id,
@@ -476,13 +497,33 @@ func runFakeCursorACP(dir string) int {
 				}
 			}
 		case method == "session/cancel" && !script.IgnoreCancel:
-			cancel(firstString(params, "sessionId"))
+			session := firstString(params, "sessionId")
+			cancel(session)
 			if command != 0 {
 				_ = syscall.Kill(-command, syscall.SIGTERM)
+			}
+			for recorded, s := range running {
+				if !script.CancelEndsPrompt || s != session {
+					continue
+				}
+				// The prompt ends here: its answer goes out now, and what the recording streamed for it
+				// after this point never does.
+				for i := cursor; i < len(lines); i++ {
+					if lines[i].answer == recorded {
+						cursor = i + 1
+						break
+					}
+				}
+				write(map[string]interface{}{"jsonrpc": "2.0", "id": live[recorded], "result": map[string]interface{}{"stopReason": "cancelled"}})
+				delete(running, recorded)
+				waiting = ""
 			}
 		case id != nil:
 			if rpcIDKey(id) == waiting {
 				waiting = ""
+			}
+			if script.HoldAfter != "" && rpcIDKey(id) == script.HoldAfter {
+				held = true
 			}
 		}
 		pump()

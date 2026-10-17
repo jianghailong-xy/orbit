@@ -749,6 +749,12 @@ type LoginResultRequest struct {
 	// The Codex account being signed in. For a new account this is the slot the runner just
 	// added, which is how the control plane learns its id.
 	Account string `json:"account,omitempty"`
+	// With URL: when that link stops working, RFC 3339 — Cursor CLI's, the time `agent login` is sure to
+	// wait on it (cursorLoginLinkLifetime). Omitted where the CLI's link has no such time.
+	ExpiresAt string `json:"expiresAt,omitempty"`
+	// With a failure: why, when a client answers it differently from any other — loginReasonExpired, the
+	// link running out before anyone signed in with it. Omitted for every other failure.
+	Reason string `json:"reason,omitempty"`
 }
 
 // MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into

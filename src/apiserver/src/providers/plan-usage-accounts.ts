@@ -4,7 +4,7 @@
  *
  * A runner reports Default's quota as that engine's snapshot's own windows and every other account's
  * under that snapshot's `accounts`, by the account's id (src/runner-go/{codex,claude}_account_usage.go),
- * and Kimi Code's the same way under `kimi`.
+ * and Kimi Code's and Cursor CLI's the same way under `kimi` and `cursor` (src/runner-go/cursor_usage.go).
  */
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { ENGINE_ACCOUNTS_MAX, namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
@@ -33,10 +33,11 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
  * `usage` with each engine snapshot's other accounts as they are stored: each under the id of an
  * account the runner added, and each as that account's own windows only — no `accounts` of its own,
  * and no reset block, which is Default's alone (docs/codex-rate-limit-reset-contract.md §3) and the
- * only one the stored-block ordering covers (§8). An entry under any other key, or that is not an
- * object, is dropped whole; at most ENGINE_ACCOUNTS_MAX are kept, as for the accounts the engine
- * report lists. Snapshots carrying no accounts are returned as they came, so a heartbeat that
- * reported none still stores the same object.
+ * only one the stored-block ordering covers (§8). An entry under any other key, that is not an
+ * object, or that names another account than its key (a Cursor CLI snapshot's `account`), is dropped
+ * whole; at most ENGINE_ACCOUNTS_MAX are kept, as for the accounts the engine report lists. Snapshots
+ * carrying no accounts are returned as they came, so a heartbeat that reported none still stores the
+ * same object.
  */
 export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
   // A runner older than nested snapshots reports its Codex quota as the payload itself.
@@ -44,8 +45,15 @@ export function sanitizePlanUsageAccounts(usage: PlanUsage): PlanUsage {
   const codex = sanitizeAccountsOf(usage.codex);
   const claude = sanitizeAccountsOf(usage.claude);
   const kimi = sanitizeAccountsOf(usage.kimi);
-  if (codex === usage.codex && claude === usage.claude && kimi === usage.kimi) return usage;
-  return { ...usage, ...(codex ? { codex } : {}), ...(claude ? { claude } : {}), ...(kimi ? { kimi } : {}) };
+  const cursor = sanitizeAccountsOf(usage.cursor);
+  if (codex === usage.codex && claude === usage.claude && kimi === usage.kimi && cursor === usage.cursor) return usage;
+  return {
+    ...usage,
+    ...(codex ? { codex } : {}),
+    ...(claude ? { claude } : {}),
+    ...(kimi ? { kimi } : {}),
+    ...(cursor ? { cursor } : {}),
+  };
 }
 
 /** One engine snapshot with its `accounts` as they are stored, or the same object when it carries
@@ -58,6 +66,7 @@ function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined): PlanUsageS
   for (const [id, entry] of Object.entries(isObject(reported) ? reported : {})) {
     if (kept === ENGINE_ACCOUNTS_MAX) break;
     if (!ADDED_ACCOUNT_ID.test(id) || !isObject(entry)) continue;
+    if (entry.account !== undefined && entry.account !== id) continue;
     const { accounts: _nested, rateLimitReset: _block, ...own } = entry as PlanUsageSnapshot;
     accounts[id] = own;
     kept += 1;
