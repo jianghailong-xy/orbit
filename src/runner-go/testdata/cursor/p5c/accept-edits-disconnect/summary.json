@@ -1,0 +1,129 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "command": "touch disconnected.txt"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+      "withdrawn": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "card-withdrawn",
+      "pass": true,
+      "detail": "cards [{ID:approval-1 ToolName:Bash ToolUseID:call-<UUID_2>-0\nfc_<UUID_3>_0 Input:map[command:touch disconnected.txt] Withdrawn:true}]"
+    },
+    {
+      "name": "command-did-not-run",
+      "pass": true,
+      "detail": "disconnected.txt absent"
+    },
+    {
+      "name": "turn-failed-on-exit",
+      "pass": true,
+      "detail": "completions [{LeaseOwner: TurnID:turn-1 Status:FAILED Result:I'll create `disconnected.txt` and stop there. Error:Cursor CLI exited during this turn (signal: killed) without answering it. The turn was not sent again: its tools may already have run. ShellExitCode:\u003cnil\u003e ShellOutput:\u003cnil\u003e Subtype:error NumTurns:1 CostUsd:0 Usage:\u003cnil\u003e ModelUsage:map[] UsageUnknown:true RuntimeSessionID:<UUID_1> IsolationStatus: ChangedFiles:[] BaseSha: BranchSha: ChangedDiff:[] WorktreeDirty:false BranchMerged:false WorktreeBranch:}]"
+    },
+    {
+      "name": "no-allow-reached-the-cli",
+      "pass": true,
+      "detail": "requests [[\"`touch disconnected.txt`\"]]"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "Cursor CLI exited during this turn (signal: killed) without answering it. The turn was not sent again: its tools may already have run.",
+      "result": "I'll create `disconnected.txt` and stop there.",
+      "status": "FAILED",
+      "subtype": "error",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "touch disconnected.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Cursor CLI ended the turn before this tool reported a result; it may have run.",
+        "isError": true,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "message": "Cursor CLI exited during this turn (signal: killed) without answering it. The turn was not sent again: its tools may already have run."
+      },
+      "turn": "turn-1",
+      "type": "error"
+    },
+    {
+      "payload": {
+        "exit": "signal: killed",
+        "provider": "cursor",
+        "runtimeSessionId": "<UUID_1>",
+        "subtype": "process_exited"
+      },
+      "turn": "",
+      "type": "system"
+    }
+  ],
+  "facts": {},
+  "mode": "acceptEdits",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server"
+  ],
+  "prompts": [
+    5
+  ],
+  "scenario": "accept-edits-disconnect",
+  "status": "FAILED",
+  "version": "2026.10.14-941492e"
+}

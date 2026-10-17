@@ -1,0 +1,108 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": null,
+  "checks": [
+    {
+      "name": "orbit-mcp-injected",
+      "pass": true,
+      "detail": "session/new mcpServers[0] = orbit [mcp], env keys 11"
+    },
+    {
+      "name": "orbit-tool-allowed-unasked",
+      "pass": true,
+      "detail": "requests [[\"orbit-task_get: task_get\" \"allow-once\"]], cards 0"
+    },
+    {
+      "name": "orbit-tool-reached-orbit",
+      "pass": true,
+      "detail": "the stub control plane served task_get"
+    },
+    {
+      "name": "orbit-tool-card",
+      "pass": true,
+      "detail": "uses [\"mcp__orbit__task_get\"] results [\"Done. Cursor CLI does not pass an MCP tool's result on to Orbit.\"]"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "I'll look up the Orbit `task_get` tool and call it with no arguments.\n\nP5c probe task",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-1\nfc_<UUID_3>_0",
+        "input": {},
+        "mcpServer": "orbit",
+        "mcpTool": "task_get",
+        "name": "mcp__orbit__task_get"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Done. Cursor CLI does not pass an MCP tool's result on to Orbit.",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-1\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "reply": "I'll look up the Orbit `task_get` tool and call it with no arguments.\n\nP5c probe task",
+    "replyNamesTheTask": true
+  },
+  "mode": "acceptEdits",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<CLI>/rg --files --follow --max-depth 16 --no-messages",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server",
+    "(stub served task_get 1 time(s))"
+  ],
+  "prompts": [
+    2
+  ],
+  "scenario": "mcp-orbit",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}
