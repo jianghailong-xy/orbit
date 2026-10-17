@@ -81,6 +81,8 @@ import {
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
   IntegrationJobProgressRequest,
+  IntegrationJobReleaseRequest,
+  IntegrationJobReleaseResponse,
   IntegrationJobResultRequest,
   IntegrationJobResultResponse,
   isUsageLimitErrorText,
@@ -1736,6 +1738,38 @@ export class RunnerApiController {
   }
 
   /**
+   * A claimed integration job given back by the process that holds it (§2.2 J-T11): a stopping runner,
+   * for a job it never started or one it stopped before its push. Fenced like a result, so a claim
+   * that has moved on gets 409 STALE_CLAIM and a job already written down 409 ALREADY_FINAL.
+   *
+   * Released, the job is QUEUED for the next heartbeat that asks for work, and this runner — the one
+   * its workspace routes it to — is woken for it: a wake nobody is parked for is held for the next
+   * poll, so a process that comes straight back claims it at once rather than at its first 30 s tick.
+   * A job somebody asked to stop ends CANCELLED instead, with the result route's aftermath.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('integration-jobs/:jobId/release')
+  @HttpCode(200)
+  async integrationJobRelease(
+    @CurrentRunner() runner: { id: string; ownerId?: string },
+    @Param('jobId', PublicIdPipe) jobId: string,
+    @Body() body: IntegrationJobReleaseRequest,
+  ): Promise<IntegrationJobReleaseResponse> {
+    let applied: Awaited<ReturnType<IntegrationJobRelay['release']>>;
+    try {
+      applied = await this.integrationQueue().release(jobId, runner.id, body, runner.ownerId);
+    } catch (error) {
+      throw integrationJobHttpError(error);
+    }
+    if (applied.answer.released) {
+      this.realtime.notifyRunnerWake(runner.id);
+    } else {
+      await this.afterIntegrationResult(applied.after, null);
+    }
+    return applied.answer;
+  }
+
+  /**
    * What one claimed integration job came to (§2.2 J-T5 to J-T7).
    *
    * Everything the result implies is written in the transaction that writes the state: the receipt
@@ -1757,7 +1791,15 @@ export class RunnerApiController {
     } catch (error) {
       throw integrationJobHttpError(error);
     }
-    const after = applied.after;
+    await this.afterIntegrationResult(applied.after, applied.answer.openItemId);
+    return applied.answer;
+  }
+
+  /** What follows a committed job result: the result route's, and a release that ended a job (J-T12). */
+  private async afterIntegrationResult(
+    after: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>['after'],
+    openItemId: string | null,
+  ): Promise<void> {
     if (after) {
       if (after.considerPromotionProjectId) {
         // M-F1 / M-F4, after the commit and from the committed rows: "the queue is empty" is only
@@ -1785,11 +1827,10 @@ export class RunnerApiController {
       // things only the account owner can answer, so their devices are told. Handed the item id
       // rather than a decision: which items reach a phone is `notifyOwnerItem`'s to decide, and the
       // exception items opened above — still the coordinator's — answer null there and send nothing.
-      if (applied.answer.openItemId) {
-        void this.push.notifyOwnerItem(applied.answer.openItemId);
+      if (openItemId) {
+        void this.push.notifyOwnerItem(openItemId);
       }
     }
-    return applied.answer;
   }
 
   /** The repository-operation queue, or the reason a request about one cannot be answered without it. */

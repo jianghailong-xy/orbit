@@ -585,6 +585,19 @@ type IntegrationUpstreamMoved struct {
 	Commits int `json:"commits,omitempty"`
 }
 
+// IntegrationJobReleaseRequest hands a claimed job back (§2.2 J-T11): the claim it gives up.
+type IntegrationJobReleaseRequest struct {
+	ClaimGeneration string `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+}
+
+// IntegrationJobReleaseResponse says whether the job went back to the queue; when it did not, State is
+// what it ended as instead (CANCELLED: somebody had asked it to stop).
+type IntegrationJobReleaseResponse struct {
+	Released bool   `json:"released"`
+	State    string `json:"state"`
+}
+
 // IntegrationJobResultRequest is what the job came to, with everything a reader needs to check
 // that what landed is what was tested.
 type IntegrationJobResultRequest struct {
