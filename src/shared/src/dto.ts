@@ -532,6 +532,80 @@ export type ProviderBalanceRead =
  */
 export type ProviderBalance = ProviderBalanceRead & { sharedWith: ProviderBalanceSibling[] };
 
+/**
+ * GET /providers/mine/:id/usage: what uses one of the caller's own keys, per engine — its open
+ * sessions (not completed, not in Trash) and the tasks still to run whose pin names it
+ * (docs/provider-engine-contract.md §3.6). What a client shows before the key is disabled or deleted,
+ * which every one of them, on every engine, then waits on; the same count that refuses a protocol
+ * change while they use it (PROVIDER_DIALECT_IN_USE). Engines nothing uses are absent.
+ */
+export interface ProviderKeyUsage {
+  providerId: string;
+  engines: Array<{ engine: AgentProvider; sessions: number; tasks: number }>;
+  /** The totals over `engines`. */
+  sessions: number;
+  tasks: number;
+}
+
+/**
+ * What Cursor CLI on a runner last answered when asked with a Cursor API key (`agent models`,
+ * docs/cursor-runtime-contract.md §9): Cursor accepted the key, refused it ("The provided API key is
+ * invalid."), or could not be reached to ask — which says nothing about the key. A Cursor key's row
+ * carries it as `keyCheckState`, beside `keyCheckedAt`; both null until a runner has checked the key
+ * it holds now. A runner reports it as it checks a session's key (POST /runner/sessions/:id/cursor-key-check).
+ */
+export const CURSOR_KEY_CHECK_STATES = ['VALID', 'INVALID', 'UNREACHABLE'] as const;
+export type CursorKeyCheckState = (typeof CURSOR_KEY_CHECK_STATES)[number];
+
+/**
+ * What a check of a Cursor API key somebody asked for came to: on connect (POST /providers/test with
+ * `runtime: 'cursor'`) or again for a saved key (POST /providers/mine/:id/key-check, "Check Again").
+ * The server never uses the key itself: a runner of theirs asks Cursor CLI's `agent models` with it
+ * (docs/cursor-runtime-contract.md §9). Either what Cursor answered, as that runner read it
+ * (CURSOR_KEY_CHECK_STATES), or NO_RUNNER: no runner of theirs could ask — none is online with the
+ * pinned Cursor CLI and a runner release that declares `cursor-key-check/v1`, or the one asked did not
+ * answer in time. Only INVALID says anything against the key: a client offers to save it anyway on
+ * UNREACHABLE and NO_RUNNER, and the key is checked again before a session starts on it.
+ */
+export const CURSOR_KEY_CHECK_OUTCOMES = [...CURSOR_KEY_CHECK_STATES, 'NO_RUNNER'] as const;
+export type CursorKeyCheckOutcome = (typeof CURSOR_KEY_CHECK_OUTCOMES)[number];
+
+/** The answer to a Cursor key check somebody asked for. */
+export interface CursorKeyCheckAnswer {
+  /** True for VALID alone. */
+  ok: boolean;
+  keyCheck: CursorKeyCheckOutcome;
+  /** What happened, in a sentence a client may show as it stands. Never carries the key. */
+  message: string;
+}
+
+/** The answer to Check Again: the check's own, and the saved key's last check as it stands after it. */
+export interface CursorKeyRecheckAnswer extends CursorKeyCheckAnswer {
+  /** Whether this check's answer was kept on the key: never for NO_RUNNER, nor for an answer about a key
+   *  replaced while it was being checked. */
+  recorded: boolean;
+  keyCheckState: CursorKeyCheckState | null;
+  keyCheckedAt: string | null;
+}
+
+/** Control plane → runner, on the heartbeat of a process that declares `cursor-key-check/v1`: a Cursor
+ *  API key to ask `agent models` with, in a throwaway home with credentials in memory, and to answer by
+ *  POST /runner/cursor-key-check-result. Handed over once; the key is written to no file, log or event
+ *  on either side. */
+export interface CursorKeyCheckCommand {
+  checkId: string;
+  apiKey: string;
+}
+
+/** Runner → control plane: what Cursor answered a CursorKeyCheckCommand's key with, and the key it was
+ *  about by its fingerprint, never the key. An answer the runner cannot read is no verdict on the key,
+ *  and is reported UNREACHABLE: the key could not be checked. */
+export interface CursorKeyCheckResult {
+  checkId: string;
+  state: CursorKeyCheckState;
+  keyFingerprint: string;
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
@@ -909,6 +983,10 @@ export interface RunnerHeartbeatResponse {
    *  (managedRunner.ts): with nothing to do, stop claiming, drain and exit. Absent otherwise, so
    *  every other runner sees the response shape it always had. */
   managedSleep?: ManagedRunnerSleepRequest;
+  /** Cursor API keys somebody is waiting to have checked (CursorKeyCheckCommand): sent only to a
+   *  process that declared `cursor-key-check/v1`, each handed over once. Absent otherwise, so every
+   *  other runner sees the response shape it always had. */
+  cursorKeyChecks?: CursorKeyCheckCommand[];
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */
@@ -1118,9 +1196,11 @@ export interface CodexRateLimitResetResultRefusal {
 /**
  * Engines a runner signs in with on its own machine, rather than using a configured API key.
  * Antigravity signs in a Google account, and only on a runner that declares
- * `antigravity-google-login/v1` (RunnerAntigravityState.googleLogin).
+ * `antigravity-google-login/v1` (RunnerAntigravityState.googleLogin). Cursor CLI's sign-in is its own
+ * `agent login` (docs/cursor-runtime-contract.md §9); the relay that starts one on a runner is not
+ * offered for it yet, so a runner is never sent one.
  */
-export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
+export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity' | 'cursor';
 
 /**
  * Kimi Code's two sign-in sites, as `kimi login --region` names them: `mainland-cn` is kimi.com,
@@ -1202,7 +1282,9 @@ export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
  */
 export interface LoginCommand {
   action: 'start' | 'code' | 'cancel';
-  /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. */
+  /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. A
+   *  `cursor` start, Default's included, goes only to a runner that declares `cursor-account-login/v1`:
+   *  an older one signs in Claude Code for an engine it does not know. */
   engine?: LoginEngine;
   /** The authorization code the user pasted, for `code`. */
   code?: string;
@@ -1272,6 +1354,15 @@ export interface LoginResult {
   /** The one-time code the user types on the sign-in page, for the device flow. */
   userCode?: string;
   message?: string;
+  /** With `url`: when that link stops working, ISO 8601. Cursor CLI's `agent login` prints one link
+   *  and gives up on it about 27 minutes later (docs/cursor-runtime-contract.md §9), so the runner
+   *  reports the start of the sign-in plus that. Absent where the runner names no such time. */
+  expiresAt?: string;
+  /** With `failed`: why, when a client answers it differently from any other failure — the one value
+   *  is `expired`, the link running out before anyone signed in with it (Cursor CLI's "Login failed or
+   *  timed out"), which a client answers with a new link rather than a retry. `message` still says it
+   *  in words. Absent for every other failure. */
+  reason?: LoginFailureReason;
   /** The `attempt` of the start this reports on. A report about an attempt the control plane has
    *  moved past (cancelled, or replaced by a new sign-in) changes nothing. Absent from an older
    *  runner, whose reports are taken as they come. */
@@ -1301,8 +1392,8 @@ export interface RunnerEngineHealth {
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
    *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
-  /** Codex, Claude Code, Antigravity and Kimi Code: every account signed into this machine's CLI,
-   *  Default first, each with its own sign-in state. `auth` above stays the engine's answer, which is
+  /** Codex, Claude Code, Antigravity, Kimi Code and Cursor CLI: every account signed into this
+   *  machine's CLI, Default first, each with its own sign-in state. `auth` above stays the engine's answer, which is
    *  what every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
    *  while its Default account is the runner's Google sign-in alone. Absent from an older runner, and
    *  whenever the runner couldn't list its accounts — read as the one account every machine had
@@ -1336,7 +1427,7 @@ export interface DshRuntimeHealth {
 /**
  * One account on a runner: a directory the CLI keeps that login in — a Codex CODEX_HOME, a Claude
  * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a Kimi Code
- * KIMI_CODE_HOME — which the runner signs in and runs sessions on.
+ * KIMI_CODE_HOME, a Cursor CLI account's directory — which the runner signs in and runs sessions on.
  *
  * Nothing here names the account itself. Neither its email nor its account id leaves the machine
  * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
@@ -1473,7 +1564,20 @@ export interface RunnerLoginState {
    *  names none — the runner's own login — and for a new account until the runner reports the
    *  slot it added. */
   account?: string | null;
+  /** When the link at `url` stops working, ISO 8601, as the runner reported it (LoginResult.expiresAt):
+   *  what a client counts down from. Present only while a sign-in is waiting on a link that has one. */
+  expiresAt?: string;
+  /** Why a `failed` sign-in failed, when a client answers it differently (LoginResult.reason).
+   *  Present only on such a failure. */
+  reason?: LoginFailureReason;
 }
+
+/** Why a sign-in failed, when a client answers it differently from any other failure: `expired` is
+ *  the sign-in link running out before anyone signed in with it. */
+export type LoginFailureReason = 'expired';
+
+/** Every LoginFailureReason, for a reader that checks one it is handed. */
+export const LOGIN_FAILURE_REASONS: readonly LoginFailureReason[] = ['expired'];
 
 /** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
 export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';
@@ -1814,6 +1918,12 @@ export interface ApprovalDecisionResponse {
 // It is deliberately its own kind rather than a relaxation of the message gate — a steer
 // neither occupies the single in-flight slot nor waits for it, and it settles its own turn
 // on the engine's echo rather than on a `result`, which belongs to the turn it joined.
+// 'withdraw' asks the runner to take back one steer the engine has not read yet. Its `content` is
+// JSON naming that steer ({"turnId": …}); the runner asks the engine to drop the message and
+// completes this turn with what the engine answered (TURN_COMPLETE_STEER_WITHDRAW), which the
+// completion writes back into `content` for the request that filed it to read. Deliverable
+// mid-turn like interrupt — a steer only exists while a turn runs — and filed only for a runtime
+// and runner that can do it (supportsSteerWithdraw).
 export type ConversationTurnKind =
   | 'message'
   | 'interrupt'
@@ -1822,7 +1932,8 @@ export type ConversationTurnKind =
   | 'setconfig'
   | 'shell'
   | 'diff'
-  | 'steer';
+  | 'steer'
+  | 'withdraw';
 
 /** What a routing-v1 sender wants a message to do. Omission retains the installed N-1
  * server-side auto-steer/queue protocol; new clients always send one explicit value. */
@@ -1880,6 +1991,23 @@ export interface RunInterruptRequest {
   content?: string;
   /** Ids of pre-uploaded attachments (`POST /api/attachments`) for the follow-up. */
   attachmentIds?: string[];
+  /**
+   * Stop this session's background work along with the turn: the shells and Monitors the
+   * engine's own turn launched, its background Workflows, and the jobs the runner hosts
+   * (bg_run — kind 'service' included, deliberately: a dev server or watcher is taken down
+   * too, and that cost was accepted rather than softened with an allow-list).
+   *
+   * Explicit, and this is the whole point of it being a field. An interrupt does not kill
+   * anything — the process, its conversation and its stdin survive it, which is the entire
+   * difference from `end` — and a client that omits this asks for exactly that, unchanged.
+   * The composer's Stop is the one caller that asks for more, because a turn that left its
+   * own dev server running has not stopped what the person pointed at.
+   *
+   * It is not a promise the runner can confirm the way the turn's own stop is confirmed:
+   * what the runner hosts is killed and reported, and the engine's own tasks are reported
+   * as stopped with it. The session is not ended by any of this.
+   */
+  stopBackgroundWork?: boolean;
 }
 
 /** Control plane → browser: the interrupt was accepted, and the turn the follow-up (if
@@ -2097,6 +2225,37 @@ export interface TurnCompleteRequest {
  * twice. See docs/codex-turn-steer-contract.md §4.3.
  */
 export const TURN_COMPLETE_STEER_REQUEUE = 'steer_requeue';
+
+/**
+ * `TurnCompleteRequest.subtype` for a `withdraw` turn: the runner asked the engine to drop the steer
+ * it names, and `result` is what came of it (SteerWithdrawOutcome), with `error` saying why when it
+ * was not `withdrawn`. Only `withdrawn` changes anything: the steer's row goes, as a cancelled
+ * queued message's does. Every other outcome leaves the steer exactly where it was, on its way to
+ * being read.
+ */
+export const TURN_COMPLETE_STEER_WITHDRAW = 'steer_withdraw';
+
+/**
+ * What asking the engine to drop a steer came to.
+ *
+ * - `withdrawn`: the engine dropped it unread (claude's `cancel_async_message` answered
+ *   `cancelled: true`). Nothing will ever read it.
+ * - `already_read`: the engine had taken it into the turn first (`cancelled: false`).
+ * - `not_waiting`: the runner holds no such message on its way into the engine — it was read,
+ *   it failed, or it belongs to an engine process that is gone.
+ * - `failed`: the engine never answered, or refused the request; the message is where it was.
+ */
+export type SteerWithdrawOutcome = 'withdrawn' | 'already_read' | 'not_waiting' | 'failed';
+
+/** The machine codes DELETE /sessions/:id/turns/:turnId refuses a steer's withdrawal with. */
+export const STEER_WITHDRAW_ERRORS = {
+  /** The engine had read it already; it is part of the running turn. */
+  ALREADY_READ: 'STEER_ALREADY_READ',
+  /** The engine has it and has no way to give it back (codex, or a runner that predates withdraw). */
+  NOT_WITHDRAWABLE: 'STEER_NOT_WITHDRAWABLE',
+  /** The runner did not answer in time; the message was not withdrawn. */
+  NO_ANSWER: 'STEER_WITHDRAW_NO_ANSWER',
+} as const;
 
 /**
  * One mid-turn message that was leased by a runner process which then died holding it.

@@ -1,0 +1,99 @@
+{
+ "name": "crash-recover-and-move",
+ "runId": "2026-10-16T17-30-18-093Z",
+ "startedAt": "2026-10-16T17:31:31.596Z",
+ "finishedAt": "2026-10-16T17:32:25.978Z",
+ "passed": false,
+ "realPromptsDeclared": 2,
+ "realPrompts": [
+  {
+   "n": 9,
+   "at": "2026-10-16T17:31:41.764Z",
+   "note": "turn interrupted by stdin EOF then SIGKILL"
+  },
+  {
+   "n": 10,
+   "at": "2026-10-16T17:32:09.327Z",
+   "note": "continue after crash + move, with SHELL wrapper"
+  }
+ ],
+ "protocol": "protocol/crash-recover-and-move.ndjson",
+ "protocolLines": 35,
+ "fixtures": [
+  "crash-recover-and-move/crash",
+  "crash-recover-and-move/moved"
+ ],
+ "checks": [
+  {
+   "name": "8 s after stdin EOF in mid-turn the process is still running the turn",
+   "ok": true
+  },
+  {
+   "name": "SIGKILL mid-turn: no prompt response ever arrives",
+   "ok": true
+  },
+  {
+   "name": "the interrupted turn is on disk (store.db exists)",
+   "ok": true
+  },
+  {
+   "name": "a copied acp-sessions/<id> directory loads from another CURSOR_CONFIG_DIR/HOME",
+   "ok": true
+  },
+  {
+   "name": "the replay contains the interrupted user message",
+   "ok": true
+  },
+  {
+   "name": "after crash + move the conversation continues with its context (names `sleep 31`)",
+   "ok": false
+  },
+  {
+   "name": "with SHELL pointing at a wrapper, agent commands see the wrapper's HOME, not the CLI's",
+   "ok": false
+  },
+  {
+   "name": "the CLI itself kept using its own HOME (writes under slot b home)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "crash": {
+   "started": true,
+   "aliveAfterEof": true,
+   "updatesAfterEof": 9,
+   "exit": {
+    "code": null,
+    "signal": "SIGKILL"
+   },
+   "promptResponse": {
+    "transportClosed": true
+   },
+   "orphanSleepPids": 1
+  },
+  "after SIGKILL of the CLI alone, its shell command keeps running (orphaned) unless the runner kills it": 1,
+  "replay of the crashed turn after moving acp-sessions/<id> to another config dir": {
+   "ok": true,
+   "kinds": {
+    "user_message_chunk": 1,
+    "agent_thought_chunk": 1,
+    "agent_message_chunk": 1
+   },
+   "tools": []
+  },
+  "continued turn": {
+   "stopReason": "end_turn",
+   "answer": "\n\nRequest blocked We are unable to complete this request because it was blocked under the model provider's usage guidelines. Try a less sensitive prompt.",
+   "env": null,
+   "permissionRequests": []
+  },
+  "wrapper unset CURSOR_API_KEY / XDG_CONFIG_HOME: still visible to commands?": {
+   "xdg": null,
+   "cursorConfigDir": null
+  }
+ }
+}

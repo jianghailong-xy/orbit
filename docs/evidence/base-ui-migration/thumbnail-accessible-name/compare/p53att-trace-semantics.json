@@ -1,0 +1,431 @@
+{
+ "antd": {
+  "del": {
+   "classes": [
+    "ant-app"
+   ],
+   "steps": 60,
+   "tests": 8
+  },
+  "ref": {
+   "classes": [
+    "ant-app"
+   ],
+   "steps": 60,
+   "tests": 8
+  }
+ },
+ "missing": [],
+ "semantic": [
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "closed with Esc",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "a file dragged over the conversation",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "dropped",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "closed with Esc",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "a file dragged over the conversation",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "dropped",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "closed with Esc",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "a file dragged over the conversation",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "dropped",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "closed with Esc",
+   "test": "chromium-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "a file dragged over the conversation",
+   "test": "chromium-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "dropped",
+   "test": "chromium-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "closed with Esc",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "a file dragged over the conversation",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "dropped",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "closed with Esc",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "a file dragged over the conversation",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "dropped",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "closed with Esc",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "a file dragged over the conversation",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "dropped",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "closed with Esc",
+   "test": "webkit-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "a file dragged over the conversation",
+   "test": "webkit-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "eye",
+      "role": "button"
+     },
+     {
+      "name": "screenshot.png",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "dropped",
+   "test": "webkit-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  }
+ ],
+ "steps": 60,
+ "tests": 8
+}

@@ -24,11 +24,14 @@ const options: SelectOption[] = [
   { value: '30', label: '30 days', disabled: true },
 ];
 
+// The same choices with the first one disabled: a list opened with no value starts on the next.
+const firstDisabled: SelectOption[] = options.map((option, index) => index === 0 ? { ...option, disabled: true } : option);
+
 const picked: (string | null)[] = [];
 
-function Expires({ from }: { from: string | null }) {
+function Expires({ from, choices = options }: { from: string | null; choices?: SelectOption[] }) {
   const [value, setValue] = useState(from);
-  return <Select aria-label="Expires" options={options} value={value} onValueChange={(next) => { picked.push(next); setValue(next); }} />;
+  return <Select aria-label="Expires" options={choices} value={value} onValueChange={(next) => { picked.push(next); setValue(next); }} />;
 }
 
 let frames = new Map<number, FrameRequestCallback>();
@@ -66,11 +69,29 @@ const trigger = () => container!.querySelector<HTMLElement>('[role="combobox"]')
 const highlighted = () => document.querySelector('[role="listbox"] [data-highlighted]')?.textContent ?? null;
 
 /** Renders the Select on the value `from`, with focus on its trigger. */
-async function mount(from: string | null): Promise<void> {
+async function mount(from: string | null, choices?: SelectOption[]): Promise<void> {
   const next = createRoot(container!);
   root = next;
-  await act(async () => next.render(<Expires from={from} />));
+  await act(async () => next.render(<Expires from={from} choices={choices} />));
   trigger().focus();
+}
+
+/** A mouse press on the trigger, and the frame in which Base UI opens the list for its mousedown. Focus is moved
+ *  into the list in the frame after that one, which is left to the test. */
+async function pointerOpen(): Promise<void> {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    trigger().dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    trigger().dispatchEvent(new MouseEvent('mousedown', init));
+    trigger().dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    trigger().dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    trigger().dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await act(async () => {
+    const due = [...frames.values()];
+    frames.clear();
+    for (const frame of due) frame(performance.now());
+  });
 }
 
 beforeEach(() => {
@@ -155,5 +176,77 @@ describe('Select keys pressed before focus enters the open list', () => {
     await runFrames();
     expect(picked).toEqual(picks);
     expectEnd(leftOn);
+  });
+});
+
+/**
+ * A list opened without a key. Base UI highlights an option on opening only for the key that opened the list
+ * or for the value; with no option holding the value, the replaced select still opened on its first enabled
+ * option (rc-select's defaultActiveFirstOption), and Enter picked it.
+ */
+
+const CHOICES = { 'all options': options, 'the first option disabled': firstDisabled };
+
+// Keys after a pointer opens the list, the value they start on, the choices, the option the list opens on, and
+// the values the keys pick (none when Enter picks the current value: the list only closes).
+const POINTER_SEQUENCES: [keys: Key[], from: string | null, choices: keyof typeof CHOICES, opensOn: string, picks: string[]][] = [
+  [['Enter'], null, 'all options', 'Never', ['never']],
+  [['ArrowDown', 'Enter'], null, 'all options', 'Never', ['1']],
+  [['Enter'], null, 'the first option disabled', '1 day', ['1']],
+  [['ArrowDown', 'Enter'], null, 'the first option disabled', '1 day', ['7']],
+  // A value no option holds opens as no value does.
+  [['Enter'], 'gone', 'all options', 'Never', ['never']],
+  [['Enter'], '7', 'all options', '7 days', []],
+];
+
+describe('Select opened by the pointer', () => {
+  it.each(POINTER_SEQUENCES)('%j from %j with %s opens on its option and picks with focus in the list', async (keys, from, choices, opensOn, picks) => {
+    await mount(from, CHOICES[choices]);
+    await pointerOpen();
+    await runFrames();
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
+    expect(highlighted()).toBe(opensOn);
+    expect(document.activeElement?.textContent).toBe(opensOn);
+    for (const key of keys) {
+      await press(key);
+      await runFrames();
+    }
+    expect(picked).toEqual(picks);
+    expectEnd(null);
+  });
+
+  it.each(POINTER_SEQUENCES)('%j from %j with %s before focus enters the list picks what the reference picks', async (keys, from, choices, _opensOn, picks) => {
+    await mount(from, CHOICES[choices]);
+    await pointerOpen();
+    // The window: the list is open and focus is still on the trigger.
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(trigger());
+    for (const key of keys) await press(key);
+    expect(picked).toEqual(picks);
+    await runFrames();
+    expect(picked).toEqual(picks);
+    expectEnd(null);
+  });
+
+  it('opens on the first option only as it opens: the list taking focus back later leaves the highlight to Base UI', async () => {
+    await mount(null);
+    await pointerOpen();
+    await runFrames();
+    expect(highlighted()).toBe('Never');
+    const list = document.querySelector<HTMLElement>('.orbit-select-popup')!;
+    const option = [...list.querySelectorAll<HTMLElement>('[role="option"]')].find((el) => el.textContent === '7 days')!;
+    await act(async () => {
+      list.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', movementX: 1 }));
+      option.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, movementX: 1 }));
+    });
+    await runFrames();
+    expect(highlighted()).toBe('7 days');
+    // The pointer leaves the options: Base UI clears the highlight and focuses the list again.
+    await act(async () => {
+      option.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, pointerType: 'mouse', relatedTarget: document.body }));
+    });
+    await runFrames();
+    expect(document.activeElement).toBe(list);
+    expect(highlighted()).not.toBe('Never');
   });
 });

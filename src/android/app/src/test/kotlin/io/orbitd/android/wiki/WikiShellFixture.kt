@@ -59,6 +59,10 @@ internal object WikiShell {
     @Volatile var docsStatus: Int = 200
     /** `GET /wiki/spaces/:id/articles`; none answers 404, as a server from before the articles. */
     @Volatile var articles: String? = null
+    /** Each space's public link by space id, as `GET /wiki/spaces/:id/share` answers it; a space with none answers `link: null`. */
+    val shares = ConcurrentHashMap<String, JsonObject>()
+    /** The share writes, in order: `PUT <space> <body>`, `DELETE <space>`. */
+    val shareWrites = CopyOnWriteArrayList<String>()
     @Volatile private var frames = Channel<String>(Channel.UNLIMITED)
     @Volatile private var opened = 0
 
@@ -67,7 +71,31 @@ internal object WikiShell {
         decision = "accepted"; watchState = "ACTIVE"; pauseRefusal = null
         wikiDisabled = false; spaces = WikiFixtures.spaces; entries = fixtureEntries(); reviewQueue = WikiFixtures.review
         plans = emptyMap(); workspaces = "[]"; docs = null; docsStatus = 200; articles = null
+        shares.clear(); shareWrites.clear()
         frames = Channel(Channel.UNLIMITED); opened = 0
+    }
+
+    /** A space's link as the server's owner view answers it (share-links.service.ts): kind WIKI, the space for its root —
+     * a slug, no status — and its one layer, Footnotes, off unless chosen. */
+    fun wikiLink(space: String, footnotes: Boolean = false) = buildJsonObject {
+        put("id", "L-$space"); put("token", "wiki-token-$space"); put("kind", "WIKI"); put("state", "ACTIVE"); put("stateReason", JsonNull)
+        put("root", buildJsonObject { put("id", space); put("title", if (space == SPACE) "orbit" else "wikova"); put("slug", if (space == SPACE) "orbit" else "wikova") })
+        put("include", buildJsonObject { put("footnotes", footnotes) }); put("expiresAt", JsonNull); put("viewCount", 0); put("lastViewedAt", JsonNull)
+    }
+
+    /** `GET | PUT | DELETE /wiki/spaces/:id/share`: the read is `{link, counts}`; a PUT opens the link with the defaults or changes
+     * the layer it names, and answers the link; DELETE turns it off. */
+    private fun share(space: String, method: String, body: String?): ApiResponse = when (method) {
+        "PUT" -> {
+            shareWrites += "PUT $space $body"
+            val chosen = Wire.json.parseToJsonElement(body!!).jsonObject["include"] as? JsonObject
+            val before = shares[space] ?: wikiLink(space)
+            val link = JsonObject(before + ("include" to JsonObject(before.getValue("include").jsonObject + chosen.orEmpty())))
+            shares[space] = link
+            ok(link.toString())
+        }
+        "DELETE" -> { shareWrites += "DELETE $space"; shares.remove(space); ok("{}") }
+        else -> ok("""{"link":${shares[space] ?: "null"},"counts":{"documents":12,"footnotes":486}}""")
     }
 
     private fun fixtureEntries() = Wire.json.parseToJsonElement(WikiFixtures.entries).jsonArray.map { it.jsonObject }
@@ -156,6 +184,7 @@ internal object WikiShell {
             path.endsWith("/timeline") -> ok(WikiFixtures.timeline)
             path.endsWith("/docs") -> status(docsStatus, if (docsStatus == 200) docs ?: docsFixture.obj("directory").obj("read").toString() else """{"message":"unavailable"}""")
             path.endsWith("/articles") && articles != null -> ok(articles!!)
+            path.startsWith("wiki/spaces/") && path.endsWith("/share") -> share(path.split('/')[2], method, api.body?.decodeToString())
             path.endsWith("/docs/$DOC") -> ok(docsFixture.obj("doc").obj("read").toString())
             path.endsWith("/doc-index") -> ok(buildJsonObject { put("plan", docsFixture.obj("directory").obj("read").obj("plan")); put("items", docsFixture.obj("index").arr("items")) }.toString())
             path == "wiki/spaces/$SPACE/changesets" -> ok("""{"changesetId":"34UDCsOwnerEdit000009","ops":[{"seq":0,"status":"applied","entryId":"$ENTRY","revision":5}]}""")

@@ -1,0 +1,51 @@
+red run of the Menu footer tests as fixed after the r2 merge check (they wait for the first item's focus), on the dev reference tree with the delivery's Menu.footer.test.tsx copied in and one mutation:
+diff --git a/src/web/src/components/ui/Menu.tsx b/src/web/src/components/ui/Menu.tsx
+index a7e3822a2..8add54048 100644
+--- a/src/web/src/components/ui/Menu.tsx
++++ b/src/web/src/components/ui/Menu.tsx
+@@ -151,7 +151,7 @@ export function Menu({ trigger, items, disabled, variant = 'default', openOnArro
+             {/* Typed into (a search field), not walked: Base UI's typeahead and arrow keys on the menu would take
+                 its letters and arrows. Escape and Tab go on to close the menu. */}
+             <div className="orbit-menu-footer" onKeyDown={(event) => {
+-              if (event.key !== 'Escape' && event.key !== 'Tab') event.stopPropagation();
++              void event; // red run: the footer's key guard removed
+             }}>{footer}</div>
+           </>}
+         </BaseMenu.Popup>
+
+$ npx vitest run src/components/ui/Menu.footer.test.tsx
+
+ RUN  v5.0.2 /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/devref/src/web
+
+ ❯ src/components/ui/Menu.footer.test.tsx (8 tests | 1 failed) 415ms
+   ❯ Menu footer (7)
+     × keeps the letters and arrows typed in it, where the items would have taken them 48ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/ui/Menu.footer.test.tsx > Menu footer > keeps the letters and arrows typed in it, where the items would have taken them
+AssertionError: d: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/ui/Menu.footer.test.tsx:132:37
+    130|     expect(document.activeElement).toBe(search());
+    131|     for (const key of ['d', 'r', ' ', 'ArrowDown', 'ArrowUp', 'Home', …
+    132|       expect(await press(key), key).toBe(false);
+       |                                     ^
+    133|       expect(highlighted(), key).toBe(before);
+    134|       expect(document.activeElement, key).toBe(search());
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  15:02:23
+   Duration  1.17s (tests 38%, import 27%, environment 26%, transform 8%)
+
+exit=1

@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AgentProvider,
+  ENGINE_CLI_NAMES,
   PermissionMode,
   WIKI_MAINTENANCE_CATCH_UP,
   WIKI_MAINTENANCE_RUN,
@@ -12,6 +13,7 @@ import {
   type WikiMaintenanceRun,
 } from '@orbit/shared';
 import { wikiMaintenanceProviderProblem, wikiMaintenanceSpaceOf } from './wiki-maintenance-settings';
+import { recordedEngine } from '../providers/session-engine';
 
 /**
  * The run a Wiki maintenance session is claimed with (design §8.2, contracts/wiki.contract.json
@@ -44,7 +46,13 @@ type RunReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace' | 'model
  */
 export async function wikiMaintenanceRunOf(
   db: RunReader,
-  session: { id: string; taskId: string | null; workspaceId: string | null; provider: string | null },
+  session: {
+    id: string;
+    taskId: string | null;
+    workspaceId: string | null;
+    engine?: string | null;
+    provider: string | null;
+  },
 ): Promise<WikiMaintenanceRun | null> {
   if (!session.taskId) return null;
   const maintained = await wikiMaintenanceSpaceOf(db, session.id);
@@ -77,6 +85,12 @@ export async function wikiMaintenanceRunOf(
       + `names '${named}'`;
   } else {
     why = (await wikiMaintenanceProviderProblem(db, maintained.ownerId, settings.provider))?.why ?? null;
+    // The run's clean start and its disallowedTools hold on Claude Code alone (design §8.2): the settings'
+    // key on another engine is not that run (docs/provider-engine-contract.md §3.5).
+    const engine = recordedEngine(session.engine) ?? AgentProvider.CLAUDE;
+    if (!why && engine !== AgentProvider.CLAUDE) {
+      why = `it runs only on Claude Code, and this session runs on ${ENGINE_CLI_NAMES[engine]}`;
+    }
   }
   return why ? { ...run, refusal: `This Wiki maintenance run did not start: ${why}.` } : run;
 }
@@ -141,6 +155,22 @@ export function wikiMaintenanceSessionSql(sessionAlias: string): Prisma.Sql {
 }
 
 /**
+ * The catch-up runs a day leaves out (contract `maintenance.job.catchUp.dailyLimit`): a run made in active
+ * catch-up that is pinned to a local endpoint, or that failed.
+ *
+ * Spelled POSITIVELY, as the set of runs to leave out, and never as `NOT { … }`: `catch_up` is NULL for
+ * every run made while the space was not behind, and `NOT (NULL = 'active' AND …)` is NULL — not true — for
+ * those. A negated predicate therefore drops every ordinary run on the rows whose other half holds, which
+ * on 2026-10-10 was a space whose runs all sit on a local endpoint: the day read 0 runs, the limit of 8
+ * never bound, and 13 runs were made (P10). Counting the day's runs and subtracting this set is the task
+ * branch's own shape, and it cannot go wrong that way.
+ */
+const WIKI_RUNS_NOT_COUNTED: Prisma.WikiMaintenanceRunWhereInput = {
+  catchUp: 'active',
+  OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }],
+};
+
+/**
  * How many maintenance runs a space has made today (the UTC day `now` is in) against its daily limit
  * (contract `space.settings.maintenance.keys.dailyRunLimit`): counted per RUN — the tasks of its
  * maintenance list made since midnight UTC, however they ended, and the runs a wiki job ran (migration
@@ -151,7 +181,8 @@ export function wikiMaintenanceSessionSql(sessionAlias: string): Prisma.Sql {
  *
  * The task branch is the count this has always been, unchanged: a run made by a task is counted off its
  * task exactly as before, so the numbers a deployment computes today are the numbers it computed
- * yesterday, and a run made by a job is read off the row the design gives it.
+ * yesterday, and a run made by a job is counted the same way — every run of the day, less the catch-up runs
+ * `WIKI_RUNS_NOT_COUNTED` names.
  */
 export async function wikiMaintenanceRunsToday(
   db: Pick<Prisma.TransactionClient, 'wikiSpace' | 'task' | 'wikiPlanJob' | 'wikiMaintenanceRun'>,
@@ -173,14 +204,7 @@ export async function wikiMaintenanceRunsToday(
   // A run's row is made after its task, in the same transaction: one made since midnight covers every run of today's tasks.
   const uncounted = settings.listId
     ? (await db.wikiMaintenanceRun.findMany({
-      where: {
-        ownerId,
-        spaceId,
-        taskId: { not: null },
-        catchUp: 'active',
-        createdAt: { gte: since },
-        OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }],
-      },
+      where: { ownerId, spaceId, taskId: { not: null }, createdAt: { gte: since }, ...WIKI_RUNS_NOT_COUNTED },
       select: { taskId: true },
     })).map((run) => run.taskId as string)
     : [];
@@ -193,15 +217,9 @@ export async function wikiMaintenanceRunsToday(
   // The server path's runs: made by a wiki job, counted off the run row itself, under the same rules the
   // task branch has — not a catch-up run on a local endpoint, and not one that failed. A list is not
   // needed for them: a space the server executes makes no task (contract `maintenance.job.server`, P8).
-  const byJob = await db.wikiMaintenanceRun.count({
-    where: {
-      ownerId,
-      spaceId,
-      jobId: { not: null },
-      createdAt: { gte: since },
-      NOT: { catchUp: 'active', OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }] },
-    },
-  });
+  const jobRuns = { ownerId, spaceId, jobId: { not: null }, createdAt: { gte: since } };
+  const byJob = (await db.wikiMaintenanceRun.count({ where: jobRuns }))
+    - (await db.wikiMaintenanceRun.count({ where: { ...jobRuns, ...WIKI_RUNS_NOT_COUNTED } }));
   const used = byTask + byJob;
   return {
     limit: settings.dailyRunLimit,

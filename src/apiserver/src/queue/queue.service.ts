@@ -34,6 +34,7 @@ import {
   type ModelProviderRow,
 } from '../providers/custom-provider';
 import { legacySessionEngine, recordedEngine } from '../providers/session-engine';
+import { dispatchKeyRow, keyRowForSlug } from '../providers/engine-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
 import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
@@ -75,6 +76,7 @@ import {
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
+  CURSOR_RUNNER_UPGRADE_ERROR,
   DSH_NOT_INSTALLED_ERROR,
   DSH_PLATFORM_UNSUPPORTED_ERROR,
   DSH_RUNNER_UPGRADE_ERROR,
@@ -217,7 +219,10 @@ export class QueueService {
         id: true, ownerId: true, provider: true, providerBuiltin: true, engine: true, error: true, model: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
         antigravityAccount: true, antigravityAccountPinned: true, kimiAccount: true, kimiAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+        cursorAccount: true, cursorAccountPinned: true,
+        workspace: {
+          select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true },
+        },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
@@ -244,10 +249,8 @@ export class QueueService {
         if (move) until = null;
       }
       if (!isBuiltinProvider(slug, session.providerBuiltin) && slug) {
-        const provider = await this.prisma.modelProvider.findFirst({
-          where: { slug, ...(await usableProviderScope(this.prisma, session.ownerId)) },
-          select: { slug: true, enabled: true, runtime: true, presetSlug: true, baseUrl: true, apiKeyEnc: true },
-        });
+        // The key it names, or the one a retired name of it resolves to (migration 0415).
+        const provider = await keyRowForSlug(this.prisma, session.ownerId, slug);
         const poolEngine = provider ? null : await accountPoolRuntime(this.prisma, session.ownerId, slug);
         engine ??= provider ? keyRowEngine(provider.runtime) : poolEngine;
         unavailable = provider ? !provider.enabled || !keyRowEngine(provider.runtime) : !poolEngine;
@@ -336,6 +339,9 @@ export class QueueService {
     // A runner that declares dsh but whose engine report does not show the CLI ready
     // (RunnerApiController.claim, dshRuntimeUnavailable) is withheld dsh rows like one that does not.
     const supportsDsh = (runner.supportedProviders?.includes(AgentProvider.DSH) ?? false) && !runner.dshUnavailable;
+    // Cursor CLI: the route keeps it in the request's declaration only when the runner's persisted
+    // heartbeat declares it too (RunnerApiController.claim); the statement below asks the heartbeat again.
+    const supportsCursor = runner.supportedProviders?.includes(AgentProvider.CURSOR) ?? false;
     const paused = await this.pausedPendingSessions(runner.id, supportsWikiMaintenance, runner.dshUnavailable);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
@@ -359,16 +365,16 @@ export class QueueService {
         // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
         // executeRaw deliberately discards that result (same pattern as pg_notify).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
-        // Migrations 0080, 0367 and 0377 install database triggers so an older apiserver replica cannot
-        // claim OpenCode, Antigravity or dsh as Claude during a rolling control-plane deploy (0372
-        // widened the Antigravity one to the configured rows that borrow it). These
+        // Migrations 0080, 0367, 0377 and 0426 install database triggers so an older apiserver replica
+        // cannot claim OpenCode, Antigravity, dsh or Cursor CLI as Claude during a rolling control-plane
+        // deploy (0372 widened the Antigravity one to the configured rows that borrow it). These
         // transaction-local capabilities are the positive signal that lets only the new, capable
-        // path pass. One statement sets all three inside the global claim lock above.
+        // path pass. One statement sets them all inside the global claim lock above.
         //
-        // The fourth (migration 0414) says this claim reads the session's recorded engine: without it
+        // One more (migration 0414) says this claim reads the session's recorded engine: without it
         // the database refuses to let a transaction claim a session that has one, which is what keeps an
         // older replica — which would derive the engine from the slug — off them (§5.2).
-        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true), set_config('orbit.runner_supports_dsh', ${supportsDsh ? '1' : '0'}, true), set_config('orbit.claim_reads_session_engine', '1', true)`;
+        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true), set_config('orbit.runner_supports_dsh', ${supportsDsh ? '1' : '0'}, true), set_config('orbit.runner_supports_cursor', ${supportsCursor ? '1' : '0'}, true), set_config('orbit.claim_reads_session_engine', '1', true)`;
         // Asked again here, after the waits for a connection and for the lock above (up to 20s
         // under a busy pool): the runner may have hung up during them.
         if (hungUp?.aborted) return [];
@@ -395,6 +401,7 @@ export class QueueService {
               ${OPENCODE_RUNNER_UPGRADE_ERROR},
               ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
               ${DSH_RUNNER_UPGRADE_ERROR},
+              ${CURSOR_RUNNER_UPGRADE_ERROR},
               ${DSH_NOT_INSTALLED_ERROR},
               ${DSH_PLATFORM_UNSUPPORTED_ERROR},
               ${DSH_VERSION_INCOMPATIBLE_ERROR},
@@ -442,14 +449,17 @@ export class QueueService {
             AND (
               (s."engine" IS NOT NULL AND (
                 (s.provider = s."engine" AND (
-                  s.provider IN ('claude', 'codex', 'opencode', 'antigravity')
+                  s.provider IN ('claude', 'codex', 'opencode', 'antigravity', 'cursor')
                   OR (s."provider_builtin" AND s.provider = 'kimi')
                 ))
                 OR (s."engine" = 'dsh' AND s.provider = 'dsh' AND s."provider_builtin")
                 OR (NOT s."provider_builtin" AND (
                   EXISTS (
                     SELECT 1 FROM "model_provider" mp
-                    WHERE mp.slug = s.provider AND mp.enabled
+                    -- The key the slug names, or the one a retired name of it resolves to (0415).
+                    WHERE (mp.slug = s.provider OR mp.id = (
+                            SELECT a.provider_id FROM "provider_slug_alias" a WHERE a.slug = s.provider))
+                      AND mp.enabled
                       AND mp.runtime = ANY(CASE s."engine"
                         WHEN 'claude' THEN ARRAY['claude', 'dsh']
                         WHEN 'dsh' THEN ARRAY['claude', 'dsh']
@@ -470,7 +480,7 @@ export class QueueService {
                 ))
               ))
               OR (s."engine" IS NULL AND (
-                COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity')
+                COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity', 'cursor')
                 OR (s."provider_builtin" AND s.provider IN ('kimi', 'dsh'))
                 OR (NOT s."provider_builtin" AND (
                   EXISTS (
@@ -507,6 +517,17 @@ export class QueueService {
                 SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
                   AND r."capabilities_reported_at" IS NOT NULL
                   AND 'provider:dsh' = ANY(r.capabilities)
+              ))
+            )
+            -- Cursor CLI the same way (migration 0426): the request and the persisted heartbeat both
+            -- declare it, for a session recorded on it whatever credential it spends, and for one
+            -- without an engine named cursor, which since 0426 only the built-in can be.
+            AND (
+              COALESCE(s."engine", s.provider, 'claude') <> 'cursor'
+              OR (${supportsCursor} AND EXISTS (
+                SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
+                  AND r."capabilities_reported_at" IS NOT NULL
+                  AND 'provider:cursor' = ANY(r.capabilities)
               ))
             )
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
@@ -700,6 +721,8 @@ export class QueueService {
     antigravityAccountPinned: boolean;
     kimiAccount: string | null;
     kimiAccountPinned: boolean;
+    cursorAccount: string | null;
+    cursorAccountPinned: boolean;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   }): Promise<WorkspaceAccountChoices> {
@@ -709,6 +732,7 @@ export class QueueService {
       claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
       kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
+      cursorAccount: session.cursorAccount ?? workspace?.cursorAccount,
     };
     const engine = isAccountEngine(session.provider) ? session.provider : null;
     const runner = session.assignedRunner;
@@ -858,9 +882,19 @@ export class QueueService {
     }
     // Continue the monotonic event seq past whatever a prior run persisted (incl. a
     // failed first run's error events) so new events never collide; 0 when fresh.
-    const maxSeq =
-      (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
-      0;
+    //
+    // Raw SQL, never `runEvent.aggregate`. Prisma compiles an aggregate to
+    // `SELECT MAX("seq") FROM (SELECT "seq" … WHERE session_id = $1 OFFSET $2) AS "sub"`, and
+    // that OFFSET — a bind parameter, always 0 — stops the planner flattening the subquery, so
+    // MAX cannot be pushed down: it scans every event this session has, one heap visit each
+    // (measured: 5125 heap blocks and 5172 buffers for a 5125-event session, against the 4
+    // buffers and single index tuple `max(seq)` reads). A claim on a busy session then pays a
+    // cold-cache scan of thousands of scattered pages, which saturates the disk for every
+    // other query. Same shape as project-fuse.service.ts / task-checkpoint.service.ts.
+    const [maxSeqRow] = await this.prisma.$queryRaw<Array<{ max: number }>>`
+      SELECT coalesce(max("seq"), 0) AS "max" FROM "run_event" WHERE "session_id" = ${session.id}::uuid
+    `;
+    const maxSeq = Number(maxSeqRow?.max ?? 0);
     const workspace = session.workspace;
     const taskIntegrationRef = session.task && !session.task.codeless
       ? session.task.project?.codebases[0]?.integrationRef
@@ -894,14 +928,17 @@ export class QueueService {
     // pool of their own, through the pool gateway on the ChatGPT login it holds — or a shared pool the
     // owner is in, which dispatches through the pool gateway; each on a token minted for this claim.
     const declaredIsBuiltin = isBuiltinProvider(declared, declaredProviderBuiltin);
-    // A maintenance run is never dispatched through a pool: it has no member to fall back on (its refusal says so).
-    const configuredRow = declaredIsBuiltin
-      ? null
-      : await this.prisma.modelProvider.findFirst({
-          where: { slug: declared!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
-        });
+    // The key the slug names, or a retired name of one; and for a legacy built-in dsh session whose
+    // workspace holds no key of its own, the owner's default DeepSeek key (docs/provider-engine-contract.md
+    // §4.1) — a built-in credential is otherwise no key. A maintenance run is never dispatched through a
+    // pool: it has no member to fall back on (its refusal says so).
+    const configuredRow = await dispatchKeyRow(
+      this.prisma,
+      { ownerId: session.ownerId, provider: declared, providerBuiltin: declaredProviderBuiltin },
+      workspace?.env,
+    );
     const customRow = declaredIsBuiltin
-      ? null
+      ? configuredRow
       : (configuredRow ??
         (maintenance
           ? null
@@ -934,6 +971,7 @@ export class QueueService {
         claudeAccount: accounts.claudeAccount,
         antigravityAccount: accounts.antigravityAccount,
         kimiAccount: accounts.kimiAccount,
+        cursorAccount: accounts.cursorAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);

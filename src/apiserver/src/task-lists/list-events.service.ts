@@ -5,10 +5,10 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /** How the board reads, in the order a reader cares about. */
 const KIND_LABEL: Record<string, string> = {
-  quota_hold: '配额挡住派发',
-  disk_hold: '磁盘不足挡住派发',
-  foreman_filed: '停滞已派协调任务',
-  completion_reverted: '完成被退回',
+  quota_hold: 'Dispatch held by quota',
+  disk_hold: 'Dispatch held by low disk',
+  foreman_filed: 'Stalled, coordinating task dispatched',
+  completion_reverted: 'Completion reverted',
 };
 
 /**
@@ -93,8 +93,8 @@ export class ListEventsService {
       .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
       .map(
         (e) =>
-          `  ${KIND_LABEL[e.kind] ?? e.kind}｜${e.detail}｜首次 ${e.firstSeenAt.toISOString()}` +
-          `，最近 ${e.lastSeenAt.toISOString()}，累计 ${e.occurrences} 次`,
+          `  ${KIND_LABEL[e.kind] ?? e.kind} | ${e.detail} | first seen ${e.firstSeenAt.toISOString()}` +
+          `, last seen ${e.lastSeenAt.toISOString()}, seen ${e.occurrences} time(s)`,
       );
     return [
       // Spelled base62, the same as the `id` the agent gets back from `tasklist_get`. Prose is the
@@ -103,9 +103,9 @@ export class ListEventsService {
       // lookup and the delivered-stamp above stay on the uuid the column holds.
       `<list-conditions list="${uuidToBase62(listId)}" title="${title}">`,
       ...lines,
-      `  以上是控制面在你上次收到消息之后观察到的，不是用户说的。`,
-      `  "累计"次数大、"最近"很新 = 条件仍然成立；"最近"已经旧了 = 它自己过去了。`,
-      `  需要更完整的现状用 tasklist_get / task_list 自取。`,
+      `  The above is what the control plane observed since you last received a message, not something the user said.`,
+      `  A high "seen" count with a recent "last seen" = the condition still holds; an old "last seen" = it has passed on its own.`,
+      `  For a fuller picture of where things stand, read it yourself with tasklist_get / task_list.`,
       `</list-conditions>`,
     ].join('\n');
   }

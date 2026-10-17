@@ -52,7 +52,7 @@ struct SessionRunStartCardView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .composerBandWash(.orange, opacity: 0.08)
         .accessibilityIdentifier("session-run-start")
     }
 

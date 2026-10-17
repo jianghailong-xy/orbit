@@ -15,11 +15,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CoordinatorProgressRows,
   ItemAsCard,
+  ACTION_CONSEQUENCES,
+  PROMOTION_RETRY_CONSEQUENCE,
+  RERUN_CHECK_ACTION_LABEL,
+  TASK_RUN_AGAIN_CONSEQUENCE,
+  retryPromotionMutationOptions,
+  retryTaskMutationOptions,
   ProjectOpenItems,
   exceptionCardRows,
   isOwnerExceptionCard,
 } from './ProjectProgressStatus';
-import { projectOpenItemsQuery } from '../lib/queries';
+import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 import {
   START_PROJECT_TITLE,
   START_ROW_NOT_ASKED,
@@ -111,6 +117,9 @@ const CONFLICT = item({
   detailLine: '3 files conflict with project/bg-jobs · nothing landed',
   waitingSince: at(18 * MINUTE),
   escalateAt: inFuture(102 * MINUTE),
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none: the card leads with the way onto the branch and draws no `Retry` at all.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   facts: facts({
     task: { id: '34OEE9DwfWYjo3aRFuBgo', title: 'runner 托管作业支持「事件发生时叫醒会话」' },
     targetRef: 'project/bg-jobs',
@@ -493,6 +502,34 @@ describe('ProjectOpenItems — the start of a project nobody has started', () =>
     expect(html).not.toContain(START_ROW_NOT_ASKED);
   });
 
+  it('says directly into the main branch the start card opens with: main as before, else the branch by name', () => {
+    const direct = (upstreamRef?: string) => item({
+      ...START,
+      startRequest: {
+        ...START.startRequest!,
+        settings: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null,
+          ...(upstreamRef ? { upstreamRef } : {}) },
+      },
+    });
+    const page = (row: ProjectOpenItemRow, standing?: object): string =>
+      paint({ needsYou: [], withCoordinator: [], startRequest: row }, (qc) => {
+        if (standing) qc.setQueryData(projectIntegrationQuery(PROJECT_ID).queryKey, standing as never);
+        return <ProjectOpenItems projectId={PROJECT_ID} now={NOW} started={false} onReviewStart={() => {}} />;
+      });
+    expect(startRequestSummary(direct().startRequest!.settings))
+      .toBe('The coordinator asked · directly into main · Automatic off · at most 1 at a time');
+    expect(page(direct())).toContain('The coordinator asked · directly into main · Automatic off · at most 1 at a time');
+    // The coordinator's suggestion, then the owner's last choice for the repository over it.
+    expect(page(direct('refs/heads/master')))
+      .toContain('The coordinator asked · directly into master · Automatic off · at most 1 at a time');
+    expect(page(direct('refs/heads/master'), {
+      upstreamRef: 'main', upstreamChosenAt: null,
+      lastMainBranch: { branch: 'develop', repository: 'acme/payments-api', chosenAt: at(MINUTE) },
+    })).toContain('The coordinator asked · directly into develop · Automatic off · at most 1 at a time');
+    expect(startRequestSummary(direct('refs/heads/master').startRequest!.settings, 'trunk'))
+      .toBe('The coordinator asked · directly into trunk · Automatic off · at most 1 at a time');
+  });
+
   it('draws the request only while the page knows the project is not started', () => {
     for (const started of [true, null, undefined]) {
       const html = openItems(asked, { started });
@@ -783,6 +820,22 @@ describe('the exception card’s fact block', () => {
     });
     expect(refused).toContain('Git refused to merge it');
     expect(refused).toContain('no paths');
+
+    // An argued exemption is about the task's reason, not about paths: the reason is the row.
+    const REASON = '判据 2 要求先复现修复前的 500，再证明修复后的行为——一条命令的退出码判定不了。';
+    const exemption = card({
+      ...REVIEW,
+      title: `Kept the judgment method Orbit questioned: ${TASK}`,
+      facts: {
+        ...REVIEW.facts!,
+        files: [],
+        review: { reason: 'CRITERION_EXEMPTION_ARGUED', declaredPaths: [], argument: REASON },
+      },
+    });
+    expect(exemption).toContain('Kept the judgment method Orbit questioned');
+    expect(exemption).not.toContain(`Kept the judgment method Orbit questioned: ${TASK}`);
+    expect(exemption).toContain(`<span class="criteria-decision-k">Its reason</span><span class="criteria-decision-v">${REASON}</span>`);
+    expect(exemption).not.toContain('<span class="criteria-decision-k">Declared</span>');
   });
 
   it('names the task in its own row rather than in the heading', () => {
@@ -917,18 +970,20 @@ function actionRow(html: string): { label: string; weight: Weight }[] {
     .parseFromString(html, 'text/html')
     .querySelector('.project-open-item-actions');
   expect(row, 'the card draws an action row').not.toBeNull();
-  return Array.from(row!.children).map((press) => {
-    const variant = press.className.match(/orbit-button-(primary|default|link)\b/)?.[1];
+  return Array.from(row!.querySelectorAll(':scope > .project-open-item-door')).map((door) => {
+    const press = door.querySelector<HTMLElement>('button, a');
+    expect(press, `a door has a press: ${door.outerHTML}`).not.toBeNull();
+    const variant = press!.className.match(/orbit-button-(primary|default|link)\b/)?.[1];
     const weight: Weight | null =
-      press.tagName === 'A' || variant === 'link'
+      press!.tagName === 'A' || variant === 'link'
         ? 'link'
         : variant === 'primary'
           ? 'primary'
           : variant === 'default'
             ? 'secondary'
             : null;
-    expect(weight, `a press in one of the three weights: ${press.outerHTML}`).not.toBeNull();
-    return { label: press.textContent?.trim() ?? '', weight: weight as Weight };
+    expect(weight, `a press in one of the three weights: ${door.outerHTML}`).not.toBeNull();
+    return { label: press!.textContent?.trim() ?? '', weight: weight as Weight };
   });
 }
 
@@ -974,18 +1029,27 @@ describe('the exception card’s action row', () => {
     ]);
   });
 
-  it('leads a conflict and a failed check with the way onto the branch, Retry as the alternative', () => {
-    // Rule 1 of the mock: a conflict and a failed combined-tree check both want the branch fixed, so
-    // the way onto it leads and Retry — the heavier step, a whole new run — is the way to take the
-    // same step differently. Neither of these is the server's first door: `Open coordinator` is.
-    const expected = [
+  it('leads a conflict with the way onto the branch, and draws no Retry under it', () => {
+    // Rule 1 of the mock: a conflict wants the branch fixed, so the way onto it leads. The heavier
+    // step behind it is not drawn: the server refuses a rerun for a conflict, so a conflict's cell
+    // lists none and the card cannot come to offer a press no door answers.
+    expect(actionRow(card(CONFLICT))).toEqual([
+      { label: 'Open task session', weight: 'primary' },
+      { label: 'Open coordinator', weight: 'link' },
+      { label: 'Cancel task', weight: 'link' },
+    ]);
+  });
+
+  it('leads a failed check with the way onto the branch, Retry as the alternative', () => {
+    // A failed combined-tree check is the same step, but its cell does hold the rerun door: the
+    // way onto the branch leads and Retry — the heavier step, a whole new run — is the way to take
+    // the same step differently. Neither of these is the server's first door: `Open coordinator` is.
+    expect(actionRow(card(CHECK_FAILED))).toEqual([
       { label: 'Open task session', weight: 'primary' },
       { label: 'Retry', weight: 'secondary' },
       { label: 'Open coordinator', weight: 'link' },
       { label: 'Cancel task', weight: 'link' },
-    ];
-    expect(actionRow(card(CONFLICT))).toEqual(expected);
-    expect(actionRow(card(CHECK_FAILED))).toEqual(expected);
+    ]);
   });
 
   it('leads a failed task with Retry, and the run as the alternative', () => {
@@ -997,6 +1061,26 @@ describe('the exception card’s action row', () => {
       { label: 'Open coordinator', weight: 'link' },
       { label: 'Cancel task', weight: 'link' },
     ]);
+  });
+
+  it('says what Retry re-runs: the task itself on a failed task, the landing otherwise', () => {
+    // Three doors wear the one word: the consequence line under it is what tells a reader which
+    // step they are taking, so a failed task's press may not say an integration attempt is queued
+    // when what it does is run the task again (`taskFailureDoors`).
+    const runAgain = card(item());
+    expect(runAgain).toContain(TASK_RUN_AGAIN_CONSEQUENCE);
+    expect(runAgain).not.toContain(ACTION_CONSEQUENCES.RETRY);
+
+    const landing = card(CHECK_FAILED);
+    expect(landing).toContain(ACTION_CONSEQUENCES.RETRY);
+    expect(landing).not.toContain(TASK_RUN_AGAIN_CONSEQUENCE);
+
+    const check = card(item({
+      kind: 'INTEGRATION_CHECK_FAILED',
+      promotionId: '34Y7UuNN81bhgBOdQTtcp',
+      actions: ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'],
+    }));
+    expect(check).toContain(PROMOTION_RETRY_CONSEQUENCE);
   });
 
   it('asks for the reason from the row’s link, and sends nothing without one', async () => {
@@ -1060,6 +1144,89 @@ describe('the exception card’s action row', () => {
     // And it is the ASSIGNEE that withholds it, not the kind: the same item once it is the owner's
     // carries the ending, which is what makes the absence above about who has it.
     expect(card({ ...error, assignee: 'OWNER' })).toContain('Mark as handled');
+  });
+});
+
+describe('T10 required actions and current-candidate doors', () => {
+  it('puts requiredAction first, follows primaryAction, and explains every door', () => {
+    const row = item({
+      assignee: 'OWNER',
+      assigneeReason: 'ESCALATED',
+      requiredAction: 'Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.',
+      primaryAction: 'ASK_COORDINATOR_AGAIN',
+      actions: ['OPEN_TASK_SESSION', 'ASK_COORDINATOR_AGAIN'],
+      handledBy: [{ taskId: '34Y7Utvsd47A14DjMzIzD', title: 'repair the combined tree', state: 'OPEN' }],
+    });
+    const html = paint(
+      { needsYou: [row], withCoordinator: [] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const body = parsed.querySelector('.project-open-item-body')!;
+    expect(body.querySelector('.project-open-item-required-action')?.textContent).toContain('Nothing on the project branch');
+    expect(body.querySelector('.project-open-item-handled-by')?.textContent).toContain('repair the combined tree');
+    expect(body.querySelector('.project-open-item-actions .orbit-button-primary')?.textContent).toContain('Ask the coordinator again');
+    expect(body.querySelectorAll('.project-open-item-consequence').length).toBeGreaterThanOrEqual(2);
+    expect(ACTION_CONSEQUENCES.MARK_HANDLED).toContain('reason');
+  });
+
+  it('only draws Review for the candidate mounted beside the row', () => {
+    const row = item({
+      kind: 'DELIVERY_REVIEW',
+      promotionId: '34Y7UuNN81bhgBOdQTtcp',
+      actions: ['REVIEW'],
+      requiredAction: 'Review the delivery before it is accepted.',
+    });
+    const render = (currentPromotionId: string | null) => renderToStaticMarkup(
+      <MemoryRouter>
+        <ItemAsCard projectId={PROJECT_ID} row={row} now={NOW} currentPromotionId={currentPromotionId} />
+      </MemoryRouter>,
+    );
+    expect(render('34Y7UuNN81bhgBOdQTtcp')).toContain('Review');
+    expect(render('34ZK1ab2Cd3Ef4Gh5Ij6Kl')).not.toContain('href="#promotion-34Y7UuNN81bhgBOdQTtcp"');
+  });
+
+  it('uses the two owner integration retry routes', async () => {
+    apiMock.mockResolvedValue({});
+    const qc = client({ needsYou: [], withCoordinator: [] });
+    await retryTaskMutationOptions(qc, PROJECT_ID, item().taskId!).mutationFn({ reason: 'fix it' });
+    await retryPromotionMutationOptions(qc, PROJECT_ID, '34Y7UuNN81bhgBOdQTtcp').mutationFn({ reason: 're-check it' });
+    expect(apiMock.mock.calls).toContainEqual([
+      `/projects/${PROJECT_ID}/tasks/${item().taskId}/integration/retry`,
+      { method: 'POST', body: { reason: 'fix it' } },
+    ]);
+    expect(apiMock.mock.calls).toContainEqual([
+      `/projects/${PROJECT_ID}/promotions/34Y7UuNN81bhgBOdQTtcp/integration/retry`,
+      { method: 'POST', body: { reason: 're-check it' } },
+    ]);
+  });
+
+  it('draws the owner’s re-check on a candidate with no task to run', () => {
+    // The shape the incident opened: the combined-tree check failed on a merge, so the item carries
+    // a candidate and no task at all (promotion_id 有、task_id 空). The server still lists RETRY —
+    // the owner's promotion door (`open-item-doors.ts` integration-retry-promotion) — and the card
+    // must draw it rather than a press that needs a task the row does not have.
+    const row = item({
+      assignee: 'OWNER',
+      assigneeReason: 'ESCALATED',
+      taskId: null,
+      sessionId: null,
+      promotionId: '34Y7UuNN81bhgBOdQTtcp',
+      actions: ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'],
+      requiredAction: 'Nothing on the project branch reaches main until this check passes.',
+    });
+    const html = paint(
+      { needsYou: [row], withCoordinator: [] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+    expect(actionRow(html)).toEqual([
+      { label: 'Ask the coordinator again', weight: 'primary' },
+      { label: RERUN_CHECK_ACTION_LABEL, weight: 'secondary' },
+      { label: 'Review', weight: 'link' },
+      { label: 'Mark as handled', weight: 'link' },
+    ]);
+    // The re-check states its own consequence, not the landing rerun's.
+    expect(html).toContain(PROMOTION_RETRY_CONSEQUENCE);
   });
 });
 
@@ -1267,14 +1434,28 @@ describe('the exception cards’ presses, through their doors', () => {
     await settle();
   }
 
-  it('retries the task through the run door every other Run press uses', async () => {
+  it('runs a failed task again through the owner’s own door, and sends no integration retry', async () => {
     await press({ needsYou: [], withCoordinator: [item()] }, 'Retry');
 
-    // One press, one `triggerId`, drawn where the press happened — the same request the task list
-    // and the detail panel send, so a resend of it is one run rather than a second.
+    // A failed task's Retry is the run-again door (`taskFailureDoors`): the owner's own route —
+    // the one Run now presses — named by this press's own token. The integration retry would be
+    // refused by design (the task is not DONE), which is the press this test replaced.
     expect(apiMock).toHaveBeenCalledWith(
       `/tasks/${item().taskId}/execute`,
       { method: 'POST', body: { triggerId: expect.any(String) } },
+    );
+    expect(apiMock.mock.calls.filter(([path]) => String(path).endsWith('/integration/retry')))
+      .toEqual([]);
+  });
+
+  it('retries the landing of a failed integration through the owner integration door with a reason', async () => {
+    await press({ needsYou: [], withCoordinator: [CHECK_FAILED] }, 'Retry');
+
+    // An integration row is unchanged: its task is the one that failed to LAND, and the door that
+    // queues another landing is the integration retry, carrying the required reason.
+    expect(apiMock).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/tasks/${CHECK_FAILED.taskId}/integration/retry`,
+      { method: 'POST', body: { reason: expect.any(String) } },
     );
   });
 

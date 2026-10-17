@@ -17,14 +17,18 @@ import {
   LandingRetryRequest,
   LandingWorkSessionFacts,
   PROMOTION_AUTOMATIC_LAND,
+  endTimedOutLanding,
   integrationSerialKey,
   queuePromotionJob,
   queueTaskBranchCandidate,
   shortBranchName,
   workBranchEndedOn,
 } from './project-integration-job';
+import { readInFlightJobs } from './project-integration-line';
 import { openItemOwed } from './project-open-item';
 import {
+  AUTOMATIC_MERGE_ATTEMPTS,
+  AutomaticConfirmationFacts,
   LIVE_PROMOTION_STATES,
   PROMOTION_COLUMNS,
   PROMOTION_NOT_READY,
@@ -40,6 +44,7 @@ import {
   promotionConfirmRefusal,
   promotionDedupeKey,
   promotionItemTitle,
+  promotionOnPass,
   promotionPrincipalRefusal,
   promotionView,
 } from './project-promotion';
@@ -78,9 +83,11 @@ const MERGED_RECORD_LIMIT = 20;
  * card when its check comes back clean: `applyPromotionJobResult` confirms it in the same
  * transaction, marked `confirmedAutomatically` with no user named, and queues the landing (M-T11).
  * That landing is bound tighter than an owner's — to the tree that passed, on the main tip it passed
- * against — and a runner that finds main has moved hands it back untouched, at which point the card
- * the owner did not see is opened after all (M-T12). The owner's doors below are unchanged, and
- * `cancel` answers an automatic merge exactly as it answers a pressed one until it is pushed.
+ * against — and a runner that finds main has moved hands it back untouched. The candidate is then
+ * checked again on the new main and judged by the same rule, and only a withdrawn authorization, or
+ * `AUTOMATIC_MERGE_ATTEMPTS` landings that all found main moved, open the card the owner did not see
+ * (M-T12). The owner's doors below are unchanged, and `cancel` answers an automatic merge exactly as
+ * it answers a pressed one until it is pushed.
  */
 @Injectable()
 export class ProjectPromotionService {
@@ -407,10 +414,15 @@ export class ProjectPromotionService {
    * merge differently, and the card the owner pressed has to be the card they get back.
    */
   private async view(row: PromotionRow): Promise<ProjectPromotionView> {
-    const [tasks, upstreamSyncedAt, execution] = await Promise.all([
+    const [tasks, upstreamSyncedAt, execution, onPass] = await Promise.all([
       this.tasksOf(row),
       this.lastUpstreamSync(row.projectId),
       this.mergeExecution(row),
+      // What the check in flight leads to, read only while one is: the checking card's last line.
+      row.state === 'CHECKING'
+        ? readAutomaticProjectFacts(this.prisma, row).then((facts) =>
+          promotionOnPass({ sourceKind: row.sourceKind, ...facts }))
+        : null,
     ]);
     // Only a re-check in flight is measured, which keeps the poll of a card nobody is acting on to
     // the two reads above.
@@ -421,7 +433,7 @@ export class ProjectPromotionService {
         typicalMs: medianMs(await this.recentCheckDurations(row.projectId)),
       }
       : null;
-    return promotionView(row, { tasks, upstreamSyncedAt, recheck, execution });
+    return promotionView(row, { tasks, upstreamSyncedAt, recheck, execution, onPass });
   }
 
   private async mergeExecution(row: PromotionRow): Promise<ProjectPromotionView['execution']> {
@@ -714,18 +726,68 @@ export interface PromotionJobOutcome {
   } | null;
 }
 
-/** The exception kinds that are an integration line's own problems (§4.2): while one of this
- *  project's is open and still owed (`openItemOwed`), nothing it would carry into main is clean
- *  enough to go there by itself. One about a candidate or a task that has moved on holds nothing
- *  back, whether or not anything has closed it yet. */
+/** The exception kinds that are an integration line's own problems (§4.2). M-T11 counts the ones
+ *  about the project's merges into main: while one is open and still owed (`openItemOwed`), nothing
+ *  the project carries into main is clean enough to go there by itself. One about a candidate that
+ *  has moved on holds nothing back, whether or not anything has closed it yet. */
 const INTEGRATION_ITEM_KINDS = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'];
+
+/**
+ * The facts of M-T11 that are about the project rather than about a check, as they stand at this
+ * moment: the line, the Automatic setting, the pause, and the exceptions open on its merge into main.
+ * Read by the decision (`automaticConfirmationRefusalIn`) and by the checking card (`onPass`), so
+ * the card says what the decision will find.
+ *
+ * The exceptions counted are the ones a candidate's check or landing opened (`promotion_id` set). A
+ * task that failed to land on the project branch opened one too, and it holds nothing back here: that
+ * task's work is not on the branch, so it is in nothing a candidate carries (owner decision
+ * 2026-10-15 — until then such an item kept every candidate of its project in front of the owner for
+ * as long as the coordinator took to repair it).
+ */
+async function readAutomaticProjectFacts(
+  db: Prisma.TransactionClient,
+  promotion: Pick<PromotionRow, 'projectId' | 'codebaseId' | 'sourceRef' | 'upstreamRef'>,
+): Promise<Pick<AutomaticConfirmationFacts, 'line' | 'coordinatorEnabled' | 'projectPaused' | 'openIntegrationItems'>> {
+  const project = await db.project.findUnique({
+    where: { id: promotion.projectId },
+    select: { coordinatorEnabled: true, pausedAt: true },
+  });
+  const codebase = await db.projectCodebase.findUnique({
+    where: { id: promotion.codebaseId },
+    select: { integrationRef: true, upstreamRef: true },
+  });
+  const [counted] = await db.$queryRaw<Array<{ open: number }>>(Prisma.sql`
+    SELECT count(*)::int AS "open"
+      FROM "project_open_item" item
+     WHERE item."project_id" = ${promotion.projectId}::uuid
+       AND item."state" = 'OPEN'
+       AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+       AND item."promotion_id" IS NOT NULL
+       AND ${openItemOwed('item')}`);
+  // The line as the binding says now, and only if it is still the line this candidate was made on:
+  // its source is the project's branch and its upstream is the project's upstream.
+  const line = !codebase
+    ? null
+    : codebase.integrationRef === codebase.upstreamRef
+      ? 'MAIN' as const
+      : codebase.integrationRef === promotion.sourceRef && codebase.upstreamRef === promotion.upstreamRef
+        ? 'PROJECT_BRANCH' as const
+        : null;
+  return {
+    line,
+    coordinatorEnabled: project?.coordinatorEnabled === true,
+    projectPaused: project?.pausedAt != null,
+    openIntegrationItems: counted!.open,
+  };
+}
 
 /**
  * M-T11: why this candidate goes to the owner as a card — or null when the project's Automatic
  * setting confirms it instead. The rule itself is `automaticConfirmationRefusal`; this is the part
  * that reads what it weighs about the project, inside the caller's transaction, so the answer is
- * about this moment and no earlier one. Asked twice: when the check comes back READY, and again when
- * the landing that answer queued is about to be handed to a runner (`automaticLandingRefusal`).
+ * about this moment and no earlier one. Asked when the check comes back READY, again when the landing
+ * that answer queued is about to be handed to a runner (`automaticLandingRefusal`), and once more
+ * when that landing comes back without landing (`automaticLandingCameBack`).
  */
 async function automaticConfirmationRefusalIn(
   tx: Prisma.TransactionClient,
@@ -739,40 +801,13 @@ async function automaticConfirmationRefusalIn(
     testedTreeSha: string | null;
   },
 ): Promise<string | null> {
-  const project = await tx.project.findUnique({
-    where: { id: promotion.projectId },
-    select: { coordinatorEnabled: true, pausedAt: true },
-  });
-  const codebase = await tx.projectCodebase.findUnique({
-    where: { id: promotion.codebaseId },
-    select: { integrationRef: true, upstreamRef: true },
-  });
-  const [counted] = await tx.$queryRaw<Array<{ open: number }>>(Prisma.sql`
-    SELECT count(*)::int AS "open"
-      FROM "project_open_item" item
-     WHERE item."project_id" = ${promotion.projectId}::uuid
-       AND item."state" = 'OPEN'
-       AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
-       AND ${openItemOwed('item')}`);
-  // The line as the binding says now, and only if it is still the line this candidate was made on:
-  // its source is the project's branch and its upstream is the project's upstream.
-  const line = !codebase
-    ? null
-    : codebase.integrationRef === codebase.upstreamRef
-      ? 'MAIN' as const
-      : codebase.integrationRef === promotion.sourceRef && codebase.upstreamRef === promotion.upstreamRef
-        ? 'PROJECT_BRANCH' as const
-        : null;
   return automaticConfirmationRefusal({
     sourceKind: promotion.sourceKind,
-    line,
-    coordinatorEnabled: project?.coordinatorEnabled === true,
-    projectPaused: project?.pausedAt != null,
+    ...(await readAutomaticProjectFacts(tx, promotion)),
     conflicts: report.conflicts,
     checks: report.checks,
     upstreamShaChecked: report.upstreamSha,
     mergeTreeSha: report.testedTreeSha,
-    openIntegrationItems: counted!.open,
     runnerHandsBackMovedUpstream: report.runnerHandsBackMovedUpstream,
   });
 }
@@ -978,9 +1013,12 @@ const RETIRABLE_BY_RECEIPT: ReadonlyArray<PromotionState> = ['CHECKING', 'READY'
  * A receipt that says a task's branch landed on the upstream (`MERGED` or `ALREADY_MERGED`) answers
  * the question a candidate for that same branch was asking. The candidate goes `SUPERSEDED`, as when
  * a newer candidate takes its place (M-T6): a merge somewhere else took it. Its check job is stopped
- * as J-T8 asks (a queued one is cancelled, a running one is asked to stop), and the owner's card and
- * the exceptions about it are closed by the platform (`PROMOTION_MOVED_ON`, §4.2) — so a check that
- * reports afterwards finds the candidate gone and opens nothing (`applyPromotionJobResult`).
+ * as J-T8 asks (a queued one is cancelled, a running one is asked to stop) — except a running one
+ * already silent past its limit, which is ended on the spot as `ERROR · RUNNER_LOST` (the J-T9
+ * read and compare-and-set): asking a dead runner to stop would leave the job holding its serial
+ * key with no one able to end it, and the project's checks would be blocked for good. The owner's
+ * card and the exceptions about it are closed by the platform (`PROMOTION_MOVED_ON`, §4.2) — so a
+ * check that reports afterwards finds the candidate gone and opens nothing (`applyPromotionJobResult`).
  *
  * WHAT IT LEAVES ALONE
  * --------------------
@@ -1037,6 +1075,19 @@ export async function retireCandidatesLandedByReceipt(
         where: { id: row.checkJobId, state: 'QUEUED' },
         data: { state: 'CANCELLED', finishedAt: now },
       });
+      // A RUNNING check is asked to stop — unless it already stopped reporting past its limit, in
+      // which case asking is how a job holds its serial key forever: `claimOne` never re-hands a
+      // cancel-requested row, so nobody would ever end it and no later check of the project could be
+      // claimed (2026-10-09: a candidate superseded this way kept `#check:<project>` and blocked the
+      // whole project). A job the read already judges timed out is ended here, in this transaction,
+      // as the ERROR it is — the same J-T9 compare-and-set the retry door uses.
+      const [silent] = await readInFlightJobs(tx, row.projectId, row.checkJobId);
+      if (silent?.state === 'RUNNING' && silent.timedOut === true) {
+        const ended = await endTimedOutLanding(tx, silent);
+        if (ended) continue;
+        // The compare-and-set lost: the job reported again between the read and the write, so it is
+        // talking after all — it gets the ordinary ask-to-stop below.
+      }
       await tx.projectIntegrationJob.updateMany({
         where: { id: row.checkJobId, state: 'RUNNING', cancelRequestedAt: null },
         data: { cancelRequestedAt: now },
@@ -1161,7 +1212,7 @@ export async function applyPromotionJobResult(
 
   // LAND_PROMOTION.
   if (input.state === 'READY' && promotion.confirmedAutomatically) {
-    return handBackToOwner(tx, promotion);
+    return automaticLandingCameBack(tx, promotion, input);
   }
   if (input.state === 'LANDED' || input.state === 'ALREADY_LANDED') {
     const mergedSha = input.state === 'LANDED' ? input.landedSha : (input.targetShaBefore ?? input.upstreamSha);
@@ -1217,13 +1268,93 @@ async function queueAutomaticLanding(tx: Prisma.TransactionClient, promotion: Pr
 }
 
 /**
- * M-T12: an automatic landing ended without landing — the runner found main somewhere other than
- * where the check left it, or the heartbeat about to hand it out found the authorization gone
- * (`automaticLandingRefusal`). The Automatic setting authorized a clean landing under a yes that
- * still stands, and this is no longer one, so the candidate goes back to being a question — READY,
- * with the card the owner was spared opened after all, and with the check it already has: the
- * owner's press is what decides whether it is checked again on the new main and merged (M5),
- * exactly as if the card had been theirs from the start.
+ * M-T12: an automatic landing ended without landing — the heartbeat about to hand it out found the
+ * authorization gone (`automaticLandingRefusal`), or a runner found main somewhere other than where
+ * the check left it and landed nothing.
+ *
+ * Which of the two it was is read again here rather than off the report: the Automatic setting's yes
+ * is asked once more (`automaticConfirmationRefusalIn`), over the facts the check left on the
+ * candidate and the project as it stands now. Withdrawn — Automatic switched off, the project paused,
+ * its line moved to main, an exception opened on its merge into main — and the candidate is the
+ * owner's question (`handBackToOwner`). Still standing, and what stopped the landing was main moving:
+ * nothing about the candidate is wrong, only the main its check ran against is gone, so it is checked
+ * again on the new one and the rule decides that check as it decided the first (owner decision
+ * 2026-10-15). Until then a moved main always opened the card: 100 of the 154 cards Automatic
+ * projects' branches opened in the fortnight before that decision were this and nothing else.
+ *
+ * Bounded by `AUTOMATIC_MERGE_ATTEMPTS`, counted off the candidate's automatic landings that came back
+ * READY — the one being applied is not terminal yet, so it is counted by hand.
+ */
+async function automaticLandingCameBack(
+  tx: Prisma.TransactionClient,
+  promotion: PromotionRow,
+  input: { jobId: string; runnerId: string | null },
+): Promise<PromotionJobOutcome> {
+  const refusal = await automaticConfirmationRefusalIn(tx, promotion, {
+    runnerHandsBackMovedUpstream: await runnerHandsBackMovedUpstream(tx, input.runnerId),
+    conflicts: promotion.conflicts,
+    checks: storedChecks(promotion),
+    upstreamSha: promotion.upstreamShaChecked,
+    testedTreeSha: promotion.mergeTreeSha,
+  });
+  if (refusal) return handBackToOwner(tx, promotion);
+  const earlier = await tx.projectIntegrationJob.count({
+    where: {
+      promotionId: promotion.id,
+      kind: 'LAND_PROMOTION',
+      confirmedAutomatically: true,
+      state: 'READY',
+      id: { not: input.jobId },
+    },
+  });
+  if (earlier + 1 >= AUTOMATIC_MERGE_ATTEMPTS) return handBackToOwner(tx, promotion);
+  return checkAgainOnMovedMain(tx, promotion);
+}
+
+/**
+ * The candidate checked again because main moved under its automatic landing (M-T12): back to
+ * CHECKING under the next CHECK_PROMOTION generation, with nothing confirmed. Same source, same
+ * tasks — only main has moved — and the new check's answer is decided the way the first one's was:
+ * clean, and the Automatic setting confirms it (M-T11); not, and it is blocked for the coordinator
+ * (M-T3) or put in front of the owner (M-T2).
+ *
+ * The landing job keeps saying it was the setting's and ended READY: that is the attempt's record,
+ * and what `automaticLandingCameBack` counts.
+ */
+async function checkAgainOnMovedMain(
+  tx: Prisma.TransactionClient,
+  promotion: PromotionRow,
+): Promise<PromotionJobOutcome> {
+  const codebase = await tx.projectCodebase.findUnique({
+    where: { id: promotion.codebaseId },
+    select: { canonicalRepoUrl: true },
+  });
+  // Unreachable while the rule above reads a line off this same binding; the card if it ever is.
+  if (!codebase) return handBackToOwner(tx, promotion);
+  const checkJobId = await queuePromotionJob(tx, {
+    kind: 'CHECK_PROMOTION',
+    promotion,
+    canonicalRepoUrl: codebase.canonicalRepoUrl,
+  });
+  await tx.projectPromotion.update({
+    where: { id: promotion.id },
+    data: {
+      state: 'CHECKING' satisfies PromotionState,
+      checkJobId,
+      confirmedAutomatically: false,
+      confirmedAt: null,
+      landJobId: null,
+    },
+  });
+  return { promotionId: promotion.id, state: 'CHECKING', receiptIds: [], openApproval: null };
+}
+
+/**
+ * The automatic landing's candidate goes back to being the owner's question (M-T12): the
+ * authorization it was queued under is gone, or main kept moving under it for
+ * `AUTOMATIC_MERGE_ATTEMPTS` landings. READY, with the card the owner was spared opened after all,
+ * and with the check it already has: the owner's press is what decides whether it is checked again
+ * on the new main and merged (M5), exactly as if the card had been theirs from the start.
  *
  * The promotion stops saying it was confirmed automatically, because it is not confirmed at all now;
  * the job it sent out keeps saying so, which is where the attempt is recorded.
@@ -1294,7 +1425,19 @@ async function blockPromotion(
  * own rule (M-T11), exactly as its first check would have. `decided_at` is cleared because the
  * candidate is asking again; a check that fails again blocks it at a new moment.
  *
- * Null when nothing can be queued: the candidate is no longer BLOCKED, or its repository is gone.
+ * The candidate's confirmation is cleared with the re-check, because the re-check asks the merge
+ * question anew: a `confirmed_by_user_id` / `confirmed_at` recorded against an earlier check result
+ * answered a different question (the tree a re-check runs on can differ — the upstream moves), and
+ * left standing it would collide with `project_promotion_automatic_chk` the moment a clean result is
+ * confirmed by the Automatic setting (`confirmed_automatically = true` forbids a named confirmer).
+ * Whoever decides the fresh result decides it fresh: the Automatic setting, or the account owner on a
+ * card the clean check opens as it always did. For a project without Automatic this changes nothing
+ * about the door's reach — it only means the row no longer carries a confirmation the new check has
+ * not earned, and the owner's earlier press is not treated as covering a merge nobody asked them
+ * about again.
+ *
+ * Null when nothing can be queued: the candidate is no longer asking (not BLOCKED, and not CHECKING
+ * for the timed-out re-check this door admits), or its repository is gone.
  */
 export async function requeuePromotionCheck(
   tx: Prisma.TransactionClient,
@@ -1304,7 +1447,10 @@ export async function requeuePromotionCheck(
     where: { id: input.promotionId },
     select: PROMOTION_COLUMNS,
   });
-  if (!promotion || promotion.state !== 'BLOCKED') return null;
+  // CHECKING is the timed-out re-check's state (J-T9): the door has already decided the authority,
+  // and a candidate asking again is exactly what this queueing is for. Anything past asking
+  // (READY and beyond) is refused upstream of here.
+  if (!promotion || (promotion.state !== 'BLOCKED' && promotion.state !== 'CHECKING')) return null;
   const codebase = await tx.projectCodebase.findUnique({
     where: { id: promotion.codebaseId },
     select: { canonicalRepoUrl: true },
@@ -1319,7 +1465,17 @@ export async function requeuePromotionCheck(
   await tx.projectPromotion.update({
     where: { id: promotion.id },
     // Asking again, so nothing blocks it any more: a check that fails again records its own reason.
-    data: { state: 'CHECKING' satisfies PromotionState, checkJobId: jobId, decidedAt: null, blockedReason: null },
+    // The confirmation columns go back to NULL with it: the re-check asks the merge question anew,
+    // and the Automatic setting or the owner decides the fresh result (see the comment above).
+    data: {
+      state: 'CHECKING' satisfies PromotionState,
+      checkJobId: jobId,
+      decidedAt: null,
+      blockedReason: null,
+      confirmedByUserId: null,
+      confirmedAt: null,
+      confirmedAutomatically: false,
+    },
   });
   const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
     where: { id: jobId },
@@ -1370,21 +1526,38 @@ async function writeUpstreamReceipts(
     select: { taskId: true, sessionId: true, landedSha: true },
   });
   const byTask = new Map(landings.map((row) => [row.taskId, row]));
+  const sessionFor = (taskId: string) =>
+    byTask.get(taskId)?.sessionId ?? (onItsOwnBranch ? input.promotion.sessionId : null);
+  // Both ids a receipt is written against are history references (0423, 0424), and both are foreign
+  // keys on the receipt: a task deleted, or a session purged from Trash, while its work waited for
+  // this merge leaves its id on the landing and on the promotion. So each is looked up first, one
+  // `IN` apiece, and a gone one is written as the NULL its key used to leave — no receipt for a
+  // session that is gone, as when the landing's `session_id` read NULL, and a receipt naming no task
+  // for a task that is gone, as SET NULL leaves one written a moment before the delete.
+  const sessionIds = [...new Set(input.promotion.includedTaskIds.flatMap((taskId) => sessionFor(taskId) ?? []))];
+  const liveSessions = new Set(sessionIds.length === 0 ? [] : (await tx.session.findMany({
+    where: { id: { in: sessionIds } },
+    select: { id: true },
+  })).map((row) => row.id));
+  const liveTasks = new Set(input.promotion.includedTaskIds.length === 0 ? [] : (await tx.task.findMany({
+    where: { id: { in: input.promotion.includedTaskIds } },
+    select: { id: true },
+  })).map((row) => row.id));
   const receiptIds: string[] = [];
   for (const taskId of input.promotion.includedTaskIds) {
     const landing = byTask.get(taskId);
-    const sessionId = landing?.sessionId ?? (onItsOwnBranch ? input.promotion.sessionId : null);
+    const sessionId = sessionFor(taskId);
     // The job's tested commit, or — when there is none because the landing answered ALREADY_LANDED
     // — the candidate's own source, which is the commit that turned out to be on the upstream
     // already. Without the second half that answer would leave the task with no receipt and the
     // criterion reading unlanded while its work sits on main.
     const sourceSha = landing?.landedSha
       ?? (onItsOwnBranch ? input.testedSha ?? input.promotion.sourceSha : null);
-    if (!sessionId || !sourceSha) continue;
+    if (!sessionId || !liveSessions.has(sessionId) || !sourceSha) continue;
     const written = await MergeReceiptService.fromIntegrationJob(tx, {
       ownerId: input.promotion.ownerId,
       sessionId,
-      taskId,
+      taskId: liveTasks.has(taskId) ? taskId : null,
       projectId: input.promotion.projectId,
       jobId: input.jobId,
       state: input.state,

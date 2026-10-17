@@ -1,0 +1,4938 @@
+{
+ "screenshots": {
+  "chromium-dark-desktop/p43b-card-criteria-refused.png": {
+   "equal": true,
+   "sha256": "8dce3569e54a733c2e5b20f92ec8e455e7575973b4a8af10f127edf0768f53cf"
+  },
+  "chromium-dark-desktop/p43b-card-evidence-refused.png": {
+   "equal": true,
+   "sha256": "854186caa08570342e11074f77a9719786a4c03401eef6e21099eaa797483c67"
+  },
+  "chromium-dark-desktop/p43b-card-evidence-stale.png": {
+   "equal": true,
+   "sha256": "9293edf9ae41cbef5f319247bb269a36f7f046c37a25eff2daa6ff8865b0fb64"
+  },
+  "chromium-dark-desktop/p43b-card-owner-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 11,
+     "x": [
+      272,
+      277
+     ],
+     "y": [
+      225,
+      230
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 11,
+     "x": [
+      1002,
+      1007
+     ],
+     "y": [
+      225,
+      230
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      272,
+      277
+     ],
+     "y": [
+      273,
+      277
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      1002,
+      1007
+     ],
+     "y": [
+      273,
+      278
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 38,
+   "pixelsAtMost2": 38,
+   "sha256Del": "5ca6c836695392557107d114d69f3e26029f3ffa27dcfbeb812428e756ec7998",
+   "sha256Ref": "16a61c994ec5e220e4b986af94f09fc9f63b5f2ba4bbb05253dd082fc54a6814"
+  },
+  "chromium-dark-desktop/p43b-card-owner-typed.png": {
+   "equal": true,
+   "sha256": "4807b30ec35778d2e6079a83f41bc2f5508067ef1784d9e27fe4e2165bd33596"
+  },
+  "chromium-dark-desktop/p43b-card-question-records.png": {
+   "equal": true,
+   "sha256": "5a3a1c3fd60a57a30bbf485d29697c7cb2250071061858c7dcc59fcf3dc1f7c5"
+  },
+  "chromium-dark-desktop/p43b-card-question-review.png": {
+   "equal": true,
+   "sha256": "a9438bc11d9f270700dd1a3205f80ce566c6b212e51d55f33a28f690ff4f2412"
+  },
+  "chromium-dark-desktop/p43b-card-receipt.png": {
+   "equal": true,
+   "sha256": "10e0b0ff4c6975f9054441aef66e544d884bd447cc9e819b62f37f58a1db9ebb"
+  },
+  "chromium-dark-desktop/p43b-card-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      726,
+      729
+     ],
+     "y": [
+      363,
+      365
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 11,
+     "x": [
+      781,
+      786
+     ],
+     "y": [
+      363,
+      368
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      785,
+      786
+     ],
+     "y": [
+      389,
+      392
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 23,
+   "pixelsAtMost2": 23,
+   "sha256Del": "f8b82e7018a5ea210271be7860976d5e662be58a0d9c2b09da29d74f751de18a",
+   "sha256Ref": "349f0ef90a028c9d300eca6f0aa40a1edd8ea3e7619099035bc8459d495973e3"
+  },
+  "chromium-dark-desktop/p43b-card-reopen.png": {
+   "equal": true,
+   "sha256": "00a9c6f22a3312fed7d82311fd854582515927ced1905624dedbc71468ed2157"
+  },
+  "chromium-dark-desktop/p43b-card-review-turns.png": {
+   "equal": true,
+   "sha256": "a21a088b84fc0363ce6982fc9550ff29ef9da7d18cc0167eb8684043faf65891"
+  },
+  "chromium-dark-desktop/p43b-card-start-gone.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 2,
+     "x": [
+      320,
+      320
+     ],
+     "y": [
+      108,
+      109
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      912,
+      916
+     ],
+     "y": [
+      606,
+      611
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      937,
+      941
+     ],
+     "y": [
+      606,
+      611
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      913,
+      916
+     ],
+     "y": [
+      632,
+      635
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      937,
+      938
+     ],
+     "y": [
+      634,
+      635
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 20,
+   "pixelsAtMost2": 20,
+   "sha256Del": "6d5dc6eda5508260c06af758c6b263834fe0ebbe9b80ae7ed4df913a5656fdd9",
+   "sha256Ref": "d5742220529816d5222f1b54545757eec9db56d613abd16b455af6056424b30c"
+  },
+  "chromium-dark-desktop/p43b-card-start-live-plan.png": {
+   "equal": true,
+   "sha256": "2b3bc4433581ce22f09592ab3938f98d259d85b219d798cf5348cf0a3aa21922"
+  },
+  "chromium-dark-desktop/p43b-card-start-live.png": {
+   "equal": true,
+   "sha256": "070b6bb14703d8aa5789c17800a51ed3cb8cb32ea65e0aed8998eeccb3b20c58"
+  },
+  "chromium-dark-desktop/p43b-card-strip.png": {
+   "equal": true,
+   "sha256": "7814cef26290f2c34691d5fd8932628a2f19aeb74349e92669761bfce323a0fb"
+  },
+  "chromium-dark-phone/p43b-card-criteria-refused.png": {
+   "equal": true,
+   "sha256": "4414a86d66f942cf934a063b6efbb6e3ad03757e422d1883247fe07377a8c887"
+  },
+  "chromium-dark-phone/p43b-card-evidence-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      50,
+      53
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 4,
+   "pixelsAtMost2": 4,
+   "sha256Del": "48fe408131d24b4f377bff997c9eea0aebf24f8b780d9e5c49634f64a65aa46e",
+   "sha256Ref": "d555b306e6f4bcb5b37702d51402243af1bcc11c4ba821b79e97d057ba946f21"
+  },
+  "chromium-dark-phone/p43b-card-evidence-stale.png": {
+   "equal": true,
+   "sha256": "244b7a372060517919e31fff0302d94d9a1e273f2dee4573317850a85aac15eb"
+  },
+  "chromium-dark-phone/p43b-card-owner-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 4,
+     "pixels": 7,
+     "x": [
+      49,
+      50
+     ],
+     "y": [
+      498,
+      504
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      51,
+      54
+     ],
+     "y": [
+      518,
+      520
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      335,
+      338
+     ],
+     "y": [
+      518,
+      519
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      349,
+      351
+     ],
+     "y": [
+      730,
+      733
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 4,
+   "pixels": 23,
+   "pixelsAtMost2": 22,
+   "sha256Del": "cc8631280dfd37fb3fb82872e8c079d9311bf61a565a3f5d9e1ce1f0a1b9e570",
+   "sha256Ref": "657692b1bf2422de438d68d28533fb2cb8f59bec2246905b2a440a1ca6724ec3"
+  },
+  "chromium-dark-phone/p43b-card-owner-typed.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 4,
+     "pixels": 7,
+     "x": [
+      49,
+      50
+     ],
+     "y": [
+      498,
+      504
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 4,
+   "pixels": 7,
+   "pixelsAtMost2": 6,
+   "sha256Del": "6634d3996a37e216b38f97b6378e21e10153a0195ce74766602a9bf3e1d612e5",
+   "sha256Ref": "0215d9d84f70c3204e38ef1a4c8ac6cdab55d4c8a950eb202cf19142bae19667"
+  },
+  "chromium-dark-phone/p43b-card-question-records.png": {
+   "equal": true,
+   "sha256": "05631d5c1d8db123bd607f7717759a236b3ab62b50fdec742a66f2b6b05a684f"
+  },
+  "chromium-dark-phone/p43b-card-question-review.png": {
+   "equal": true,
+   "sha256": "ce5f70077067f269caf730f1eb2db90b9f7011ee211228675b7f49cdd1a6a40b"
+  },
+  "chromium-dark-phone/p43b-card-receipt.png": {
+   "equal": true,
+   "sha256": "d3bcb0502de1975c682c0811ef44a0c3461662152d2255d1666a9281b24321ea"
+  },
+  "chromium-dark-phone/p43b-card-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      208,
+      211
+     ],
+     "y": [
+      437,
+      439
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      263,
+      266
+     ],
+     "y": [
+      437,
+      438
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 12,
+   "pixelsAtMost2": 12,
+   "sha256Del": "bceeee0736f627d8f02bb6d089be89ee8284f4c9340a4cbf6ca0e78303312af0",
+   "sha256Ref": "b05f588a3286109a99b01f7152b2318bb2e334f8c15c655d220f8fdf2cb18bc9"
+  },
+  "chromium-dark-phone/p43b-card-reopen.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      8,
+      8
+     ],
+     "y": [
+      116,
+      117
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      207,
+      208
+     ],
+     "y": [
+      307,
+      308
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      265,
+      267
+     ],
+     "y": [
+      307,
+      308
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      207,
+      208
+     ],
+     "y": [
+      335,
+      335
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      266,
+      266
+     ],
+     "y": [
+      335,
+      335
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 12,
+   "pixelsAtMost2": 12,
+   "sha256Del": "f5b52d23a53550bd6d3c7c2371b824bfe68c9068a9031eea81da8e350a99b441",
+   "sha256Ref": "1104c2d62c9ae604068afb3e6b360c53173e6cc4f977c9fbab82bf641154a81e"
+  },
+  "chromium-dark-phone/p43b-card-review-turns.png": {
+   "equal": true,
+   "sha256": "8b1f5e54f9e38563aa181b448ace62ca0f6e0ae14b0680544c50a6630655bb89"
+  },
+  "chromium-dark-phone/p43b-card-start-gone.png": {
+   "equal": true,
+   "sha256": "3c94171c9b027ddd205e03a396fbfc1939f56f20a3f200b2e06286e325149c2f"
+  },
+  "chromium-dark-phone/p43b-card-start-live-graph.png": {
+   "equal": true,
+   "sha256": "1bec766557ca709c824144a1bfecc68d2e6cc1e59fc3a0dbf04b0e22b807ae98"
+  },
+  "chromium-dark-phone/p43b-card-start-live-more.png": {
+   "equal": true,
+   "sha256": "6c6884222bfc43b74fe80cace0945ede2c94ac8990edfe707ff9883b16e6dfa8"
+  },
+  "chromium-dark-phone/p43b-card-start-live-plan.png": {
+   "equal": true,
+   "sha256": "0b478586603bd4abd13bae38287837f8f8b974783069f343cd7db30f490fb85d"
+  },
+  "chromium-dark-phone/p43b-card-start-live.png": {
+   "equal": true,
+   "sha256": "cb52fbd77b954c2641850c9caf14827dd4ed64edca76d1753e6bf7849b76a39f"
+  },
+  "chromium-light-desktop/p43b-card-criteria-refused.png": {
+   "equal": true,
+   "sha256": "a37a95cbeb3a3f35b2682399daf666cee7d26639c289a10fe9405dd977c2d6ab"
+  },
+  "chromium-light-desktop/p43b-card-evidence-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      246,
+      247
+     ],
+     "y": [
+      51,
+      53
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      246,
+      247
+     ],
+     "y": [
+      579,
+      582
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      1032,
+      1033
+     ],
+     "y": [
+      579,
+      582
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      246,
+      247
+     ],
+     "y": [
+      649,
+      651
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1033,
+      1033
+     ],
+     "y": [
+      649,
+      651
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 20,
+   "pixelsAtMost2": 20,
+   "sha256Del": "df65d38f129b909fdb354d37d17f6f5464c0a4a6c33a41d0d1c1b0c37758b882",
+   "sha256Ref": "63148c4be108c069fe080dcfca26fa47028a440832ec5233ec999d816ff607b8"
+  },
+  "chromium-light-desktop/p43b-card-evidence-stale.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      246,
+      247
+     ],
+     "y": [
+      51,
+      53
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1033,
+      1033
+     ],
+     "y": [
+      51,
+      53
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 13,
+     "x": [
+      261,
+      268
+     ],
+     "y": [
+      463,
+      468
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      246,
+      247
+     ],
+     "y": [
+      579,
+      582
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      246,
+      247
+     ],
+     "y": [
+      649,
+      651
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 27,
+   "pixelsAtMost2": 27,
+   "sha256Del": "007f46c6594f957acf33bed2d958e7969fc512496d2a144e271c4f69403711ed",
+   "sha256Ref": "8750895be9b3552df121703cb49e1c1239a680caebd9b8f2c319a974c67f8805"
+  },
+  "chromium-light-desktop/p43b-card-owner-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 13,
+     "x": [
+      272,
+      277
+     ],
+     "y": [
+      225,
+      230
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 14,
+     "x": [
+      1002,
+      1007
+     ],
+     "y": [
+      225,
+      230
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 14,
+     "x": [
+      272,
+      277
+     ],
+     "y": [
+      273,
+      278
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 15,
+     "x": [
+      1002,
+      1007
+     ],
+     "y": [
+      273,
+      278
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      1032,
+      1033
+     ],
+     "y": [
+      648,
+      651
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1032,
+      1033
+     ],
+     "y": [
+      717,
+      720
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 66,
+   "pixelsAtMost2": 66,
+   "sha256Del": "2a765fca87c20cb0faed9c013a31e931c816141f67cac52b69c3545a89a71b9b",
+   "sha256Ref": "0e2575b46ef78a65501a7e646bf9428bba0aab0ba83d70feadf504ae7a25f44b"
+  },
+  "chromium-light-desktop/p43b-card-owner-typed.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 10,
+     "x": [
+      272,
+      277
+     ],
+     "y": [
+      706,
+      711
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 10,
+   "pixelsAtMost2": 10,
+   "sha256Del": "f3dd6e4f4c18ea8e60e9d1f65e72c2c553a823eec30d9c9d657cbbbef238ba76",
+   "sha256Ref": "ca9b120188b0c5d38a78d610553b72ee3fe4c388f095c7b2e9d11037abcbbc7a"
+  },
+  "chromium-light-desktop/p43b-card-question-records.png": {
+   "equal": true,
+   "sha256": "d555906afadf2d59f68876d8196543a425eaee387ee955b0e4fc5ab0f688bd86"
+  },
+  "chromium-light-desktop/p43b-card-question-review.png": {
+   "equal": true,
+   "sha256": "f3471056d77b528d20909e93fb3a3ef6274329c73c777adf05e3b235cdb17f05"
+  },
+  "chromium-light-desktop/p43b-card-receipt.png": {
+   "equal": true,
+   "sha256": "fdf82a929f98b981c9834acf2c6204ca6c8505e0714ed8d9fc0def92ca657529"
+  },
+  "chromium-light-desktop/p43b-card-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      726,
+      729
+     ],
+     "y": [
+      363,
+      365
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 11,
+     "x": [
+      781,
+      786
+     ],
+     "y": [
+      363,
+      368
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      784,
+      786
+     ],
+     "y": [
+      389,
+      392
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 24,
+   "pixelsAtMost2": 24,
+   "sha256Del": "2dfff02d4b5effa6e7c709587b5a1a48bd124466d3dec2961bc37a76abf01527",
+   "sha256Ref": "dab6971204da174b1e75939c57d2df6bcae5057bacb7d670998075f41e60b407"
+  },
+  "chromium-light-desktop/p43b-card-reopen.png": {
+   "equal": true,
+   "sha256": "f1c2d4aaa4d4da9398db2bd1bee23f0dbeee3c815990aa960397a8ff49594cc2"
+  },
+  "chromium-light-desktop/p43b-card-review-turns.png": {
+   "equal": true,
+   "sha256": "4634e307826af9c4d78081c785240d79f1c6c351be2b06f49a4f3ff225a8f3ef"
+  },
+  "chromium-light-desktop/p43b-card-start-gone.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 4,
+     "pixels": 2,
+     "x": [
+      320,
+      320
+     ],
+     "y": [
+      108,
+      109
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 13,
+     "x": [
+      912,
+      918
+     ],
+     "y": [
+      606,
+      612
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 12,
+     "x": [
+      935,
+      941
+     ],
+     "y": [
+      606,
+      612
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 11,
+     "x": [
+      912,
+      918
+     ],
+     "y": [
+      629,
+      635
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      935,
+      941
+     ],
+     "y": [
+      629,
+      635
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 4,
+   "pixels": 47,
+   "pixelsAtMost2": 45,
+   "sha256Del": "ccea4f70310ac46acd2ba006a7ee5d7d474a40ee4a6dba02c5612e0dfccf2c6d",
+   "sha256Ref": "cd8acb2eabb27b0b83f7c50dd27cbb73aeaa1e9f01d48cb450ab9a833b71f8f1"
+  },
+  "chromium-light-desktop/p43b-card-start-live-plan.png": {
+   "equal": true,
+   "sha256": "e22e5ebb0d7c668a0882dc79d4be017b4e44282f0d6e4be326eb3a12975dc9c1"
+  },
+  "chromium-light-desktop/p43b-card-start-live.png": {
+   "equal": true,
+   "sha256": "87622eedab6d333e5ca5b7a715499bebf691ae82610e455bcda10f6fa1936b68"
+  },
+  "chromium-light-desktop/p43b-card-strip.png": {
+   "equal": true,
+   "sha256": "98a0ccfb0deae5d521900d8ef39abafb51e672580af6d77f443b98b8f94a0d00"
+  },
+  "chromium-light-phone/p43b-card-criteria-refused.png": {
+   "equal": true,
+   "sha256": "2862cc5674a96dff5c6cfa1331eefa0dd4178e8b07fcdeaad0f7fdd84bb6f4af"
+  },
+  "chromium-light-phone/p43b-card-evidence-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      16,
+      16
+     ],
+     "y": [
+      673,
+      675
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      673,
+      675
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "1cf263271b9837aa2c116023dd71fb9a07cf9382cf7f0dca2de660127a99ba9f",
+   "sha256Ref": "65724234d0c6b80f7b14a6f406b103bb27a357927d46118afc165d0ec615807b"
+  },
+  "chromium-light-phone/p43b-card-evidence-stale.png": {
+   "equal": true,
+   "sha256": "3133efbbf5fb7283199f428351f79ad82c527820710246860a76ca8b3ae68b0e"
+  },
+  "chromium-light-phone/p43b-card-owner-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      51,
+      54
+     ],
+     "y": [
+      518,
+      520
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 7,
+     "x": [
+      335,
+      338
+     ],
+     "y": [
+      518,
+      520
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 8,
+     "x": [
+      349,
+      351
+     ],
+     "y": [
+      730,
+      733
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 14,
+     "x": [
+      38,
+      43
+     ],
+     "y": [
+      766,
+      771
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 36,
+   "pixelsAtMost2": 36,
+   "sha256Del": "50d57231a9ad0ed27f98ebf6b007834017490a87ed0d14bd3a0bc9bbd93274bc",
+   "sha256Ref": "635e69dcf44fbca45ea73b8016d299ca45f622ff17cd672b74082892c29aa0ae"
+  },
+  "chromium-light-phone/p43b-card-owner-typed.png": {
+   "equal": true,
+   "sha256": "5c8e473fe9cb9b431eb3361562a5194e924aa11fe48960992aff85bda4d776bc"
+  },
+  "chromium-light-phone/p43b-card-question-records.png": {
+   "equal": true,
+   "sha256": "a88c8c47816d182759df07783e078c06d4f6d50fb072fcc032925573e9a8a88c"
+  },
+  "chromium-light-phone/p43b-card-question-review.png": {
+   "equal": true,
+   "sha256": "2c1631ee90e75bcbf7e0071f51d182e1d00cba69df5aa8bf985a89f5a232d0c5"
+  },
+  "chromium-light-phone/p43b-card-receipt.png": {
+   "equal": true,
+   "sha256": "683e26bca6976db03cd88a9ac461609f714961df8be60a9d8408e5a6671a2ea5"
+  },
+  "chromium-light-phone/p43b-card-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      208,
+      211
+     ],
+     "y": [
+      437,
+      439
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 7,
+     "x": [
+      263,
+      266
+     ],
+     "y": [
+      437,
+      439
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 14,
+   "pixelsAtMost2": 14,
+   "sha256Del": "0db0a01ededd91a6b62040ce8d004cc6db36ff28362c6e762e2f6cd95fb3c1b0",
+   "sha256Ref": "f343f20206dc0d3e5fa0915a7c6eefd83222b654c5b769db0c767fed8641770d"
+  },
+  "chromium-light-phone/p43b-card-reopen.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 4,
+     "pixels": 2,
+     "x": [
+      8,
+      8
+     ],
+     "y": [
+      116,
+      117
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 4,
+   "pixels": 2,
+   "pixelsAtMost2": 0,
+   "sha256Del": "31609a41b06efb0bb9871e4b129ee0f15db3d5f2563a503d26daaf3b811d7e1a",
+   "sha256Ref": "f21a6dfa43fb42d3903512c039e3ac6f5337e4b3ac663d6abcb0a3b719efa1fb"
+  },
+  "chromium-light-phone/p43b-card-review-turns.png": {
+   "equal": true,
+   "sha256": "02b4480643a176f52d1212ae23a2c37f73c93ca11e122f49b7926d0e30f632fc"
+  },
+  "chromium-light-phone/p43b-card-start-gone.png": {
+   "equal": true,
+   "sha256": "660d215c9362431999ab80d679d0f921ba7f868d2eee52e65b0a893d695c4b25"
+  },
+  "chromium-light-phone/p43b-card-start-live-graph.png": {
+   "equal": true,
+   "sha256": "9bafb2560200f35789b7fe9125ea63942276d3903229b498708fef98f4b73c1b"
+  },
+  "chromium-light-phone/p43b-card-start-live-more.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      38,
+      39
+     ],
+     "y": [
+      548,
+      550
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      350,
+      351
+     ],
+     "y": [
+      548,
+      550
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "e523b70e9c2f2d913c4903802407d1ddad780b24b11448f643b7aece4cf6bfd5",
+   "sha256Ref": "f23efbde2713c4d83ec44b7de5399cee5365a13757ba3b25a67df2ed02cf6ca3"
+  },
+  "chromium-light-phone/p43b-card-start-live-plan.png": {
+   "equal": true,
+   "sha256": "acfcd967c82342dd376964b657e5b5a9fbcfbb4d0cbf328243d26114d95b41c9"
+  },
+  "chromium-light-phone/p43b-card-start-live.png": {
+   "equal": true,
+   "sha256": "3194829323d8b618896ff782528a76f4d7ee82bacb2401d64846ce7d81fa313d"
+  },
+  "webkit-dark-desktop/p43b-card-criteria-refused.png": {
+   "equal": true,
+   "sha256": "dd1d7440530452db097b0db89647e4f9e2c06b4de8907b09541558de568539d3"
+  },
+  "webkit-dark-desktop/p43b-card-evidence-refused.png": {
+   "equal": true,
+   "sha256": "44017f0267d5dac596a967179475039378e64f73db3a527237f7590fe6f1913f"
+  },
+  "webkit-dark-desktop/p43b-card-evidence-stale.png": {
+   "equal": true,
+   "sha256": "077b5d26b089169a198547acca1a70ae2cc39edbfa1997f9d0293e8464cc2fac"
+  },
+  "webkit-dark-desktop/p43b-card-owner-refused.png": {
+   "equal": true,
+   "sha256": "56c6cc72f72de06150498c31997f77cfa340831baa987d197c62630a534ca5f7"
+  },
+  "webkit-dark-desktop/p43b-card-owner-typed.png": {
+   "equal": true,
+   "sha256": "187b1f3db2df7d46b1d063e36e7e3a84679c0633341ef9b0d05b20f1971ed469"
+  },
+  "webkit-dark-desktop/p43b-card-question-records.png": {
+   "equal": true,
+   "sha256": "69aafcbb1d17830fa98e412f72bcefdefe68b1167339c141411c6c5db346e2d7"
+  },
+  "webkit-dark-desktop/p43b-card-question-review.png": {
+   "equal": true,
+   "sha256": "1cf181c1014369d01bccc0d7e052c876471b36723cb31bc321f7a42593cfc550"
+  },
+  "webkit-dark-desktop/p43b-card-receipt.png": {
+   "equal": true,
+   "sha256": "a2381c06d24d80bdbd759bb036b4330d168205c4e116a8aa07d6f3849f219f4a"
+  },
+  "webkit-dark-desktop/p43b-card-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 35,
+     "pixels": 1,
+     "x": [
+      0,
+      0
+     ],
+     "y": [
+      0,
+      0
+     ]
+    },
+    {
+     "maxChannelDiff": 255,
+     "pixels": 7200,
+     "x": [
+      1272,
+      1279
+     ],
+     "y": [
+      0,
+      899
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      380,
+      380
+     ],
+     "y": [
+      105,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      899,
+      899
+     ],
+     "y": [
+      105,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 5,
+     "pixels": 38,
+     "x": [
+      429,
+      452
+     ],
+     "y": [
+      275,
+      286
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      380,
+      384
+     ],
+     "y": [
+      409,
+      413
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      895,
+      898
+     ],
+     "y": [
+      409,
+      413
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 6,
+     "x": [
+      262,
+      271
+     ],
+     "y": [
+      414,
+      417
+     ]
+    },
+    {
+     "maxChannelDiff": 11,
+     "pixels": 2,
+     "x": [
+      271,
+      272
+     ],
+     "y": [
+      416,
+      416
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 15,
+     "x": [
+      264,
+      274
+     ],
+     "y": [
+      588,
+      600
+     ]
+    },
+    {
+     "maxChannelDiff": 6,
+     "pixels": 2,
+     "x": [
+      262,
+      263
+     ],
+     "y": [
+      597,
+      598
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 255,
+   "pixels": 7275,
+   "pixelsAtMost2": 48,
+   "sha256Del": "228f72b308807d57a305d718921b970cd3c7147043d2500a423b93f1744c6c91",
+   "sha256Ref": "b363691b4a157ee0a99b38ee343113ad2b6c2d83f3adae74af9e4eef1af20bb7"
+  },
+  "webkit-dark-desktop/p43b-card-reopen.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 35,
+     "pixels": 1,
+     "x": [
+      0,
+      0
+     ],
+     "y": [
+      0,
+      0
+     ]
+    },
+    {
+     "maxChannelDiff": 255,
+     "pixels": 7200,
+     "x": [
+      1272,
+      1279
+     ],
+     "y": [
+      0,
+      899
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      380,
+      380
+     ],
+     "y": [
+      105,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      899,
+      899
+     ],
+     "y": [
+      105,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      380,
+      384
+     ],
+     "y": [
+      300,
+      304
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      895,
+      898
+     ],
+     "y": [
+      300,
+      304
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 6,
+     "x": [
+      262,
+      271
+     ],
+     "y": [
+      414,
+      417
+     ]
+    },
+    {
+     "maxChannelDiff": 11,
+     "pixels": 2,
+     "x": [
+      271,
+      272
+     ],
+     "y": [
+      416,
+      416
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 15,
+     "x": [
+      264,
+      274
+     ],
+     "y": [
+      588,
+      600
+     ]
+    },
+    {
+     "maxChannelDiff": 6,
+     "pixels": 2,
+     "x": [
+      262,
+      263
+     ],
+     "y": [
+      597,
+      598
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 255,
+   "pixels": 7237,
+   "pixelsAtMost2": 26,
+   "sha256Del": "7de291bd7d550dfcc77516bbee3813d456f3ba033ec58f7afcc1dcd0dc9a3db3",
+   "sha256Ref": "803bd3153510bda5db17b60d1742199b57f6685e1cbdb0bf699e990716b533df"
+  },
+  "webkit-dark-desktop/p43b-card-review-turns.png": {
+   "equal": true,
+   "sha256": "ee57ab445cf5d544247d1e298e990f6523e4899183c2accae38020fff4bfca02"
+  },
+  "webkit-dark-desktop/p43b-card-start-gone.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 35,
+     "pixels": 1,
+     "x": [
+      0,
+      0
+     ],
+     "y": [
+      0,
+      0
+     ]
+    },
+    {
+     "maxChannelDiff": 255,
+     "pixels": 7200,
+     "x": [
+      1272,
+      1279
+     ],
+     "y": [
+      0,
+      899
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      320,
+      324
+     ],
+     "y": [
+      101,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      957,
+      959
+     ],
+     "y": [
+      104,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      320,
+      324
+     ],
+     "y": [
+      196,
+      200
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      955,
+      958
+     ],
+     "y": [
+      196,
+      200
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 255,
+   "pixels": 7217,
+   "pixelsAtMost2": 16,
+   "sha256Del": "cc3f6521422c90dc18a93ae64bc5df3ffe46a60daee5b47495c93519f1e9efe8",
+   "sha256Ref": "49d581c105cc881e1b3f797728153359cbbaec07ba8e99548e6c543fb3ae98c5"
+  },
+  "webkit-dark-desktop/p43b-card-start-live-plan.png": {
+   "equal": true,
+   "sha256": "3123ef99168a2b9c8985e8a4de7a4312baae9f8f89d69ef48bab026c2e0e0db5"
+  },
+  "webkit-dark-desktop/p43b-card-start-live.png": {
+   "equal": true,
+   "sha256": "80f6d669ecb89e5875c9d6d5f5dc79c5e1aa6fcf878a40c9d3dbd23bd93ef65d"
+  },
+  "webkit-dark-desktop/p43b-card-strip.png": {
+   "equal": true,
+   "sha256": "baaaddafd13bbe19fb904bfc7e9249b82c82858b480b02e7734f7bd5ba2945e1"
+  },
+  "webkit-dark-phone/p43b-card-criteria-refused.png": {
+   "equal": true,
+   "sha256": "4cf713c8408044cc1766392f8077571532ea01ac3e19abb3e4b54ade7ac13c65"
+  },
+  "webkit-dark-phone/p43b-card-evidence-refused.png": {
+   "equal": true,
+   "sha256": "5982cde892e3700a8901a0d6f215b1ef74586e9a983396547e1fe54b3191851d"
+  },
+  "webkit-dark-phone/p43b-card-evidence-stale.png": {
+   "equal": true,
+   "sha256": "3422eab436911a67575cbf264bae99cf40979c91c4a27c7fff3f205a7301b7af"
+  },
+  "webkit-dark-phone/p43b-card-owner-refused.png": {
+   "equal": true,
+   "sha256": "2aa8174ba782edd961594acf0bf1fe8721872347c42dac85d2c348f1cd95637f"
+  },
+  "webkit-dark-phone/p43b-card-owner-typed.png": {
+   "equal": true,
+   "sha256": "8df4d681744f7e46ad7097159787d7741a04651d4a99e5dc6a825c1cbbdd74f8"
+  },
+  "webkit-dark-phone/p43b-card-question-records.png": {
+   "equal": true,
+   "sha256": "966ba2ebe99e74af80faa868a0799ddec7949fc1d199a3ea31a33bae40ca1ad0"
+  },
+  "webkit-dark-phone/p43b-card-question-review.png": {
+   "equal": true,
+   "sha256": "6eb60b9b58d45cbc391f232d1c2c89f45db727adabea098b30326f1462c08b7c"
+  },
+  "webkit-dark-phone/p43b-card-receipt.png": {
+   "equal": true,
+   "sha256": "92a920d088bbec906c38aeac228533b5dd4789c580f048a1ad4466205d0bd28b"
+  },
+  "webkit-dark-phone/p43b-card-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      8,
+      13
+     ],
+     "y": [
+      109,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      376,
+      381
+     ],
+     "y": [
+      109,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      8,
+      12
+     ],
+     "y": [
+      483,
+      487
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      377,
+      380
+     ],
+     "y": [
+      483,
+      487
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 17,
+   "pixelsAtMost2": 17,
+   "sha256Del": "ee839e9d731ca3d0e905bf2db07cbb4fd573a42b18c053493c81ec5a42af4afe",
+   "sha256Ref": "c6c69f1af546f9afd7738a9ab9a8b341baec717f3c2afcd02075bc469c8c1b6e"
+  },
+  "webkit-dark-phone/p43b-card-reopen.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      8,
+      13
+     ],
+     "y": [
+      109,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      376,
+      381
+     ],
+     "y": [
+      109,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      8,
+      12
+     ],
+     "y": [
+      352,
+      356
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      377,
+      380
+     ],
+     "y": [
+      352,
+      356
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 17,
+   "pixelsAtMost2": 17,
+   "sha256Del": "b765f5e86e7df258aa4dc2834d1f3fbaa1a32103f97fa5d3538f64bc3bbb0ca8",
+   "sha256Ref": "245b80e30fc2a66c9f920b93b9f00303cfd48717836219fc328f4796f9c22382"
+  },
+  "webkit-dark-phone/p43b-card-review-turns.png": {
+   "equal": true,
+   "sha256": "3eff9078c5f35ddcf608002baa2aeb87c1629ac870c41052c381ff69916ee810"
+  },
+  "webkit-dark-phone/p43b-card-start-gone.png": {
+   "equal": true,
+   "sha256": "9090218c920c06c3cf78d3179a76f3d058ffb08660ce4fb3dd521233cd12bcc2"
+  },
+  "webkit-dark-phone/p43b-card-start-live-graph.png": {
+   "equal": true,
+   "sha256": "7b8cf41c158f853256bdbaf612c939e42b53e5fe2fc17cc7c014d57c0d0e675a"
+  },
+  "webkit-dark-phone/p43b-card-start-live-more.png": {
+   "equal": true,
+   "sha256": "29e6bcc52023589dcfc5d2dbfd98e06c512ed4293e2206868724f1870de56567"
+  },
+  "webkit-dark-phone/p43b-card-start-live-plan.png": {
+   "equal": true,
+   "sha256": "5a8dafc6bdfbcbd2a8242ec376aa4bae07ef3a1a0e691bd155d7d649e192c9de"
+  },
+  "webkit-dark-phone/p43b-card-start-live.png": {
+   "equal": true,
+   "sha256": "0ddd2f9b1691f09c73f078bf2a4350620d38eba690ba196581a6be6c05b5f775"
+  },
+  "webkit-light-desktop/p43b-card-criteria-refused.png": {
+   "equal": true,
+   "sha256": "2cf7b89a31a2dde8ea91d7289ee29992ab28e4ec2bf530139e8156716f55e714"
+  },
+  "webkit-light-desktop/p43b-card-evidence-refused.png": {
+   "equal": true,
+   "sha256": "8404a63f33c2246e9cc94a3b840f1e678d0a4ac274919073eff8d733245bfeb4"
+  },
+  "webkit-light-desktop/p43b-card-evidence-stale.png": {
+   "equal": true,
+   "sha256": "033e1219e7137ac95c8b583da6bcf1d9187b26feb6748ddbcfcc3b9345527afe"
+  },
+  "webkit-light-desktop/p43b-card-owner-refused.png": {
+   "equal": true,
+   "sha256": "0f14da8cad8f849e14c7e85fba25e3dfc2e7a07ff8c1a18c0a12118d3c5d8bd4"
+  },
+  "webkit-light-desktop/p43b-card-owner-typed.png": {
+   "equal": true,
+   "sha256": "a7cba9b7fff9d752f4b868d039a9100515bc5963c1eabe9e0a49ccefdaebbd0e"
+  },
+  "webkit-light-desktop/p43b-card-question-records.png": {
+   "equal": true,
+   "sha256": "97d075ab0f6de2cdc152d04bb55c8bbb89d4ac3cad5f67d0e43cda0bedabec20"
+  },
+  "webkit-light-desktop/p43b-card-question-review.png": {
+   "equal": true,
+   "sha256": "a6191df674d86c57a7d958fb9d522e3072699a14f827b6badaf9b31aabbf5a51"
+  },
+  "webkit-light-desktop/p43b-card-receipt.png": {
+   "equal": true,
+   "sha256": "7d120d54b1a80c92139266a87072d80fe1c8d291ffebf61a071742463b4b66c8"
+  },
+  "webkit-light-desktop/p43b-card-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 21,
+     "pixels": 1,
+     "x": [
+      0,
+      0
+     ],
+     "y": [
+      0,
+      0
+     ]
+    },
+    {
+     "maxChannelDiff": 255,
+     "pixels": 7200,
+     "x": [
+      1272,
+      1279
+     ],
+     "y": [
+      0,
+      899
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      382,
+      384
+     ],
+     "y": [
+      101,
+      104
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      895,
+      898
+     ],
+     "y": [
+      101,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 5,
+     "pixels": 38,
+     "x": [
+      429,
+      452
+     ],
+     "y": [
+      275,
+      286
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      894,
+      899
+     ],
+     "y": [
+      409,
+      413
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      384,
+      385
+     ],
+     "y": [
+      413,
+      413
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 5,
+     "x": [
+      262,
+      271
+     ],
+     "y": [
+      414,
+      417
+     ]
+    },
+    {
+     "maxChannelDiff": 14,
+     "pixels": 2,
+     "x": [
+      271,
+      272
+     ],
+     "y": [
+      416,
+      416
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 17,
+     "x": [
+      262,
+      274
+     ],
+     "y": [
+      588,
+      600
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 255,
+   "pixels": 7272,
+   "pixelsAtMost2": 45,
+   "sha256Del": "9af1fa3a3b89bacf6eb52078ff219630bda6cd14bec842a47140cbef55656ddf",
+   "sha256Ref": "73fe757040dcd7aab552dc975eb6840087e89f5ea1997b0edd0696b6e2501707"
+  },
+  "webkit-light-desktop/p43b-card-reopen.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 21,
+     "pixels": 1,
+     "x": [
+      0,
+      0
+     ],
+     "y": [
+      0,
+      0
+     ]
+    },
+    {
+     "maxChannelDiff": 255,
+     "pixels": 7200,
+     "x": [
+      1272,
+      1279
+     ],
+     "y": [
+      0,
+      899
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      382,
+      384
+     ],
+     "y": [
+      101,
+      104
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      895,
+      898
+     ],
+     "y": [
+      101,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      894,
+      899
+     ],
+     "y": [
+      300,
+      304
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      385,
+      385
+     ],
+     "y": [
+      304,
+      304
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 5,
+     "x": [
+      262,
+      271
+     ],
+     "y": [
+      414,
+      417
+     ]
+    },
+    {
+     "maxChannelDiff": 14,
+     "pixels": 2,
+     "x": [
+      271,
+      272
+     ],
+     "y": [
+      416,
+      416
+     ]
+    },
+    {
+     "maxChannelDiff": 9,
+     "pixels": 17,
+     "x": [
+      262,
+      274
+     ],
+     "y": [
+      588,
+      600
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 255,
+   "pixels": 7233,
+   "pixelsAtMost2": 23,
+   "sha256Del": "13d8a36bff4903754d3cb57cdd279e1b8bbc6633ede1fc6ae2fa21e7bb394e8b",
+   "sha256Ref": "3f8109e1240124ea47c27d5cf6c677e76ef186b48346c536a0373c59a7338614"
+  },
+  "webkit-light-desktop/p43b-card-review-turns.png": {
+   "equal": true,
+   "sha256": "15beef96e9f95ea8243feb3ce716007041c0769863a4bad3b85ed4bbf191160c"
+  },
+  "webkit-light-desktop/p43b-card-start-gone.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 21,
+     "pixels": 1,
+     "x": [
+      0,
+      0
+     ],
+     "y": [
+      0,
+      0
+     ]
+    },
+    {
+     "maxChannelDiff": 255,
+     "pixels": 7200,
+     "x": [
+      1272,
+      1279
+     ],
+     "y": [
+      0,
+      899
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      322,
+      324
+     ],
+     "y": [
+      101,
+      104
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      955,
+      958
+     ],
+     "y": [
+      101,
+      105
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      954,
+      959
+     ],
+     "y": [
+      196,
+      200
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      325,
+      325
+     ],
+     "y": [
+      200,
+      200
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 255,
+   "pixels": 7210,
+   "pixelsAtMost2": 9,
+   "sha256Del": "d39c91afead68bc2009820b3e25af46d0bc77cd37f9c8f7feb211c3782e791be",
+   "sha256Ref": "497e8c7c1207e55d26a0e1b2df42f3a7493afc4d93bc3dc483c47abf21258cda"
+  },
+  "webkit-light-desktop/p43b-card-start-live-plan.png": {
+   "equal": true,
+   "sha256": "c7657bb538757b256ed222ef3dcad30314471ff999b1cb0084870baefb94fb6e"
+  },
+  "webkit-light-desktop/p43b-card-start-live.png": {
+   "equal": true,
+   "sha256": "0b8a6f5a3e115c5c176cd31bb400eb6d726475f2a7a84de998be81f461f6eb46"
+  },
+  "webkit-light-desktop/p43b-card-strip.png": {
+   "equal": true,
+   "sha256": "5448653518063708e8230ce56fa7d655498fe8621d8dd21afc3d5772cdf82082"
+  },
+  "webkit-light-phone/p43b-card-criteria-refused.png": {
+   "equal": true,
+   "sha256": "be96e2e1e6eff7218c79369c10e9f7c62840394c7c8a1b42e3763150558175c9"
+  },
+  "webkit-light-phone/p43b-card-evidence-refused.png": {
+   "equal": true,
+   "sha256": "5614d05aa2c22d5d269e92a096599d31684dc23663738c2b10239267ef34f214"
+  },
+  "webkit-light-phone/p43b-card-evidence-stale.png": {
+   "equal": true,
+   "sha256": "10ff455328a85947307c10a13b987484caf1b4bad5c06538b1b7efbb0c797fe3"
+  },
+  "webkit-light-phone/p43b-card-owner-refused.png": {
+   "equal": true,
+   "sha256": "3d2edb2d8dbf0c2487ca080d4958a69b800825abaf815034bf8090fb66307425"
+  },
+  "webkit-light-phone/p43b-card-owner-typed.png": {
+   "equal": true,
+   "sha256": "cc20a02951a8df85fb8a1b70a63775ae8ed56611c75369f3a6c67c6c05746829"
+  },
+  "webkit-light-phone/p43b-card-question-records.png": {
+   "equal": true,
+   "sha256": "69cb1495e57c1decc755e28746aa185e2bf4e3353ecbe2bf1650276e5ce14685"
+  },
+  "webkit-light-phone/p43b-card-question-review.png": {
+   "equal": true,
+   "sha256": "b8d410fa9740f560243049f74a49bb72073390b73a658454e781973caa71a2ab"
+  },
+  "webkit-light-phone/p43b-card-receipt.png": {
+   "equal": true,
+   "sha256": "047b442c87795a02a0165e40da1e75d42a7d96cac8ac28709653cee23a9c08df"
+  },
+  "webkit-light-phone/p43b-card-reopen-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      10,
+      12
+     ],
+     "y": [
+      109,
+      112
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      377,
+      380
+     ],
+     "y": [
+      109,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      376,
+      381
+     ],
+     "y": [
+      483,
+      487
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      13,
+      13
+     ],
+     "y": [
+      487,
+      487
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "c7ba2e8be2995d919398bd2c57f8e39080e74c266b3e7788a30b8fcfd926c746",
+   "sha256Ref": "00a7e8da5e023ae6822405a12a1f0b20fef0e19992b27e17642eeb6be9e7347a"
+  },
+  "webkit-light-phone/p43b-card-reopen.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      10,
+      12
+     ],
+     "y": [
+      109,
+      112
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      377,
+      380
+     ],
+     "y": [
+      109,
+      113
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      376,
+      381
+     ],
+     "y": [
+      352,
+      356
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      13,
+      13
+     ],
+     "y": [
+      356,
+      356
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 8,
+   "pixelsAtMost2": 8,
+   "sha256Del": "a163852df6791bfadff91d2592bd5dcbea4502f9abd7c4bfcf013e6dfe4d8403",
+   "sha256Ref": "138cd794b518865154492fb3a226c8808068c24bf632e2b4b22e32a112213bf7"
+  },
+  "webkit-light-phone/p43b-card-review-turns.png": {
+   "equal": true,
+   "sha256": "caf328f832112e1cb0bcf5860d565d2be7b77a652acf2fcadc9acfe2ff07d215"
+  },
+  "webkit-light-phone/p43b-card-start-gone.png": {
+   "equal": true,
+   "sha256": "18e546604c4a68eefde7769ddd328320bda9efb80ae57c5f60c9d11cabacf9d0"
+  },
+  "webkit-light-phone/p43b-card-start-live-graph.png": {
+   "equal": true,
+   "sha256": "4bd43659da8cd9f13aeb90476acf72ccf635afe18107cb8d60a7aa400cac4c0c"
+  },
+  "webkit-light-phone/p43b-card-start-live-more.png": {
+   "equal": true,
+   "sha256": "4e49193c3a5399e2dacda7cf2dd5b459364d3af218b0bc8d1054ecf68109c013"
+  },
+  "webkit-light-phone/p43b-card-start-live-plan.png": {
+   "equal": true,
+   "sha256": "315a4a55a26fab972b122026fd6e541220ed98ab9ad61b0a0ed474a8194cecf7"
+  },
+  "webkit-light-phone/p43b-card-start-live.png": {
+   "equal": true,
+   "sha256": "a146cb591bc531628acb6dc88f2e9c9a9bda24b6216c97e53e9aef729dc0f620"
+  }
+ },
+ "styles": {
+  "chromium-dark-desktop/p43b-card-criteria-refused": {},
+  "chromium-dark-desktop/p43b-card-evidence-refused": {},
+  "chromium-dark-desktop/p43b-card-evidence-stale": {},
+  "chromium-dark-desktop/p43b-card-owner-refused": {},
+  "chromium-dark-desktop/p43b-card-owner-typed": {},
+  "chromium-dark-desktop/p43b-card-question-records": {},
+  "chromium-dark-desktop/p43b-card-question-review": {},
+  "chromium-dark-desktop/p43b-card-receipt": {},
+  "chromium-dark-desktop/p43b-card-reopen": {},
+  "chromium-dark-desktop/p43b-card-reopen-refused": {},
+  "chromium-dark-desktop/p43b-card-review-turns": {},
+  "chromium-dark-desktop/p43b-card-start-gone": {},
+  "chromium-dark-desktop/p43b-card-start-live": {},
+  "chromium-dark-desktop/p43b-card-start-live-plan": {},
+  "chromium-dark-desktop/p43b-card-strip": {},
+  "chromium-dark-phone/p43b-card-criteria-refused": {},
+  "chromium-dark-phone/p43b-card-evidence-refused": {},
+  "chromium-dark-phone/p43b-card-evidence-stale": {},
+  "chromium-dark-phone/p43b-card-owner-refused": {},
+  "chromium-dark-phone/p43b-card-owner-typed": {},
+  "chromium-dark-phone/p43b-card-question-records": {},
+  "chromium-dark-phone/p43b-card-question-review": {},
+  "chromium-dark-phone/p43b-card-receipt": {},
+  "chromium-dark-phone/p43b-card-reopen": {},
+  "chromium-dark-phone/p43b-card-reopen-refused": {},
+  "chromium-dark-phone/p43b-card-review-turns": {},
+  "chromium-dark-phone/p43b-card-start-gone": {},
+  "chromium-dark-phone/p43b-card-start-live": {},
+  "chromium-dark-phone/p43b-card-start-live-graph": {},
+  "chromium-dark-phone/p43b-card-start-live-more": {},
+  "chromium-dark-phone/p43b-card-start-live-plan": {},
+  "chromium-light-desktop/p43b-card-criteria-refused": {},
+  "chromium-light-desktop/p43b-card-evidence-refused": {},
+  "chromium-light-desktop/p43b-card-evidence-stale": {},
+  "chromium-light-desktop/p43b-card-owner-refused": {},
+  "chromium-light-desktop/p43b-card-owner-typed": {},
+  "chromium-light-desktop/p43b-card-question-records": {},
+  "chromium-light-desktop/p43b-card-question-review": {},
+  "chromium-light-desktop/p43b-card-receipt": {},
+  "chromium-light-desktop/p43b-card-reopen": {},
+  "chromium-light-desktop/p43b-card-reopen-refused": {},
+  "chromium-light-desktop/p43b-card-review-turns": {},
+  "chromium-light-desktop/p43b-card-start-gone": {},
+  "chromium-light-desktop/p43b-card-start-live": {},
+  "chromium-light-desktop/p43b-card-start-live-plan": {},
+  "chromium-light-desktop/p43b-card-strip": {},
+  "chromium-light-phone/p43b-card-criteria-refused": {},
+  "chromium-light-phone/p43b-card-evidence-refused": {},
+  "chromium-light-phone/p43b-card-evidence-stale": {},
+  "chromium-light-phone/p43b-card-owner-refused": {},
+  "chromium-light-phone/p43b-card-owner-typed": {},
+  "chromium-light-phone/p43b-card-question-records": {},
+  "chromium-light-phone/p43b-card-question-review": {},
+  "chromium-light-phone/p43b-card-receipt": {},
+  "chromium-light-phone/p43b-card-reopen": {},
+  "chromium-light-phone/p43b-card-reopen-refused": {},
+  "chromium-light-phone/p43b-card-review-turns": {},
+  "chromium-light-phone/p43b-card-start-gone": {},
+  "chromium-light-phone/p43b-card-start-live": {},
+  "chromium-light-phone/p43b-card-start-live-graph": {},
+  "chromium-light-phone/p43b-card-start-live-more": {},
+  "chromium-light-phone/p43b-card-start-live-plan": {},
+  "webkit-dark-desktop/p43b-card-criteria-refused": {},
+  "webkit-dark-desktop/p43b-card-evidence-refused": {},
+  "webkit-dark-desktop/p43b-card-evidence-stale": {},
+  "webkit-dark-desktop/p43b-card-owner-refused": {},
+  "webkit-dark-desktop/p43b-card-owner-typed": {},
+  "webkit-dark-desktop/p43b-card-question-records": {},
+  "webkit-dark-desktop/p43b-card-question-review": {},
+  "webkit-dark-desktop/p43b-card-receipt": {},
+  "webkit-dark-desktop/p43b-card-reopen": {},
+  "webkit-dark-desktop/p43b-card-reopen-refused": {},
+  "webkit-dark-desktop/p43b-card-review-turns": {},
+  "webkit-dark-desktop/p43b-card-start-gone": {},
+  "webkit-dark-desktop/p43b-card-start-live": {},
+  "webkit-dark-desktop/p43b-card-start-live-plan": {},
+  "webkit-dark-desktop/p43b-card-strip": {},
+  "webkit-dark-phone/p43b-card-criteria-refused": {},
+  "webkit-dark-phone/p43b-card-evidence-refused": {},
+  "webkit-dark-phone/p43b-card-evidence-stale": {},
+  "webkit-dark-phone/p43b-card-owner-refused": {},
+  "webkit-dark-phone/p43b-card-owner-typed": {},
+  "webkit-dark-phone/p43b-card-question-records": {},
+  "webkit-dark-phone/p43b-card-question-review": {},
+  "webkit-dark-phone/p43b-card-receipt": {},
+  "webkit-dark-phone/p43b-card-reopen": {},
+  "webkit-dark-phone/p43b-card-reopen-refused": {},
+  "webkit-dark-phone/p43b-card-review-turns": {},
+  "webkit-dark-phone/p43b-card-start-gone": {},
+  "webkit-dark-phone/p43b-card-start-live": {},
+  "webkit-dark-phone/p43b-card-start-live-graph": {},
+  "webkit-dark-phone/p43b-card-start-live-more": {},
+  "webkit-dark-phone/p43b-card-start-live-plan": {},
+  "webkit-light-desktop/p43b-card-criteria-refused": {},
+  "webkit-light-desktop/p43b-card-evidence-refused": {},
+  "webkit-light-desktop/p43b-card-evidence-stale": {},
+  "webkit-light-desktop/p43b-card-owner-refused": {},
+  "webkit-light-desktop/p43b-card-owner-typed": {},
+  "webkit-light-desktop/p43b-card-question-records": {},
+  "webkit-light-desktop/p43b-card-question-review": {},
+  "webkit-light-desktop/p43b-card-receipt": {},
+  "webkit-light-desktop/p43b-card-reopen": {},
+  "webkit-light-desktop/p43b-card-reopen-refused": {},
+  "webkit-light-desktop/p43b-card-review-turns": {},
+  "webkit-light-desktop/p43b-card-start-gone": {},
+  "webkit-light-desktop/p43b-card-start-live": {},
+  "webkit-light-desktop/p43b-card-start-live-plan": {},
+  "webkit-light-desktop/p43b-card-strip": {},
+  "webkit-light-phone/p43b-card-criteria-refused": {},
+  "webkit-light-phone/p43b-card-evidence-refused": {},
+  "webkit-light-phone/p43b-card-evidence-stale": {},
+  "webkit-light-phone/p43b-card-owner-refused": {},
+  "webkit-light-phone/p43b-card-owner-typed": {},
+  "webkit-light-phone/p43b-card-question-records": {},
+  "webkit-light-phone/p43b-card-question-review": {},
+  "webkit-light-phone/p43b-card-receipt": {},
+  "webkit-light-phone/p43b-card-reopen": {},
+  "webkit-light-phone/p43b-card-reopen-refused": {},
+  "webkit-light-phone/p43b-card-review-turns": {},
+  "webkit-light-phone/p43b-card-start-gone": {},
+  "webkit-light-phone/p43b-card-start-live": {},
+  "webkit-light-phone/p43b-card-start-live-graph": {},
+  "webkit-light-phone/p43b-card-start-live-more": {},
+  "webkit-light-phone/p43b-card-start-live-plan": {}
+ },
+ "tests": {
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "del": "passed",
+   "ref": "passed"
+  }
+ },
+ "traces": {
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen this task?",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen asked"
+    },
+    {
+     "del": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen refused"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "The plan changed after the coordinator asked, so this request no longer stands. ",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "requests": [
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items"
+       }
+      ],
+      "step": "request gone",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "dialogs": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items"
+       }
+      ],
+      "step": "request gone",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "request gone"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "That decision was not recordedThe criteria in force moved after this proposal was filed."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [
+       "A weakening change to this project\u2019s ruler needs your decisionA weakening change to this project\u2019s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 \u00b7 un"
+      ],
+      "requests": [
+       {
+        "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}",
+        "method": "POST",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d"
+       }
+      ],
+      "step": "approve refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "That decision was not recordedThe criteria in force moved after this proposal was filed."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve & re-sealCtrl + Enter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "A weakening change to this project\u2019s ruler needs your decisionA weakening change to this project\u2019s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 \u00b7 un"
+      ],
+      "requests": [
+       {
+        "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}",
+        "method": "POST",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d"
+       }
+      ],
+      "step": "approve refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "approve refused"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen this task?",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen asked"
+    },
+    {
+     "del": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen refused"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Task graph",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu",
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "requests": [],
+      "step": "task graph full screen",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+      ],
+      "requests": [],
+      "step": "task graph full screen",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "task graph full screen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Task graph \u2922",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+      ],
+      "requests": [],
+      "step": "escape in the task graph",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "escape in the task graph",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "escape in the task graph"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-dark-phone :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen this task?",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen asked"
+    },
+    {
+     "del": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen refused"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Not recorded: already answered elsewhere \u2014 this card is out of dateThis version was decided in another conversation."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm doneEnter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused as out of date",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Not recorded: already answered elsewhere \u2014 this card is out of dateThis version was decided in another conversation."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused as out of date",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "confirm refused as out of date"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "The plan changed after the coordinator asked, so this request no longer stands. ",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "requests": [
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items"
+       }
+      ],
+      "step": "request gone",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "dialogs": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items"
+       }
+      ],
+      "step": "request gone",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "request gone"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "That decision was not recordedThe criteria in force moved after this proposal was filed."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve & re-sealCtrl + Enter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "A weakening change to this project\u2019s ruler needs your decisionA weakening change to this project\u2019s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 \u00b7 un"
+      ],
+      "requests": [
+       {
+        "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}",
+        "method": "POST",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d"
+       }
+      ],
+      "step": "approve refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "That decision was not recordedThe criteria in force moved after this proposal was filed."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [
+       "A weakening change to this project\u2019s ruler needs your decisionA weakening change to this project\u2019s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 \u00b7 un"
+      ],
+      "requests": [
+       {
+        "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}",
+        "method": "POST",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d"
+       }
+      ],
+      "step": "approve refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "approve refused"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen this task?",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen asked"
+    },
+    {
+     "del": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen refused"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Not recorded: already answered elsewhere \u2014 this card is out of dateThis version was decided in another conversation."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm doneEnter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused as out of date",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Not recorded: already answered elsewhere \u2014 this card is out of dateThis version was decided in another conversation."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused as out of date",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "confirm refused as out of date"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Task graph",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu",
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "requests": [],
+      "step": "task graph full screen",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+      ],
+      "requests": [],
+      "step": "task graph full screen",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "task graph full screen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Task graph \u2922",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+      ],
+      "requests": [],
+      "step": "escape in the task graph",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "escape in the task graph",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "escape in the task graph"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-phone :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen this task?",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen asked"
+    },
+    {
+     "del": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Not recorded: already answered elsewhere \u2014 this card is out of dateThis version was decided in another conversation."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm doneEnter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused as out of date",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Not recorded: already answered elsewhere \u2014 this card is out of dateThis version was decided in another conversation."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused as out of date",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "confirm refused as out of date"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Not recordedThe run reported again while this card was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm done",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       }
+      ],
+      "step": "confirm refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Not recordedThe run reported again while this card was open."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       }
+      ],
+      "step": "confirm refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "confirm refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "The plan changed after the coordinator asked, so this request no longer stands. ",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "requests": [
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items"
+       }
+      ],
+      "step": "request gone",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "dialogs": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items"
+       }
+      ],
+      "step": "request gone",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "request gone"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "That decision was not recordedThe criteria in force moved after this proposal was filed."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [
+       "A weakening change to this project\u2019s ruler needs your decisionA weakening change to this project\u2019s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 \u00b7 un"
+      ],
+      "requests": [
+       {
+        "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}",
+        "method": "POST",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d"
+       }
+      ],
+      "step": "approve refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "That decision was not recordedThe criteria in force moved after this proposal was filed."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve & re-sealCtrl + Enter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "A weakening change to this project\u2019s ruler needs your decisionA weakening change to this project\u2019s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 \u00b7 un"
+      ],
+      "requests": [
+       {
+        "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}",
+        "method": "POST",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d"
+       }
+      ],
+      "step": "approve refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "approve refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen this task?",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen asked"
+    },
+    {
+     "del": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Not recorded: already answered elsewhere \u2014 this card is out of dateThis version was decided in another conversation."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm doneEnter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused as out of date",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Not recorded: already answered elsewhere \u2014 this card is out of dateThis version was decided in another conversation."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused as out of date",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "confirm refused as out of date"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Task graph",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu",
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "requests": [],
+      "step": "task graph full screen",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+      ],
+      "requests": [],
+      "step": "task graph full screen",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "task graph full screen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Task graph \u2922",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+      ],
+      "requests": [],
+      "step": "escape in the task graph",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "escape in the task graph",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "escape in the task graph"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-dark-phone :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen this task?",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen asked"
+    },
+    {
+     "del": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a the decision strip: what waits on the reader": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "The plan changed after the coordinator asked, so this request no longer stands. ",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "requests": [
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items"
+       }
+      ],
+      "step": "request gone",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "dialogs": [
+       "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items"
+       }
+      ],
+      "step": "request gone",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "request gone"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a a criteria decision: refused": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "That decision was not recordedThe criteria in force moved after this proposal was filed."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Approve & re-sealCtrl + Enter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "A weakening change to this project\u2019s ruler needs your decisionA weakening change to this project\u2019s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 \u00b7 un"
+      ],
+      "requests": [
+       {
+        "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}",
+        "method": "POST",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d"
+       }
+      ],
+      "step": "approve refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "That decision was not recordedThe criteria in force moved after this proposal was filed."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [
+       "A weakening change to this project\u2019s ruler needs your decisionA weakening change to this project\u2019s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 \u00b7 un"
+      ],
+      "requests": [
+       {
+        "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}",
+        "method": "POST",
+        "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d"
+       }
+      ],
+      "step": "approve refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "approve refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a a receipt\u2019s Reopen task: asked, refused, and back": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen this task?",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "reopen asked",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen asked"
+    },
+    {
+     "del": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Task status was not changedFixture: the task changed while this question was open."
+      ],
+      "dialogs": [
+       "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+      ],
+      "focus": {
+       "name": "Reopen",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}",
+        "method": "PATCH",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr"
+       }
+      ],
+      "step": "reopen refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "reopen refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a an evidence decision: refused, then out of date": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Not recordedThe evidence changed while this card was open."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Not recordedThe evidence changed while this card was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm doneEnter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [
+       {
+        "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/evidence-decisions/pending"
+       }
+      ],
+      "step": "confirm refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "confirm refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a an owner confirmation: a review question answered in the owner\u2019s own words, refused": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [
+       "Not recordedThe run reported again while this card was open."
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Confirm doneEnter",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+      ],
+      "requests": [
+       {
+        "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       }
+      ],
+      "step": "confirm refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [
+       "Not recordedThe run reported again while this card was open."
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "notifications": "",
+      "popups": [
+       "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+      ],
+      "requests": [
+       {
+        "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}",
+        "method": "POST",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       },
+       {
+        "body": null,
+        "method": "GET",
+        "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation"
+       }
+      ],
+      "step": "confirm refused",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "confirm refused"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a ended coordinator questions: the records, and an answered one\u2019s review": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a the review turns: the run\u2019s session opened from the request": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Task graph",
+       "role": "dialog"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu",
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "requests": [],
+      "step": "task graph full screen",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+      ],
+      "requests": [],
+      "step": "task graph full screen",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "task graph full screen"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Task graph \u2922",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [
+       "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+      ],
+      "requests": [],
+      "step": "escape in the task graph",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Task graphA \u00b7 The shared examples pageBlockedB \u00b7 Notes for the overlaysWaiting on 1C \u00b7 Notes for the pickersWaiting on 1D \u00b7 Notes for the feedback componentsWai"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "notifications": "",
+      "popups": [],
+      "requests": [],
+      "step": "escape in the task graph",
+      "url": "/ui-migration/p43b-cards.html"
+     },
+     "step": "escape in the task graph"
+    }
+   ],
+   "equal": false
+  },
+  "webkit-light-phone :: P4.3b session decision cards \u203a the start dialog when its request no longer stands": {
+   "equal": true
+  }
+ }
+}

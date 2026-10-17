@@ -29,8 +29,8 @@ import {
  * The writer's deterministic half (wiki-docs-writer.ts), case for case the unit cases of
  * `src/runner-go/wiki_docs_build_test.go` and `wiki_docs_test.go` — the material's cap and filter, the merge read
  * strictly, a quote found in a file and its lines, the fingerprint, a section's heading — and, where the server
- * reads the repository differently from a checkout, a file the read cut short and a directory shown as git shows a
- * tree.
+ * reads the repository differently from a checkout, a file the read cut short, a directory shown as git shows a
+ * tree, and a path holding a wildcard shown as git shows a pathspec.
  */
 
 const CONTRACT = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../contracts/wiki.contract.json'), 'utf8')) as {
@@ -76,18 +76,23 @@ test('taken out by rule: a turn that is the settlement card\'s template, whoever
   ];
   wikiDocFilter(filtered);
   assert.equal(actions(filtered), 'S1=filtered S2= S3= S4= S5=filtered');
-  assert.match(filtered[4].reason, /与 S4 的原文相同/u);
+  assert.match(filtered[4].reason, /the same original as S4/u);
 });
 
 // ── The merge, read strictly (TestWikiArticleBuildSendsWhatBecameOfEveryPieceWithItsSection) ─────
 
 test('a merge into a piece that is not the section\'s is an adoption, and a piece the merge said nothing of is adopted — each saying so', () => {
   const pieces = [piece({ id: 'S1', handed: true }), piece({ id: 'S2', handed: true }), piece({ id: 'S3', handed: true }), piece({ id: 'S4' })];
-  const state = wikiDocApplyMerge('S1 | 采用 | 原话\nS2 | 合并到 S9 | 同一件事\n[S4] | 舍弃 | 没交给它\n现状：\n- 第一条 [S1]\n- 第二条\n', pieces);
+  const state = wikiDocApplyMerge("S1 | adopt | the owner's words\nS2 | merge into S9 | the same thing\n[S4] | drop | not handed to it\nCurrent state:\n- the first point [S1]\n- the second\n", pieces);
   assert.deepEqual(pieces.map((p) => p.action), ['adopt', 'adopt', 'adopt', '']);
   assert.match(pieces[1].reason, /S9/u);
-  assert.match(pieces[2].reason, /按采用/u);
-  assert.deepEqual(state, ['第一条 [S1]', '第二条']);
+  assert.match(pieces[2].reason, /read as adopt|adopted/u);
+  assert.equal(pieces[2].reason, 'the merge said nothing of this material: adopted and handed to the writing');
+  assert.deepEqual(state, ['the first point [S1]', 'the second']);
+  // The words read in any case at their start, as a model capitalizes a line.
+  const capital = [piece({ id: 'S1', handed: true }), piece({ id: 'S2', handed: true })];
+  assert.deepEqual(wikiDocApplyMerge('S1 | Drop | off the topic\nS2 | Merge into S1 | the same\ncurrent state:\n- one\n', capital), ['one']);
+  assert.deepEqual(capital.map((p) => [p.action, p.into]), [['drop', ''], ['merge', 'S1']]);
 });
 
 // ── A quote in a file (TestWikiArticleBuildChecksRepositoryQuotesInTheFileAtTheCommit) ───────────
@@ -210,6 +215,8 @@ test('in a file a read cut short only the heading named is looked for, and what 
 });
 
 test('a read cut short keeps the file\'s whole lines before the cut, and an empty file is not a missing one', () => {
+  assert.deepEqual(wikiDocsShownOf(file('docs/big.md', 'cut', 'line 1\nline 2\nhalf a li\n… (rest omitted)\n', 90_000), 90_000), { text: 'line 1\nline 2\n', cut: true });
+  // The marker an older runner ends its cut read with, which the read cache may still hold.
   assert.deepEqual(wikiDocsShownOf(file('docs/big.md', 'cut', 'line 1\nline 2\nhalf a li\n…（后略）\n', 90_000), 90_000), { text: 'line 1\nline 2\n', cut: true });
   assert.deepEqual(wikiDocsShownOf(file('docs/a.md', 'found', 'whole\n', 6), 6), { text: 'whole\n', cut: false });
   assert.deepEqual(wikiDocsShownOf(file('docs/empty.md', 'missing', '', 0), 0), { text: '', cut: false });
@@ -240,6 +247,34 @@ test('a directory shows as `git show <sha>:<dir>` shows a tree — the runner\'s
   const code = wikiDocCodePieces(repo, 'contracts', [], ['json']);
   assert.deepEqual([code.pieces.length, code.missing], [0, []]);
   assert.equal(wikiDocContract(repo, 'contracts/sub')?.text, `tree ${sha}:contracts/sub\n\nb.json`);
+});
+
+test('a path that is no file or directory of the commit but holds a wildcard shows as git shows a pathspec: an empty file', async () => {
+  // git 2.47.3: `git show <sha>:'src/*.go'` exits 0 printing nothing, `git show <sha>:'src/\*.go'` exits 128, and a
+  // file or directory whose own name holds the wildcard is shown as itself.
+  const sha = 'f'.repeat(40);
+  const files = ['src/x.go', 'src/[v].go', 'lib/[v1]/a.go'];
+  const reads: string[][] = [];
+  const repo = new WikiDocsSnapshotRepo(sha, new Map(files.map((one) => [one, 10])), [...files].sort(), async (paths) => {
+    reads.push([...paths]);
+    return new Map(paths.map((one) => [one, file(one, 'found', `${one}\n`, 10)]));
+  });
+  await repo.prepare(['src/*.go', 'src/[v].go']);
+  assert.deepEqual(reads, [['src/[v].go']], 'a pattern is no file to read');
+  for (const pattern of ['src/*.go', '`src/nope/*.go`', 'docs/de?ign.md', 'contracts/[a].json']) {
+    assert.deepEqual(repo.show(pattern), { text: '', cut: false }, pattern);
+  }
+  assert.equal(repo.show('src/\\*.go'), null, 'an escaped wildcard is no pattern');
+  assert.deepEqual(repo.show('src/[v].go'), { text: 'src/[v].go\n', cut: false });
+  assert.deepEqual(repo.show('lib/[v1]'), { text: `tree ${sha}:lib/[v1]\n\na.go\n`, cut: false });
+  // The writer finds nothing in it, as the runner's did: a code path's head and a contract with nothing in them, a
+  // document from its top, and a symbol or a heading named in it missing.
+  const head = wikiDocCodePieces(repo, 'src/*.go', [], ['go']);
+  assert.deepEqual([head.pieces.map((p) => [p.kind, p.path, p.lines, p.text]), head.missing], [[['code', 'src/*.go', { start: 1, end: 1 }, '']], []]);
+  assert.deepEqual(wikiDocCodePieces(repo, 'src/*.go', ['runLoop'], []), { pieces: [], missing: ['src/*.go :: runLoop'] });
+  assert.equal(wikiDocContract(repo, 'contracts/*.json')?.text, '');
+  assert.equal(wikiDocDocSection(repo, 'docs/*.md', '').piece?.text, '');
+  assert.equal(wikiDocDocSection(repo, 'docs/*.md', '2. Delivery').piece, null);
 });
 
 test('a file another section is already reading is shown only once that read landed (v27, 2026-10-09: «was shown before it was read»)', async () => {

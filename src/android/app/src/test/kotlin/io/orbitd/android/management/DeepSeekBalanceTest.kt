@@ -49,12 +49,15 @@ class DeepSeekBalanceTest {
 
     @Before fun start() {
         fixture.reset()
-        fixture.providerCatalog = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","defaultModel":"deepseek-chat"},
-            {"slug":"dsh","label":"DeepSeek Harness","runtime":"dsh"},{"slug":"openai","label":"OpenAI","runtime":"codex","defaultModel":"gpt-5"}]"""
+        fixture.providerCatalog = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","defaultModel":"deepseek-chat","engines":["claude","opencode","dsh"]},
+            {"slug":"dsh","label":"DeepSeek Harness","runtime":"dsh","engines":["dsh","claude","opencode"]},
+            {"slug":"openai","label":"OpenAI","runtime":"codex","defaultModel":"gpt-5","engines":["codex","opencode"]}]"""
         fixture.providersMine = """[{"id":"$deepseek","slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek",
-              "baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,"defaultModel":"deepseek-chat"},
-            {"id":"$harness","slug":"dsh","label":"DeepSeek Harness","runtime":"dsh","presetSlug":"deepseek-harness","baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true},
-            {"id":"${ManagementFixture.KEY_OPENAI}","slug":"openai","label":"OpenAI","runtime":"codex","presetSlug":"openai","baseUrl":"https://api.openai.com/v1","hasApiKey":true}]"""
+              "baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,"defaultModel":"deepseek-chat","engines":["claude","opencode","dsh"]},
+            {"id":"$harness","slug":"dsh","label":"DeepSeek Harness","runtime":"dsh","presetSlug":"deepseek-harness","baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,
+              "engines":["dsh","claude","opencode"]},
+            {"id":"${ManagementFixture.KEY_OPENAI}","slug":"openai","label":"OpenAI","runtime":"codex","presetSlug":"openai","baseUrl":"https://api.openai.com/v1","hasApiKey":true,
+              "defaultModel":"gpt-5","engines":["codex","opencode"]}]"""
         fixture.balances[deepseek] = read(two)
         fixture.balances[harness] = """{"ok":false,"reason":"NETWORK","message":"DeepSeek didn't answer in time.","fetchedAt":"${Instant.now()}"}"""
     }
@@ -65,38 +68,44 @@ class DeepSeekBalanceTest {
         return ManagementApi(session, (session.state.value as AuthState.SignedIn).handle)
     }
     private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-    private fun providers(record: String?, opened: MutableList<OrbitRoute> = mutableListOf()) {
+    /** Infrastructure, or one of its pages: its API keys are the account's own, as GET providers/mine lists them. */
+    private fun infrastructure(record: String?, opened: MutableList<OrbitRoute> = mutableListOf()) {
         val api = api()
-        compose.setContent { ProviderManagement(api, revision, record, { opened += it }, {}) }
+        compose.setContent { InfrastructureSettings(api, revision, record, { opened += it }, {}) }
     }
 
     @Test fun aDeepSeekKeysRowEndsWithItsBalanceAndOpensItsPage() {
         val opened = mutableListOf<OrbitRoute>()
-        providers(null, opened)
+        infrastructure(null, opened)
         await("¥110.00 · $5.00")
         await("Unavailable")
-        compose.onNodeWithText("Runs on DeepSeek Harness", useUnmergedTree = true).assertExists()
+        // Each key says every engine it runs on, the not-yet-migrated Harness key included: no key is named after one engine.
+        compose.onNodeWithText("Claude Code · OpenCode · DeepSeek Harness", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("DeepSeek Harness · Claude Code · OpenCode", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Codex · OpenCode", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Runs on", substring = true, useUnmergedTree = true).assertCountEquals(0)
         compose.onNodeWithText("gpt-5", useUnmergedTree = true).assertExists()
         assertTrue("both DeepSeek keys' balances are asked", fixture.calls.containsAll(listOf("GET providers/mine/$deepseek/balance", "GET providers/mine/$harness/balance")))
         assertFalse("no balance for a key that isn't DeepSeek's", fixture.calls.any { it.contains(ManagementFixture.KEY_OPENAI) })
         compose.onAllNodes(hasText("OpenAI") and hasClickAction()).assertCountEquals(0)
         compose.onNode(hasText("DeepSeek") and hasClickAction()).performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "providers", recordId = "key:$deepseek")), opened) }
+        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = "key:$deepseek")), opened) }
     }
 
     /** iOS 96e1a1536: a slow key's read holds up no other key's. */
     @Test fun theBalancesAreReadSideBySide() {
         val held = CompletableDeferred<Unit>()
         fixture.balanceGates[deepseek] = held
-        providers(null)
+        infrastructure(null)
         await("Unavailable")
         compose.onAllNodesWithText("¥110.00", substring = true).assertCountEquals(0)
         held.complete(Unit)
         await("¥110.00 · $5.00")
     }
 
+    /** Board 2: the balance first, then every engine the key works with, then the key itself — its protocol, never an engine. */
     @Test fun theKeysPageShowsTheWholeAccountsBalanceFirstThenWhereTheKeyRuns() {
-        providers("key:$deepseek")
+        infrastructure("key:$deepseek")
         await("DeepSeek account balance")
         await("¥110.00")
         compose.onNodeWithText("Total").assertExists()
@@ -107,19 +116,24 @@ class DeepSeekBalanceTest {
         compose.onNodeWithText("Each currency is a separate balance; DeepSeek doesn't convert between them.").assertExists()
         compose.onNodeWithText("The balance of the whole DeepSeek account this key belongs to", substring = true).assertExists()
         compose.onNodeWithText("Top up on DeepSeek ↗").assertExists()
-        compose.onNodeWithText("Claude Code").assertExists()
+        compose.onNodeWithText("Works with").assertExists()
+        listOf("Claude Code", "OpenCode", "DeepSeek Harness").forEach { compose.onNodeWithText(it).assertExists() }
+        compose.onNodeWithText("Pick it for a session on any of these in the composer's model menu → Provider.").assertExists()
+        compose.onNodeWithText("Anthropic-compatible").assertExists()
+        compose.onAllNodesWithText("Runs on", substring = true).assertCountEquals(0)
         compose.onNodeWithText("deepseek-chat").assertExists()
         compose.onNodeWithText("api.deepseek.com").assertExists()
-        compose.onNodeWithText("Adding or changing a key happens on the web.").assertExists()
+        compose.onNodeWithText("Adding or changing a key happens on the web. Turning it off there stops it on Claude Code, OpenCode and DeepSeek Harness.")
+            .performScrollTo().assertExists()
         compose.onNode(hasText("Refresh", substring = true) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { fixture.queries.contains("GET providers/mine/$deepseek/balance?refresh=1") }
-        assertEquals("DeepSeek", settingsTitle("providers", "key:$deepseek"))
+        assertEquals("DeepSeek", settingsTitle("infrastructure", "key:$deepseek"))
     }
 
     @Test fun aBalanceTooLowSaysCallsWillFailAndOpensTheTopUpInTheBrowser() {
         fixture.balances[deepseek] = read("""[{"currency":"CNY","totalBalance":"0.12","grantedBalance":"0","toppedUpBalance":"0.12"}]""", available = false,
             shared = """[{"id":"$harness","label":"DeepSeek Harness"}]""")
-        providers("key:$deepseek")
+        infrastructure("key:$deepseek")
         await("Balance too low — DeepSeek calls will fail")
         compose.onNodeWithText("Every session using a key on this account will fail at its next request. Orbit can't top up for you.").assertExists()
         compose.onNodeWithText("Opens platform.deepseek.com/top_up in your browser. The balance of the whole", substring = true).assertExists()
@@ -129,7 +143,7 @@ class DeepSeekBalanceTest {
 
     @Test fun aRejectedKeySaysWhyAndToChangeItOnTheWeb() {
         fixture.balances[deepseek] = """{"ok":false,"reason":"KEY_REJECTED","message":"DeepSeek refused this key (401 Authentication Fails).","fetchedAt":"${Instant.now()}"}"""
-        providers("key:$deepseek")
+        infrastructure("key:$deepseek")
         await("Couldn't get the balance")
         compose.onNodeWithText("DeepSeek refused this key (401 Authentication Fails). Change the key on the web, then retry.").assertExists()
         compose.onNodeWithText("Unknown").assertExists()
@@ -140,7 +154,7 @@ class DeepSeekBalanceTest {
     }
 
     @Test fun aKeyThatIsGoneSaysSo() {
-        providers("key:${ManagementFixture.KEY_OPENAI}")
+        infrastructure("key:${ManagementFixture.KEY_OPENAI}")
         await("That provider no longer exists.")
     }
 }

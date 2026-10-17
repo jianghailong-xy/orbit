@@ -1,0 +1,43 @@
+argv: env MOVE_RESULTS=src/web/.ui-migration-results npm run test:ui-migration
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref HEAD f492dbb30fa24718061f69ca93ef1df5a05f4fa0
+uncommitted: 
+start: 2026-10-09T22:33:05Z load: 22.12 27.66 33.09
+mem: 3892M available, swap 4884M free
+disk: / 5689M available
+cgroup: 0::/system.slice/run-p56177-i58740688.scope
+
+> @orbit/web@0.1.0 pretest:ui-migration
+> npm run build -w @orbit/shared && npm run build
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+src/components/ToastViewport.tsx(15,30): error TS7016: Could not find a declaration file for module 'react-dom'. '/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/react-dom/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom';`
+src/lib/paneTransition.ts(1,27): error TS7016: Could not find a declaration file for module 'react-dom'. '/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/react-dom/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom';`
+src/lib/sessionExport.tsx(9,38): error TS7016: Could not find a declaration file for module 'react-dom/server'. '/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/react-dom/server.node.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom/server';`
+src/main.tsx(14,22): error TS7016: Could not find a declaration file for module 'react-dom/client'. '/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/react-dom/client.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom/client';`
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web
+npm error command failed
+npm error command sh -c tsc -b && vite build
+npm error Lifecycle script `test:ui-migration` failed with error:
+npm error code 1
+npm error path /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web
+npm error command failed
+npm error command sh -c npm run build -w @orbit/shared && npm run build
+end: 2026-10-09T22:33:09Z load: 22.67 27.68 33.07
+exit=1

@@ -1,0 +1,442 @@
+{
+ "tests": 68,
+ "steps": 176,
+ "semantic": [
+  {
+   "test": "chromium-dark-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+   "step": "escape in the task graph",
+   "delta": {
+    "layers": [
+     [
+      "Task graphA · The shared examples pageBlockedB · Notes for the overlaysWaiting on 1C · Notes for the pickersWaiting on 1D · Notes for the feedback componentsWai"
+     ],
+     [
+      "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+   "step": "escape in the task graph",
+   "delta": {
+    "layers": [
+     [
+      "Task graphA · The shared examples pageBlockedB · Notes for the overlaysWaiting on 1C · Notes for the pickersWaiting on 1D · Notes for the feedback componentsWai"
+     ],
+     [
+      "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+   "step": "escape in the task graph",
+   "delta": {
+    "layers": [
+     [
+      "Task graphA · The shared examples pageBlockedB · Notes for the overlaysWaiting on 1C · Notes for the pickersWaiting on 1D · Notes for the feedback componentsWai"
+     ],
+     [
+      "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+   "step": "escape in the task graph",
+   "delta": {
+    "layers": [
+     [
+      "Task graphA · The shared examples pageBlockedB · Notes for the overlaysWaiting on 1C · Notes for the pickersWaiting on 1D · Notes for the feedback componentsWai"
+     ],
+     [
+      "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+     ]
+    ]
+   }
+  }
+ ],
+ "reads": [],
+ "presentation": {
+  "focus": 31,
+  "filed": 28
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-dark-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Reopen this task?"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b session decision cards › the start dialog when its request no longer stands",
+    "step": "request gone",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "The plan changed after the coordinator asked, so this request no longer stands. "
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b session decision cards › a criteria decision: refused",
+    "step": "approve refused",
+    "ref": {
+     "role": "button",
+     "name": "Approve & re-sealCtrl + Enter"
+    },
+    "del": "body"
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Reopen this task?"
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+    "step": "task graph full screen",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Task graph"
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+    "step": "escape in the task graph",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "button",
+     "name": "Task graph ⤢"
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Reopen this task?"
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b session decision cards › an evidence decision: refused, then out of date",
+    "step": "confirm refused as out of date",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Confirm doneEnter"
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b session decision cards › the start dialog when its request no longer stands",
+    "step": "request gone",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "The plan changed after the coordinator asked, so this request no longer stands. "
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › a criteria decision: refused",
+    "step": "approve refused",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Approve & re-sealCtrl + Enter"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Reopen this task?"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › an evidence decision: refused, then out of date",
+    "step": "confirm refused as out of date",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Confirm doneEnter"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+    "step": "task graph full screen",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Task graph"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+    "step": "escape in the task graph",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "button",
+     "name": "Task graph ⤢"
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Reopen this task?"
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: P4.3b session decision cards › an evidence decision: refused, then out of date",
+    "step": "confirm refused as out of date",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Confirm doneEnter"
+    }
+   }
+  ],
+  "filed": [
+   {
+    "test": "chromium-dark-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen refused",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.3b session decision cards › the start dialog when its request no longer stands",
+    "step": "request gone",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen refused",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+    "step": "task graph full screen",
+    "ref": {
+     "dialogs": 1,
+     "popups": 1
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 2
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+    "step": "escape in the task graph",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen refused",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-light-desktop :: P4.3b session decision cards › the start dialog when its request no longer stands",
+    "step": "request gone",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen refused",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+    "step": "task graph full screen",
+    "ref": {
+     "dialogs": 1,
+     "popups": 1
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 2
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level",
+    "step": "escape in the task graph",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen asked",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back",
+    "step": "reopen refused",
+    "ref": {
+     "dialogs": 1,
+     "popups": 0
+    },
+    "del": {
+     "dialogs": 0,
+     "popups": 1
+    }
+   }
+  ]
+ }
+}

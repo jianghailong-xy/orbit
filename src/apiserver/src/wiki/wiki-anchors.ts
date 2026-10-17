@@ -73,6 +73,129 @@ export function dueAnchors(anchors: readonly WikiAnchor[]): WikiDueAnchor[] {
 }
 
 /**
+ * Whether an anchor's last check still holds for `ref` (`anchorRules.verify.skip`): the check was made on
+ * exactly that commit — `check.ref` character for character — and, for a symbol, the baseline it was
+ * compared against is still the anchor's own. A check's answer depends on the anchor and the commit
+ * alone, so a second one at the same commit could only write what the first wrote.
+ *
+ * A symbol is the one anchor whose answer depends on more than the commit: its baseline may have been
+ * moved by the owner's Re-confirm without the commit moving. What a check knows is the baseline it
+ * USED, and it records one only when it adopted it (`check.baselineSha256`, written by `anchorsChecked`
+ * for an anchor that names no `regionSha256` of its own). An anchor that names its own baseline — a
+ * proposer's, or the region a Re-confirm wrote into it — records no such thing, and nothing on the
+ * anchor tells a Re-confirm's write from a plain check's: `rebaselinedAnchors` leaves exactly the shape
+ * the check leaves. So that anchor is re-checked rather than trusted, as the contract says.
+ */
+export function anchorCheckedAt(anchor: WikiAnchor, ref: string): boolean {
+  const check = anchor.check;
+  if (!check || check.ref !== ref) return false;
+  if (anchor.type !== 'symbol') return true;
+  return baselineIsTheChecks(anchor);
+}
+
+/** A symbol held to the baseline its check adopted and recorded, the one baseline a check can vouch for. */
+function baselineIsTheChecks(anchor: WikiAnchor): boolean {
+  return anchor.type === 'symbol' && anchor.regionSha256 === undefined
+    && typeof anchor.check?.baselineSha256 === 'string' && anchor.check.baselineSha256 === symbolBaseline(anchor);
+}
+
+/**
+ * What a run knows about the commit it checks at, enough to let an anchor's last check stand without making
+ * it again (contract `anchorRules.verify.skip`): the commit, every commit it reaches, and the names of a diff
+ * to it from each commit the run diffed, keyed by that commit.
+ */
+export interface WikiAnchorProof {
+  /** The commit the run checks at: the snapshot's. */
+  sha: string;
+  /** Every commit `sha` reaches: the snapshot's `commits`, `git rev-list <sha>`. */
+  reaches: ReadonlySet<string>;
+  /** By commit `c`: what `git diff --name-status -M <c> <sha>` names (`anchorDiffNames`). */
+  changed: ReadonlyMap<string, WikiAnchorDiffNames>;
+}
+
+/** The names one diff gives, each with every directory above it, so that an anchor naming a directory is touched by what happened under it. */
+export interface WikiAnchorDiffNames {
+  /** Every entry's names, both sides of a rename or a copy: what a symbol's region could have moved with. */
+  any: ReadonlySet<string>;
+  /** Every entry's but a modification's (`M`), and of a copy only its new side: what can change whether a path is there. */
+  placement: ReadonlySet<string>;
+}
+
+/** The names of a diff as the runner's `diff` operation lists them (`path` the new name, `from` the old one of a rename or copy). */
+export function anchorDiffNames(files: ReadonlyArray<{ status: string; path: string; from: string | null }>): WikiAnchorDiffNames {
+  const any = new Set<string>();
+  const placement = new Set<string>();
+  const add = (into: Set<string>, name: string | null): void => {
+    if (!name) return;
+    for (let end = name.length; end > 0; end = name.lastIndexOf('/', end - 1)) into.add(name.slice(0, end));
+  };
+  for (const file of files) {
+    add(any, file.path);
+    add(any, file.from);
+    const kind = file.status.charAt(0);
+    if (kind === 'M') continue;
+    add(placement, file.path);
+    // A rename took its old name away; a copy left its source where it was.
+    if (kind !== 'C') add(placement, file.from);
+  }
+  return { any, placement };
+}
+
+/** Go's unicode.IsSpace, which `strings.TrimSpace` trims: not quite what String.prototype.trim does. */
+const GO_SPACE = '\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
+const GO_TRIM = new RegExp(`^[${GO_SPACE}]+|[${GO_SPACE}]+$`, 'gu');
+
+/**
+ * An anchor's path as the runner checks it (wiki_anchors.go `wikiAnchorPath`): trimmed, no doubled slash, no
+ * leading ./ or /, no trailing / — the spelling a diff's names are in. Null when that leaves nothing, or a `.` or
+ * `..` part, which a diff never names: such an anchor is checked again every run.
+ */
+export function anchorGitPath(path: string): string | null {
+  let name = path.replace(GO_TRIM, '');
+  while (name.includes('//')) name = name.replaceAll('//', '/');
+  while (name.startsWith('./') || name.startsWith('/')) name = name.startsWith('./') ? name.slice(2) : name.slice(1);
+  if (name.endsWith('/')) name = name.slice(0, -1);
+  if (name === '' || name.split('/').some((part) => part === '.' || part === '..')) return null;
+  return name;
+}
+
+/**
+ * Whether an anchor's last check still holds at `proof.sha` (`anchorRules.verify.skip`): it was made there
+ * (`anchorCheckedAt`), or it found the anchor verified on another commit since which nothing the answer depends
+ * on can have moved —
+ *  - a path: the runner asks only whether it is there (`git cat-file -e`), so the diff from that commit names
+ *    the path, or anything under it, as nothing but a modification;
+ *  - a symbol held to the baseline its check adopted: the diff names neither its file nor anything under it,
+ *    whatever the change, since the region is read from the content;
+ *  - a commit: the snapshot reaches it, so `git merge-base --is-ancestor` answers it is an ancestor.
+ * A check that found an anchor missing or changed is made again: a missing path or commit may come back, and
+ * the challenge a broken entry files is the check's to file. So is any check whose ref is not a commit sha, a
+ * check from a commit the run has no diff from, and a symbol that names its own baseline (`anchorCheckedAt`).
+ */
+export function anchorHoldsAt(anchor: WikiAnchor, proof: WikiAnchorProof): boolean {
+  if (anchorCheckedAt(anchor, proof.sha)) return true;
+  const check = anchor.check;
+  if (!check || check.state !== 'verified' || typeof check.ref !== 'string' || !COMMIT_SHA.test(check.ref)) return false;
+  if (anchor.type === 'commit') return proof.reaches.has(anchor.sha);
+  if (anchor.type !== 'path' && !baselineIsTheChecks(anchor)) return false;
+  const path = anchorGitPath((anchor as { path: string }).path);
+  const names = proof.changed.get(check.ref);
+  if (path === null || names === undefined) return false;
+  return !(anchor.type === 'path' ? names.placement : names.any).has(path);
+}
+
+/**
+ * The git anchors of one entry that a check at `proof.sha` still owes: all of them when any one's last check
+ * does not hold there — one anchor out of date is the whole entry's re-check, as it always was — and none when
+ * every one of them holds (`anchorHoldsAt`).
+ */
+export function anchorsDueAt(anchors: readonly WikiAnchor[], proof: WikiAnchorProof): WikiDueAnchor[] {
+  const held = anchors.filter((anchor) => GIT_TYPES.has(anchor.type));
+  if (held.length > 0 && held.every((anchor) => anchorHoldsAt(anchor, proof))) return [];
+  return dueAnchors(anchors);
+}
+
+/**
  * An entry's anchor state from its anchors' last checks (contract `anchorRules.verify.aggregate`):
  * `missing` when any is missing, else `changed` when any changed, else `unchecked` when any anchor has
  * no check yet — or the entry has none at all — else `verified`.
@@ -351,7 +474,7 @@ export async function listWikiAnchors(
   input: { ownerId: string; runnerId: string; spaceId: string; sessionId: string; after: string | null; limit: number | null },
 ): Promise<WikiAnchorList> {
   const limit = Math.min(Math.max(input.limit ?? WIKI_ANCHOR_RULES.listEntriesDefault, 1), WIKI_ANCHOR_RULES.listEntriesMax);
-  const page = await anchorPage(reader, input, limit);
+  const page = await anchorPage(reader, input, limit, null);
   return { spaceId: input.spaceId, repo: await anchorRepoOf(reader, input), entries: page.entries, next: page.next };
 }
 
@@ -360,21 +483,56 @@ export async function listWikiAnchors(
  * session and no runner on this side — the checks travel as a `wiki_repo_op` the space's workspace routes,
  * and this returns the entries alone, with no checkout for the caller to name. The entries are exactly the
  * runner's list's: active, git-anchored, in id order, one page at a time.
+ *
+ * Each entry carries only the anchors a check at `proof.sha` still owes (`anchorsDueAt`), because this side
+ * is the one that re-runs: an entry every anchor of which still holds there — checked at exactly this commit,
+ * or verified on one since which nothing its answer depends on has moved — comes back with none, and the run
+ * leaves it alone rather than re-check what only the same answer can come of. The runner's own list is not
+ * this list: it is handed every anchor, always.
  */
 export async function listWikiAnchorsForJob(
   reader: AnchorReader,
-  input: { ownerId: string; spaceId: string; after: string | null; limit: number | null },
+  input: { ownerId: string; spaceId: string; after: string | null; limit: number | null; proof: WikiAnchorProof },
 ): Promise<{ spaceId: string; entries: WikiAnchorList['entries']; next: string | null }> {
   const limit = Math.min(Math.max(input.limit ?? WIKI_ANCHOR_RULES.listEntriesDefault, 1), WIKI_ANCHOR_RULES.listEntriesMax);
-  const page = await anchorPage(reader, input, limit);
+  const page = await anchorPage(reader, input, limit, input.proof);
   return { spaceId: input.spaceId, entries: page.entries, next: page.next };
 }
 
-/** The page's rows as entries: the one read both lists above make. */
+/**
+ * The commits the space's anchors were last checked at, other than `sha`, from which a diff to `sha` could vouch
+ * for a check (`anchorHoldsAt`) — a path's, or a symbol's held to the baseline its check adopted, that found it
+ * verified — each with how many such anchors were checked there, the most first and then by sha.
+ */
+export async function anchorCheckRefs(
+  reader: Pick<Prisma.TransactionClient, '$queryRaw'>,
+  input: { ownerId: string; spaceId: string; sha: string },
+): Promise<Array<{ ref: string; anchors: number }>> {
+  const rows = await reader.$queryRaw<Array<{ ref: string; anchors: number }>>`
+    SELECT a."value"->'check'->>'ref' AS "ref", count(*)::int AS "anchors"
+      FROM "wiki_entry" e CROSS JOIN LATERAL jsonb_array_elements(e."anchors") AS a("value")
+     WHERE e."owner_id" = ${input.ownerId}::uuid
+       AND e."space_id" = ${input.spaceId}::uuid
+       AND e."status" = 'active'
+       AND a."value"->'check'->>'state' = 'verified'
+       AND a."value"->'check'->>'ref' ~ '^[0-9a-f]{40}$'
+       AND a."value"->'check'->>'ref' <> ${input.sha}
+       AND (a."value"->>'type' = 'path'
+            OR (a."value"->>'type' = 'symbol' AND a."value"->>'regionSha256' IS NULL AND a."value"->'check'->>'baselineSha256' IS NOT NULL))
+     GROUP BY 1
+     ORDER BY 2 DESC, 1 ASC`;
+  return rows.map((row) => ({ ref: row.ref, anchors: Number(row.anchors) }));
+}
+
+/**
+ * The page's rows as entries: the one read both lists above make. `proof` is what lets an entry's anchors be
+ * left out (the server's own run), or null to hand every git anchor (the runner's).
+ */
 async function anchorPage(
   reader: AnchorReader,
   input: { ownerId: string; spaceId: string; after: string | null },
   limit: number,
+  proof: WikiAnchorProof | null,
 ): Promise<Pick<WikiAnchorList, 'entries' | 'next'>> {
   const rows = await reader.$queryRaw<Array<{ id: string; currentRevision: number; anchors: unknown }>>`
     SELECT e."id" AS "id", e."current_revision" AS "currentRevision", e."anchors" AS "anchors"
@@ -389,11 +547,14 @@ async function anchorPage(
      LIMIT ${limit + 1}::int`;
   const page = rows.slice(0, limit);
   return {
-    entries: page.map((row) => ({
-      entryId: row.id,
-      revision: Number(row.currentRevision),
-      anchors: dueAnchors(storedAnchors(row.anchors)),
-    })),
+    entries: page.map((row) => {
+      const anchors = storedAnchors(row.anchors);
+      return {
+        entryId: row.id,
+        revision: Number(row.currentRevision),
+        anchors: proof === null ? dueAnchors(anchors) : anchorsDueAt(anchors, proof),
+      };
+    }),
     next: rows.length > limit ? page[page.length - 1].id : null,
   };
 }

@@ -528,7 +528,7 @@ func (r *wikiArticlesRun) compose(input wikiArticleInput) ([]wikiArticlePart, er
 	var lines []string
 	var top []wikiArticleEntry
 	for i, group := range groups {
-		lines = append(lines, fmt.Sprintf("- %s（%d 条）", names[i], len(group)))
+		lines = append(lines, fmt.Sprintf("- %s (%s)", names[i], wikiCount(len(group), "entry", "entries")))
 		members := pickEntries(entries, group)
 		for j := 0; j < 2 && j < len(members); j++ {
 			top = append(top, members[j])
@@ -638,12 +638,14 @@ func (r *wikiArticlesRun) name(topicTitle string, members []wikiArticleEntry, ta
 		}
 		titles = append(titles, "- "+cutRunes(entry.Title, 60))
 	}
-	prompt := fmt.Sprintf("下面是 wiki 里「%s」主题下归在同一组的条目标题：\n%s\n\n给这组起一个简短的中文小标题（不超过 14 个字，可保留代码名），概括它们共同讲的事。",
+	prompt := fmt.Sprintf("Below are the titles of the entries filed in one group under the wiki topic \"%s\":\n%s\n\n"+
+		"Give this group a short English subheading (at most 14 characters; code names may stay) that sums up what they have in common.",
 		topicTitle, strings.Join(titles, "\n"))
 	if len(taken) > 0 {
-		prompt += "\n同一主题的其他组已经叫：" + strings.Join(taken, "、") + "。起一个和它们都不同的名字，说出这组独有的内容，不要只换个说法。"
+		prompt += "\nThe topic's other groups are already called: " + strings.Join(taken, ", ") + ". Give this one a name different from all of them that says what " +
+			"only this group covers, not just another way of saying one of theirs."
 	}
-	text, err := r.ask(prompt + "只输出这个小标题。")
+	text, err := r.ask(prompt + " Output only the subheading.")
 	if err != nil {
 		var auth *wikiArticleAuthError
 		if errors.As(err, &auth) {
@@ -751,13 +753,13 @@ func wikiArticlePrompt(kind, topicTitle, title string, fed []wikiArticleEntry, s
 		return fmt.Sprintf(`Write the overview of the wiki topic "%s". The topic is split into these sub-articles:
 %s
 
-Using ONLY the numbered entries below (the most important ones of each sub-article), write in Chinese:
+Using ONLY the numbered entries below (the most important ones of each sub-article), write in English:
 - first line: "# " + the topic title
 - two or three short paragraphs that tell a reader what this topic covers and point out its most important rules and traps.
 Rules:
 - EVERY sentence must end with one or more footnote markers such as [2] or [2][5], the numbers of the entries it is based on. A sentence without a marker will be deleted.
 - State only what the entries say; do not invent facts, versions, dates, numbers or paths.
-- LENGTH: 450-750 Chinese characters in total, 6-9 sentences. Anything past %d characters is cut off.
+- LENGTH: 450-750 characters in total, 6-9 sentences. Anything past %d characters is cut off.
 Output only the Markdown.
 
 ENTRIES:
@@ -769,16 +771,16 @@ ENTRIES:
 	}
 	return fmt.Sprintf(`Write a wiki article titled "%s"%s, using ONLY the numbered knowledge entries below.
 
-Format (Markdown, in Chinese; keep code identifiers, paths and commands verbatim in backticks):
+Format (Markdown, in English; keep code identifiers, paths and commands verbatim in backticks):
 - first line: "# " + a concise article title
 - a lead paragraph of 2-3 sentences: what this area is about and its most important rules and traps
-- then 2-4 sections "## heading" of 2-3 sentences each that group the knowledge (for example 约定 / 决策 / 常见的坑 / 做法 / 概念 — choose what fits)
+- then 2-4 sections "## heading" of 2-3 sentences each that group the knowledge (for example Conventions / Decisions / Common pitfalls / Practices / Concepts — choose what fits)
 Rules:
 - EVERY sentence must end with one or more footnote markers such as [3] or [3][7], the numbers of the entries it is based on. A sentence without a marker will be deleted.
 - State only what the entries say; do not invent facts, versions, dates, numbers or paths. If entries disagree, say so and cite both.
 - Prefer the most important and most corroborated entries (more sources = more corroborated); you need not cite every entry.
-- Mark a trap that an entry says is fixed as 已修.
-- LENGTH: 450-800 Chinese characters in total, 8-11 sentences, one point per sentence. Anything past %d characters is cut off.
+- Mark a trap that an entry says is fixed as (fixed).
+- LENGTH: 450-800 characters in total, 8-11 sentences, one point per sentence. Anything past %d characters is cut off.
 Output only the Markdown article.
 
 ENTRIES:
@@ -927,7 +929,7 @@ func wikiArticleFallbackName(members []wikiArticleEntry) string {
 	if len(members) > 0 {
 		return cutRunes(members[0].Title, 14)
 	}
-	return "其他"
+	return "Other"
 }
 
 // ── Grouping: a big topic's subtopics, by code ──────────────────────────────────────────────────

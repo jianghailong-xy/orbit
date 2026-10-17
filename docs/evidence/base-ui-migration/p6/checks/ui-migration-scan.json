@@ -1,0 +1,1646 @@
+{
+ "files": 109,
+ "hits": {
+  "p0": 0,
+  "fixture": 0,
+  "batch": 191
+ },
+ "p0": [
+  {
+   "file": "breakpoints.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "collect-evidence.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "environment.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "expected-screenshots.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "feedback-production.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "fixtures.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "harness.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "known-failures.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "page-scenarios.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "pages.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "performance.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "playwright.config.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "port.config.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "session-fixtures.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "session-scenarios.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "states.browser.mjs",
+   "imports": [],
+   "hits": 0
+  }
+ ],
+ "fixture": [
+  {
+   "file": "choices-first-frame.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices-first-option.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices-lifecycle.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices-motion.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices-open-value.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices-scroll-observation.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices-submenu-geometry.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices.config.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices.html",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices.tsconfig.json",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "choices.tsx",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "collect-choice-evidence.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "collect-composer-evidence.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "collect-overlay-evidence.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "composer-checks.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "composer-cost.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "composer-input.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "composer.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "composer.config.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "composer.html",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "composer.tsconfig.json",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "composer.tsx",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "controls.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "controls.config.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "controls.html",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "controls.tsconfig.json",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "controls.tsx",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "foundation-theme.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "foundation.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "foundation.config.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "foundation.html",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "foundation.tsconfig.json",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "foundation.tsx",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "overlays-app-frame.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "overlays-close-hover.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "overlays.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "overlays.config.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "overlays.html",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "overlays.tsconfig.json",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "overlays.tsx",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts-checks.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts-hover.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts-lifecycle.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts-promotion.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts-tests.tsconfig.json",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts.browser.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts.config.mjs",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts.html",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts.tsconfig.json",
+   "imports": [],
+   "hits": 0
+  },
+  {
+   "file": "toasts.tsx",
+   "imports": [],
+   "hits": 0
+  }
+ ],
+ "batch": [
+  {
+   "file": "p41-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.1",
+   "purpose": "sign-in, setup, profile, settings",
+   "lines": []
+  },
+  {
+   "file": "p41.browser.mjs",
+   "imports": [],
+   "hits": 10,
+   "batch": "P4.1",
+   "purpose": "sign-in, setup, profile, settings",
+   "lines": [
+    {
+     "line": 17,
+     "kind": "ant-selector",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 17,
+     "kind": "ant-class",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-selector",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-class",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-selector",
+     "text": "const TABLE = '.ant-table, .access-token-table';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-class",
+     "text": "const TABLE = '.ant-table, .access-token-table';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-selector",
+     "text": "const SELECT_OPTION = '[role=\"option\"], .ant-select-item-option';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-class",
+     "text": "const SELECT_OPTION = '[role=\"option\"], .ant-select-item-option';"
+    },
+    {
+     "line": 22,
+     "kind": "ant-selector",
+     "text": "const SELECT = '.ant-select, .orbit-select';"
+    },
+    {
+     "line": 22,
+     "kind": "ant-class",
+     "text": "const SELECT = '.ant-select, .orbit-select';"
+    }
+   ]
+  },
+  {
+   "file": "p41.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.1",
+   "purpose": "sign-in, setup, profile, settings",
+   "lines": []
+  },
+  {
+   "file": "p42-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.2",
+   "purpose": "providers, pools, runners, admin users",
+   "lines": []
+  },
+  {
+   "file": "p42.browser.mjs",
+   "imports": [],
+   "hits": 22,
+   "batch": "P4.2",
+   "purpose": "providers, pools, runners, admin users",
+   "lines": [
+    {
+     "line": 23,
+     "kind": "ant-selector",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .ant-modal-confirm .ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 23,
+     "kind": "ant-class",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .ant-modal-confirm .ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 24,
+     "kind": "ant-selector",
+     "text": "const SELECT_OPTION = '[role=\"option\"], .ant-select-item-option';"
+    },
+    {
+     "line": 24,
+     "kind": "ant-class",
+     "text": "const SELECT_OPTION = '[role=\"option\"], .ant-select-item-option';"
+    },
+    {
+     "line": 25,
+     "kind": "ant-selector",
+     "text": "const SELECT = '.ant-select, .orbit-select';"
+    },
+    {
+     "line": 25,
+     "kind": "ant-class",
+     "text": "const SELECT = '.ant-select, .orbit-select';"
+    },
+    {
+     "line": 26,
+     "kind": "ant-selector",
+     "text": "const NUMBER = '.ant-input-number, .orbit-number-input';"
+    },
+    {
+     "line": 26,
+     "kind": "ant-class",
+     "text": "const NUMBER = '.ant-input-number, .orbit-number-input';"
+    },
+    {
+     "line": 27,
+     "kind": "ant-selector",
+     "text": "const TABLE = '.ant-table-wrapper, .orbit-table-frame';"
+    },
+    {
+     "line": 27,
+     "kind": "ant-class",
+     "text": "const TABLE = '.ant-table-wrapper, .orbit-table-frame';"
+    },
+    {
+     "line": 28,
+     "kind": "ant-selector",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 28,
+     "kind": "ant-class",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 350,
+     "kind": "ant-selector",
+     "text": "await page.locator('.ant-input-password-icon, .orbit-password-toggle').first().click();"
+    },
+    {
+     "line": 350,
+     "kind": "ant-class",
+     "text": "await page.locator('.ant-input-password-icon, .orbit-password-toggle').first().click();"
+    },
+    {
+     "line": 398,
+     "kind": "ant-selector",
+     "text": "await expect(section.locator('.ant-btn-loading, .orbit-button[data-loading]')).toBeVisible();"
+    },
+    {
+     "line": 398,
+     "kind": "ant-class",
+     "text": "await expect(section.locator('.ant-btn-loading, .orbit-button[data-loading]')).toBeVisible();"
+    },
+    {
+     "line": 577,
+     "kind": "ant-selector",
+     "text": "await capture('p42-pool-add-key-form', { surface: addKey, limit: addKey.locator('.ant-input-affix-wrapper, .orbit-input-affix').last() });"
+    },
+    {
+     "line": 577,
+     "kind": "ant-class",
+     "text": "await capture('p42-pool-add-key-form', { surface: addKey, limit: addKey.locator('.ant-input-affix-wrapper, .orbit-input-affix').last() });"
+    },
+    {
+     "line": 882,
+     "kind": "ant-selector",
+     "text": "await expect(page.locator('.ant-spin, .orbit-spinner').first()).toBeVisible();"
+    },
+    {
+     "line": 882,
+     "kind": "ant-class",
+     "text": "await expect(page.locator('.ant-spin, .orbit-spinner').first()).toBeVisible();"
+    },
+    {
+     "line": 926,
+     "kind": "ant-selector",
+     "text": "await expect(page.locator('.ant-spin, .orbit-spinner').first()).toBeVisible();"
+    },
+    {
+     "line": 926,
+     "kind": "ant-class",
+     "text": "await expect(page.locator('.ant-spin, .orbit-spinner').first()).toBeVisible();"
+    }
+   ]
+  },
+  {
+   "file": "p42.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.2",
+   "purpose": "providers, pools, runners, admin users",
+   "lines": []
+  },
+  {
+   "file": "p43a-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3a",
+   "purpose": "task and project lists, pages and toolbars",
+   "lines": []
+  },
+  {
+   "file": "p43a.browser.mjs",
+   "imports": [],
+   "hits": 14,
+   "batch": "P4.3a",
+   "purpose": "task and project lists, pages and toolbars",
+   "lines": [
+    {
+     "line": 21,
+     "kind": "ant-selector",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 21,
+     "kind": "ant-class",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 22,
+     "kind": "ant-selector",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 22,
+     "kind": "ant-class",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 23,
+     "kind": "ant-selector",
+     "text": "const EMPTY = '.ant-empty, .orbit-empty';"
+    },
+    {
+     "line": 23,
+     "kind": "ant-class",
+     "text": "const EMPTY = '.ant-empty, .orbit-empty';"
+    },
+    {
+     "line": 24,
+     "kind": "ant-selector",
+     "text": "const SEGMENTED = '.ant-segmented, .orbit-segmented';"
+    },
+    {
+     "line": 24,
+     "kind": "ant-class",
+     "text": "const SEGMENTED = '.ant-segmented, .orbit-segmented';"
+    },
+    {
+     "line": 25,
+     "kind": "ant-selector",
+     "text": "const SEGMENT = '.ant-segmented-item, .orbit-segmented-item';"
+    },
+    {
+     "line": 25,
+     "kind": "ant-class",
+     "text": "const SEGMENT = '.ant-segmented-item, .orbit-segmented-item';"
+    },
+    {
+     "line": 26,
+     "kind": "ant-selector",
+     "text": "const SELECT_OPTION = '[role=\"option\"], .ant-select-item-option';"
+    },
+    {
+     "line": 26,
+     "kind": "ant-class",
+     "text": "const SELECT_OPTION = '[role=\"option\"], .ant-select-item-option';"
+    },
+    {
+     "line": 27,
+     "kind": "ant-selector",
+     "text": "const INPUT_CLEAR = '.ant-input-clear-icon, .orbit-input-clear';"
+    },
+    {
+     "line": 27,
+     "kind": "ant-class",
+     "text": "const INPUT_CLEAR = '.ant-input-clear-icon, .orbit-input-clear';"
+    }
+   ]
+  },
+  {
+   "file": "p43a.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3a",
+   "purpose": "task and project lists, pages and toolbars",
+   "lines": []
+  },
+  {
+   "file": "p43b-cards-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": []
+  },
+  {
+   "file": "p43b-cards-ids.json",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": []
+  },
+  {
+   "file": "p43b-cards.browser.mjs",
+   "imports": [],
+   "hits": 5,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": [
+    {
+     "line": 18,
+     "kind": "ant-selector",
+     "text": "const ALERT = '.ant-alert, .orbit-alert';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-class",
+     "text": "const ALERT = '.ant-alert, .orbit-alert';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-selector",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-class",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 271,
+     "kind": "antd-reference",
+     "text": "// Which layer Escape closes is recorded, not asserted: on the reference the graph (AntD) and the"
+    }
+   ]
+  },
+  {
+   "file": "p43b-cards.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": []
+  },
+  {
+   "file": "p43b-cards.html",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": []
+  },
+  {
+   "file": "p43b-cards.tsconfig.json",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": []
+  },
+  {
+   "file": "p43b-cards.tsx",
+   "imports": [],
+   "hits": 1,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": [
+    {
+     "line": 32,
+     "kind": "antd-reference",
+     "text": "// reference tree (the cards on AntD) and on the delivery, so the two are compared on identical data."
+    }
+   ]
+  },
+  {
+   "file": "p43b-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": []
+  },
+  {
+   "file": "p43b-helpers.mjs",
+   "imports": [],
+   "hits": 4,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": [
+    {
+     "line": 13,
+     "kind": "ant-selector",
+     "text": "export const popup = (page, text) => page.locator('[role=\"tooltip\"], [role=\"dialog\"], [role=\"alertdialog\"], .ant-popover, .ant-tooltip')"
+    },
+    {
+     "line": 13,
+     "kind": "ant-class",
+     "text": "export const popup = (page, text) => page.locator('[role=\"tooltip\"], [role=\"dialog\"], [role=\"alertdialog\"], .ant-popover, .ant-tooltip')"
+    },
+    {
+     "line": 42,
+     "kind": "ant-selector",
+     "text": "const modal = (el) => el.getAttribute('aria-modal') === 'true' || el.matches('.ant-modal-wrap *, .ant-modal-wrap');"
+    },
+    {
+     "line": 42,
+     "kind": "ant-class",
+     "text": "const modal = (el) => el.getAttribute('aria-modal') === 'true' || el.matches('.ant-modal-wrap *, .ant-modal-wrap');"
+    }
+   ]
+  },
+  {
+   "file": "p43b.browser.mjs",
+   "imports": [],
+   "hits": 14,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": [
+    {
+     "line": 24,
+     "kind": "ant-selector",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 24,
+     "kind": "ant-class",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 25,
+     "kind": "ant-selector",
+     "text": "const SPINNER = '.ant-spin, .orbit-spinner';"
+    },
+    {
+     "line": 25,
+     "kind": "ant-class",
+     "text": "const SPINNER = '.ant-spin, .orbit-spinner';"
+    },
+    {
+     "line": 26,
+     "kind": "ant-selector",
+     "text": "const ALERT = '.ant-alert, .orbit-alert';"
+    },
+    {
+     "line": 26,
+     "kind": "ant-class",
+     "text": "const ALERT = '.ant-alert, .orbit-alert';"
+    },
+    {
+     "line": 27,
+     "kind": "ant-selector",
+     "text": "const SELECT = '.ant-select, .orbit-select';"
+    },
+    {
+     "line": 27,
+     "kind": "ant-class",
+     "text": "const SELECT = '.ant-select, .orbit-select';"
+    },
+    {
+     "line": 28,
+     "kind": "ant-selector",
+     "text": "const NUMBER = '.ant-input-number, .orbit-number-input';"
+    },
+    {
+     "line": 28,
+     "kind": "ant-class",
+     "text": "const NUMBER = '.ant-input-number, .orbit-number-input';"
+    },
+    {
+     "line": 29,
+     "kind": "ant-selector",
+     "text": "const SWITCH = '.ant-switch, .orbit-switch';"
+    },
+    {
+     "line": 29,
+     "kind": "ant-class",
+     "text": "const SWITCH = '.ant-switch, .orbit-switch';"
+    },
+    {
+     "line": 30,
+     "kind": "ant-selector",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 30,
+     "kind": "ant-class",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    }
+   ]
+  },
+  {
+   "file": "p43b.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.3b",
+   "purpose": "dependency graphs and decision cards",
+   "lines": []
+  },
+  {
+   "file": "p44-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.4",
+   "purpose": "wiki, shared pages, following and watches",
+   "lines": []
+  },
+  {
+   "file": "p44.browser.mjs",
+   "imports": [],
+   "hits": 26,
+   "batch": "P4.4",
+   "purpose": "wiki, shared pages, following and watches",
+   "lines": [
+    {
+     "line": 17,
+     "kind": "ant-selector",
+     "text": "const DIALOG = '.ant-modal-container, .orbit-dialog';"
+    },
+    {
+     "line": 17,
+     "kind": "ant-class",
+     "text": "const DIALOG = '.ant-modal-container, .orbit-dialog';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-selector",
+     "text": "const CONFIRM = '.ant-modal-confirm .ant-modal-container, .orbit-confirm';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-class",
+     "text": "const CONFIRM = '.ant-modal-confirm .ant-modal-container, .orbit-confirm';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-selector",
+     "text": "const DRAWER = '.ant-drawer-content-wrapper, .orbit-drawer';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-class",
+     "text": "const DRAWER = '.ant-drawer-content-wrapper, .orbit-drawer';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-selector",
+     "text": "const POPOVER = '.ant-popover:not(.ant-popover-hidden), .orbit-popover';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-class",
+     "text": "const POPOVER = '.ant-popover:not(.ant-popover-hidden), .orbit-popover';"
+    },
+    {
+     "line": 21,
+     "kind": "ant-selector",
+     "text": "const TIP = '.ant-tooltip:not(.ant-tooltip-hidden), .orbit-tooltip';"
+    },
+    {
+     "line": 21,
+     "kind": "ant-class",
+     "text": "const TIP = '.ant-tooltip:not(.ant-tooltip-hidden), .orbit-tooltip';"
+    },
+    {
+     "line": 22,
+     "kind": "ant-selector",
+     "text": "const SELECT_OPTION = '[role=\"option\"], .ant-select-item-option';"
+    },
+    {
+     "line": 22,
+     "kind": "ant-class",
+     "text": "const SELECT_OPTION = '[role=\"option\"], .ant-select-item-option';"
+    },
+    {
+     "line": 23,
+     "kind": "ant-selector",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 23,
+     "kind": "ant-class",
+     "text": "const CARD = '.ant-card, .orbit-card';"
+    },
+    {
+     "line": 94,
+     "kind": "antd-reference",
+     "text": "// The runtime census: AntD-classed elements drawn outside the sidebar (`aside.app-nav`, the session"
+    },
+    {
+     "line": 96,
+     "kind": "antd-reference",
+     "text": "antd: [...new Set([...document.querySelectorAll('[class*=\"ant-\"]')]"
+    },
+    {
+     "line": 96,
+     "kind": "ant-class",
+     "text": "antd: [...new Set([...document.querySelectorAll('[class*=\"ant-\"]')]"
+    },
+    {
+     "line": 98,
+     "kind": "ant-class",
+     "text": ".flatMap((el) => [...el.classList].filter((token) => token.startsWith('ant-') && !token.startsWith('anticon'))"
+    },
+    {
+     "line": 577,
+     "kind": "ant-class",
+     "text": "await openChoice(page.locator('#wk-setup-workspace').locator('xpath=ancestor-or-self::*[contains(@class,\"ant-select\") or contains(@class,\"orbit-select\")][1]'));"
+    },
+    {
+     "line": 584,
+     "kind": "ant-class",
+     "text": "await openChoice(page.locator('#wk-setup-lookback').locator('xpath=ancestor-or-self::*[contains(@class,\"ant-select\") or contains(@class,\"orbit-select\")][1]'));"
+    },
+    {
+     "line": 671,
+     "kind": "ant-selector",
+     "text": "const spinner = page.locator('.following-empty [aria-busy=\"true\"], .following-empty .ant-spin, .following-empty .orbit-spinner').first();"
+    },
+    {
+     "line": 671,
+     "kind": "ant-class",
+     "text": "const spinner = page.locator('.following-empty [aria-busy=\"true\"], .following-empty .ant-spin, .following-empty .orbit-spinner').first();"
+    },
+    {
+     "line": 772,
+     "kind": "ant-selector",
+     "text": "const spinner = page.locator('.following-empty [aria-busy=\"true\"], .following-empty .ant-spin, .following-empty .orbit-spinner').first();"
+    },
+    {
+     "line": 772,
+     "kind": "ant-class",
+     "text": "const spinner = page.locator('.following-empty [aria-busy=\"true\"], .following-empty .ant-spin, .following-empty .orbit-spinner').first();"
+    },
+    {
+     "line": 887,
+     "kind": "ant-selector",
+     "text": "const spinner = page.locator('.app-view--doc [aria-busy=\"true\"], .app-view--doc .ant-spin, .app-view--doc .orbit-spinner').first();"
+    },
+    {
+     "line": 887,
+     "kind": "ant-class",
+     "text": "const spinner = page.locator('.app-view--doc [aria-busy=\"true\"], .app-view--doc .ant-spin, .app-view--doc .orbit-spinner').first();"
+    }
+   ]
+  },
+  {
+   "file": "p44.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P4.4",
+   "purpose": "wiki, shared pages, following and watches",
+   "lines": []
+  },
+  {
+   "file": "p51-fixtures.mjs",
+   "imports": [
+    "import antd",
+    "import antd"
+   ],
+   "hits": 4,
+   "batch": "P5.1",
+   "purpose": "session navigation, search, outputs",
+   "lines": [
+    {
+     "line": 94,
+     "kind": "antd-reference",
+     "text": "\"-import { Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';\","
+    },
+    {
+     "line": 95,
+     "kind": "antd-reference",
+     "text": "\"-import type { MenuProps } from 'antd';\","
+    },
+    {
+     "line": 104,
+     "kind": "use-token",
+     "text": "'-  const { token } = theme.useToken();',"
+    },
+    {
+     "line": 104,
+     "kind": "theme",
+     "text": "'-  const { token } = theme.useToken();',"
+    }
+   ]
+  },
+  {
+   "file": "p51.browser.mjs",
+   "imports": [],
+   "hits": 26,
+   "batch": "P5.1",
+   "purpose": "session navigation, search, outputs",
+   "lines": [
+    {
+     "line": 15,
+     "kind": "ant-selector",
+     "text": "const DIALOG = '.ant-modal-container, .orbit-dialog';"
+    },
+    {
+     "line": 15,
+     "kind": "ant-class",
+     "text": "const DIALOG = '.ant-modal-container, .orbit-dialog';"
+    },
+    {
+     "line": 16,
+     "kind": "ant-selector",
+     "text": "const CONFIRM = '.ant-modal-confirm .ant-modal-container, .orbit-confirm';"
+    },
+    {
+     "line": 16,
+     "kind": "ant-class",
+     "text": "const CONFIRM = '.ant-modal-confirm .ant-modal-container, .orbit-confirm';"
+    },
+    {
+     "line": 17,
+     "kind": "ant-selector",
+     "text": "const DRAWER = '.ant-drawer-content-wrapper, .orbit-drawer';"
+    },
+    {
+     "line": 17,
+     "kind": "ant-class",
+     "text": "const DRAWER = '.ant-drawer-content-wrapper, .orbit-drawer';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-selector",
+     "text": "const POPOVER = '.ant-popover:not(.ant-popover-hidden), .orbit-popover';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-class",
+     "text": "const POPOVER = '.ant-popover:not(.ant-popover-hidden), .orbit-popover';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-selector",
+     "text": "const TIP = '.ant-tooltip:not(.ant-tooltip-hidden), .orbit-tooltip';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-class",
+     "text": "const TIP = '.ant-tooltip:not(.ant-tooltip-hidden), .orbit-tooltip';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-selector",
+     "text": "const PALETTE = '.ssearch-modal .ant-modal-container, .orbit-dialog.ssearch-modal';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-class",
+     "text": "const PALETTE = '.ssearch-modal .ant-modal-container, .orbit-dialog.ssearch-modal';"
+    },
+    {
+     "line": 87,
+     "kind": "ant-selector",
+     "text": "tips: [...document.querySelectorAll('[role=\"tooltip\"]')].filter((el) => !el.closest('.ant-popover') && visible(el))"
+    },
+    {
+     "line": 87,
+     "kind": "ant-class",
+     "text": "tips: [...document.querySelectorAll('[role=\"tooltip\"]')].filter((el) => !el.closest('.ant-popover') && visible(el))"
+    },
+    {
+     "line": 89,
+     "kind": "ant-selector",
+     "text": "popovers: [...document.querySelectorAll('.ant-popover, .orbit-popover')].filter(visible).map((el) => el.textContent.trim().replace(/\\s+/g, ' ')).filter(Boolean),"
+    },
+    {
+     "line": 89,
+     "kind": "ant-class",
+     "text": "popovers: [...document.querySelectorAll('.ant-popover, .orbit-popover')].filter(visible).map((el) => el.textContent.trim().replace(/\\s+/g, ' ')).filter(Boolean),"
+    },
+    {
+     "line": 92,
+     "kind": "antd-reference",
+     "text": "// The runtime census: AntD-classed elements drawn anywhere (the sidebar included, P5.1's own), by class; an"
+    },
+    {
+     "line": 94,
+     "kind": "antd-reference",
+     "text": "antd: [...new Set([...document.querySelectorAll('[class*=\"ant-\"]')]"
+    },
+    {
+     "line": 94,
+     "kind": "ant-class",
+     "text": "antd: [...new Set([...document.querySelectorAll('[class*=\"ant-\"]')]"
+    },
+    {
+     "line": 96,
+     "kind": "ant-class",
+     "text": ".flatMap((el) => [...el.classList].filter((token) => token.startsWith('ant-') && !token.startsWith('anticon'))"
+    },
+    {
+     "line": 333,
+     "kind": "ant-selector",
+     "text": "await expect(visible(page, '.ssearch-head [aria-busy=\"true\"], .ssearch-head .ant-spin, .ssearch-head .orbit-spinner')).toBeVisible();"
+    },
+    {
+     "line": 333,
+     "kind": "ant-class",
+     "text": "await expect(visible(page, '.ssearch-head [aria-busy=\"true\"], .ssearch-head .ant-spin, .ssearch-head .orbit-spinner')).toBeVisible();"
+    },
+    {
+     "line": 335,
+     "kind": "ant-selector",
+     "text": "await capture('p51-search-loading', { palette, spinner: visible(page, '.ssearch-head .ant-spin, .ssearch-head .orbit-spinner') });"
+    },
+    {
+     "line": 335,
+     "kind": "ant-class",
+     "text": "await capture('p51-search-loading', { palette, spinner: visible(page, '.ssearch-head .ant-spin, .ssearch-head .orbit-spinner') });"
+    },
+    {
+     "line": 338,
+     "kind": "ant-selector",
+     "text": "await expect(page.locator('.ssearch-head .ant-spin, .ssearch-head .orbit-spinner')).toBeHidden();"
+    },
+    {
+     "line": 338,
+     "kind": "ant-class",
+     "text": "await expect(page.locator('.ssearch-head .ant-spin, .ssearch-head .orbit-spinner')).toBeHidden();"
+    }
+   ]
+  },
+  {
+   "file": "p51.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P5.1",
+   "purpose": "session navigation, search, outputs",
+   "lines": []
+  },
+  {
+   "file": "p52-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P5.2",
+   "purpose": "transcript pictures and their preview",
+   "lines": []
+  },
+  {
+   "file": "p52.browser.mjs",
+   "imports": [],
+   "hits": 23,
+   "batch": "P5.2",
+   "purpose": "transcript pictures and their preview",
+   "lines": [
+    {
+     "line": 16,
+     "kind": "ant-selector",
+     "text": "const VIEWER = '.ant-image-preview, .orbit-image-preview';"
+    },
+    {
+     "line": 16,
+     "kind": "ant-class",
+     "text": "const VIEWER = '.ant-image-preview, .orbit-image-preview';"
+    },
+    {
+     "line": 17,
+     "kind": "ant-selector",
+     "text": "const PICTURE = '.ant-image-preview-img, .orbit-image-preview-img';"
+    },
+    {
+     "line": 17,
+     "kind": "ant-class",
+     "text": "const PICTURE = '.ant-image-preview-img, .orbit-image-preview-img';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-selector",
+     "text": "const PROGRESS = '.ant-image-preview-progress, .orbit-image-preview-progress';"
+    },
+    {
+     "line": 18,
+     "kind": "ant-class",
+     "text": "const PROGRESS = '.ant-image-preview-progress, .orbit-image-preview-progress';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-selector",
+     "text": "const MASK = '.ant-image-preview-mask, .orbit-image-preview-mask';"
+    },
+    {
+     "line": 19,
+     "kind": "ant-class",
+     "text": "const MASK = '.ant-image-preview-mask, .orbit-image-preview-mask';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-selector",
+     "text": "const SINGLE = '.ant-image, .orbit-image';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-class",
+     "text": "const SINGLE = '.ant-image, .orbit-image';"
+    },
+    {
+     "line": 63,
+     "kind": "ant-selector",
+     "text": "const body = view.querySelector('.ant-image-preview-body, .orbit-image-preview-body');"
+    },
+    {
+     "line": 63,
+     "kind": "ant-class",
+     "text": "const body = view.querySelector('.ant-image-preview-body, .orbit-image-preview-body');"
+    },
+    {
+     "line": 105,
+     "kind": "ant-class",
+     "text": "const own = (img) => [...img.classList].filter((name) => !/^(?:ant-|orbit-image|css-)/.test(name)).join(' ');"
+    },
+    {
+     "line": 135,
+     "kind": "antd-reference",
+     "text": "// The runtime census: AntD-classed elements in the conversation, the composer's attachments and the viewer, by"
+    },
+    {
+     "line": 137,
+     "kind": "antd-reference",
+     "text": "antd: [...new Set(scope.flatMap((root) => [root, ...root.querySelectorAll('[class*=\"ant-\"]')])"
+    },
+    {
+     "line": 137,
+     "kind": "ant-class",
+     "text": "antd: [...new Set(scope.flatMap((root) => [root, ...root.querySelectorAll('[class*=\"ant-\"]')])"
+    },
+    {
+     "line": 139,
+     "kind": "ant-class",
+     "text": ".flatMap((el) => [...el.classList].filter((token) => token.startsWith('ant-') && !token.startsWith('anticon'))"
+    },
+    {
+     "line": 231,
+     "kind": "ant-selector",
+     "text": "await capture('p52-diagram-hover', { diagram, cover: diagram.locator('.ant-image-cover, .orbit-image-cover') });"
+    },
+    {
+     "line": 231,
+     "kind": "ant-class",
+     "text": "await capture('p52-diagram-hover', { diagram, cover: diagram.locator('.ant-image-cover, .orbit-image-cover') });"
+    },
+    {
+     "line": 459,
+     "kind": "ant-selector",
+     "text": "await capture('p52-composer-chip-hover', { chip, cover: chip.locator('.ant-image-cover, .orbit-image-cover') });"
+    },
+    {
+     "line": 459,
+     "kind": "ant-class",
+     "text": "await capture('p52-composer-chip-hover', { chip, cover: chip.locator('.ant-image-cover, .orbit-image-cover') });"
+    },
+    {
+     "line": 566,
+     "kind": "ant-selector",
+     "text": "const body = view?.querySelector('.ant-image-preview-body, .orbit-image-preview-body');"
+    },
+    {
+     "line": 566,
+     "kind": "ant-class",
+     "text": "const body = view?.querySelector('.ant-image-preview-body, .orbit-image-preview-body');"
+    }
+   ]
+  },
+  {
+   "file": "p52.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P5.2",
+   "purpose": "transcript pictures and their preview",
+   "lines": []
+  },
+  {
+   "file": "p53-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P5.3",
+   "purpose": "the session workspace",
+   "lines": []
+  },
+  {
+   "file": "p53.browser.mjs",
+   "imports": [],
+   "hits": 38,
+   "batch": "P5.3",
+   "purpose": "the session workspace",
+   "lines": [
+    {
+     "line": 12,
+     "kind": "antd-reference",
+     "text": "// classes, so the same file drives the replaced AntD controls (same-commit reference tree) and the Orbit ones; a box"
+    },
+    {
+     "line": 17,
+     "kind": "antd-reference",
+     "text": "// An open popup of either kind: AntD keeps a closed dropdown in the page, hidden; Orbit unmounts it."
+    },
+    {
+     "line": 20,
+     "kind": "ant-selector",
+     "text": "const POPOVER = '.ant-popover, .orbit-popover';"
+    },
+    {
+     "line": 20,
+     "kind": "ant-class",
+     "text": "const POPOVER = '.ant-popover, .orbit-popover';"
+    },
+    {
+     "line": 21,
+     "kind": "ant-selector",
+     "text": "const SELECT_POPUP = '.ant-select-dropdown, .orbit-select-popup';"
+    },
+    {
+     "line": 21,
+     "kind": "ant-class",
+     "text": "const SELECT_POPUP = '.ant-select-dropdown, .orbit-select-popup';"
+    },
+    {
+     "line": 75,
+     "kind": "ant-class",
+     "text": "el.getAttribute('aria-disabled') === 'true' || el.hasAttribute('data-disabled') || el.classList.contains('ant-dropdown-menu-item-disabled') ? 'disabled' : null,"
+    },
+    {
+     "line": 76,
+     "kind": "ant-class",
+     "text": "el.hasAttribute('data-selected') || el.classList.contains('ant-dropdown-menu-item-selected') ? 'selected' : null,"
+    },
+    {
+     "line": 85,
+     "kind": "antd-reference",
+     "text": "// Group headings, in AntD's and Orbit's class names."
+    },
+    {
+     "line": 86,
+     "kind": "ant-selector",
+     "text": "const heading = (el) => (el.matches('.ant-dropdown-menu-item-group-title, .orbit-menu-group-label') ? `# ${words(el)}` : null);"
+    },
+    {
+     "line": 86,
+     "kind": "ant-class",
+     "text": "const heading = (el) => (el.matches('.ant-dropdown-menu-item-group-title, .orbit-menu-group-label') ? `# ${words(el)}` : null);"
+    },
+    {
+     "line": 87,
+     "kind": "ant-selector",
+     "text": "const menus = [...document.querySelectorAll(MENU)].filter(shown).map((menu) => [...menu.querySelectorAll('[role=\"menuitem\"], [role=\"menuitemcheckbox\"], [role=\"separator\"], .ant-dropdown-menu-item-group-title, .orbit-menu-group-label')]"
+    },
+    {
+     "line": 87,
+     "kind": "ant-class",
+     "text": "const menus = [...document.querySelectorAll(MENU)].filter(shown).map((menu) => [...menu.querySelectorAll('[role=\"menuitem\"], [role=\"menuitemcheckbox\"], [role=\"separator\"], .ant-dropdown-menu-item-group-title, .orbit-menu-group-label')]"
+    },
+    {
+     "line": 89,
+     "kind": "ant-selector",
+     "text": "const options = [...document.querySelectorAll(SELECT_POPUP)].filter(shown).map((list) => [...list.querySelectorAll('[role=\"option\"], .ant-select-item-option')]"
+    },
+    {
+     "line": 89,
+     "kind": "ant-class",
+     "text": "const options = [...document.querySelectorAll(SELECT_POPUP)].filter(shown).map((list) => [...list.querySelectorAll('[role=\"option\"], .ant-select-item-option')]"
+    },
+    {
+     "line": 90,
+     "kind": "ant-class",
+     "text": ".filter(shown).map((el) => `${words(el)}${el.getAttribute('aria-disabled') === 'true' || el.classList.contains('ant-select-item-option-disabled') ? ' [disabled]' : ''}${el.getAttribute('aria-selected') === 'true' || el.classList.contains('ant-select-item-option-selected') ? ' [selected]' : ''}`));"
+    },
+    {
+     "line": 93,
+     "kind": "ant-selector",
+     "text": "title: words(el.querySelector('.ant-modal-confirm-title, .ant-modal-title, .orbit-overlay-title, [id] h2')),"
+    },
+    {
+     "line": 93,
+     "kind": "ant-class",
+     "text": "title: words(el.querySelector('.ant-modal-confirm-title, .ant-modal-title, .orbit-overlay-title, [id] h2')),"
+    },
+    {
+     "line": 99,
+     "kind": "ant-class",
+     "text": "const census = [...new Set([...document.querySelectorAll('[class*=\"ant-\"]')].filter(shown)"
+    },
+    {
+     "line": 100,
+     "kind": "ant-class",
+     "text": ".flatMap((el) => [...el.classList].filter((token) => token.startsWith('ant-') && !token.startsWith('anticon'))"
+    },
+    {
+     "line": 112,
+     "kind": "ant-class",
+     "text": "send: [...document.querySelectorAll('.composer-send')].map((button) => `${label(button)}${button.disabled ? ' (disabled)' : ''}${button.getAttribute('aria-busy') === 'true' || button.classList.contains('ant-btn-loading') ? ' (busy)' : ''}`),"
+    },
+    {
+     "line": 115,
+     "kind": "ant-selector",
+     "text": "pickers: [...document.querySelectorAll('.composer-toolbar .ant-select, .composer-toolbar .orbit-select')].map(words),"
+    },
+    {
+     "line": 115,
+     "kind": "ant-class",
+     "text": "pickers: [...document.querySelectorAll('.composer-toolbar .ant-select, .composer-toolbar .orbit-select')].map(words),"
+    },
+    {
+     "line": 126,
+     "kind": "antd-reference",
+     "text": "antd: census,"
+    },
+    {
+     "line": 387,
+     "kind": "ant-selector",
+     "text": "const thumbnail = page.locator('.composer-attach .ant-image, .composer-attach .orbit-image').first();"
+    },
+    {
+     "line": 387,
+     "kind": "ant-class",
+     "text": "const thumbnail = page.locator('.composer-attach .ant-image, .composer-attach .orbit-image').first();"
+    },
+    {
+     "line": 395,
+     "kind": "ant-selector",
+     "text": "await expect(page.locator('.ant-image-preview, .orbit-image-preview').filter({ visible: true })).toBeVisible();"
+    },
+    {
+     "line": 395,
+     "kind": "ant-class",
+     "text": "await expect(page.locator('.ant-image-preview, .orbit-image-preview').filter({ visible: true })).toBeVisible();"
+    },
+    {
+     "line": 398,
+     "kind": "ant-selector",
+     "text": "await capture('p53-attach-preview', { viewer: '.ant-image-preview-img, .orbit-image-preview-img' });"
+    },
+    {
+     "line": 398,
+     "kind": "ant-class",
+     "text": "await capture('p53-attach-preview', { viewer: '.ant-image-preview-img, .orbit-image-preview-img' });"
+    },
+    {
+     "line": 400,
+     "kind": "ant-selector",
+     "text": "await expect(page.locator('.ant-image-preview, .orbit-image-preview').filter({ visible: true })).toHaveCount(0);"
+    },
+    {
+     "line": 400,
+     "kind": "ant-class",
+     "text": "await expect(page.locator('.ant-image-preview, .orbit-image-preview').filter({ visible: true })).toHaveCount(0);"
+    },
+    {
+     "line": 445,
+     "kind": "ant-selector",
+     "text": "const mode = page.locator('.composer-toolbar .ant-select, .composer-toolbar .orbit-select').last();"
+    },
+    {
+     "line": 445,
+     "kind": "ant-class",
+     "text": "const mode = page.locator('.composer-toolbar .ant-select, .composer-toolbar .orbit-select').last();"
+    },
+    {
+     "line": 754,
+     "kind": "ant-selector",
+     "text": "await expect(page.locator('.orbit-spinner, .ant-spin').filter({ visible: true }).first()).toBeVisible();"
+    },
+    {
+     "line": 754,
+     "kind": "ant-class",
+     "text": "await expect(page.locator('.orbit-spinner, .ant-spin').filter({ visible: true }).first()).toBeVisible();"
+    },
+    {
+     "line": 760,
+     "kind": "ant-selector",
+     "text": "await capture('p53-not-found', { result: '.ant-result, .orbit-result', home: '.ant-result button, .orbit-result button' });"
+    },
+    {
+     "line": 760,
+     "kind": "ant-class",
+     "text": "await capture('p53-not-found', { result: '.ant-result, .orbit-result', home: '.ant-result button, .orbit-result button' });"
+    }
+   ]
+  },
+  {
+   "file": "p53.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P5.3",
+   "purpose": "the session workspace",
+   "lines": []
+  },
+  {
+   "file": "pilot-fixtures.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P3.2",
+   "purpose": "the task detail / share / attachments pilot (pilot.config.mjs)",
+   "lines": []
+  },
+  {
+   "file": "pilot-performance.browser.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P3.2",
+   "purpose": "the task detail / share / attachments pilot (pilot.config.mjs)",
+   "lines": []
+  },
+  {
+   "file": "pilot.browser.mjs",
+   "imports": [],
+   "hits": 2,
+   "batch": "P3.2",
+   "purpose": "the task detail / share / attachments pilot (pilot.config.mjs)",
+   "lines": [
+    {
+     "line": 21,
+     "kind": "ant-selector",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    },
+    {
+     "line": 21,
+     "kind": "ant-class",
+     "text": "const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';"
+    }
+   ]
+  },
+  {
+   "file": "pilot.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P3.2",
+   "purpose": "the task detail / share / attachments pilot (pilot.config.mjs)",
+   "lines": []
+  },
+  {
+   "file": "reviews.check.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P2 integration fix 34a0sy3NmYy7MLbOcqhkW",
+   "purpose": "compact review cards (reviews.config.mjs)",
+   "lines": []
+  },
+  {
+   "file": "reviews.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "P2 integration fix 34a0sy3NmYy7MLbOcqhkW",
+   "purpose": "compact review cards (reviews.config.mjs)",
+   "lines": []
+  },
+  {
+   "file": "reviews.html",
+   "imports": [],
+   "hits": 0,
+   "batch": "P2 integration fix 34a0sy3NmYy7MLbOcqhkW",
+   "purpose": "compact review cards (reviews.config.mjs)",
+   "lines": []
+  },
+  {
+   "file": "reviews.tsx",
+   "imports": [],
+   "hits": 0,
+   "batch": "P2 integration fix 34a0sy3NmYy7MLbOcqhkW",
+   "purpose": "compact review cards (reviews.config.mjs)",
+   "lines": []
+  },
+  {
+   "file": "tasks-toolbar.browser.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "WebKit tasks toolbar fix 34coPBqt8gi229cVNds0E",
+   "purpose": "tasks toolbar geometry",
+   "lines": []
+  },
+  {
+   "file": "tasks-toolbar.config.mjs",
+   "imports": [],
+   "hits": 0,
+   "batch": "WebKit tasks toolbar fix 34coPBqt8gi229cVNds0E",
+   "purpose": "tasks toolbar geometry",
+   "lines": []
+  }
+ ]
+}

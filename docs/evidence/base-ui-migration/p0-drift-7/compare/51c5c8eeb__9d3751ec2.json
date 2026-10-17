@@ -1,0 +1,3281 @@
+{
+ "summary": {
+  "dirA": "/mnt/data/tmp/34cswWfvNasFTq8kDM0Q4/runs/full-51c5c8eeb/snapshots",
+  "dirB": "/mnt/data/tmp/34cswWfvNasFTq8kDM0Q4/runs/full-9d3751ec2/snapshots",
+  "total": 252,
+  "missing": 0,
+  "same": 179,
+  "noise": 17,
+  "changed": [
+   "chromium-dark-desktop/breakpoint-959-session.png",
+   "chromium-dark-desktop/breakpoint-961-session.png",
+   "chromium-dark-desktop/notification-error.png",
+   "chromium-dark-desktop/session-attachment-menu.png",
+   "chromium-dark-desktop/session-attachment-staged.png",
+   "chromium-dark-desktop/session-composer-focus.png",
+   "chromium-dark-desktop/session-idle.png",
+   "chromium-dark-desktop/session-streaming.png",
+   "chromium-dark-phone/notification-error.png",
+   "chromium-dark-phone/session-attachment-menu.png",
+   "chromium-dark-phone/session-attachment-staged.png",
+   "chromium-dark-phone/session-composer-focus.png",
+   "chromium-dark-phone/session-idle.png",
+   "chromium-dark-phone/session-streaming.png",
+   "chromium-light-desktop/breakpoint-959-session.png",
+   "chromium-light-desktop/breakpoint-961-session.png",
+   "chromium-light-desktop/notification-error.png",
+   "chromium-light-desktop/session-attachment-menu.png",
+   "chromium-light-desktop/session-attachment-staged.png",
+   "chromium-light-desktop/session-composer-focus.png",
+   "chromium-light-desktop/session-idle.png",
+   "chromium-light-desktop/session-streaming.png",
+   "chromium-light-phone/notification-error.png",
+   "chromium-light-phone/session-attachment-menu.png",
+   "chromium-light-phone/session-attachment-staged.png",
+   "chromium-light-phone/session-composer-focus.png",
+   "chromium-light-phone/session-idle.png",
+   "chromium-light-phone/session-streaming.png",
+   "webkit-dark-desktop/breakpoint-959-session.png",
+   "webkit-dark-desktop/breakpoint-961-session.png",
+   "webkit-dark-desktop/notification-error.png",
+   "webkit-dark-desktop/session-attachment-menu.png",
+   "webkit-dark-desktop/session-attachment-staged.png",
+   "webkit-dark-desktop/session-composer-focus.png",
+   "webkit-dark-desktop/session-idle.png",
+   "webkit-dark-desktop/session-streaming.png",
+   "webkit-dark-phone/notification-error.png",
+   "webkit-dark-phone/session-attachment-menu.png",
+   "webkit-dark-phone/session-attachment-staged.png",
+   "webkit-dark-phone/session-composer-focus.png",
+   "webkit-dark-phone/session-idle.png",
+   "webkit-dark-phone/session-streaming.png",
+   "webkit-light-desktop/breakpoint-959-session.png",
+   "webkit-light-desktop/breakpoint-961-session.png",
+   "webkit-light-desktop/notification-error.png",
+   "webkit-light-desktop/session-attachment-menu.png",
+   "webkit-light-desktop/session-attachment-staged.png",
+   "webkit-light-desktop/session-composer-focus.png",
+   "webkit-light-desktop/session-idle.png",
+   "webkit-light-desktop/session-streaming.png",
+   "webkit-light-phone/notification-error.png",
+   "webkit-light-phone/session-attachment-menu.png",
+   "webkit-light-phone/session-attachment-staged.png",
+   "webkit-light-phone/session-composer-focus.png",
+   "webkit-light-phone/session-idle.png",
+   "webkit-light-phone/session-streaming.png"
+  ],
+  "p0ComparatorFails": []
+ },
+ "rows": [
+  {
+   "file": "chromium-dark-desktop/breakpoint-599-dialog.png",
+   "sha256A": "a8d4c1687cfd60124091621fd0e8c145174237323c52e66d98e00065b9a80a04",
+   "sha256B": "a8d4c1687cfd60124091621fd0e8c145174237323c52e66d98e00065b9a80a04",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-599-share.png",
+   "sha256A": "44f28d51b4be65e5cc57341f000ed1206a135ce13df4c7fc6da3cf5a19d753a6",
+   "sha256B": "44f28d51b4be65e5cc57341f000ed1206a135ce13df4c7fc6da3cf5a19d753a6",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-601-dialog.png",
+   "sha256A": "2a1f94c39e54e2fd22a5875296d5a37d9bbeeae9dfe9613a2f81532c7833ba96",
+   "sha256B": "2a1f94c39e54e2fd22a5875296d5a37d9bbeeae9dfe9613a2f81532c7833ba96",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-601-share.png",
+   "sha256A": "ee7f345a8ae0c4427599e6e3183daa54c3eba4a5f1b8c5db7ba724b043be8e77",
+   "sha256B": "ee7f345a8ae0c4427599e6e3183daa54c3eba4a5f1b8c5db7ba724b043be8e77",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-639-graph.png",
+   "sha256A": "9dccdcef4db9de1e43491be08841f32a1fd4e401a3e0f7649b408ec732d360d3",
+   "sha256B": "9dccdcef4db9de1e43491be08841f32a1fd4e401a3e0f7649b408ec732d360d3",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-639-projects.png",
+   "sha256A": "92671f312c24aa02a6185f52dd92486cc82770530272e1541e28c15f0cd8bef1",
+   "sha256B": "128218565194f26290e5d44d9f724f74a51878e3e96152eb21a171cc104deeca",
+   "bytesEqual": false,
+   "differentPixels": 7,
+   "maxChannelDelta": 4,
+   "box": {
+    "x": 18,
+    "y": 192,
+    "width": 4,
+    "height": 32
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-641-graph.png",
+   "sha256A": "dbc687038cf25a5c797413d1ffe5850c001fed431ad5b1a863e80945ee1a9ca7",
+   "sha256B": "47712e2f7751cdf3312e3d7b76bfb5479dcdb61a70541e87ee2c1e668dfc8486",
+   "bytesEqual": false,
+   "differentPixels": 3,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 16,
+    "y": 840,
+    "width": 2,
+    "height": 3
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-641-projects.png",
+   "sha256A": "171027981201740cffbe4ebaefe52aad282bd8057b008e589311252eb12c283c",
+   "sha256B": "171027981201740cffbe4ebaefe52aad282bd8057b008e589311252eb12c283c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-959-session.png",
+   "sha256A": "008aa398f75d4836ecc779ff0936124da4e39c449c858b8f84f5d8aee3ac96d6",
+   "sha256B": "d1c379a13d2cf864d563698f84cae58bdcfe9269ef5edd2a58b3daf4c033a2c9",
+   "bytesEqual": false,
+   "differentPixels": 2802,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 94,
+    "width": 931,
+    "height": 695
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-959-wiki.png",
+   "sha256A": "65cddc1a00dfb6b5a5585ef7a1f950b7e475793a7b582041e1000e2dca5a7227",
+   "sha256B": "65cddc1a00dfb6b5a5585ef7a1f950b7e475793a7b582041e1000e2dca5a7227",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-961-session.png",
+   "sha256A": "85b53f5b6722d1adbf849faeea62421552d978707ac0b02114fa0ff65c09809e",
+   "sha256B": "c188301f26ca40f218afa644a6b3fbff1e9ef6d83d4e98c7955856ff2d091213",
+   "bytesEqual": false,
+   "differentPixels": 2202,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 104,
+    "width": 320,
+    "height": 685
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-desktop/breakpoint-961-wiki.png",
+   "sha256A": "92b1f659d4a160ba376169c8a1bb7e777224e2039c9b8476d9347303ee104bbe",
+   "sha256B": "da51c547dca8e774a23530093ecaca77d23f969edf40ec10e7266576c231ab08",
+   "bytesEqual": false,
+   "differentPixels": 6,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 496,
+    "y": 24,
+    "width": 4,
+    "height": 3
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/notification-error.png",
+   "sha256A": "edc547196540cc4ec963e1e9a12d34025e73d63b1df7fe51456e813ea33f74a4",
+   "sha256B": "4d050829259093fdd073e3678b0ddba82b6ae0d9a0e20c2d1ea3992b5386519a",
+   "bytesEqual": false,
+   "differentPixels": 1192,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 196,
+    "width": 639,
+    "height": 593
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-desktop/profile-validation.png",
+   "sha256A": "40598d3e0732b6201ec10bcb202be431e06355d11711549d1bdea56da64fc530",
+   "sha256B": "4f9aef5bbdd513d5ef67c85b2af28762c530d457a80aa3f9d50d3e0e248c505d",
+   "bytesEqual": false,
+   "differentPixels": 47,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 500,
+    "y": 242,
+    "width": 560,
+    "height": 656
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/profile.png",
+   "sha256A": "7521aef91eca4d1e95a7bf104b7b0ba705e91457859d0cbd1ca7bc552b6773ce",
+   "sha256B": "7521aef91eca4d1e95a7bf104b7b0ba705e91457859d0cbd1ca7bc552b6773ce",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/project-graph-fullscreen.png",
+   "sha256A": "af2e8aecb2e0956c2f0bb80ed91fbe0e6d44567bedb80eabbe7e3a96c8d9c092",
+   "sha256B": "af2e8aecb2e0956c2f0bb80ed91fbe0e6d44567bedb80eabbe7e3a96c8d9c092",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/project-graph.png",
+   "sha256A": "ef6f29167f86dbd5647d05ef3d1d8cdcfce17bfff013b8c0bdb80610ab8faa36",
+   "sha256B": "ef6f29167f86dbd5647d05ef3d1d8cdcfce17bfff013b8c0bdb80610ab8faa36",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/project-overview.png",
+   "sha256A": "9a9430209e3ace78dfa766820d9e6525bd752600d5692b231ea81fedf956f0a1",
+   "sha256B": "74707929927d16eea7e1615fc330989d9c94c6a3ea9931183710a3ef2b77af63",
+   "bytesEqual": false,
+   "differentPixels": 6,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 312,
+    "y": 154,
+    "width": 2,
+    "height": 4
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/projects-error.png",
+   "sha256A": "d5cca31aba9993385c5192197d08fab73d0b658ec04b1eee1f000d6d946ffaf5",
+   "sha256B": "d5cca31aba9993385c5192197d08fab73d0b658ec04b1eee1f000d6d946ffaf5",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/projects-list.png",
+   "sha256A": "f5fec665bbad01468b4026041651687d91b38abae2bfde7bef1e893acd856b79",
+   "sha256B": "035ab67a19a0c3bd8ed1e7bd8297681f00eaa11cde7e49a809a96f9d14c5afc0",
+   "bytesEqual": false,
+   "differentPixels": 6,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 330,
+    "y": 98,
+    "width": 2,
+    "height": 4
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/projects-loading.png",
+   "sha256A": "8998c10fd3543010ea773f3fc2398edad288232db80f4c1e3bd4de0be540e91e",
+   "sha256B": "8998c10fd3543010ea773f3fc2398edad288232db80f4c1e3bd4de0be540e91e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/projects-search-empty.png",
+   "sha256A": "23d5d9992dd5753221d0a94daef2c41fa611077ab3923453f419aa951323264f",
+   "sha256B": "23d5d9992dd5753221d0a94daef2c41fa611077ab3923453f419aa951323264f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/session-attachment-menu.png",
+   "sha256A": "464e6a59268c557967a8afad860812cb2336e8ac3949fea38cb1b150809c8958",
+   "sha256B": "530e19fd74305b1937f0a938ab1034111a0acc48b5bda6d7047e51d14820782b",
+   "bytesEqual": false,
+   "differentPixels": 2926,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 104,
+    "width": 639,
+    "height": 661
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-desktop/session-attachment-staged.png",
+   "sha256A": "64218214cc15857776ba719c8781e8032fefd2d95a140d136447cb126299d546",
+   "sha256B": "965e331b55d13b24ee5ba9cbeefa4d691d767ed06765def0c3e3e634338f2048",
+   "bytesEqual": false,
+   "differentPixels": 3045,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 104,
+    "width": 639,
+    "height": 620
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-desktop/session-composer-focus.png",
+   "sha256A": "bf3f3844ddc52d7bce20c452b1986d44bf1b29eae9bb5ddc16663eb283066aa1",
+   "sha256B": "f840964ec7f258ee816774ac00d60e9f434044051c2226f009fd746ec3d82d9e",
+   "bytesEqual": false,
+   "differentPixels": 3045,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 104,
+    "width": 639,
+    "height": 661
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-desktop/session-idle.png",
+   "sha256A": "5581f65cec369e3806a3a0a0829d293696065a03400c7a4147f222ec7d15a654",
+   "sha256B": "aa1b6e6e88ab6511bd777fab4d962d7b043f3c0604fb8bd017df779405884fd8",
+   "bytesEqual": false,
+   "differentPixels": 2536,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 104,
+    "width": 639,
+    "height": 685
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-desktop/session-streaming.png",
+   "sha256A": "abb3d6397f7b4e6c7287b1b8006cc1079dd46fed3051cce2229840fd997aa83b",
+   "sha256B": "f3d446b92e09a6313de27a995550927fda4caed33368c44b5abb1b3feda025a0",
+   "bytesEqual": false,
+   "differentPixels": 3019,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 104,
+    "width": 639,
+    "height": 685
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-desktop/settings-saved.png",
+   "sha256A": "8f7ec8b463f419562c2e28d85d6a7e176f2fa5767e7494c5484e9980e93f862f",
+   "sha256B": "8f7ec8b463f419562c2e28d85d6a7e176f2fa5767e7494c5484e9980e93f862f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/settings.png",
+   "sha256A": "0bb811ccda2151e9fffa9a3c57046cb1e86874602147a2e8a9522851914d00cc",
+   "sha256B": "0bb811ccda2151e9fffa9a3c57046cb1e86874602147a2e8a9522851914d00cc",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/task-action-focus.png",
+   "sha256A": "bb2c4bfaf16435afa05cacbd40c5b05d0385c34e782562064486e2900b1d2aa9",
+   "sha256B": "3df609a2c08f3a46cccbfe19d24f3ada6f8552d9f01eb9a429a4108e3844a242",
+   "bytesEqual": false,
+   "differentPixels": 3,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 312,
+    "y": 175,
+    "width": 2,
+    "height": 2
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/task-action-hover.png",
+   "sha256A": "d5289d46f71f9e1c6dec13a9c7a1dda296a548fad0488ded7de21a98cc94f24d",
+   "sha256B": "651f8cce3992d8943abe404683c9b4aef944cfc8d3e600e1639eaa395853bd57",
+   "bytesEqual": false,
+   "differentPixels": 3,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 312,
+    "y": 175,
+    "width": 2,
+    "height": 2
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/task-action-menu.png",
+   "sha256A": "f25867226da7cf56e5ddb500545e331cf56447d14a8b9dfca4fd5ce072c01fee",
+   "sha256B": "f25867226da7cf56e5ddb500545e331cf56447d14a8b9dfca4fd5ce072c01fee",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/task-detail.png",
+   "sha256A": "285423c4359a840c4aa6ed959ce9aab93dfc98f17b774fa33d27ce67de573b72",
+   "sha256B": "2b715852439d7fa49b87cdcdcfa19f081c9f2a0aab1efc6dc404293856093cd5",
+   "bytesEqual": false,
+   "differentPixels": 3,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 312,
+    "y": 175,
+    "width": 2,
+    "height": 2
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-desktop/task-public-share.png",
+   "sha256A": "7b0843aed860e884a277b1090b01150873daf095e649a531c84da56f31f6ff2c",
+   "sha256B": "7b0843aed860e884a277b1090b01150873daf095e649a531c84da56f31f6ff2c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/task-share-dialog.png",
+   "sha256A": "4d8e1b6a6796a0432cca1f79b8528047b8afbd8ce4baa79a6cbf99d2ead5ba38",
+   "sha256B": "4d8e1b6a6796a0432cca1f79b8528047b8afbd8ce4baa79a6cbf99d2ead5ba38",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/wiki-home.png",
+   "sha256A": "f9cead60b48f95558e5b22f601f5fc6b7dbfe7a9263efaadb2320e3e8c21900f",
+   "sha256B": "f9cead60b48f95558e5b22f601f5fc6b7dbfe7a9263efaadb2320e3e8c21900f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-desktop/wiki-new-entry.png",
+   "sha256A": "e9da2ac92546dee57853d1642f092ec90ba86b972017c26093226d8469987896",
+   "sha256B": "e9da2ac92546dee57853d1642f092ec90ba86b972017c26093226d8469987896",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/notification-error.png",
+   "sha256A": "a39ba5a227b1e9d8918d951764fffaddffb42d15dac9c97e7e2c457ce057f079",
+   "sha256B": "0bb67799ae1d1a18ef0702ea11e88ede710a8af9d83bd4445ee6243cf4c30295",
+   "bytesEqual": false,
+   "differentPixels": 848,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 259,
+    "width": 362,
+    "height": 474
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-phone/profile-validation.png",
+   "sha256A": "15f5aeb26991232ee5ade4aac7c4a057460cd9dcf0360d85c274fc337b62b76a",
+   "sha256B": "15f5aeb26991232ee5ade4aac7c4a057460cd9dcf0360d85c274fc337b62b76a",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/profile.png",
+   "sha256A": "5a266cd0deb90ba08e9bd2503f7ccc2b7ab44a87b225141d513078815a7b6020",
+   "sha256B": "5a266cd0deb90ba08e9bd2503f7ccc2b7ab44a87b225141d513078815a7b6020",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/project-graph-fullscreen.png",
+   "sha256A": "c21d31f9bfb0dc2207b9838505fb5d8b9c962c9a8be513e1a2bf224de3392b04",
+   "sha256B": "c21d31f9bfb0dc2207b9838505fb5d8b9c962c9a8be513e1a2bf224de3392b04",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/project-graph.png",
+   "sha256A": "e4eacd8d6f1f434a1b99f982fd58beddfbf115cd51082843a62f855b70d6f296",
+   "sha256B": "e4eacd8d6f1f434a1b99f982fd58beddfbf115cd51082843a62f855b70d6f296",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/project-overview.png",
+   "sha256A": "8b50e9973cde6c3822b2359f961fcb3a44ea8c834bad202c5bfee91d0022855c",
+   "sha256B": "8b50e9973cde6c3822b2359f961fcb3a44ea8c834bad202c5bfee91d0022855c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/projects-error.png",
+   "sha256A": "e63566cbeea337d9474a12267eaec1a86a7a4bea7649be9b5e50f2816347ca57",
+   "sha256B": "e63566cbeea337d9474a12267eaec1a86a7a4bea7649be9b5e50f2816347ca57",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/projects-list.png",
+   "sha256A": "06fb19e4b30a9b51690fb2a3dfbaf0e0628b6d5bdfe3e713c9168e86afa73e86",
+   "sha256B": "0a8be67e46e7baf377b8e9f6842165a46ef713ff5e8fd1e168307d75859328ea",
+   "bytesEqual": false,
+   "differentPixels": 7,
+   "maxChannelDelta": 4,
+   "box": {
+    "x": 18,
+    "y": 192,
+    "width": 4,
+    "height": 32
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-phone/projects-loading.png",
+   "sha256A": "1614aa0e4d60b611754415281630f307085f93381245f3c1d8129de81d20f69f",
+   "sha256B": "1614aa0e4d60b611754415281630f307085f93381245f3c1d8129de81d20f69f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/projects-search-empty.png",
+   "sha256A": "2183f0e6d5f26ff1c2b81de94660336020f4ed799b06c7854749338c19f08802",
+   "sha256B": "ad4d2042668ddad43527cfa4a22f729c1271e432b892838579c492924b0ec0c0",
+   "bytesEqual": false,
+   "differentPixels": 13,
+   "maxChannelDelta": 4,
+   "box": {
+    "x": 18,
+    "y": 149,
+    "width": 4,
+    "height": 75
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-dark-phone/session-attachment-menu.png",
+   "sha256A": "46ab48139e17d6555f6c49e5d68e58a50c4c14a838707856d8e3ad35d8d0e005",
+   "sha256B": "168e58d666bea0fff181ca97fb04d8f15d743efa4272ed0249e9f69e35b8e497",
+   "bytesEqual": false,
+   "differentPixels": 2465,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 620
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-phone/session-attachment-staged.png",
+   "sha256A": "279d6d0eb9821406958a8dafb4e6e37eb8552b5844b682aebf965f75c9e9bd6e",
+   "sha256B": "b78e6218a0c662f3125aae854c8bcc5e059549bbd1f1adfede9001f4ece20149",
+   "bytesEqual": false,
+   "differentPixels": 2711,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 579
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-phone/session-composer-focus.png",
+   "sha256A": "0ec715180c58ccd08e46f3107e59027bf75ffa2a10d734f948ed8b27cbe880e8",
+   "sha256B": "1bca9354ac731ebe9939e0b73d0392027554d92475c9b0cc8d614fd1c8c4e5a4",
+   "bytesEqual": false,
+   "differentPixels": 2711,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 620
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-phone/session-idle.png",
+   "sha256A": "3ac3611b06db78a2ff62cb702c421d677062df20311a9c59dc8f3eb855267a03",
+   "sha256B": "52f2e0d5f6c6dfe54426e26e6f3365b5137d5b3ccd92505cc66195c7a97cc9b9",
+   "bytesEqual": false,
+   "differentPixels": 2242,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 644
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-phone/session-streaming.png",
+   "sha256A": "3b18e7064deb3bbeaccc7f53b8bdf461aa0d1b777d12aeb1e3c7931132326324",
+   "sha256B": "da8d1128bbe1de1ea6ab62716f7cbfe24ffa9152b0e04cbf51c4841d401a5a6a",
+   "bytesEqual": false,
+   "differentPixels": 2711,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 644
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-dark-phone/settings-saved.png",
+   "sha256A": "5df35df360fb8b4736c962e56fc10b6c1a597a02e7547f018819a3cb0f09e3ad",
+   "sha256B": "5df35df360fb8b4736c962e56fc10b6c1a597a02e7547f018819a3cb0f09e3ad",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/settings.png",
+   "sha256A": "8f82671d9eb1e7be57baf347d90ee0dceaa116886417b7c0db662c599e7b2bcf",
+   "sha256B": "8f82671d9eb1e7be57baf347d90ee0dceaa116886417b7c0db662c599e7b2bcf",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-action-focus.png",
+   "sha256A": "b84799263fee89ccf7f8088fc99d7fa125327d5d896f255d662977588ad0d17c",
+   "sha256B": "b84799263fee89ccf7f8088fc99d7fa125327d5d896f255d662977588ad0d17c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-action-hover.png",
+   "sha256A": "832020df658d2d727559043faeee4c6680f6a2d799835bac100329298c638256",
+   "sha256B": "832020df658d2d727559043faeee4c6680f6a2d799835bac100329298c638256",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-action-menu.png",
+   "sha256A": "e5bbd20d11e74d07e03df024cf8cfe4a6c539dbfae711a810a8446551b530830",
+   "sha256B": "e5bbd20d11e74d07e03df024cf8cfe4a6c539dbfae711a810a8446551b530830",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-detail.png",
+   "sha256A": "feddbad5d9380c31a61900e5d4db4934220384b9179e12bba1816c12f0d90cea",
+   "sha256B": "feddbad5d9380c31a61900e5d4db4934220384b9179e12bba1816c12f0d90cea",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-public-share.png",
+   "sha256A": "6f5d09a6629db5b8f5bef019b2f244b5a751b90d1dc6691403d7f138a120117b",
+   "sha256B": "6f5d09a6629db5b8f5bef019b2f244b5a751b90d1dc6691403d7f138a120117b",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/task-share-dialog.png",
+   "sha256A": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37",
+   "sha256B": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/wiki-contents.png",
+   "sha256A": "57864eac86c00aaa15516ce2f74b0348c5b611a31e492218775cd600ecbee0dc",
+   "sha256B": "57864eac86c00aaa15516ce2f74b0348c5b611a31e492218775cd600ecbee0dc",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/wiki-home.png",
+   "sha256A": "170b95ca2bbd0c99eef4e9c042dd0447d7b9b92e8a2c90eb15409d67b4b1e7fe",
+   "sha256B": "170b95ca2bbd0c99eef4e9c042dd0447d7b9b92e8a2c90eb15409d67b4b1e7fe",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-dark-phone/wiki-new-entry.png",
+   "sha256A": "46134d646fac295df159e7e15acb746882c6a4be178f9d151dfc23ac99119717",
+   "sha256B": "46134d646fac295df159e7e15acb746882c6a4be178f9d151dfc23ac99119717",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-599-dialog.png",
+   "sha256A": "819762ce17b65952fc13a4e11f6ebeffc6dcab7cec9037b909250bf7ca114bf5",
+   "sha256B": "819762ce17b65952fc13a4e11f6ebeffc6dcab7cec9037b909250bf7ca114bf5",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-599-share.png",
+   "sha256A": "59ce81b7b27542bb3ab9d6ba0afd48d6cde516ada450c3d9b9471094deaf9f88",
+   "sha256B": "59ce81b7b27542bb3ab9d6ba0afd48d6cde516ada450c3d9b9471094deaf9f88",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-601-dialog.png",
+   "sha256A": "3f66283d449cc36db8f55ebd23dccca124b4f3a161dac7bce5f7c3c84ffad278",
+   "sha256B": "3f66283d449cc36db8f55ebd23dccca124b4f3a161dac7bce5f7c3c84ffad278",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-601-share.png",
+   "sha256A": "e0fb7cefb5368a5b2e9afa660dc01f53e7d60ced1470bdb42a2ac11976f8ee22",
+   "sha256B": "e0fb7cefb5368a5b2e9afa660dc01f53e7d60ced1470bdb42a2ac11976f8ee22",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-639-graph.png",
+   "sha256A": "0868ab643d46c3ae512a6229e2a9fe0d941e6a7b03a3d5bc87c7973e34a9cf68",
+   "sha256B": "0868ab643d46c3ae512a6229e2a9fe0d941e6a7b03a3d5bc87c7973e34a9cf68",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-639-projects.png",
+   "sha256A": "ae90a2a736a1e9c8e37d46fab052605547a542cfe727219138967e5778c54319",
+   "sha256B": "ae90a2a736a1e9c8e37d46fab052605547a542cfe727219138967e5778c54319",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-641-graph.png",
+   "sha256A": "cc7502b07bebb6759e34ce970b6728dce6b416cb411cc7703eade9cba50c1b07",
+   "sha256B": "cc7502b07bebb6759e34ce970b6728dce6b416cb411cc7703eade9cba50c1b07",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-641-projects.png",
+   "sha256A": "250a5bb3d7790f9796bfbde7c6c06be996f370351eeabfb35222991f1101674b",
+   "sha256B": "250a5bb3d7790f9796bfbde7c6c06be996f370351eeabfb35222991f1101674b",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-959-session.png",
+   "sha256A": "c538834029aeecf4d136872a784afaca5b714b075f5ce36e1003e8642c6ae933",
+   "sha256B": "d634a613f04a1991b4f65b9912311c7a7339670bfa938bdf3c9fd270d718a9bc",
+   "bytesEqual": false,
+   "differentPixels": 959,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 186,
+    "width": 931,
+    "height": 603
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-959-wiki.png",
+   "sha256A": "d5bbbb804d0e7bb6f0fdae575a3ba054cdc3db303da0a4195d91b2b7629d6bcf",
+   "sha256B": "d5bbbb804d0e7bb6f0fdae575a3ba054cdc3db303da0a4195d91b2b7629d6bcf",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-961-session.png",
+   "sha256A": "46a4ad8db8270b05984d02b49000f24cd27e90168be282c0aa6358bb47b22478",
+   "sha256B": "1776b646b7701c0f9c9127d45cddb20ccba3ba0d7e0302d54515934ed95d3a1d",
+   "bytesEqual": false,
+   "differentPixels": 367,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 269,
+    "width": 320,
+    "height": 520
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/breakpoint-961-wiki.png",
+   "sha256A": "8a78ac02b0c7a81c9b28da7583341ac3e5297afa5fdf4b8c14bc30c2d8619152",
+   "sha256B": "8a78ac02b0c7a81c9b28da7583341ac3e5297afa5fdf4b8c14bc30c2d8619152",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/notification-error.png",
+   "sha256A": "c3dbfedf3c1352c5bade5cd737e54163a316924199b8b4ade77ad6ba01b7fa52",
+   "sha256B": "02163be60a67b18b187b8609a66ec56ba886abeca8ebbdb6901171309d62ec05",
+   "bytesEqual": false,
+   "differentPixels": 732,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 196,
+    "width": 639,
+    "height": 593
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/profile-validation.png",
+   "sha256A": "15e140cacae184750b390fccd5ab0fbcfff55459e4f1f2404094eccc52a027cb",
+   "sha256B": "15e140cacae184750b390fccd5ab0fbcfff55459e4f1f2404094eccc52a027cb",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/profile.png",
+   "sha256A": "0f9986c6bfc461fa8860ba98f030239219ac557c32f1ce8393ff1800724eec15",
+   "sha256B": "0f9986c6bfc461fa8860ba98f030239219ac557c32f1ce8393ff1800724eec15",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/project-graph-fullscreen.png",
+   "sha256A": "a216d34fc7810ddba043beb1747bb01d5f2ad728400ff13a9fc8e5a1887b0b05",
+   "sha256B": "a216d34fc7810ddba043beb1747bb01d5f2ad728400ff13a9fc8e5a1887b0b05",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/project-graph.png",
+   "sha256A": "200967342d72d2a9cd5f62e8c4a0cbed9b3b7c202811f66703537bf5024b9364",
+   "sha256B": "200967342d72d2a9cd5f62e8c4a0cbed9b3b7c202811f66703537bf5024b9364",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/project-overview.png",
+   "sha256A": "10d556cbefd47409464d674ca131d94ac2efa66e905a17de116a593136a1facc",
+   "sha256B": "5b355e0cd35c3ef3a009971a60aba332cd5804e987984813596e7eb359891703",
+   "bytesEqual": false,
+   "differentPixels": 13,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 1246,
+    "y": 546,
+    "width": 2,
+    "height": 40
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-light-desktop/projects-error.png",
+   "sha256A": "1b56e0a8bfcdc0f816854113a7f8d5c851bda1690a23e9947ba3e07214a6e8f6",
+   "sha256B": "1b56e0a8bfcdc0f816854113a7f8d5c851bda1690a23e9947ba3e07214a6e8f6",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/projects-list.png",
+   "sha256A": "992ff55f6473f1f0e30f0d38e4a65253bc7bd586d4556234d0488f528ec949ae",
+   "sha256B": "b5858713c80ac3483d9b7483b53cc6f2b5b9dc3d0f6f43d475191bc453545659",
+   "bytesEqual": false,
+   "differentPixels": 7,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 330,
+    "y": 98,
+    "width": 3,
+    "height": 4
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-light-desktop/projects-loading.png",
+   "sha256A": "1799070d992b94a61cd1c6b1b2bb12961c76e2c522e55eeb9d54b7d96a546eb5",
+   "sha256B": "1799070d992b94a61cd1c6b1b2bb12961c76e2c522e55eeb9d54b7d96a546eb5",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/projects-search-empty.png",
+   "sha256A": "488ca122caf1d5252c9785f4cb7bbdfe636c81e55aa45306c81e7dcc8e61801e",
+   "sha256B": "488ca122caf1d5252c9785f4cb7bbdfe636c81e55aa45306c81e7dcc8e61801e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/session-attachment-menu.png",
+   "sha256A": "94bc945d76d47162448806122d87cf929fc62f4cccf1ab577054d645a094715d",
+   "sha256B": "b378568cfe0b508b6a89e59b03f3b71e7061b9b2c22fbf9b35e8ba071196f142",
+   "bytesEqual": false,
+   "differentPixels": 613,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 196,
+    "width": 639,
+    "height": 569
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/session-attachment-staged.png",
+   "sha256A": "81cc2c6afb0887817f9eb451878cb85e5ac61dbafe64fa840c57cf3a98b7b543",
+   "sha256B": "2368bda2093938fcf0d1ec44da790de831d0724623a6434e3a94c89afce4fa51",
+   "bytesEqual": false,
+   "differentPixels": 732,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 196,
+    "width": 639,
+    "height": 528
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/session-composer-focus.png",
+   "sha256A": "224144d8bdc13de8edd128524373e153633549717875e54a8194d5ac6f17403d",
+   "sha256B": "aa4169d0376e39726f0acef882a50203a514b88ad4ec5100d451d9f075aae3fa",
+   "bytesEqual": false,
+   "differentPixels": 732,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 196,
+    "width": 639,
+    "height": 569
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/session-idle.png",
+   "sha256A": "56d86d3cf954bd407302cd0a5c38bb6a4c491b09cb0d3f85e954ba3146c0a63e",
+   "sha256B": "b163c150f293226b8a72a1a8749c66cdb5491fda0bbeda24e26c695c20236db9",
+   "bytesEqual": false,
+   "differentPixels": 693,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 196,
+    "width": 639,
+    "height": 593
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/session-streaming.png",
+   "sha256A": "5b16f60a33ed8ef3b5da1dc1d1380cfe1a4d4df57c5530a47d93600aa1c80131",
+   "sha256B": "31cdf7d87171305ab37b73d2b85ec38d2350f07cf021985d3ee8eaf74fcb7a8c",
+   "bytesEqual": false,
+   "differentPixels": 706,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 196,
+    "width": 639,
+    "height": 593
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-desktop/settings-saved.png",
+   "sha256A": "a108623d260df558f209a179a44cb60ac9b3ea70b5b53e6ef986fdab1f99c13c",
+   "sha256B": "a108623d260df558f209a179a44cb60ac9b3ea70b5b53e6ef986fdab1f99c13c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/settings.png",
+   "sha256A": "6f6c1abcefc6f9dd164b0dc764d0259f54720c512fdd15e27aa704139f646b7a",
+   "sha256B": "6f6c1abcefc6f9dd164b0dc764d0259f54720c512fdd15e27aa704139f646b7a",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/task-action-focus.png",
+   "sha256A": "53fd92a21b5d363674f9fa8ac9257bc884d4be53cc48117102d9420003742042",
+   "sha256B": "59d812cafe17054aa3036ee13382ac7c1972780014f13e6b2e33d233ae442397",
+   "bytesEqual": false,
+   "differentPixels": 5,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 312,
+    "y": 174,
+    "width": 2,
+    "height": 3
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-light-desktop/task-action-hover.png",
+   "sha256A": "423757c0f7007210f39053660a428783818da7460c3ba2f2131497e420c3e4b3",
+   "sha256B": "40e6f75f0a244a054f9052658fc4956888b9c6c25f2b69e998c8c6973d982895",
+   "bytesEqual": false,
+   "differentPixels": 5,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 312,
+    "y": 174,
+    "width": 2,
+    "height": 3
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-light-desktop/task-action-menu.png",
+   "sha256A": "e9234a96e06fc13c50eac67f15521d088dcaf10f7577a2ee8210693dd174f76f",
+   "sha256B": "e9234a96e06fc13c50eac67f15521d088dcaf10f7577a2ee8210693dd174f76f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/task-detail.png",
+   "sha256A": "b99cd3fbdd0bf11de4d13aed94551cedd17227508add7d54839d6981434187c9",
+   "sha256B": "8887e70f502bea4d48cd92d31becfd7eb632e1a6d3a3b8103acf4dcf5227930c",
+   "bytesEqual": false,
+   "differentPixels": 5,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 312,
+    "y": 174,
+    "width": 2,
+    "height": 3
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-light-desktop/task-public-share.png",
+   "sha256A": "b6a708a53434ccc519901b82e9a02d6240bf241f48537f7378458d58c01480ab",
+   "sha256B": "b6a708a53434ccc519901b82e9a02d6240bf241f48537f7378458d58c01480ab",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/task-share-dialog.png",
+   "sha256A": "64f02d0417b70ffaa52c5a74be668ae4ebdc99d7ce407e90924b2c2629f36828",
+   "sha256B": "64f02d0417b70ffaa52c5a74be668ae4ebdc99d7ce407e90924b2c2629f36828",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/wiki-home.png",
+   "sha256A": "1ba1bc049828ef9251cf91bc2963ed2e2abfd012df428cbd8a94fbb57a696a28",
+   "sha256B": "1ba1bc049828ef9251cf91bc2963ed2e2abfd012df428cbd8a94fbb57a696a28",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-desktop/wiki-new-entry.png",
+   "sha256A": "c6936e21529463f165cd853adb9dbedcb7ca9e6df200e77819068b6cf1747b81",
+   "sha256B": "c6936e21529463f165cd853adb9dbedcb7ca9e6df200e77819068b6cf1747b81",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/notification-error.png",
+   "sha256A": "aaaeed0b6b8e4a71a7e855d20825bc9211bbbe2033a10699e6b2ec1b4b32dd97",
+   "sha256B": "878d8cd0da0bef99c79d05b778c7d1a06a2406bafcbf916df41da2b664a3c96e",
+   "bytesEqual": false,
+   "differentPixels": 394,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 229,
+    "width": 362,
+    "height": 504
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-phone/profile-validation.png",
+   "sha256A": "a88fcd764681dca10f85aa96a41be7407c2c0045b3d8adbfd36a1cb970e3c3ef",
+   "sha256B": "a88fcd764681dca10f85aa96a41be7407c2c0045b3d8adbfd36a1cb970e3c3ef",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/profile.png",
+   "sha256A": "4b966dec5ba6f0ccd0a48719d9682fc2758c7656d2dcfb956e9fa000fb9a880f",
+   "sha256B": "4b966dec5ba6f0ccd0a48719d9682fc2758c7656d2dcfb956e9fa000fb9a880f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/project-graph-fullscreen.png",
+   "sha256A": "5bbdd1f3349bec5251905e2d57de03894d1e270ba0977c708fd63efc0cd7da27",
+   "sha256B": "5bbdd1f3349bec5251905e2d57de03894d1e270ba0977c708fd63efc0cd7da27",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/project-graph.png",
+   "sha256A": "e607f487ff68030704825e83535601e49155e5334a0d8793ebbadce6e8cfd90c",
+   "sha256B": "e607f487ff68030704825e83535601e49155e5334a0d8793ebbadce6e8cfd90c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/project-overview.png",
+   "sha256A": "da93eb5caa592200f94152830ac5947ba390c485a080cc798cb201f8b44ce836",
+   "sha256B": "da93eb5caa592200f94152830ac5947ba390c485a080cc798cb201f8b44ce836",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/projects-error.png",
+   "sha256A": "18b3b9c5652c13f68d4647f4640ebbd5efb441bbb6f52231b7d3dcaa3d0fe41b",
+   "sha256B": "18b3b9c5652c13f68d4647f4640ebbd5efb441bbb6f52231b7d3dcaa3d0fe41b",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/projects-list.png",
+   "sha256A": "93c9a517fbfe60397330c8a4e8866c2d3984ffad74e009bdda4299a8e190d07e",
+   "sha256B": "93c9a517fbfe60397330c8a4e8866c2d3984ffad74e009bdda4299a8e190d07e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/projects-loading.png",
+   "sha256A": "f6b89be306f058e88fd69868e5e74027cd3cc836f8203346ae7c46d8f6731247",
+   "sha256B": "f6b89be306f058e88fd69868e5e74027cd3cc836f8203346ae7c46d8f6731247",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/projects-search-empty.png",
+   "sha256A": "64ab73ad7ea02e255dab79dcbb156f55ac0f8c6d31ac3b60d17074ffeb0c27c8",
+   "sha256B": "64ab73ad7ea02e255dab79dcbb156f55ac0f8c6d31ac3b60d17074ffeb0c27c8",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/session-attachment-menu.png",
+   "sha256A": "dc5f7432449838a2cffea5d79ccc588ecddb00547082fc9f0087464b1adbb41b",
+   "sha256B": "a6a5ebb78abd9f4705227e4ee6a44aa7c2152a59c5c58789be177bee5369216f",
+   "bytesEqual": false,
+   "differentPixels": 147,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 620
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-phone/session-attachment-staged.png",
+   "sha256A": "bd04e6a53bff61ef98519a4cf642458ae7050e55a12b5dc2cf6a101bf56c9856",
+   "sha256B": "5dfd09ce9aa97558b6f997e64e0f1f740a8605d0a40fd23d48218b5fb7a67af1",
+   "bytesEqual": false,
+   "differentPixels": 397,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 579
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-phone/session-composer-focus.png",
+   "sha256A": "263e22b9ffc9f9aad068e6fcd251fa30866c17ed8664abd1b78efb78891f3ea4",
+   "sha256B": "b461ffa052a168826ec2726b85e4b2c3c9b6e759fc307f8f505f36be33c1539d",
+   "bytesEqual": false,
+   "differentPixels": 397,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 620
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-phone/session-idle.png",
+   "sha256A": "92528cfb5d25bd55bafcd010238c524783697c329cb3c3e8e90e63fcc02d618f",
+   "sha256B": "3f3ec1501c81ec3ed0166179202077ecd8d3d68914caafc6ebe7a881dd818b02",
+   "bytesEqual": false,
+   "differentPixels": 393,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 644
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-phone/session-streaming.png",
+   "sha256A": "6d0e48679fe964e0c3a474e2492db83d8f8d62e8ba4db12b8882e11df947a516",
+   "sha256B": "3dd7f87ec080eb8f595dcf68897bd916acc3c307eca95b50fce4afa9439dbdd7",
+   "bytesEqual": false,
+   "differentPixels": 397,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 89,
+    "width": 362,
+    "height": 644
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "chromium-light-phone/settings-saved.png",
+   "sha256A": "a658d52a2efee3aa75953ac59bdddb74f03ff13aa7860e724bfd65d1e7b5bed9",
+   "sha256B": "a658d52a2efee3aa75953ac59bdddb74f03ff13aa7860e724bfd65d1e7b5bed9",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/settings.png",
+   "sha256A": "6003bc62f9224ed1ed6e6f7c83b2e60da52c36301a90f5be81f6673c05791d5d",
+   "sha256B": "6003bc62f9224ed1ed6e6f7c83b2e60da52c36301a90f5be81f6673c05791d5d",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-action-focus.png",
+   "sha256A": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780",
+   "sha256B": "1440c08230da52a2eff81c1cb8fafe7eac7d84bd2408406634a5ae9ca5bd8dfe",
+   "bytesEqual": false,
+   "differentPixels": 2,
+   "maxChannelDelta": 3,
+   "box": {
+    "x": 286,
+    "y": 23,
+    "width": 4,
+    "height": 1
+   },
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "noise"
+  },
+  {
+   "file": "chromium-light-phone/task-action-hover.png",
+   "sha256A": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79",
+   "sha256B": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-action-menu.png",
+   "sha256A": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b",
+   "sha256B": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-detail.png",
+   "sha256A": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990",
+   "sha256B": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-public-share.png",
+   "sha256A": "f074c9b7219930eaa0f74135d2661ec1f2c39a764d2a8b26f8b7119d0a03d048",
+   "sha256B": "f074c9b7219930eaa0f74135d2661ec1f2c39a764d2a8b26f8b7119d0a03d048",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/task-share-dialog.png",
+   "sha256A": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b",
+   "sha256B": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/wiki-contents.png",
+   "sha256A": "852535b3aef10af0e58aca89b6cd3f2886c2ea7907566afdcf207cf99e9bf809",
+   "sha256B": "852535b3aef10af0e58aca89b6cd3f2886c2ea7907566afdcf207cf99e9bf809",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/wiki-home.png",
+   "sha256A": "748a8043f39f9d6a6371c2aab74f9a24e36f4c9356e53b4a8c28de07e7b2a818",
+   "sha256B": "748a8043f39f9d6a6371c2aab74f9a24e36f4c9356e53b4a8c28de07e7b2a818",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "chromium-light-phone/wiki-new-entry.png",
+   "sha256A": "dbbd58f8dbff203c9ad9fbfec1fc4bdae29805d4cc4e39888b53591335012d38",
+   "sha256B": "dbbd58f8dbff203c9ad9fbfec1fc4bdae29805d4cc4e39888b53591335012d38",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-599-dialog.png",
+   "sha256A": "a00bba305113163960ed4016a00f21a4b40ab95817b3505682089a17b3c7435d",
+   "sha256B": "a00bba305113163960ed4016a00f21a4b40ab95817b3505682089a17b3c7435d",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-599-share.png",
+   "sha256A": "a13dc7a2bd275eb9226cedae966421816dd8b1e267553fd5d84d20b29cd3a8b1",
+   "sha256B": "a13dc7a2bd275eb9226cedae966421816dd8b1e267553fd5d84d20b29cd3a8b1",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-601-dialog.png",
+   "sha256A": "9cbe8afd42d775243ce3d001f960b1a3a0206842284894f4ca1f0a4a83dfbf01",
+   "sha256B": "9cbe8afd42d775243ce3d001f960b1a3a0206842284894f4ca1f0a4a83dfbf01",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-601-share.png",
+   "sha256A": "21772b0dd8ec4d76faf756b79fd95381ebfcf33a939dd1e1d5a11aae76a8aae7",
+   "sha256B": "21772b0dd8ec4d76faf756b79fd95381ebfcf33a939dd1e1d5a11aae76a8aae7",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-639-graph.png",
+   "sha256A": "476a58610951bdb0c6486ab8f0b0d496ec01fc241b0329a18e050dc4b66cac14",
+   "sha256B": "476a58610951bdb0c6486ab8f0b0d496ec01fc241b0329a18e050dc4b66cac14",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-639-projects.png",
+   "sha256A": "777b8188a81db6a12b62b0660d39897dc1ae30ea73343c7d9749009993a561b1",
+   "sha256B": "777b8188a81db6a12b62b0660d39897dc1ae30ea73343c7d9749009993a561b1",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-641-graph.png",
+   "sha256A": "e9f81625d0b41ee3df3dfb01d99797a253fc3ae85d558b3711d10ff91d411f6a",
+   "sha256B": "e9f81625d0b41ee3df3dfb01d99797a253fc3ae85d558b3711d10ff91d411f6a",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-641-projects.png",
+   "sha256A": "589c6221709e40bb575bef86da73375800e2fe47982cffe88270320a98c6cc79",
+   "sha256B": "589c6221709e40bb575bef86da73375800e2fe47982cffe88270320a98c6cc79",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-959-session.png",
+   "sha256A": "a89853ccc97aa0158d638282e055c9febfc728421c7eb39a7f0268b3196b47ec",
+   "sha256B": "35be5e51f19df1a58a4880ae198273ef25e0b232a0d3247190cf79bd5485b578",
+   "bytesEqual": false,
+   "differentPixels": 2817,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 931,
+    "height": 707
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-959-wiki.png",
+   "sha256A": "a9fd597d8a3269e1897b536cac47d07598d0c6118cc3db9105c4ea1eb4dba82d",
+   "sha256B": "a9fd597d8a3269e1897b536cac47d07598d0c6118cc3db9105c4ea1eb4dba82d",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-961-session.png",
+   "sha256A": "1e8dbce22116dafb188a806585fd7ad099c2e80f91103d9cc34056bfa414d032",
+   "sha256B": "a62142f4b0403a171f7f99a3e55b57fe0e6276a283f15f035bf4aa1c5a465429",
+   "bytesEqual": false,
+   "differentPixels": 2170,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 320,
+    "height": 697
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/breakpoint-961-wiki.png",
+   "sha256A": "9f84cd8e542cff492e0a859e90720fb8f5507198f110c0757d2f1e2cae30a3ed",
+   "sha256B": "9f84cd8e542cff492e0a859e90720fb8f5507198f110c0757d2f1e2cae30a3ed",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/notification-error.png",
+   "sha256A": "81d4258380981e3d42b523842c8078ba8143ad978c886a3113888aba0415c2a3",
+   "sha256B": "e0620f579d5d2d5fd7364aed9d2ffc7962dd4f9770a317f3c5dbf88728e46e0e",
+   "bytesEqual": false,
+   "differentPixels": 1206,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 195,
+    "width": 639,
+    "height": 594
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/profile-validation.png",
+   "sha256A": "58f0e4f9a87920c1cd63294d295a003e0367e6be82eb055cf484b6e033e15036",
+   "sha256B": "58f0e4f9a87920c1cd63294d295a003e0367e6be82eb055cf484b6e033e15036",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/profile.png",
+   "sha256A": "6defe597090a656474f02256dcd705e11579786e5ecb95874918ec7eaeb11b3f",
+   "sha256B": "6defe597090a656474f02256dcd705e11579786e5ecb95874918ec7eaeb11b3f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/project-graph-fullscreen.png",
+   "sha256A": "0cb2ef59f78c848d260081a13a12d9b9fadddc49fb5eb7f57bc33ced3bc7b811",
+   "sha256B": "0cb2ef59f78c848d260081a13a12d9b9fadddc49fb5eb7f57bc33ced3bc7b811",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/project-graph.png",
+   "sha256A": "06577c22c0720c2438957b08f13813d201764dc5b6d28efcbc880fc7f0fab709",
+   "sha256B": "06577c22c0720c2438957b08f13813d201764dc5b6d28efcbc880fc7f0fab709",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/project-overview.png",
+   "sha256A": "9f91a985250ff64c1def13cf72c1f265b23cf52013640c2f0e30f590dee6e94e",
+   "sha256B": "9f91a985250ff64c1def13cf72c1f265b23cf52013640c2f0e30f590dee6e94e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/projects-error.png",
+   "sha256A": "6ab5b1696fb70c385db9063e2b3d21665717c5d008b46e8c5a25084977be0cef",
+   "sha256B": "6ab5b1696fb70c385db9063e2b3d21665717c5d008b46e8c5a25084977be0cef",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/projects-list.png",
+   "sha256A": "5f659c07a445b1c945bdc4cfc75e255fc32f478ac02ef3039f8a3d072a291657",
+   "sha256B": "5f659c07a445b1c945bdc4cfc75e255fc32f478ac02ef3039f8a3d072a291657",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/projects-loading.png",
+   "sha256A": "817cdf28cd285876e0fe50bebcb0e76e8c7b5891abbf41fdb2c09f9ddcd3474d",
+   "sha256B": "817cdf28cd285876e0fe50bebcb0e76e8c7b5891abbf41fdb2c09f9ddcd3474d",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/projects-search-empty.png",
+   "sha256A": "05d3164d954f27561f156669f5ff19cabdd28e7c4fc6374f9f12745fc181b48f",
+   "sha256B": "05d3164d954f27561f156669f5ff19cabdd28e7c4fc6374f9f12745fc181b48f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/session-attachment-menu.png",
+   "sha256A": "32b72dab8089cc0cfb72b5405a6af7537f61632dd30e833de36fbe615b466e97",
+   "sha256B": "d1e6b1f57069efbeae6903474d4725880454821e156f3b8898b4a0e6587c0c17",
+   "bytesEqual": false,
+   "differentPixels": 2956,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 673
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/session-attachment-staged.png",
+   "sha256A": "c25bd7d80baf5fd097eb280ef3fa112ec1adfcca9a21bffeb143868cfee26d40",
+   "sha256B": "e5c3f985e38a722a0019d5131c37f900a2d0e78f6ac8e9fd744e6aec7e68bfa7",
+   "bytesEqual": false,
+   "differentPixels": 3075,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 632
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/session-composer-focus.png",
+   "sha256A": "87f681700a19e4afe0cbfa31b10352364c03cc0c19b02adb7d226f33caf47435",
+   "sha256B": "fd5fe622aa53377a3eddbcc89e75b701e48431d57c6e3d932f6f7ce0cb944088",
+   "bytesEqual": false,
+   "differentPixels": 3075,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 673
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/session-idle.png",
+   "sha256A": "f90b12adc6e3efe11dab4d45945930bb60b33c7bc93c152d9fd6cfb500b8d3c1",
+   "sha256B": "ee5201ad43c0dcfd4abfa3f08dffc0c0835811ff5191e8871cd7ee92e89f93c1",
+   "bytesEqual": false,
+   "differentPixels": 2551,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 697
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/session-streaming.png",
+   "sha256A": "93fda5106c1bcda687058b4e97ec65d8d3769fe8bca0922f64aa2719a89c62c9",
+   "sha256B": "3380786e2d908c22bc5374d71d61c7d7d60b5d0a7a1be0417d2f7df939fd2474",
+   "bytesEqual": false,
+   "differentPixels": 3049,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 697
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-desktop/settings-saved.png",
+   "sha256A": "e7bb335b8da6f305b7a8cff0cbc1529bf848c8515a89eb85da601393573f2887",
+   "sha256B": "e7bb335b8da6f305b7a8cff0cbc1529bf848c8515a89eb85da601393573f2887",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/settings.png",
+   "sha256A": "ee8599f88fded863da3da0b5579a9dce8ca79864c24d65a3b58bf7989ec65998",
+   "sha256B": "ee8599f88fded863da3da0b5579a9dce8ca79864c24d65a3b58bf7989ec65998",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-focus.png",
+   "sha256A": "7faa28663bc162938edc882005f5a05705b8ba29135819b77e022ca165e88304",
+   "sha256B": "7faa28663bc162938edc882005f5a05705b8ba29135819b77e022ca165e88304",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-hover.png",
+   "sha256A": "be683362036780de6db46769c038be14826da479299ce77c9b4231734136b916",
+   "sha256B": "be683362036780de6db46769c038be14826da479299ce77c9b4231734136b916",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-action-menu.png",
+   "sha256A": "f021d6622b6b3c0172481654af3c951ecc8c9e841407397a6b8f73166e8d9d71",
+   "sha256B": "f021d6622b6b3c0172481654af3c951ecc8c9e841407397a6b8f73166e8d9d71",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-detail.png",
+   "sha256A": "0c44cd621c41bef3d91b4245dc5f87e95c650e90a9076da8b59f64bd4d77b2a4",
+   "sha256B": "0c44cd621c41bef3d91b4245dc5f87e95c650e90a9076da8b59f64bd4d77b2a4",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-public-share.png",
+   "sha256A": "6276adb67d96e6a368aceae885fb8ce0c5ac067b4db96d7103661f761da19852",
+   "sha256B": "6276adb67d96e6a368aceae885fb8ce0c5ac067b4db96d7103661f761da19852",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/task-share-dialog.png",
+   "sha256A": "b25516ca0e3d7e25fe5bad276b3d5fc30725f41c171f00c7f29dfa962d9f8d6e",
+   "sha256B": "b25516ca0e3d7e25fe5bad276b3d5fc30725f41c171f00c7f29dfa962d9f8d6e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/wiki-home.png",
+   "sha256A": "b0d0c8f9ffe58d3e330cb719898968f1381632457fc1d13a260adfb2703ee778",
+   "sha256B": "b0d0c8f9ffe58d3e330cb719898968f1381632457fc1d13a260adfb2703ee778",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-desktop/wiki-new-entry.png",
+   "sha256A": "23a571354596a6542377ac7d6c11c0f6c2aa9792e80aa004642023d122038376",
+   "sha256B": "23a571354596a6542377ac7d6c11c0f6c2aa9792e80aa004642023d122038376",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/notification-error.png",
+   "sha256A": "3354b55c94dde9139364cbf417ff3a9ec88ced8c38f868db2d4b40291085d02f",
+   "sha256B": "ddd5fc92edf0555f38dd989d4d06c83c2eeb5a89ccc8aacfec83dffda2c693b5",
+   "bytesEqual": false,
+   "differentPixels": 884,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 85,
+    "width": 362,
+    "height": 648
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-phone/profile-validation.png",
+   "sha256A": "0f3a4108c15f1319245ea6e51311cd7bf410c28ba0bbfd3986ac0dff64089b2e",
+   "sha256B": "0f3a4108c15f1319245ea6e51311cd7bf410c28ba0bbfd3986ac0dff64089b2e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/profile.png",
+   "sha256A": "c8a40a2b778c4dd00909bcbafc3230fc6e5847b9daeb032431774cb03ef68cb8",
+   "sha256B": "c8a40a2b778c4dd00909bcbafc3230fc6e5847b9daeb032431774cb03ef68cb8",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/project-graph-fullscreen.png",
+   "sha256A": "dafed8c223afc325c5a996329bfd9cfbce6156da713e453b682a61b250dc0c74",
+   "sha256B": "dafed8c223afc325c5a996329bfd9cfbce6156da713e453b682a61b250dc0c74",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/project-graph.png",
+   "sha256A": "b1f23376cf9ec3565b06a65ebfa095109ca1afe1e7c806e8b9824abc43592df4",
+   "sha256B": "b1f23376cf9ec3565b06a65ebfa095109ca1afe1e7c806e8b9824abc43592df4",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/project-overview.png",
+   "sha256A": "156df04993ddc8a6e80510fe2507d10666ac60ccf10647793a50922819aeecdf",
+   "sha256B": "156df04993ddc8a6e80510fe2507d10666ac60ccf10647793a50922819aeecdf",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/projects-error.png",
+   "sha256A": "4ec3d1663023cdc43821c11098ac7215ca8a8cd3a51965837e90aec423ab73f3",
+   "sha256B": "4ec3d1663023cdc43821c11098ac7215ca8a8cd3a51965837e90aec423ab73f3",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/projects-list.png",
+   "sha256A": "dd29ed7d5494935dd15fc54f81ae1f43395340b8236ef3da30e32b5c178ae94c",
+   "sha256B": "dd29ed7d5494935dd15fc54f81ae1f43395340b8236ef3da30e32b5c178ae94c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/projects-loading.png",
+   "sha256A": "9bd2154df1f3083598c6b03cbe712d74831da45803db139a39dd6ec49f65795a",
+   "sha256B": "9bd2154df1f3083598c6b03cbe712d74831da45803db139a39dd6ec49f65795a",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/projects-search-empty.png",
+   "sha256A": "0fbfd38a6877dc70206f8109e0796ee70eca21f12bd4f40dec04db65c2b1c671",
+   "sha256B": "0fbfd38a6877dc70206f8109e0796ee70eca21f12bd4f40dec04db65c2b1c671",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/session-attachment-menu.png",
+   "sha256A": "a74fbd3fea32032cec0938e9be5488075069414a9da6f765f06778d0be76eb6e",
+   "sha256B": "68a1afbe1b4c4e0cd467651288ac0e9d934707019239071cd2b7a03a162ca0d3",
+   "bytesEqual": false,
+   "differentPixels": 2491,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 627
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-phone/session-attachment-staged.png",
+   "sha256A": "5eef589353d23f1809d71fbff1b4fedc2e0f81fa7af539fff26daa700faf218d",
+   "sha256B": "36a81d09c68ab0c71af0a6351af68e4d5a894ea8c55f456e6dbfd303fb1f349d",
+   "bytesEqual": false,
+   "differentPixels": 2741,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 586
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-phone/session-composer-focus.png",
+   "sha256A": "2b68ad5a16fbff5aaa5d5112d446f9a9cf64a58bbe05a7f6d651a8033eabf68b",
+   "sha256B": "a7be3cf19bcfe9461ad917790f80f11e29708d6821f8218be091c730c2a284b1",
+   "bytesEqual": false,
+   "differentPixels": 2741,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 627
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-phone/session-idle.png",
+   "sha256A": "d4ce2bd66177fe10dfed9df21317a16c241606dd79a9ccdeea69c1282fe0baa1",
+   "sha256B": "4e8339818a1b5a806cf9a7f37f32ae583274795e8f49b832503ff25570d0992c",
+   "bytesEqual": false,
+   "differentPixels": 2240,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 651
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-phone/session-streaming.png",
+   "sha256A": "3cb9d5f7f9d6be4e0759f0e25517fe00d41c09418bad64ef097c3abd65512d68",
+   "sha256B": "5532bf7d9d85d756bcdd19a1beabc25c4b498d679bde87566b61b80c01e53719",
+   "bytesEqual": false,
+   "differentPixels": 2740,
+   "maxChannelDelta": 20,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 651
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-dark-phone/settings-saved.png",
+   "sha256A": "40656db95780414b9ffba66014745816e1eba22a958fad4a30ef14ea625db8a5",
+   "sha256B": "40656db95780414b9ffba66014745816e1eba22a958fad4a30ef14ea625db8a5",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/settings.png",
+   "sha256A": "afce26a702816d0b13e6376e7d91150ee59e06577002012f5e76061a90590cc3",
+   "sha256B": "afce26a702816d0b13e6376e7d91150ee59e06577002012f5e76061a90590cc3",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-action-focus.png",
+   "sha256A": "b9edf27f85d9304718043b232450b4d9ff3ced817e0f0bd828d7aea23337cc1f",
+   "sha256B": "b9edf27f85d9304718043b232450b4d9ff3ced817e0f0bd828d7aea23337cc1f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-action-hover.png",
+   "sha256A": "f02a4c45316f9edda3043baaad3cb35aac7a2589adb65d6eb4f836ed5a5b9b75",
+   "sha256B": "f02a4c45316f9edda3043baaad3cb35aac7a2589adb65d6eb4f836ed5a5b9b75",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-action-menu.png",
+   "sha256A": "213ec5ec43e0851f2ada09159bfeace4effe72f365472a86a63dd6eda271ba30",
+   "sha256B": "213ec5ec43e0851f2ada09159bfeace4effe72f365472a86a63dd6eda271ba30",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-detail.png",
+   "sha256A": "1a41a568778acba3a00e435f20732406d55b240f641043ddeabb16cf05510044",
+   "sha256B": "1a41a568778acba3a00e435f20732406d55b240f641043ddeabb16cf05510044",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-public-share.png",
+   "sha256A": "22a4ffc866526331018f0bc0b52fdcfec4a3ff2bf9f9e6bb562c0bf60cd76c2c",
+   "sha256B": "22a4ffc866526331018f0bc0b52fdcfec4a3ff2bf9f9e6bb562c0bf60cd76c2c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/task-share-dialog.png",
+   "sha256A": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
+   "sha256B": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/wiki-contents.png",
+   "sha256A": "3384758be6181749dd2f6a4afe5c40f3df30743a445d9323874789a42d87abc9",
+   "sha256B": "3384758be6181749dd2f6a4afe5c40f3df30743a445d9323874789a42d87abc9",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/wiki-home.png",
+   "sha256A": "9a19d303b85015f090fb4e32d206bbd461043fd08d830d5b95076329c4ce4b41",
+   "sha256B": "9a19d303b85015f090fb4e32d206bbd461043fd08d830d5b95076329c4ce4b41",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-dark-phone/wiki-new-entry.png",
+   "sha256A": "cf5ca334f49d2003cdbb8ed98655c61949794d01fc332b1e7d4c919c4b5ff22d",
+   "sha256B": "cf5ca334f49d2003cdbb8ed98655c61949794d01fc332b1e7d4c919c4b5ff22d",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-599-dialog.png",
+   "sha256A": "a9a8a2f5cb12a620a3847e3e66917cb47caef18ed5473dada3ab129f74176431",
+   "sha256B": "a9a8a2f5cb12a620a3847e3e66917cb47caef18ed5473dada3ab129f74176431",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-599-share.png",
+   "sha256A": "741c28464f8492cf3ccb401b49068847be37cfed2afa722e15fb60a2e1c9a598",
+   "sha256B": "741c28464f8492cf3ccb401b49068847be37cfed2afa722e15fb60a2e1c9a598",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-601-dialog.png",
+   "sha256A": "5aa074a2dc2c613c35ccb7d242a04134219be97a5671be1c9f78788cac44f53d",
+   "sha256B": "5aa074a2dc2c613c35ccb7d242a04134219be97a5671be1c9f78788cac44f53d",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-601-share.png",
+   "sha256A": "118113262d6073fd94a5374e522748c402216e4a8b9695ae10980d9e0ed6b5e3",
+   "sha256B": "118113262d6073fd94a5374e522748c402216e4a8b9695ae10980d9e0ed6b5e3",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-639-graph.png",
+   "sha256A": "1526b3fa2ecabe44617dd542da23085c5fd50884368bc90a7fd2850fe201301f",
+   "sha256B": "1526b3fa2ecabe44617dd542da23085c5fd50884368bc90a7fd2850fe201301f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-639-projects.png",
+   "sha256A": "d62edba5fe757c10a1d20f3f50ca945650778236273b55ad7295115329879098",
+   "sha256B": "d62edba5fe757c10a1d20f3f50ca945650778236273b55ad7295115329879098",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-641-graph.png",
+   "sha256A": "a64f537c7410cbd1da286e5b9c8e11f18e425a1747cc1a5361ddec1124b8a4d1",
+   "sha256B": "a64f537c7410cbd1da286e5b9c8e11f18e425a1747cc1a5361ddec1124b8a4d1",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-641-projects.png",
+   "sha256A": "dbd43b5f7243bd667bfb9f3948243355c76d717477c5ca7b6164ecf8a1f3ccb7",
+   "sha256B": "dbd43b5f7243bd667bfb9f3948243355c76d717477c5ca7b6164ecf8a1f3ccb7",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-959-session.png",
+   "sha256A": "92f0a5c674d4d13c15ee93578caf329e8575a8b99280a9795a7827035d715bcd",
+   "sha256B": "3d2dcca109d5a7f20c373f11e64352a5989c9e05cbafb6f296b81958ddcc5d05",
+   "bytesEqual": false,
+   "differentPixels": 957,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 931,
+    "height": 707
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-959-wiki.png",
+   "sha256A": "8ffae3dddf66cc572c0d0005bd013af4006839db1e60565f6e6242b72479bc4b",
+   "sha256B": "8ffae3dddf66cc572c0d0005bd013af4006839db1e60565f6e6242b72479bc4b",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-961-session.png",
+   "sha256A": "78401b473d61b4cbc0b99e6a53deb1845966fb1729155511e2b5d48f5b46168f",
+   "sha256B": "392c03f40fa7f1e7a09991d619369f2fd136bfc16aaeabc432551ca45d6e36e0",
+   "bytesEqual": false,
+   "differentPixels": 378,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 320,
+    "height": 697
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/breakpoint-961-wiki.png",
+   "sha256A": "d18c04e6fe42b9069e139425ae15cdee3e9d2f12dde3589e2e173997e22ebef3",
+   "sha256B": "d18c04e6fe42b9069e139425ae15cdee3e9d2f12dde3589e2e173997e22ebef3",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/notification-error.png",
+   "sha256A": "aedb996376254d90b3516e24f7b9a7dcbfdc5ee12199f468daf72a0a622e8af4",
+   "sha256B": "6a448d44fa63d48955ad70fc5d643df606e1e01cd8c07ef1a975e062ffe7eeed",
+   "bytesEqual": false,
+   "differentPixels": 721,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 196,
+    "width": 639,
+    "height": 593
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/profile-validation.png",
+   "sha256A": "d2e26d04427a7bae6e44cf9dadd0e4ea1c7a4c3722b8792b7ef2b5bd177e8038",
+   "sha256B": "d2e26d04427a7bae6e44cf9dadd0e4ea1c7a4c3722b8792b7ef2b5bd177e8038",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/profile.png",
+   "sha256A": "79d972e84ded03469b5ffb3c7657bec5343c67e8e3b1e5022e7acccdc39ad0e9",
+   "sha256B": "79d972e84ded03469b5ffb3c7657bec5343c67e8e3b1e5022e7acccdc39ad0e9",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/project-graph-fullscreen.png",
+   "sha256A": "c0be1eba38a1d396f9574e78b7bece78e74e8749959d9885635de2964383d105",
+   "sha256B": "c0be1eba38a1d396f9574e78b7bece78e74e8749959d9885635de2964383d105",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/project-graph.png",
+   "sha256A": "4418d20aba11b05a761e5ff5d9421c9ff28d82b3150978768566ef12a46b962c",
+   "sha256B": "4418d20aba11b05a761e5ff5d9421c9ff28d82b3150978768566ef12a46b962c",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/project-overview.png",
+   "sha256A": "97e1f90a776f69d667d961b033e9e145b726a29cbd35dd04a31b887170e8ecd1",
+   "sha256B": "97e1f90a776f69d667d961b033e9e145b726a29cbd35dd04a31b887170e8ecd1",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/projects-error.png",
+   "sha256A": "7cc413b1b1758145ff73ef947c25b8703b1513a3b41117f23481249cff32f56e",
+   "sha256B": "7cc413b1b1758145ff73ef947c25b8703b1513a3b41117f23481249cff32f56e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/projects-list.png",
+   "sha256A": "1dfdaf476b4e0f7385ae97be36add3a0968e3960ce451bb83ed66c28f3a2a850",
+   "sha256B": "1dfdaf476b4e0f7385ae97be36add3a0968e3960ce451bb83ed66c28f3a2a850",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/projects-loading.png",
+   "sha256A": "6eab08b15d3dffb67ece9e7eaa05e09bd7f90234842acb5d3fe2750a5471afc4",
+   "sha256B": "6eab08b15d3dffb67ece9e7eaa05e09bd7f90234842acb5d3fe2750a5471afc4",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/projects-search-empty.png",
+   "sha256A": "1ae048000ee7f69e69fea77535c6cb44f0d6772c6d8d24c7fc287280e7e8da8f",
+   "sha256B": "1ae048000ee7f69e69fea77535c6cb44f0d6772c6d8d24c7fc287280e7e8da8f",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/session-attachment-menu.png",
+   "sha256A": "e676f71292edc1eb7c8b5c95213d71a6cad096f6f56384ec4d5fc5ee0d11fd98",
+   "sha256B": "ada0146ca40b298d2e0d292029eb032f644735d607e7040fa45c52461928688e",
+   "bytesEqual": false,
+   "differentPixels": 613,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 673
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/session-attachment-staged.png",
+   "sha256A": "d1d5830bc41587614bc2733cd8fb091d8aa8e1c49393cb6759e1955ab0c9c5cf",
+   "sha256B": "fcf7368837dd65fc6152431c92ca6e24d0efcfa405967029463fbc49e91c4e0b",
+   "bytesEqual": false,
+   "differentPixels": 732,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 632
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/session-composer-focus.png",
+   "sha256A": "4ef74c03be09b822a8543d9852e1ec188a94fc9b083bdee71d71069826f9a1de",
+   "sha256B": "175eff365b40469e27bfa3d18c2d85c25b4260ccb12de80f8d82b7dfff0df9b8",
+   "bytesEqual": false,
+   "differentPixels": 732,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 673
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/session-idle.png",
+   "sha256A": "80feb2498ed07ba25cb004987fd53bc640d07e60ce8323981762d942470a31d6",
+   "sha256B": "8e131649be7f67ddb840ff81a276863ed0cf632a4e243154fecad3aa16efd4b2",
+   "bytesEqual": false,
+   "differentPixels": 691,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 697
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/session-streaming.png",
+   "sha256A": "c0a1766df5c7215bae5b8fc0c70fda3300eec46925b22be1d5b42f7870110251",
+   "sha256B": "ac2f649ac3556f1cfa5708f18baea2c4eba5b0f2e91f3d4c21f3424d35c8e8a6",
+   "bytesEqual": false,
+   "differentPixels": 706,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 621,
+    "y": 92,
+    "width": 639,
+    "height": 697
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-desktop/settings-saved.png",
+   "sha256A": "676287ec035cae6e8efab01d34f54f5eb698449dfab38570f4bcc7b861b1cafe",
+   "sha256B": "676287ec035cae6e8efab01d34f54f5eb698449dfab38570f4bcc7b861b1cafe",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/settings.png",
+   "sha256A": "1ca8d75ff9a133c0097f7eaeada5f60b68fb0027a4959fcfc1b9a051c0c6f6f9",
+   "sha256B": "1ca8d75ff9a133c0097f7eaeada5f60b68fb0027a4959fcfc1b9a051c0c6f6f9",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-action-focus.png",
+   "sha256A": "1d94d4e73e7373beab30cb3fd01872777b8880c625c7c8b55b9fc7cae4736e0e",
+   "sha256B": "1d94d4e73e7373beab30cb3fd01872777b8880c625c7c8b55b9fc7cae4736e0e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-action-hover.png",
+   "sha256A": "9e55133ae4566a884b98bf4876200997b3d322b7bce1521cc46c6450fa652dc9",
+   "sha256B": "9e55133ae4566a884b98bf4876200997b3d322b7bce1521cc46c6450fa652dc9",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-action-menu.png",
+   "sha256A": "1d9a855f85f816adb23963b43c84dec303bdadce91b9c373bd73ecdc733624cc",
+   "sha256B": "1d9a855f85f816adb23963b43c84dec303bdadce91b9c373bd73ecdc733624cc",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-detail.png",
+   "sha256A": "f2fee0d8b8fb84406b40c5954ceb2234ffb5a89a3c70fd029995a5e71d9f189e",
+   "sha256B": "f2fee0d8b8fb84406b40c5954ceb2234ffb5a89a3c70fd029995a5e71d9f189e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-public-share.png",
+   "sha256A": "3486e927411e0d117ac162a1ad6299c8226e6641e8fa71f929d6e990cda70a56",
+   "sha256B": "3486e927411e0d117ac162a1ad6299c8226e6641e8fa71f929d6e990cda70a56",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/task-share-dialog.png",
+   "sha256A": "b6bb1d236105d93b5d9465e7704d0b06085bf4aae500c9dbc6fe75a1ceefa927",
+   "sha256B": "b6bb1d236105d93b5d9465e7704d0b06085bf4aae500c9dbc6fe75a1ceefa927",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/wiki-home.png",
+   "sha256A": "d3f746a766ed07b05b87e6973b80ec05de0e0527ea82fd418e135d617a3643f9",
+   "sha256B": "d3f746a766ed07b05b87e6973b80ec05de0e0527ea82fd418e135d617a3643f9",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-desktop/wiki-new-entry.png",
+   "sha256A": "b968378236aae49e545acbd48a3a0f3c62a98f48accf561b31a7ce217214cfd3",
+   "sha256B": "b968378236aae49e545acbd48a3a0f3c62a98f48accf561b31a7ce217214cfd3",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/notification-error.png",
+   "sha256A": "a10102f4bcd92c8f6295caf9b560bb5cb0b25d0de28deb98696a8a71b3f7799d",
+   "sha256B": "bb770670d10d8072fe90fd943ccae5caccc9163a03ae89b05ab1036373372db5",
+   "bytesEqual": false,
+   "differentPixels": 396,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 86,
+    "width": 362,
+    "height": 647
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-phone/profile-validation.png",
+   "sha256A": "fe86cd9b21ba30505c00b74bb38c4c5442c2d979a30237e12630bde31c3c4333",
+   "sha256B": "fe86cd9b21ba30505c00b74bb38c4c5442c2d979a30237e12630bde31c3c4333",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/profile.png",
+   "sha256A": "19d4e052db4726179df29fce1df55b4163df1d49e304f41a1d5d59dcde3bd8ae",
+   "sha256B": "19d4e052db4726179df29fce1df55b4163df1d49e304f41a1d5d59dcde3bd8ae",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/project-graph-fullscreen.png",
+   "sha256A": "4c25fd1acefe818d78cf63f75e7dd4598c1561095580096c0db02a569e631e64",
+   "sha256B": "4c25fd1acefe818d78cf63f75e7dd4598c1561095580096c0db02a569e631e64",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/project-graph.png",
+   "sha256A": "47bd30854211a436140c04fc248055dd75cdb8d6ca0cc5a6e02107921acd6673",
+   "sha256B": "47bd30854211a436140c04fc248055dd75cdb8d6ca0cc5a6e02107921acd6673",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/project-overview.png",
+   "sha256A": "73f6ecab0a3b68b03ee01528f4437df6f58a2f94b483b36458b20e74abd4a7b8",
+   "sha256B": "73f6ecab0a3b68b03ee01528f4437df6f58a2f94b483b36458b20e74abd4a7b8",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/projects-error.png",
+   "sha256A": "bf80fed79089ba055f584a8c3f09ea5c857dc2a0710fc771538ace5574c12e1e",
+   "sha256B": "bf80fed79089ba055f584a8c3f09ea5c857dc2a0710fc771538ace5574c12e1e",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/projects-list.png",
+   "sha256A": "d8c22faa736fa636a094f19f954394c6597eea76c4a7288dc2173a710ee99ede",
+   "sha256B": "d8c22faa736fa636a094f19f954394c6597eea76c4a7288dc2173a710ee99ede",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/projects-loading.png",
+   "sha256A": "1d31a39992a6f1c3e68ebc1f45a64291ccf7b7035f156f784648001a61a538e1",
+   "sha256B": "1d31a39992a6f1c3e68ebc1f45a64291ccf7b7035f156f784648001a61a538e1",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/projects-search-empty.png",
+   "sha256A": "10c4ed86c0df40dc2c46924299bfedb98587fb9aad287c79a24eda51b9bca774",
+   "sha256B": "10c4ed86c0df40dc2c46924299bfedb98587fb9aad287c79a24eda51b9bca774",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/session-attachment-menu.png",
+   "sha256A": "622b5f5e2b34c4af8e585a349632a0c9c524791566c0848636260576cd85fb59",
+   "sha256B": "3679f8fe036fe466f814f120a438064b9db0e1980bc38e37beb876b6bec84b28",
+   "bytesEqual": false,
+   "differentPixels": 154,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 627
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-phone/session-attachment-staged.png",
+   "sha256A": "72f2620d79e6fd9567122163e6d1726e8f462a045cbfe33ead7cf2d1d51ba2b9",
+   "sha256B": "7a80441f270b94d3cedc9e322dd73eb83fcf3e44fd2818c4d46fc4c6f4864fe2",
+   "bytesEqual": false,
+   "differentPixels": 404,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 586
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-phone/session-composer-focus.png",
+   "sha256A": "2b7c6af4121170d00088f147aa9fb69fab8edb4fc7472aa78188b185c28e31bc",
+   "sha256B": "9965a9ad9fb4fd41df6cadaa322839cfe673cd642fbc044185616976b3bcae24",
+   "bytesEqual": false,
+   "differentPixels": 404,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 627
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-phone/session-idle.png",
+   "sha256A": "9e715fa1439041f37d0e8c491cc4270931348b97f09a01c6cd08efafc0a5e979",
+   "sha256B": "aeb56f4ec5131861d28b3596bf98ad2387783038023de4f5ac4870749a45bfd8",
+   "bytesEqual": false,
+   "differentPixels": 389,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 651
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-phone/session-streaming.png",
+   "sha256A": "80011429f087ca60a4928db3d6ebd6613e6292a814f0308dcc0d4e66157af5df",
+   "sha256B": "1b4eb6cb1361e48ed512b5c8ee350f1fb342f16223b46bdf769ec5c5fa45d8d1",
+   "bytesEqual": false,
+   "differentPixels": 403,
+   "maxChannelDelta": 19,
+   "box": {
+    "x": 14,
+    "y": 82,
+    "width": 362,
+    "height": 651
+   },
+   "p0Comparator": "match",
+   "changed": true,
+   "class": "changed"
+  },
+  {
+   "file": "webkit-light-phone/settings-saved.png",
+   "sha256A": "645f9b38aa43728c1c594cde778aa1321f04f072862a1cbe4bf8d39dad9c4f43",
+   "sha256B": "645f9b38aa43728c1c594cde778aa1321f04f072862a1cbe4bf8d39dad9c4f43",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/settings.png",
+   "sha256A": "4e25c276d7a5863fca4936879170859516dc5b6e6f773e7a1d6c8bd84eae30ef",
+   "sha256B": "4e25c276d7a5863fca4936879170859516dc5b6e6f773e7a1d6c8bd84eae30ef",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-action-focus.png",
+   "sha256A": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479",
+   "sha256B": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-action-hover.png",
+   "sha256A": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329",
+   "sha256B": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-action-menu.png",
+   "sha256A": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802",
+   "sha256B": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-detail.png",
+   "sha256A": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca",
+   "sha256B": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-public-share.png",
+   "sha256A": "56c69301dbb0bd027839303054f7b662214884705f362549d21f350cc604a209",
+   "sha256B": "56c69301dbb0bd027839303054f7b662214884705f362549d21f350cc604a209",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/task-share-dialog.png",
+   "sha256A": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5",
+   "sha256B": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/wiki-contents.png",
+   "sha256A": "20ea1c28980a475031ff17c284b1e280c3bc99c9979905936f9a8916338c637b",
+   "sha256B": "20ea1c28980a475031ff17c284b1e280c3bc99c9979905936f9a8916338c637b",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/wiki-home.png",
+   "sha256A": "d578763aa2034724bed41da335ef5badbbd60916e6e209eb9a5f83e4b0bcaa11",
+   "sha256B": "d578763aa2034724bed41da335ef5badbbd60916e6e209eb9a5f83e4b0bcaa11",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  },
+  {
+   "file": "webkit-light-phone/wiki-new-entry.png",
+   "sha256A": "67ce4f6fb9ce491215e82a2c62b5e7bc963b294dacf3564465e81619d65e9da0",
+   "sha256B": "67ce4f6fb9ce491215e82a2c62b5e7bc963b294dacf3564465e81619d65e9da0",
+   "bytesEqual": true,
+   "differentPixels": 0,
+   "maxChannelDelta": 0,
+   "p0Comparator": "match",
+   "changed": false,
+   "class": "same"
+  }
+ ]
+}

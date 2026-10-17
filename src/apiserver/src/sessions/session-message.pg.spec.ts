@@ -346,7 +346,12 @@ test('one session’s message to another is signed, delivered as such, and bound
 
   /** What the runner's claim does to a queued session, then the inbox poll that follows it. */
   async function claimAndPoll(sessionId: string): Promise<Answer> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    // As a current replica claims: one that reads the session's engine, which a revive records
+    // (migration 0414's acquisition guard drops the claim of any replica that does not).
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    });
     const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
     assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
     return delivered;
@@ -1156,14 +1161,14 @@ test('one session’s message to another is signed, delivered as such, and bound
     );
     const user = { userId: ownerId } as never;
 
-    // A session keeps its runtime (sessions.service.resolveProviderSwitch), so a pick that rule
+    // A session keeps its engine (providers/engine-provider.resolveSessionSwitch), so a pick that rule
     // refuses comes back as that refusal — and the refusal is the proof the pick reached the resume.
     // Before, this door took no body at all: nothing was ever sent, so nothing could be refused, and
     // the re-send ran on the provider the session was already on — which is how "choose the pool,
     // press Retry" came out on the account the person was trying to leave (2026-10-05).
     await assert.rejects(
       () => door.resendRetryMessage(user, recipient, { provider: 'codex' }),
-      /cannot switch to a provider that runs on/,
+      /provider "codex" cannot run on Claude Code; it runs on Codex/,
       'the pick the composer had did not reach the resume',
     );
   });

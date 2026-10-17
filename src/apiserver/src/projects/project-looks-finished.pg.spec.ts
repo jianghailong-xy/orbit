@@ -724,7 +724,7 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
     assert.deepEqual(await judgmentSessions(stack, w), [],
       'a judgment opened in the gap between the landing and main — the 10-01 incident');
     const turns = await stack.db.conversationTurn.findMany({
-      where: { sessionId: w.coordinatorSessionId, content: { contains: '看起来做完了' } },
+      where: { sessionId: w.coordinatorSessionId, content: { contains: 'looks finished' } },
     });
     assert.deepEqual(turns, [], 'the coordinator was told the project looks finished mid-landing');
     landing = job;
@@ -758,19 +758,19 @@ test('(2)(3) a project that looks finished is handed to its coordinator with eve
     });
     assert.ok(delivered, 'the delivery names a turn the conversation does not have');
     const message = delivered.content ?? '';
-    assert.match(message, /看起来做完了，但 Orbit 自己记不了 Done/);
+    assert.match(message, /looks finished, but Orbit cannot record it Done by itself/);
     // Every criterion Orbit cannot prove, with its reason; the one on main is not a gap.
     assert.ok(
-      message.includes(`「the go-live walkthrough was done on production」（key ${GO_LIVE}）：NOTHING_TO_LAND`),
+      message.includes(`“the go-live walkthrough was done on production” (key ${GO_LIVE}): NOTHING_TO_LAND`),
       `the go-live criterion's reason is missing:\n${message}`,
     );
-    assert.equal(message.includes('「the dispatcher change is on main」'), false);
-    assert.match(message, /2 条验收标准 · 2 条已满足 · 1 条在 main 上 · 1 条 NOTHING_TO_LAND/);
+    assert.equal(message.includes('“the dispatcher change is on main”'), false);
+    assert.match(message, /2 acceptance criteria · 2 satisfied · 1 on main · 1 NOTHING_TO_LAND/);
     // The two things it may do.
     assert.match(message, /project_request_done/);
-    assert.match(message, /去干活/);
+    assert.match(message, /Go and do the work/);
     // And what happens if it does neither, in the project's own window.
-    assert.match(message, /exceptionEscalationSeconds（现在是 7200 秒）/);
+    assert.match(message, /exceptionEscalationSeconds \(currently 7200 seconds\)/);
     assert.match(message, /Record as done…/);
 
     const project = await stack.db.project.findUniqueOrThrow({
@@ -964,7 +964,7 @@ test('(5) a judgment opened because the tasks settled files no task while a land
   });
   assert.equal(judgment.dispatchOrigin, SessionDispatchOrigin.PROJECT_COORDINATOR);
   // Its protocol no longer tells it to file a "merge into main" task, and says why it may not.
-  assert.equal((judgment.prompt ?? '').includes('合并并录入主干证据'), false);
+  assert.equal((judgment.prompt ?? '').includes('merge and record main evidence'), false);
   assert.match(judgment.prompt ?? '', /TASK_LANDING_IN_FLIGHT/);
 
   // A landing starts after the judgment opened — the race the producer cannot see.

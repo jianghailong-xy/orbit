@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- Design board iOS 3 (T0, Cursor engine): Add Account with Cursor's sign-in link, Sign In Again and Remove on
+     the Cursor CLI engine page. 393 × 852 pt on ../antigravity-accounts/kit.css; the proposal is drawn from
+     today's RunnerEnginePage.swift and RunnerSignInView.swift. macOS is the same SwiftUI; Android follows. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 3 · Cursor accounts: Add Account, Sign In Again, Remove</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script src="kit.js"></script>
+<style>
+  .ph .ctx .it.red { color: #ff3b30; }
+  .ph .ctx .it.red svg { fill: #ff3b30; }
+  .ph.dark .ctx { background: rgba(44, 44, 46, .97); color: #fff; }
+  .ph.dark .ctx .it svg { fill: #fff; }
+  .ph.dark .lift { background: #2c2c2d; }
+  .ph.dark .sheet .grp { background: rgba(44, 44, 46, .97); }
+  .ph.dark .sheet .opt { border-top-color: #404042; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet" style="width:1980px">
+  <h1 class="m-h1 zh">iOS 3 · Cursor 账号：Add Account 用 Cursor 的登录链接，写还剩多久，过期给「Get a New Link」；Sign In Again、Remove 同其他多账号 engine</h1>
+  <p class="m-sub zh">流程同 Web 3：起名 → runner 拿到 <code>cursor.com</code> 的登录链接 → 在浏览器里登录 → runner 看到 <code>agent login</code> 成功；约 27 分钟没人用就过期。和今天的 Kimi（设备码）、Claude / Antigravity（回贴码）比，Cursor 不需要回贴任何东西。长按账号行是今天的菜单（Rename…、Sign In Again、Pause…、Remove…），左滑是 Remove / Pause。Default 不能移除；有会话在用时机器拒绝移除。iPhone 上「Open cursor.com」在 Safari 里打开。Android 跟这张稿。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① Add Account</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k state">过程</span>a · 起名，登录自动开始</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k state">过程</span>b · 链接到了</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k state">过程</span>c · 27 分钟没登：过期</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k state">过程</span>d · 登上了</div><div id="p4"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② Sign In Again 与 Remove</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k state">过程</span>长按 Team</div><div id="p5"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k state">过程</span>Sign In Again：同一个链接卡片</div><div id="p6"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k state">过程</span>Remove… → 先问</div><div id="p7"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k state">过程</span>有会话在用：拒绝并说为什么</div><div id="p8"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">③ 差异与待验</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+const addCard = (inner, name = 'Work') => accountRow({ id: 'adding', name: '', body: `<div class="fld" style="margin-top:-6px">${name}</div>${inner}` });
+const page = (accs, extra = '', addRow = true) => cursorHead()
+  + section({ header: 'Accounts', id: 'accs', rows: [...accs, ...(extra ? [extra] : []), ...(addRow && !extra ? [btnRow('Add Account')] : [])] })
+  + `<div class="s-f">${CURSOR_ENGINE_FOOTER}</div>`;
+document.getElementById('p1').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph1', body: page(cursorAccounts(), addCard(signInCard.starting)) });
+document.getElementById('p2').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph2', body: page(cursorAccounts(), addCard(signInCard.link(true))) });
+document.getElementById('p3').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph3', body: page(cursorAccounts(), addCard(signInCard.expired)) });
+document.getElementById('p4').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph4', body: page([...cursorAccounts(), accountRow({ id: 'acc-work', name: 'Work', sub: 'Pro plan · ~/.orbit/cursor-accounts/9b1f4d27', status: { text: 'Signed in', tone: 'ok' }, windows: [{ label: 'Monthly limit', pct: 3, resets: 'Resets Fri, Oct 15 at 12:00 AM' }] })]) });
+
+/* ② long-press menu, sign in again, remove */
+const ctxMenu = `<div class="dim"></div><div class="lift" style="top:370px">${cursorAccounts()[1]}</div>
+  <div class="ctx" style="left:110px;top:520px">
+    <div class="it">Rename…${ICON.pencil}</div><div class="it" id="again">Sign In Again${ICON.open}</div><div class="it">Pause…${ICON.pause}</div>
+    <div class="it red">Remove…${ICON.trash}</div></div>`;
+document.getElementById('p5').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph5', body: page(cursorAccounts()), overlay: ctxMenu });
+document.getElementById('p6').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph6', body: page(cursorAccounts({ team: { body: `<div style="margin-top:4px">${signInCard.link(false)}</div>` } })) });
+const removeSheet = `<div class="dim"></div><div class="sheet"><div class="grp"><div class="ttl"><b>Remove “Team” from hpc?</b>Its sign-in goes from this machine, and sessions stop running on it. Default is untouched.</div>
+  <div class="opt red">Remove</div></div><div class="grp"><div class="opt bold">Cancel</div></div></div>`;
+document.getElementById('p7').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph7', body: page(cursorAccounts()), overlay: removeSheet });
+document.getElementById('p8').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph8', body: page(cursorAccounts({ team: { body: '<div class="a-note bad" id="refused">Team is in use: 2 sessions on hpc are running on it. Remove it once they finish. Its sign-in is untouched.</div>' } })) });
+
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  ['ph1', 'ph2', 'ph3', 'ph4'].forEach((id) => scrollPhone(ph(id), '#accs', 150));
+  ring(ph('ph1'), '#adding .fld', 1, 3);
+  ring(ph('ph2'), '#si-open', 2, 3);
+  ring(ph('ph2'), '#si-wait', 3, 3);
+  ring(ph('ph3'), '#si-warn', 4, 3);
+  ring(ph('ph3'), '#si-new', 5, 3);
+  ring(ph('ph4'), '#acc-work', 6, 1);
+  ring(ph('ph5'), '#again', 7, 0);
+  scrollPhone(ph('ph6'), '#accs', 150);
+  ring(ph('ph6'), '#acc-team .si', 8, 3);
+  scrollPhone(ph('ph8'), '#accs', 150);
+  ring(ph('ph8'), '#refused', 9, 3);
+});
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>名字</b>：「Account name」，预填「Account N」，可改；登录随即开始（同 Codex / Claude，不像 Kimi 要先选站点）。'],
+  [2, '<b>Open cursor.com</b>（实心按钮）+「Copy Sign-In Link」：链接原样来自 runner 的 <code>agent login</code>。'],
+  [3, '<b>还剩多久</b>：「Waiting for you to sign in… · link expires in 26 min」，按 runner 报的过期时间倒数。'],
+  [4, '<b>过期</b>：「The sign-in link expired before anyone signed in with it.」'],
+  [5, '<b>Get a New Link</b>：重新起一个 <code>agent login</code>，名字不丢。'],
+  [6, '<b>登上后</b>：卡片收起，新账号成一行，带自己的套餐、目录和额度。'],
+  [7, '<b>Sign In Again</b>：今天的长按菜单项，只对已登录的账号出现；掉线的账号行上直接是「Sign In」。'],
+  [8, '<b>再登录</b>：同一张链接卡片，提示改成「with this account again」，登录写回这个账号自己的目录。'],
+  [9, '<b>拒绝移除</b>：机器自己的话，红字写在账号行下（同今天 Codex 账号被拒时）。Default 没有 Remove。'],
+  ['·', '<b>待验</b>：在另一台设备上完成登录（这里就是手机上的 Safari）还没实测（契约 §9、§17.1-6）；P4b 实现前补验，不成立的话这张图要改。'],
+]);
+</script>
+</body>
+</html>

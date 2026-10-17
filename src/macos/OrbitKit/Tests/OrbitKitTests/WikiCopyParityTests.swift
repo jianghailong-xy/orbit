@@ -677,8 +677,8 @@ final class WikiCopyParityTests: XCTestCase {
     func testTheEntrysActionsAndForms() throws {
         let drawer = try source(Self.drawer)
         assertOrder(drawer, ["{WIKI_ACTION_EDIT}",
-                             "{ key: 'supersede', icon: <SwapOutlined />, label: WIKI_ACTION_SUPERSEDE }",
-                             "{ key: 'retire', icon: <StopOutlined />, label: WIKI_ACTION_RETIRE, danger: true }",
+                             "{ key: 'supersede', icon: <SwapOutlined />, label: WIKI_ACTION_SUPERSEDE,",
+                             "{ key: 'retire', icon: <StopOutlined />, label: WIKI_ACTION_RETIRE, danger: true,",
                              "label: copied ? WIKI_LINK_COPIED : WIKI_ACTION_COPY_LINK"], "the entry's actions")
         for text in [WikiCopy.editNote, WikiCopy.supersedeNote, WikiCopy.retireNote] {
             assertSays(drawer, text, in: Self.drawer)
@@ -686,7 +686,7 @@ final class WikiCopyParityTests: XCTestCase {
         for placeholder in [WikiCopy.titlePlaceholder, WikiCopy.summaryPlaceholder, WikiCopy.reasonPlaceholder] {
             assertSays(drawer, "placeholder=\"\(placeholder)\"", in: Self.drawer)
         }
-        assertSays(drawer, "okText={mode === 'retire' ? '\(WikiCopy.retireConfirm)' : mode === 'supersede' ? "
+        assertSays(drawer, "{mode === 'retire' ? '\(WikiCopy.retireConfirm)' : mode === 'supersede' ? "
                    + "'\(WikiCopy.supersedeConfirm)' : '\(WikiCopy.save)'}", in: Self.drawer)
         assertSays(drawer, "message.success(mode === 'retire' ? '\(WikiCopy.retired)' : mode === 'supersede' ? "
                    + "'\(WikiCopy.superseded)' : '\(WikiCopy.saved)');", in: Self.drawer)
@@ -742,7 +742,7 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(actions, "decide({ opId: op.id, action: 'reject', reason: 'not_true' })", in: Self.review)
         XCTAssertEqual(WikiRejectReason.allCases.first, .notTrue, "Keep is a rejection as Not true")
         assertSays(review, "{op.tainted ? WIKI_WEB_DERIVED_NOTE : WIKI_ACCEPT_NOTE}", in: Self.review)
-        assertSays(review, "items: WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label }))", in: Self.review)
+        assertSays(review, "items={WIKI_REJECT_MENU.map(({ reason, label }) => ({", in: Self.review)
         // The retire card's three rows, and the others' three.
         assertOrder(review, ["<span className=\"k\">\(WikiCopy.reasonLabel)</span>",
                              "<span className=\"k\">\(WikiCopy.evidenceLabel)</span>",

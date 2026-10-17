@@ -1,9 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { CloseCircleFilled, ExclamationCircleFilled } from '@ant-design/icons';
+import { CloseCircleFilled, ExclamationCircleFilled, InfoCircleFilled } from '@ant-design/icons';
 import './Alert.css';
 
 export interface AlertProps {
-  type: 'error' | 'warning';
+  type: 'error' | 'warning' | 'info';
   title: ReactNode;
   description?: ReactNode;
   /** What to do about it, after the text: a Retry, a repair. */
@@ -20,7 +20,7 @@ export function Alert({ type, title, description, action, className, style }: Al
   const described = shown(description);
   return (
     <div role="alert" style={style} className={`orbit-alert orbit-alert-${type}${described ? ' orbit-alert-with-description' : ''}${className ? ` ${className}` : ''}`}>
-      <span className="orbit-alert-icon" aria-hidden>{type === 'warning' ? <ExclamationCircleFilled /> : <CloseCircleFilled />}</span>
+      <span className="orbit-alert-icon" aria-hidden>{type === 'warning' ? <ExclamationCircleFilled /> : type === 'info' ? <InfoCircleFilled /> : <CloseCircleFilled />}</span>
       <div className="orbit-alert-section">
         <div className="orbit-alert-title">{title}</div>
         {described && <div className="orbit-alert-description">{description}</div>}

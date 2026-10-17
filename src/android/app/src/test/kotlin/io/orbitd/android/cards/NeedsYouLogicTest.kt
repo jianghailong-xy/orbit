@@ -154,6 +154,21 @@ class NeedsYouLogicTest {
         assertEquals("item:i", NeedsYouLogic.cardKey(OwnerItem("i", "ESCALATED", "", "")))
     }
 
+    /** A08-17: a session ROW says an escalated item's need after its word (iOS `NeedsYouLogic.itemWord`); the banner keeps the word and
+     * the project, and the other three kinds carry no need. */
+    @Test fun aSessionRowSaysAnEscalatedItemsNeed() {
+        fun item(kind: String, need: String?) = buildJsonObject {
+            put("itemId", "i"); put("kind", kind); put("title", "t"); put("since", "2026-09-13T10:00:00Z"); need?.let { put("need", it) }
+        }
+        fun row(vararg items: JsonObject) = NeedsYouLogic.oldestItemWord(NeedsYouLogic.ownerItems(items.toList()))
+        assertEquals("Escalated to you · the check on the combined tree failed", row(item("ESCALATED", " the check on the combined tree failed ")))
+        assertEquals("a blank need leaves the word alone", "Escalated to you", row(item("ESCALATED", "  ")))
+        assertEquals("an older server's item has none", "Escalated to you", row(item("ESCALATED", null)))
+        assertEquals("Paused", row(item("FUSE_PAUSED", "not the pause's")))
+        assertEquals("Escalated to you · Integration line",
+            NeedsYouLogic.banner(listOf(coordinator("c1", "Integration line", listOf(item("ESCALATED", "the check failed")))))?.text)
+    }
+
     @Test fun coordinatorItemsDoNotCount() {
         val handling = coordinator("c1", "Integration line", emptyList(), approvals = 0)
         assertFalse(NeedsYouLogic.needsYou(handling))
@@ -226,6 +241,21 @@ class NeedsYouLogicTest {
         assertEquals("8 waiting below", NeedsYouLogic.below(counted, ReaderSide.BELOW)?.text)
     }
 
+    /** A revision waiting for the paused coordinator, or sent to it, is not asking the owner (project 34cygPTQe5LPUT7tdUAzG): the
+     * corpus has one of each, both drawn, and the bar counts neither — without today's evidence card, no evidence at all. */
+    @Test fun aRevisionWaitingForTheCoordinatorOrSentToItIsNotCounted() {
+        val queue = corpus.obj("snapshot")!!.obj("standing")!!.obj("evidenceDecisions")!!
+        val queued = (queue.objects("waitingOnCoordinator") + queue.objects("sentToCoordinator"))
+            .map { "evidence:${it.text("taskId")}:${it.text("evidenceRevision")}" }
+        assertEquals(queued.toSet(), CardCatalog.session(corpus.text("sessionId")!!, snapshot())
+            .filter { it.family == CardFamily.COORDINATOR_QUEUE }.map { it.key }.toSet())
+        val counted = rows(snapshot())
+        assertTrue(counted.none { it.rowId in queued })
+        val alone = rows(snapshot { standing -> standing["evidenceDecisions"] = JsonObject(queue + ("pending" to JsonArray(emptyList()))) })
+        assertTrue(alone.none { it.rowId.startsWith("evidence:") })
+        assertEquals(counted.size - 1, alone.size)
+    }
+
     /** Under review the card can still be pressed, but it is not asking the owner yet (contract §5 N1). */
     @Test fun aConfirmationUnderReviewIsNotCounted() {
         val counted = rows(snapshot { standing ->
@@ -250,6 +280,23 @@ class NeedsYouLogicTest {
         assertTrue(counted.none { it.rowId == "item:x1" })
         assertTrue(counted.none { it.rowId.startsWith("acceptance:") })
         assertTrue(counted.any { it.rowId == "item:f1" })
+    }
+
+    /** A08-13: a question that has ended is a record no count reads — the read's, or this window's answer before the read has it. */
+    @Test fun aQuestionsRecordIsNotCounted() {
+        val items = corpus.obj("snapshot")!!.obj("standing")!!.obj("openItems")!!
+        val asked = items.objects("needsYou").single { it.text("itemId") == "q1" }
+        val record = CoordinatorQuestions.answeredHere(asked, 0, null, null)
+        val answeredHere = NeedsYouLogic.belowRows(corpus.text("sessionId")!!, snapshot(), mapOf("q1" to record))
+        assertTrue(answeredHere.none { it.rowId == "item:q1" })
+        assertEquals(rows(snapshot()).size - 1, answeredHere.size)
+        val read = rows(snapshot { standing ->
+            standing["openItems"] = JsonObject(items + ("needsYou" to JsonArray(items.objects("needsYou").filter { it.text("itemId") != "q1" })) +
+                ("closedQuestions" to JsonArray(listOf(record))))
+        })
+        assertTrue(read.none { it.rowId == "item:q1" })
+        assertTrue("the record is drawn", CardCatalog.session(corpus.text("sessionId")!!, snapshot(), answered = mapOf("q1" to record))
+            .any { it.key == "item:q1" && it.family == CardFamily.QUESTION_RECORD })
     }
 
     /** The coordinator's "Is this project done?" counts while it asks, after the rail's cards, and not once recorded. */

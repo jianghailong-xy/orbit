@@ -1,0 +1,67 @@
+argv: npx playwright test --config ui-migration/controls.config.mjs
+tree: /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/base
+head: f78e93f615fceda94eeea0c9cdd400fb44b7949e
+uncommitted:
+ M src/web/ui-migration/choices-first-frame.browser.mjs
+ M src/web/ui-migration/choices-first-option.browser.mjs
+ M src/web/ui-migration/choices-lifecycle.browser.mjs
+ M src/web/ui-migration/choices-motion.browser.mjs
+ M src/web/ui-migration/choices-open-value.browser.mjs
+ M src/web/ui-migration/choices-submenu-geometry.browser.mjs
+ M src/web/ui-migration/choices.browser.mjs
+ M src/web/ui-migration/composer-checks.mjs
+ M src/web/ui-migration/composer-cost.browser.mjs
+ M src/web/ui-migration/composer-input.browser.mjs
+ M src/web/ui-migration/composer.browser.mjs
+ M src/web/ui-migration/controls.browser.mjs
+ M src/web/ui-migration/foundation.browser.mjs
+ M src/web/ui-migration/overlays-app-frame.browser.mjs
+ M src/web/ui-migration/overlays-close-hover.browser.mjs
+ M src/web/ui-migration/overlays.browser.mjs
+ M src/web/ui-migration/toasts.browser.mjs
+load: 13.63 16.86 16.20 7/3222 923739
+mem: 7247M available
+disk: / 73778M available, TMPDIR /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/tmp
+started: 2026-10-10T14:42:33Z
+
+P0 expected screenshots: 44 P0.2 originals, 165 main drift references, 43 accepted migration differences.
+
+Running 32 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/controls.browser.mjs:96:1 › fixed control states keep the frozen P0 palette (3.8s)
+  ✓   2 [chromium-light-desktop] › ui-migration/controls.browser.mjs:187:1 › hover and keyboard focus preserve visible control feedback (2.9s)
+  ✓   3 [chromium-light-desktop] › ui-migration/controls.browser.mjs:215:1 › keyboard, labels, loading, disabled and native form values work (1.7s)
+  ✓   4 [chromium-light-desktop] › ui-migration/controls.browser.mjs:298:1 › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded (1.3s)
+  ✓   5 [chromium-light-phone] › ui-migration/controls.browser.mjs:96:1 › fixed control states keep the frozen P0 palette (3.5s)
+  ✓   6 [chromium-light-phone] › ui-migration/controls.browser.mjs:187:1 › hover and keyboard focus preserve visible control feedback (2.9s)
+  ✓   7 [chromium-light-phone] › ui-migration/controls.browser.mjs:215:1 › keyboard, labels, loading, disabled and native form values work (1.8s)
+  ✓   8 [chromium-light-phone] › ui-migration/controls.browser.mjs:298:1 › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded (1.1s)
+  ✓   9 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:96:1 › fixed control states keep the frozen P0 palette (3.5s)
+  ✓  10 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:187:1 › hover and keyboard focus preserve visible control feedback (3.0s)
+  ✓  11 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:215:1 › keyboard, labels, loading, disabled and native form values work (1.8s)
+  ✓  12 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:298:1 › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded (1.4s)
+  ✓  13 [chromium-dark-phone] › ui-migration/controls.browser.mjs:96:1 › fixed control states keep the frozen P0 palette (3.7s)
+  ✓  14 [chromium-dark-phone] › ui-migration/controls.browser.mjs:187:1 › hover and keyboard focus preserve visible control feedback (3.1s)
+  ✓  15 [chromium-dark-phone] › ui-migration/controls.browser.mjs:215:1 › keyboard, labels, loading, disabled and native form values work (1.7s)
+  ✓  16 [chromium-dark-phone] › ui-migration/controls.browser.mjs:298:1 › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded (1.1s)
+  ✓  17 [webkit-light-desktop] › ui-migration/controls.browser.mjs:96:1 › fixed control states keep the frozen P0 palette (3.9s)
+  ✓  18 [webkit-light-desktop] › ui-migration/controls.browser.mjs:187:1 › hover and keyboard focus preserve visible control feedback (3.2s)
+  ✓  19 [webkit-light-desktop] › ui-migration/controls.browser.mjs:215:1 › keyboard, labels, loading, disabled and native form values work (2.3s)
+  ✓  20 [webkit-light-desktop] › ui-migration/controls.browser.mjs:298:1 › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded (1.6s)
+  ✓  21 [webkit-light-phone] › ui-migration/controls.browser.mjs:96:1 › fixed control states keep the frozen P0 palette (3.4s)
+  ✓  22 [webkit-light-phone] › ui-migration/controls.browser.mjs:187:1 › hover and keyboard focus preserve visible control feedback (3.0s)
+  ✓  23 [webkit-light-phone] › ui-migration/controls.browser.mjs:215:1 › keyboard, labels, loading, disabled and native form values work (1.9s)
+  ✓  24 [webkit-light-phone] › ui-migration/controls.browser.mjs:298:1 › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded (1.2s)
+  ✓  25 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:96:1 › fixed control states keep the frozen P0 palette (4.0s)
+  ✓  26 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:187:1 › hover and keyboard focus preserve visible control feedback (3.2s)
+  ✓  27 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:215:1 › keyboard, labels, loading, disabled and native form values work (2.4s)
+  ✓  28 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:298:1 › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded (1.7s)
+  ✓  29 [webkit-dark-phone] › ui-migration/controls.browser.mjs:96:1 › fixed control states keep the frozen P0 palette (3.4s)
+  ✓  30 [webkit-dark-phone] › ui-migration/controls.browser.mjs:187:1 › hover and keyboard focus preserve visible control feedback (2.9s)
+  ✓  31 [webkit-dark-phone] › ui-migration/controls.browser.mjs:215:1 › keyboard, labels, loading, disabled and native form values work (1.9s)
+  ✓  32 [webkit-dark-phone] › ui-migration/controls.browser.mjs:298:1 › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded (1.2s)
+
+  32 passed (1.4m)
+exit=0
+load: 11.61 15.42 15.74 9/3190 940242
+ended: 2026-10-10T14:43:59Z

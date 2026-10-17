@@ -1,0 +1,150 @@
+{
+ "name": "install-and-version",
+ "runId": "2026-10-17T02-15-08-453Z",
+ "startedAt": "2026-10-17T02:15:08.462Z",
+ "finishedAt": "2026-10-17T02:15:20.558Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/install-and-version.ndjson",
+ "protocolLines": 8,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "the tarball of the build under test has the expected sha256",
+   "ok": true,
+   "detail": {
+    "bytes": 183861376
+   }
+  },
+  {
+   "name": "--version is the build under test",
+   "ok": true,
+   "detail": "2026.10.14-941492e"
+  },
+  {
+   "name": "about reports the build under test as cliVersion",
+   "ok": true,
+   "detail": "2026.10.14-941492e"
+  },
+  {
+   "name": "install <version> unpacks into ~/.local/share/cursor-agent/versions/<version>",
+   "ok": true
+  },
+  {
+   "name": "installed index.js is byte-identical to the tarball under test",
+   "ok": true
+  },
+  {
+   "name": "~/.local/bin/agent points at the installed version",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "unpacked": {
+   "files": 458,
+   "bytes": 586293819,
+   "indexJsSha256": "27776c587649c9b6fa9671ac8dda2810f29346e66937efe8ac254012d2113482",
+   "launcherSha256": "2ccc9a8e167797641448b5e5c936f006ba137a2555f117f38c5eb76a5238a233",
+   "nodeSha256": "e0e46d3a1c0667117303412647cafcbcefb1be7612493015ec8fd6b7440162a4"
+  },
+  "help:acp": "Usage: agent acp [options]\n\nStart the Cursor Agent as an ACP (Agent Client Protocol) server\n\nOptions:\n  -h, --help  Display help for command",
+  "help:install": "Usage: agent install [options] <version> [urlPrefix]\n\nInstall Cursor Agent with specified version and URL prefix\n\nOptions:\n  -h, --help  Display help for command",
+  "help:update": "Usage: agent update [options]\n\nUpdate Cursor Agent to the latest version\n\nOptions:\n  -h, --help  Display help for command",
+  "help:status": "Usage: agent status|whoami [options]\n\nView authentication status\n\nOptions:\n  --format <format>  Output format (choices: \"text\", \"json\", default: \"text\")\n  -h, --help         Display help for command",
+  "help:about": "Usage: agent about [options]\n\nDisplay version, system, and account information\n\nOptions:\n  --format <format>  Output format (choices: \"text\", \"json\", default: \"text\")\n  -h, --help         Display help for command",
+  "about": {
+   "cliVersion": "2026.10.14-941492e",
+   "latestStatus": "update_available",
+   "latestVersion": "2026.10.16-e3cb207",
+   "model": "Auto",
+   "subscriptionTier": null,
+   "osPlatform": "linux",
+   "osArch": "x64",
+   "userEmail": null,
+   "terminalProgram": "unknown",
+   "shell": "unknown",
+   "lastRequestId": null
+  },
+  "update channel: latest build and status (recorded, not asserted)": {
+   "latestVersion": "2026.10.16-e3cb207",
+   "latestStatus": "update_available",
+   "isLatest": false
+  },
+  "install": {
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "ms": 3187
+  },
+  "processes the installer left running (ended by the scenario)": [
+   "<RUN>/slots/installer/home/.local/share/cursor-agent/versions/2026.10.14-941492e/cursor-agent <RUN>/slots/installer/home/.local/share/cursor-agent/versions/2026.10.14-941492e/index.js cleanup-install-versions 2026.10.14-941492e"
+  ],
+  "installer-home-tree": [
+   ".local/",
+   ".local/bin/",
+   ".local/bin/agent 777 symlink",
+   ".local/bin/cursor 755 765",
+   ".local/bin/cursor-agent 777 symlink",
+   ".local/share/",
+   ".local/share/cursor-agent/",
+   ".local/share/cursor-agent/versions/",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/.running/",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/1326.index.js 644 39027",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/1429.index.js 644 43875",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/1499.index.js 644 12470",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/1538.index.js 644 5940",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/159.index.js 644 353078",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/1623.index.js 644 116136",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/190.index.js 644 116619",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2240.index.js 644 221412",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2290.index.js 644 35299",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2422.index.js 644 1966",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2496.index.js 644 30631",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2576.index.js 644 2224",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2601.index.js 644 2092",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2652.index.js 644 368",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/272.index.js 644 6881",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2721.index.js 644 92713",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2761.index.js 644 5825",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/2911.index.js 644 6282",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3144.index.js 644 793",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3190.index.js 644 1795",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3244.index.js 644 899",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3284.index.js 644 573",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3464.index.js 644 2438",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3541.index.js 644 4469",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3548.index.js 644 416968",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3550.index.js 644 4849",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3575.index.js 644 1367",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/3857.index.js 644 6881",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/4114.index.js 644 5699",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/4155.index.js 644 9134",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/4161.index.js 644 5594",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/4343.index.js 644 665",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/4632.index.js 644 21998",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/4760.index.js 644 2099",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/478.index.js 644 14533",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/4945.index.js 644 5987",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5092.index.js 644 3637",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5336.index.js 644 29510",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5380.index.js 644 59306",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5434.index.js 644 1085",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5469.index.js 644 336",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5531.index.js 644 899",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5688.index.js 644 483885",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5720.index.js 644 2505",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5740.index.js 644 5657",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5818.index.js 644 9840",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/5993.index.js 644 1706",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/6040.index.js 644 16999",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/6134.index.js 644 7910",
+   ".local/share/cursor-agent/versions/2026.10.14-941492e/6136.index.js 644 100885"
+  ]
+ }
+}

@@ -10,6 +10,7 @@ import {
   modelForProvider,
   OPENCODE_DIALECT_NPM,
   openCodeBaseUrl,
+  openCodeDialect,
   openCodeKeyModel,
   openCodeKeyOf,
   openCodeKeyProvider,
@@ -30,16 +31,17 @@ import {
   savedRuntimeDefaultModel,
 } from '../common/runtime-model';
 
-// Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
-// a control-plane-configured ModelProvider that borrows one of these runtimes.
+// A built-in provider is an engine's own sign-in on the runner (or OpenCode's own configuration), named
+// by the engine. Any other `provider` value is a credential configured on the control plane — a key
+// (ModelProvider) or an account pool — that an engine runs on (docs/provider-engine-contract.md §1.3).
 /** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
  * `providerBuiltin` fences configured `kimi` / `dsh` slugs during rolling
- * deployment; Claude/Codex predate the discriminator, and migrations 0080 and 0367 move any
- * pre-existing custom `opencode` / `antigravity` row (0367: or account pool) aside, so all four
- * remain unambiguous. */
+ * deployment; Claude/Codex predate the discriminator, and migrations 0080, 0367 and 0426 move any
+ * pre-existing custom `opencode` / `antigravity` / `cursor` row (0367: or account pool; 0426: or
+ * retired name) aside, so all five remain unambiguous. */
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
-  if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY) return true;
+  if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY || slug === AgentProvider.CURSOR) return true;
   if (slug === AgentProvider.KIMI || slug === AgentProvider.DSH) return providerBuiltin;
   return false;
 }
@@ -47,8 +49,8 @@ export function isBuiltinProvider(slug?: string | null, providerBuiltin = true):
 /**
  * The engine a built-in provider slug names, or null when the slug needs a lookup (a key, a pool, or a
  * configured identity named `kimi`/`dsh`): docs/provider-engine-contract.md §5.4 steps 1–2. `claude`,
- * `codex`, `opencode` and `antigravity` are unambiguous (isBuiltinProvider); `kimi` and `dsh` are the
- * engine only when the row says it is the built-in one. No provider at all is the column default.
+ * `codex`, `opencode`, `antigravity` and `cursor` are unambiguous (isBuiltinProvider); `kimi` and `dsh`
+ * are the engine only when the row says it is the built-in one. No provider at all is the column default.
  */
 export function builtinSessionEngine(
   provider: string | null | undefined,
@@ -59,7 +61,8 @@ export function builtinSessionEngine(
     provider === AgentProvider.CLAUDE ||
     provider === AgentProvider.CODEX ||
     provider === AgentProvider.OPENCODE ||
-    provider === AgentProvider.ANTIGRAVITY
+    provider === AgentProvider.ANTIGRAVITY ||
+    provider === AgentProvider.CURSOR
   ) {
     return provider;
   }
@@ -74,6 +77,7 @@ const KEY_ROW_ENGINES: ReadonlySet<string> = new Set([
   AgentProvider.KIMI,
   AgentProvider.ANTIGRAVITY,
   AgentProvider.DSH,
+  AgentProvider.CURSOR,
 ]);
 
 /** The engine a key's row ran its sessions on before the split — its runtime, when that is one — and
@@ -170,38 +174,8 @@ function runtimeOf(row: ModelProviderRow): AgentProvider {
   if (row.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
   if (row.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (row.runtime === AgentProvider.DSH) return AgentProvider.DSH;
+  if (row.runtime === AgentProvider.CURSOR) return AgentProvider.CURSOR;
   throw new BadRequestException(`provider runtime not available: "${row.runtime}"`);
-}
-
-/**
- * The engine a credential runs on when nothing else is named: a live configured row's runtime, else
- * the built-in ladder (with a Claude fallback for a slug nothing live holds). Asked of a credential a
- * caller is moving TO — a provider switch's target, a wiki maintenance key — and never of a session:
- * a session's engine is its own (Session.engine, providers/session-engine.ts), which no disabling or
- * deletion of its key changes. That fallback is why.
- */
-export function execRuntime(args: {
-  declaredProvider?: string | null;
-  declaredProviderBuiltin?: boolean;
-  customRow: ModelProviderRow | null;
-}): AgentProvider {
-  if (args.customRow && !args.customRow.enabled && (
-    args.customRow.runtime === AgentProvider.DSH ||
-    (args.declaredProvider === AgentProvider.DSH && args.customRow.runtime !== AgentProvider.CLAUDE)
-  )) {
-    throw new BadRequestException('DeepSeek Harness provider is disabled');
-  }
-  if (args.customRow && args.customRow.enabled) return runtimeOf(args.customRow);
-  if (args.declaredProvider === AgentProvider.CODEX) return AgentProvider.CODEX;
-  if (args.declaredProvider === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
-  if (args.declaredProvider === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
-  if (args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false) {
-    return AgentProvider.KIMI;
-  }
-  if (args.declaredProvider === AgentProvider.DSH && args.declaredProviderBuiltin !== false) {
-    return AgentProvider.DSH;
-  }
-  return AgentProvider.CLAUDE;
 }
 
 /**
@@ -334,19 +308,29 @@ function isAnthropicEndpoint(baseUrl: string): boolean {
   }
 }
 
+/** The variable a Cursor key reaches the runner in. */
+export const CURSOR_KEY_VAR = 'ORBIT_CURSOR_API_KEY';
+
 // Env injected so the engine's CLI talks to the key's endpoint, in the variables THAT engine reads
 // (docs/provider-engine-contract.md §4.2) — the engine is the session's, and the key only says where
 // to send it: Claude Code → the Anthropic-compatible vars (Phase 1); Codex → OpenAI-compatible (Phase
 // 2); Kimi Code → the Kimi CLI's own KIMI_MODEL_* provider; Antigravity → agy's GEMINI_API_KEY /
-// GOOGLE_GEMINI_BASE_URL; DeepSeek Harness → its own pair. The same DeepSeek key on Claude Code and on
-// DeepSeek Harness is one endpoint, its baseUrl, read by each in its own names. OpenCode is not here:
-// its key travels in its config (openCodeKeyConfig).
+// GOOGLE_GEMINI_BASE_URL; DeepSeek Harness → its own pair; Cursor CLI → ORBIT_CURSOR_API_KEY. The same
+// DeepSeek key on Claude Code and on DeepSeek Harness is one endpoint, its baseUrl, read by each in its
+// own names. OpenCode is not here: its key travels in its config (openCodeKeyConfig).
 function injectedEnv(
   engine: AgentProvider,
   row: ModelProviderRow,
   model: string,
   apiKey: string,
 ): Record<string, string> {
+  if (engine === AgentProvider.CURSOR) {
+    // The runner reads this and starts the CLI with the key as CURSOR_API_KEY, its credentials held in
+    // memory only (docs/cursor-runtime-contract.md §8.2, §16.3); the variable itself never reaches the
+    // CLI. No endpoint: the CLI trades the key for a token at Cursor's own API, and the row's baseUrl
+    // only names it. The model is the session's ACP selection, which the driver sets.
+    return { [CURSOR_KEY_VAR]: apiKey };
+  }
   if (engine === AgentProvider.DSH) {
     // P2 fixes these in the session overlay, including apiKeyEnv=ORBIT_DSH_API_KEY. A Harness
     // session never falls through to Claude credentials or the project's ambient DeepSeek key.
@@ -512,12 +496,12 @@ export function engineIncompatible(
 
 /**
  * Whether an OpenCode session may spend this configured key (shared `openCodeKeys`): enabled, on a
- * dialect OpenCode speaks — every one a configured key can speak — and holding an API key rather than
- * a Claude subscription token. A pool's members are rows too and answer the same way; the pool itself
+ * dialect OpenCode speaks — every one a configured key can speak but a Cursor key's — and holding an API
+ * key rather than a Claude subscription token. A pool's members are rows too and answer the same way; the pool itself
  * holds no key to hand over, so it is not one.
  */
 export function runsOnOpenCode(row: Pick<ModelProviderRow, 'runtime' | 'enabled' | 'apiKeyEnc'>): boolean {
-  if (!row.enabled || !keyDialect(row.runtime)) return false;
+  if (!row.enabled || !openCodeDialect(row.runtime)) return false;
   try {
     return !decryptSecret(row.apiKeyEnc).trim().startsWith(SUBSCRIPTION_TOKEN_PREFIX);
   } catch {
@@ -548,7 +532,7 @@ export async function openCodeKeyRows(
  * permission config over this in turn (runner-go openCodeConfigContent).
  */
 function openCodeKeyConfig(row: OpenCodeKeyRow, model: string, base?: string, apiKey?: string): string {
-  const dialect = keyDialect(row.runtime)!;
+  const dialect = openCodeDialect(row.runtime)!;
   let config: Record<string, unknown> = {};
   try {
     const parsed: unknown = base ? JSON.parse(base) : {};
@@ -629,6 +613,10 @@ export function resolveProviderExec(args: {
    *  read the same way: resolved into the KIMI_CODE_HOME injected below, the directory Kimi Code keeps
    *  its whole login in. */
   kimiAccount?: string | null;
+  /** The Cursor CLI account this session runs on (Session.cursorAccount ?? Workspace.cursorAccount),
+   *  read the same way: resolved into the ORBIT_CURSOR_ACCOUNT_DIR injected below, which the runner
+   *  reads to pick the account the session's CLI signs in with (docs/cursor-runtime-contract.md §16.2). */
+  cursorAccount?: string | null;
   /** Runner.engines of the assigned runner: where each account's directory is reported. */
   runnerEngines?: unknown;
   /** The owner's configured keys (openCodeKeyRows), for an OpenCode session whose model names one
@@ -725,16 +713,21 @@ export function resolveProviderExec(args: {
   }
   // A session on an account other than Default runs in that account's own directory — a Codex
   // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a
-  // Kimi Code KIMI_CODE_HOME.
+  // Kimi Code KIMI_CODE_HOME, a Cursor CLI account's directory.
   // Built-in only: a configured provider brings its own key, so no sign-in on the machine is spent.
   // The chosen account replaces any such variable typed into the workspace's env.
   const accountId = isAccountEngine(provider) ? args[ACCOUNT_CHOICE[provider]] : undefined;
   const account = accountOnRunner(provider, accountId, args.runnerEngines);
   const dirVar = accountEnvVar(provider);
-  const env =
+  let env =
     account && dirVar
       ? { ...(workspaceEnv ?? {}), [dirVar]: accountDir(account) }
       : (workspaceEnv ?? undefined);
+  // A Cursor CLI session on its sign-in spends no key: the variable a Cursor key reaches the runner in is
+  // dispatch's alone to set (injectedEnv), never one typed into the workspace's env.
+  if (provider === AgentProvider.CURSOR && env && CURSOR_KEY_VAR in env) {
+    env = Object.fromEntries(Object.entries(env).filter(([name]) => name !== CURSOR_KEY_VAR));
+  }
   const pin = nonBlankModel(provider, sessionModel);
   const retired = retiredPin(null, provider, args, pin);
   const explicitSessionModel = retired ? undefined : pin;

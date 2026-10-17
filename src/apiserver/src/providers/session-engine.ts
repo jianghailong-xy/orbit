@@ -31,7 +31,7 @@ export interface SessionEngineFacts {
  *    use it: its row's runtime, when that is an engine;
  * 4. an account pool: the engine it was made on (accountPoolRuntime — one of the owner's own, or a
  *    Codex pool they are one of the people of);
- * 5. an alias of a retired slug: added by T3 with the alias table;
+ * 5. a retired provider name (provider_slug_alias, migration 0415): the engine the old slug ran on;
  * 6. anything else — a key that is gone — is unknown.
  */
 export async function legacySessionEngine(
@@ -46,7 +46,10 @@ export async function legacySessionEngine(
     select: { runtime: true },
   });
   if (row) return keyRowEngine(row.runtime);
-  return accountPoolRuntime(db, session.ownerId, slug);
+  const pooled = await accountPoolRuntime(db, session.ownerId, slug);
+  if (pooled) return pooled;
+  const alias = await db.providerSlugAlias.findUnique({ where: { slug }, select: { engine: true } });
+  return recordedEngine(alias?.engine);
 }
 
 /**
@@ -73,3 +76,28 @@ export function recordedEngine(engine: string | null | undefined): AgentProvider
  */
 export const SESSION_ENGINE_UNKNOWN_MESSAGE =
   "this session's engine was never recorded and its provider is gone, so Orbit cannot tell which engine its conversation belongs to; start a new session";
+
+/**
+ * The engine every read reports for each of these sessions (docs/provider-engine-contract.md §6.1): the
+ * recorded one, else the old rules' derivation, else null when nobody can tell. A row without one is
+ * rare after the backfill — one an older replica wrote — and a page of them shares a few credentials,
+ * so each derivation is asked once per credential.
+ */
+export async function sessionEnginesOf(
+  db: Prisma.TransactionClient,
+  sessions: Array<SessionEngineFacts & { id: string }>,
+): Promise<Map<string, AgentProvider | null>> {
+  const engines = new Map<string, AgentProvider | null>();
+  const derived = new Map<string, Promise<AgentProvider | null>>();
+  for (const session of sessions) {
+    const recorded = recordedEngine(session.engine);
+    if (recorded) {
+      engines.set(session.id, recorded);
+      continue;
+    }
+    const key = `${session.ownerId}\u0000${session.provider ?? ''}\u0000${session.providerBuiltin ? 1 : 0}`;
+    if (!derived.has(key)) derived.set(key, legacySessionEngine(db, session));
+    engines.set(session.id, await derived.get(key)!);
+  }
+  return engines;
+}

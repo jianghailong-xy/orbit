@@ -815,7 +815,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
 
         // Redraft…: the note, the owner's words, the protected documents kept, Cancel and Redraft.
         let webRedraft = try slice(page, from: "function PlanRedraftModal(", to: "const KIND_OPTIONS")
-        for literal in ["okText={WIKI_PLAN_REDRAFT_GO}", "{wikiPlanRedraftNote(provider,", "placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER}",
+        for literal in ["{WIKI_PLAN_REDRAFT_GO}", "{wikiPlanRedraftNote(provider,", "placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER}",
                         "{wikiPlanProtectedKept(protectedDocs)}", "{WIKI_PLAN_REDRAFT_TITLE}"] {
             assertSays(webRedraft, literal, in: Self.page)
         }

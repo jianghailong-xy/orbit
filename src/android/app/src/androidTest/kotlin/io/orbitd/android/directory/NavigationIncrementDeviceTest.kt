@@ -94,9 +94,9 @@ class NavigationIncrementDeviceTest {
                 compose.onNodeWithText("Cancel").performClick()
                 compose.onNodeWithTag("tasks-select-done").performClick()
 
-                // A05-8 · a project row: the project's page as a destination of its own, led by the drawer's button.
+                // A05-8 · a project row: the project's sessions page (A05d) as a destination of its own, led by the drawer's button.
                 openDrawer(); compose.onNode(row("Launch")).performClick(); settle()
-                await { exists(hasTestTag("project-detail")) }
+                await { exists(hasTestTag("project-sessions")) }
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                 capture("08-project-destination")
                 openDrawer(); compose.onNode(row("Launch")).assertIsSelected(); compose.onNode(row("Projects")).assertIsNotSelected()

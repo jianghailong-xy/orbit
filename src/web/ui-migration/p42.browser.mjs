@@ -9,7 +9,8 @@ import {
 // table with its delete question, its loading and its empty state; New pool), connecting and editing a
 // provider, a DeepSeek key's account balance (its line in the keys table; on its page read, refreshing,
 // too low, refused and loading), a pool's own page (Who can use it, adding an account or a key,
-// sharing, signing ChatGPT in), the Runners list (its menu, rename, token rotation and delete questions, loading and empty), a
+// sharing, signing ChatGPT in), the Runners list (since main 33e0e2e09 the Infrastructure page's Machines section: its
+// menu, rename, token rotation and delete questions, loading and empty), a
 // runner's page (its menus, the workspace form, capacity, and an offline machine's attention cards), the
 // runner register guide, approving `orbit register`, and the administrator's Users table (with disabling
 // and enabling an account).
@@ -194,9 +195,11 @@ test.describe('P4.2 providers', () => {
     const fixtures = await installP42Fixtures(page, { theme: testInfo.project.use.colorScheme });
     const trace = [];
     fixtures.state.holdProviders = gate();
-    await page.goto(P42_PATHS.providers);
+    // Main 33e0e2e09: the keys are the Infrastructure page's #keys section, headed "API keys" (the deleted
+    // Providers page said "Your API keys").
+    await page.goto(P42_PATHS.keys);
     const keys = page.locator('.provider-keys');
-    const heading = page.getByRole('heading', { name: 'Your API keys', exact: true });
+    const heading = page.getByRole('heading', { name: 'API keys', exact: true });
     await expect(heading).toBeVisible();
     await expect(keys).toBeVisible();
     await top(heading);
@@ -290,7 +293,8 @@ test.describe('P4.2 connecting a provider', () => {
     trace.push(await observe(page, fixtures, 'advanced'));
     await capture('p42-connect-advanced', { advanced: page.locator('.provider-adv') });
     await button(page, 'Save anyway').click();
-    await page.waitForURL('**/providers');
+    // Main 33e0e2e09: a saved key goes back to the Infrastructure page's keys, not to /providers.
+    await page.waitForURL(`**${P42_PATHS.keys}`);
     await expect(notifications(page).getByText('Provider created', { exact: true })).toBeVisible();
     trace.push(await observe(page, fixtures, 'saved anyway'));
     await attachTrace(testInfo, trace);
@@ -351,7 +355,8 @@ test.describe('P4.2 connecting a provider', () => {
     await enabled.click();
     await expect(enabled).toHaveAttribute('aria-checked', 'false');
     await button(page, 'Save').click();
-    await page.waitForURL('**/providers');
+    // Main 33e0e2e09: a saved key goes back to the Infrastructure page's keys, not to /providers.
+    await page.waitForURL(`**${P42_PATHS.keys}`);
     await expect(notifications(page).getByText('Provider updated', { exact: true })).toBeVisible();
     trace.push(await observe(page, fixtures, 'saved'));
     await attachTrace(testInfo, trace);
@@ -608,15 +613,19 @@ test.describe('P4.2 a pool on its own page', () => {
     trace.push(await observe(page, fixtures, 'leave asked'));
     await capture('p42-pool-leave', { question: ask });
     await button(ask, 'Leave').click();
-    await page.waitForURL('**/providers');
+    // Main 33e0e2e09: leaving a pool goes back to the Infrastructure page's pools, not to /providers.
+    await page.waitForURL(`**${P42_PATHS.pools}`);
     await expect(notifications(page).getByText('You left Team keys', { exact: true })).toBeVisible();
     trace.push(await observe(page, fixtures, 'left'));
     await attachTrace(testInfo, trace);
   });
 });
 
-/** A runner card on the Runners list, by the name it shows. */
-const runnerCard = (page, name) => page.locator('.runner-card').filter({ has: page.locator('.runner-name', { hasText: new RegExp(`^${escape(name)}$`) }) });
+/** A machine card in the Infrastructure page's Machines section, by the name it shows: main 33e0e2e09 moved the
+ *  Runners list there, and main 8e0d14276 deleted the Runners page with its .runner-card list. */
+const runnerCard = (page, name) => page.locator('.re-runner-card').filter({ has: page.locator('.re-runner', { hasText: new RegExp(`^${escape(name)}$`) }) });
+/** The ⋯ on a machine card (main 33e0e2e09: "More actions for <name>"; the Runners list's was .runner-kebab). */
+const runnerMenu = (page, name) => runnerCard(page, name).getByRole('button', { name: `More actions for ${name}`, exact: true });
 
 test.describe('P4.2 runners', () => {
   test('the list: loading, its menu, rename, token rotation and delete', async ({ evidence }, testInfo) => {
@@ -624,28 +633,35 @@ test.describe('P4.2 runners', () => {
     const fixtures = await installP42Fixtures(page, { theme: testInfo.project.use.colorScheme });
     const trace = [];
     fixtures.state.holdRunners = gate();
-    await page.goto(P42_PATHS.runners);
-    await expect(page.getByRole('heading', { name: 'Runners', exact: true })).toBeVisible();
-    await expect(page.locator('.ant-spin, .orbit-spinner').first()).toBeVisible();
+    // Main 33e0e2e09: the list is the Infrastructure page's Machines section (/runners lands there). The section
+    // draws no spinner while its list is read: until the list answers it lists no machine and shows its empty
+    // invitation.
+    await page.goto(P42_PATHS.infrastructure);
+    const machines = page.locator('#machines');
+    await expect(page.getByRole('heading', { name: 'Machines', exact: true })).toBeVisible();
+    await expect(machines.locator('.re-runner-card')).toHaveCount(0);
+    await expect(machines.locator('.re-empty')).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'loading'));
-    await capture('p42-runners-loading', { spinner: page.locator('.ant-spin, .orbit-spinner').first() });
+    await capture('p42-runners-loading', { section: machines });
     fixtures.state.holdRunners.open();
     fixtures.state.holdRunners = null;
 
     const studio = runnerCard(page, 'Studio Mac');
     await expect(studio).toBeVisible();
     trace.push(await observe(page, fixtures, 'list'));
-    await capture('p42-runners', { card: studio, register: button(page, 'Register Runner') });
+    // Main 33e0e2e09: a machine is registered from the page head's Add menu (the Runners page had Register Runner).
+    await capture('p42-runners', { card: studio, add: page.locator('.prov-page-head').getByRole('button', { name: /^Add\b/ }) });
 
     await studio.hover();
-    await studio.locator('.runner-kebab').click();
+    await runnerMenu(page, 'Studio Mac').click();
     await expect(item(page, 'Rotate token')).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'menu'));
     await capture('p42-runner-menu', { menu: openMenu(page) });
     await item(page, 'Rename').click();
-    const rename = dialog(page, 'Rename runner');
+    // Main 33e0e2e09 titles the dialog "Rename machine" (the Runners page's said "Rename runner").
+    const rename = dialog(page, 'Rename machine');
     await expect(rename).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'rename'));
@@ -657,7 +673,7 @@ test.describe('P4.2 runners', () => {
     trace.push(await observe(page, fixtures, 'renamed'));
 
     await runnerCard(page, 'Studio').hover();
-    await runnerCard(page, 'Studio').locator('.runner-kebab').click();
+    await runnerMenu(page, 'Studio').click();
     await item(page, 'Rotate token').click();
     const rotate = question(page, 'Rotate token for “Studio”?');
     await expect(rotate).toBeVisible();
@@ -674,7 +690,7 @@ test.describe('P4.2 runners', () => {
     await expect(token).toHaveCount(0);
 
     await runnerCard(page, 'old-laptop').hover();
-    await runnerCard(page, 'old-laptop').locator('.runner-kebab').click();
+    await runnerMenu(page, 'old-laptop').click();
     await item(page, 'Delete').click();
     const remove = question(page, 'Delete “old-laptop”?');
     await expect(remove).toBeVisible();
@@ -687,10 +703,14 @@ test.describe('P4.2 runners', () => {
 
     fixtures.state.runners = [];
     await page.reload();
-    await expect(page.getByText('No runners yet — register a machine to get started.', { exact: true })).toBeVisible();
+    // Main 33e0e2e09: with no machine the Machines section invites one to be registered (the Runners page said "No
+    // runners yet" beside Register Runner). The overview under the page head is drawn once every list on the page has
+    // answered, so the invitation is read after the empty list arrived, not while it is being read.
+    await expect(page.getByRole('heading', { name: 'What your agents can run on', exact: true })).toBeVisible();
+    await expect(machines.getByRole('heading', { name: 'Already pay for Claude, Codex or Kimi?', exact: true })).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'no runners'));
-    await capture('p42-runners-empty', { register: button(page, 'Register Runner') });
+    await capture('p42-runners-empty', { register: button(machines, 'Register a machine') });
     await attachTrace(testInfo, trace);
   });
 
@@ -894,6 +914,19 @@ test.describe('P4.2 approving orbit register', () => {
 
 /** A user's row in the Users table, by email. */
 const userRow = (page, email) => page.locator('tr').filter({ has: page.getByText(email, { exact: true }) });
+/** A row's menu of every other action (docs/mocks/admin-users-redesign). */
+const rowMenu = (row) => row.getByRole('button', { name: /^More actions for / });
+/** A row's own action — View as, or Enable on a disabled account: in sight, or on a phone first in its menu. */
+async function ownAction(page, testInfo, row, name) {
+  if (!phone(testInfo)) return button(row, name);
+  await rowMenu(row).click();
+  return item(page, name);
+}
+/** That the row offers `name` as its own action; a menu opened to see it is closed again. */
+async function offersOwn(page, testInfo, row, name) {
+  await expect(await ownAction(page, testInfo, row, name)).toBeVisible();
+  if (phone(testInfo)) await page.keyboard.press('Escape');
+}
 
 test.describe('P4.2 users', () => {
   test('the table: loading, reset password, a one-time password and delete', async ({ evidence }, testInfo) => {
@@ -916,13 +949,14 @@ test.describe('P4.2 users', () => {
     trace.push({ ...(await observe(page, fixtures, 'users')), rows: await page.locator('tbody tr').allInnerTexts() });
     await capture('p42-users', { table: page.locator(TABLE), row: dev });
 
-    await button(dev, 'Reset password').click();
+    await rowMenu(dev).click();
+    await item(page, 'Reset password').click();
     const reset = question(page, 'Reset dev@example.test\'s password?');
     await expect(reset).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'reset asked'));
     await capture('p42-users-reset', { question: reset });
-    await button(reset, 'OK').click();
+    await button(reset, 'Reset password').click();
     const issued = question(page, 'Password reset for dev@example.test');
     await expect(issued.getByText(ONE_TIME_PASSWORD, { exact: true })).toBeVisible();
     await frames(page);
@@ -932,20 +966,22 @@ test.describe('P4.2 users', () => {
     await expect(issued).toHaveCount(0);
     trace.push(await observe(page, fixtures, 'password dismissed'));
 
-    await button(dev, 'Make admin').click();
+    await rowMenu(dev).click();
+    await item(page, 'Make admin').click();
     const updated = notifications(page).getByText('Role updated', { exact: true });
     await expect(updated).toBeVisible();
     trace.push(await observe(page, fixtures, 'role updated'));
     await expect(updated).toHaveCount(0);
 
     const ops = userRow(page, 'ops@example.test');
-    await button(ops, 'Delete').click();
+    await rowMenu(ops).click();
+    await item(page, 'Delete').click();
     const remove = question(page, 'Delete ops@example.test?');
     await expect(remove).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'delete asked'));
     await capture('p42-users-delete', { question: remove });
-    await button(remove, 'OK').click();
+    await button(remove, 'Delete').click();
     await expect(notifications(page).getByText('User deleted', { exact: true })).toBeVisible();
     trace.push(await observe(page, fixtures, 'deleted'));
 
@@ -1004,14 +1040,18 @@ test.describe('P4.2 users', () => {
     await page.goto(P42_PATHS.admin);
     const dev = userRow(page, 'dev@example.test');
     await expect(dev).toBeVisible();
-    // The signed-in administrator's own row offers neither; a disabled account offers Enable.
-    await expect(button(userRow(page, 'reviewer@example.test'), 'Disable')).toHaveCount(0);
-    await expect(button(userRow(page, 'former@example.test'), 'Enable')).toBeVisible();
+    // The signed-in administrator's own menu offers no Disable; a disabled account offers Enable.
+    await rowMenu(userRow(page, 'reviewer@example.test')).click();
+    await expect(openMenu(page)).toBeVisible();
+    await expect(item(page, 'Disable')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await offersOwn(page, testInfo, userRow(page, 'former@example.test'), 'Enable');
     trace.push({ ...(await observe(page, fixtures, 'status')), rows: await page.locator('tbody tr').allInnerTexts() });
 
     // A refusal (the account was deleted meanwhile) is said in the question itself, and nothing changes.
     fixtures.state.disableRefusals = { [P42_IDS.ops]: 'user not found' };
-    await button(userRow(page, 'ops@example.test'), 'Disable').click();
+    await rowMenu(userRow(page, 'ops@example.test')).click();
+    await item(page, 'Disable').click();
     const askOps = question(page, 'Disable ops@example.test?');
     await expect(askOps).toBeVisible();
     await button(askOps, 'Disable').click();
@@ -1023,7 +1063,8 @@ test.describe('P4.2 users', () => {
     await expect(askOps).toHaveCount(0);
 
     // Disable asks first and says what stops working; then the row reads Disabled and offers Enable.
-    await button(dev, 'Disable').click();
+    await rowMenu(dev).click();
+    await item(page, 'Disable').click();
     const ask = question(page, 'Disable dev@example.test?');
     await expect(ask).toBeVisible();
     await frames(page);
@@ -1031,16 +1072,18 @@ test.describe('P4.2 users', () => {
     await capture('p42-users-disable', { question: ask });
     await button(ask, 'Disable').click();
     await expect(notifications(page).getByText('Account disabled', { exact: true })).toBeVisible();
-    await expect(button(dev, 'Enable')).toBeVisible();
+    await offersOwn(page, testInfo, dev, 'Enable');
     await expect(ask).toHaveCount(0);
     await frames(page);
     trace.push(await observe(page, fixtures, 'disabled'));
     await capture('p42-users-disabled', { row: dev });
 
-    // Enable lets the account back in at once, without asking.
-    await button(dev, 'Enable').click();
+    // Enable lets the account back in at once, without asking; Disable is back in its menu.
+    await (await ownAction(page, testInfo, dev, 'Enable')).click();
     await expect(notifications(page).getByText('Account enabled', { exact: true })).toBeVisible();
-    await expect(button(dev, 'Disable')).toBeVisible();
+    await rowMenu(dev).click();
+    await expect(item(page, 'Disable')).toBeVisible();
+    await page.keyboard.press('Escape');
     trace.push(await observe(page, fixtures, 'enabled'));
     await attachTrace(testInfo, trace);
   });

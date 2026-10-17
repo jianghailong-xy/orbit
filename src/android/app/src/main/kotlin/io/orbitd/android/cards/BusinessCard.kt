@@ -21,14 +21,16 @@ import io.orbitd.android.text.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.*
-import java.util.UUID
 
 /** The same component and commands can be embedded in Tasks/Projects and Wiki when routed there. [review] draws it as a review's
  * page (A08-2; iOS `ApprovalReviewLayout`'s review path): its words scroll, its buttons stay pinned under them, and its heading is
- * the review's own title rather than a line of the card. */
+ * the review's own title rather than a line of the card. [recorded] — what this window pressed it with — draws it in its review as
+ * the record it became: its words as they were asked, dimmed and read-only, what was picked ticked, and no buttons, inputs or hints;
+ * the review puts who did what where its buttons were. */
 @Composable
 fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState = CardActionState(),
-    open: (String) -> Unit, discuss: ((String) -> Unit)? = null, submit: (CardVerb, CardInput) -> Unit, review: Boolean = false) {
+    open: (String) -> Unit, discuss: ((String) -> Unit)? = null, submit: (CardVerb, CardInput) -> Unit, review: Boolean = false,
+    recorded: CardInput? = null) {
     var note by rememberSaveable(card.key, card.binding) { mutableStateOf("") }
     var noteAction by rememberSaveable(card.key, card.binding) { mutableStateOf<CardVerb?>(null) }
     var selections by rememberSaveable(card.key, card.binding, stateSaver = jsonSaver(MapSerializer(String.serializer(), ListSerializer(String.serializer())))) { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
@@ -56,20 +58,33 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             }
             put("title", editTitle.trim()); put("summary", editSummary.trim())
         }, reason = reason)
-    fun send(verb: CardVerb) { submit(verb, if (verb == CardVerb.RETRY_TASK) input.copy(triggerId = UUID.randomUUID().toString()) else input) }
+    fun send(verb: CardVerb) = submit(verb, input)
     val body: @Composable ColumnScope.() -> Unit = {
-        if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
-        Text("From Orbit", style = MaterialTheme.typography.labelSmall)
-        card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
-        if (batchPreview != null) BatchReviewBody(card, open, batchPage) { batchPage = it }
-        else CardBody(card, open, owner = if (card.family == CardFamily.OWNER_CONFIRMATION && CardVerb.CONFIRM_OWNER in card.actions)
-                OwnerForm(ownerAnswers, enabled) { answer -> ownerAnswers = ownerAnswers.filterNot { it.key == answer.key } + answer } else null,
-            reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null)
-        CardDiscussion.context(card)?.let { context ->
+        // A revision waiting for the coordinator says when it was submitted, beside its title (`CoordinatorQueue`).
+        val submitted = card.source.text("submittedAt")?.takeIf { card.family == CardFamily.COORDINATOR_QUEUE || CoordinatorQueue.isDecidingMyself(card) }
+            ?.let { OwnerReview.receiptTime(it) }
+        if (!review && submitted != null) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(card.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Text(submitted, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
+        // A record's words are dimmed, still readable — and what opens (a fold, a task) still opens.
+        Column(Modifier.alpha(if (recorded != null) 0.6f else 1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("From Orbit", style = MaterialTheme.typography.labelSmall)
+            if (recorded == null) card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
+            if (batchPreview != null) BatchReviewBody(card, open, batchPage) { batchPage = it }
+            else CardBody(card, open, owner = when {
+                    card.family != CardFamily.OWNER_CONFIRMATION || CardVerb.CONFIRM_OWNER !in card.actions -> null
+                    recorded != null -> OwnerForm(recorded.ownerAnswers, false) {}
+                    else -> OwnerForm(ownerAnswers, enabled) { answer -> ownerAnswers = ownerAnswers.filterNot { it.key == answer.key } + answer }
+                }, reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null,
+                recorded = recorded != null)
+        }
+        if (card.family == CardFamily.QUESTION && recorded != null) QuestionAnswered(card, recorded)
+        if (recorded == null) CardDiscussion.context(card)?.let { context ->
             if (discuss == null) Text("Conversation discussion is not connected yet.", style = MaterialTheme.typography.bodySmall)
             else TextButton(onClick = { discuss(context) }, enabled = fresh && !result.busy) { Text("Chat about this") }
         }
-        if (card.family == CardFamily.QUESTION && card.actions.isNotEmpty()) {
+        if (card.family == CardFamily.QUESTION && card.actions.isNotEmpty() && recorded == null) {
             approvalQuestions(card.source.obj("input") ?: JsonObject(emptyMap())).forEach { q ->
                 Text(q.header ?: q.question, style = MaterialTheme.typography.titleSmall)
                 if (q.header != null) Text(q.question)
@@ -108,9 +123,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         }
         if (noteAction != null) {
             Text(noteAction!!.label, style = MaterialTheme.typography.labelMedium)
-            if (noteAction == CardVerb.MARK_HANDLED) Text("The task, its branch and history stay where they are. Your reason records why this item is no longer open.")
-            OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), enabled = enabled,
-                label = { Text(if (noteAction == CardVerb.MARK_HANDLED) "Why is it no longer open?" else "Say what to do instead…") })
+            OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Say what to do instead…") })
             TextButton(onClick = { noteAction = null }, enabled = enabled) { Text("Back") }
         }
     }
@@ -120,13 +133,11 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         result.response?.takeIf { it.text("code") in setOf("TASK_ALREADY_RUNNING", "TASK_RUN_PIN_CONFLICT", "TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED") }
             ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }
         if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        // A merge under way: its dead press says how far its job got, beside the Cancel it still offers (iOS `mergingActionLabel`).
-        if (card.family == CardFamily.PROMOTION && PromotionCards.isMerging(card.source)) OutlinedButton(onClick = {}, enabled = false,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${card.key}:merging")) { Text(PromotionCards.mergingActionLabel(card.source)) }
         // Reopen task is pressed in the review's box (iOS `OwnerConfirmationReviewBarView`), not among the card's buttons.
         card.actions.filter { it != CardVerb.REOPEN_TASK }.forEach { verb ->
-            val requiresNote = verb in setOf(CardVerb.SEND_BACK, CardVerb.CHAT, CardVerb.MARK_HANDLED)
-            val valid = runCatching { CardRequests.build(card, verb, input.copy(triggerId = "validation")) }.isSuccess
+            val requiresNote = verb in setOf(CardVerb.SEND_BACK, CardVerb.CHAT)
+            // Decide it myself sends nothing: it opens the waiting revision's decision here (`CoordinatorQueue.decideMyself`).
+            val valid = verb == CardVerb.DECIDE_MYSELF || runCatching { CardRequests.build(card, verb, input) }.isSuccess
             val label = if (verb == CardVerb.REMEMBER) {
                 val rules = ApprovalRules.remember(card.source.text("toolName") ?: "", card.source.obj("input") ?: JsonObject(emptyMap()))
                 "Allow & remember " + rules.joinToString(", ") { it.ruleContent?.removeSuffix(":*") ?: it.toolName }
@@ -137,7 +148,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             OutlinedButton(onClick = {
                 when {
                     requiresNote && noteAction != verb -> noteAction = verb
-                    verb in setOf(CardVerb.CANCEL_TASK, CardVerb.CONFIRM_MERGE, CardVerb.WIKI_REVERT, CardVerb.WATCH_CANCEL) -> confirming = verb
+                    verb in setOf(CardVerb.CONFIRM_MERGE, CardVerb.WIKI_REVERT, CardVerb.WATCH_CANCEL) -> confirming = verb
                     else -> send(verb)
                 }
             }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${card.key}:${verb.name}"),
@@ -149,8 +160,11 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     if (review) Column(Modifier.fillMaxSize().testTag(card.key)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp), content = body)
-        HorizontalDivider()
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = doors)
+        // A record's buttons are gone: the review draws who did what in their place.
+        if (recorded == null) {
+            HorizontalDivider()
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = doors)
+        }
     } else Surface(Modifier.fillMaxWidth().testTag(card.key).alpha(if (record) 0.72f else 1f), shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { body(); doors() }
@@ -161,12 +175,31 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             // The task panel's own question (`TaskReopen`): a receipt's reopen is a second place to press the one door.
             CardVerb.REOPEN_TASK -> TaskReopen.paragraphs(buildJsonObject { (card.context.obj("view")?.text("projectId"))?.let { put("projectId", it) } })
                 .joinToString("\n\n")
-            CardVerb.CANCEL_TASK -> "This ends the task's attempt and closes its exceptions. Its branch and history remain."
             CardVerb.CONFIRM_MERGE -> "Merge the displayed source revision into ${card.source.text("upstreamRef")}. The server checks this exact revision again."
             CardVerb.WIKI_REVERT -> "Take back the changes shown in this run's revert plan."
             else -> "Stop this watch. It will no longer wait for its condition."
         }) }, confirmButton = { TextButton(modifier = Modifier.testTag("confirm:${verb.name}"), enabled = enabled, onClick = { confirming = null; send(verb) }) { Text(verb.label) } },
         dismissButton = { TextButton(onClick = { confirming = null }) { Text(if (verb == CardVerb.REOPEN_TASK) "Cancel" else "Back") } }) }
+}
+
+/** The questions as they were asked, answered (record-1): each one's options with those picked ticked on a light row and the rest
+ * grey, and words typed instead under YOUR ANSWER, ticked, in quotes. */
+@Composable
+private fun QuestionAnswered(card: InteractionCard, answered: CardInput) {
+    approvalQuestions(card.source.obj("input") ?: JsonObject(emptyMap())).forEachIndexed { index, q ->
+        Text(q.header ?: q.question, style = MaterialTheme.typography.titleSmall)
+        if (q.header != null) Text(q.question)
+        val picked = answered.selections[q.question].orEmpty()
+        q.options.forEachIndexed { option, choice ->
+            ReplayOption("${card.key}:question:$index:option:$option", choice.label, choice.description, recommended = false,
+                chosen = choice.label in picked, words = null, wordsLabel = null)
+        }
+        answered.custom[q.question]?.trim()?.takeIf { it.isNotEmpty() }?.let { own ->
+            Text(CardPreviews.yourAnswer, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ReplayOption("${card.key}:question:$index:own", "“$own”", null, recommended = false, chosen = true, words = null, wordsLabel = null)
+        }
+    }
 }
 
 private fun <T> jsonSaver(serializer: KSerializer<T>) = Saver<T, String>(

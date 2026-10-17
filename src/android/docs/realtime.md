@@ -66,12 +66,19 @@ views, folders, tags, workspaces and runners. Raw control summaries never
 overwrite full permission/capability fields from a REST snapshot.
 
 The selected session opens `/api/sessions/:id/events?sinceSeq=...&maxPayload=2048`.
-A cold open reads `events/page?tail=200`; reconnect verifies an overlap through
-`events/page?after=...&limit=500`, following `after`. `hasMore` means older
-history exists and is not a forward-page cursor. More than two overlap pages
+A cold open reads `events/page?tail=200`. A window seeded before the attempt
+(restored from the cache, or carried over a drop or a clean close) first closes
+its gap through `events/page?after=<resumeSeq>&limit=200`, following `after`,
+and the stream then connects from the frontier those pages proved. The gateway
+compresses JSON but not `text/event-stream`, and a replay that drops midway
+re-sends the whole gap, while each landed page moves the frontier. A page that
+fails ends the catch-up: the stream attempt right after it is the retry, from
+the advanced frontier. `hasMore` means older history exists and is not a
+forward-page cursor. A gap past five pages (the server's `SSE_GAP_CAP` of 1,000)
 or an explicit `resync` discards the old window and reseeds from a fresh tail.
-The server subscribes to live events before replaying; the client reads the
-REST overlap after successful SSE headers and before draining those frames.
+The server subscribes to live events before replaying; after successful SSE
+headers and before draining those frames, the client reads one REST page from
+its cursor and does not follow that page's `after`: the replay carries the rest.
 
 Every connect/foreground recovery rereads session detail, PENDING approvals,
 queued turns, background jobs and pending evidence decisions. Session-linked

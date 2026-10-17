@@ -119,9 +119,10 @@ final class SharedPoolAdapterTests: XCTestCase {
     func testASharedPoolRunsOnCodexWithTheCodexCLIsOwnModels() {
         let providers = ProviderPools.asProviders(SharedPools.asProviderPools([self.pool([key("a")])]))
         XCTAssertEqual(AgentDefaults.runtime(for: "team-codex", configured: providers), "codex")
-        XCTAssertEqual(AgentDefaults.models(for: "team-codex", catalog: codexCatalog, configured: providers)
-            .map(\.id), ["gpt-5.6-sol"])
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "team-codex", catalog: codexCatalog,
+        XCTAssertEqual(ProviderEngines.engines(ofProvider: "team-codex", configured: providers), ["codex"])
+        XCTAssertEqual(AgentDefaults.models(engine: "codex", provider: "team-codex", catalog: codexCatalog,
+                                            configured: providers).map(\.id), ["gpt-5.6-sol"])
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "codex", provider: "team-codex", catalog: codexCatalog,
                                                   configured: providers), "gpt-5.6-sol")
         XCTAssertEqual(providers.first?.presetSlug, "openai")
         XCTAssertEqual(AgentDefaults.providerName("team-codex", configured: providers), "Team Codex")
@@ -134,15 +135,16 @@ final class SharedPoolAdapterTests: XCTestCase {
         let pools = SharedPools.asProviderPools([self.pool([key("orbit-org-1", next: true)])])
         let providers = ProviderPools.asProviders(pools)
         let tile = try XCTUnwrap(SessionProviderChoices
-            .choices(configured: providers, catalog: codexCatalog, pools: pools)
+            .providers(for: "codex", sources: ChoiceSources(configured: providers, catalog: codexCatalog, pools: pools))
             .first { $0.kind == .pool })
         XCTAssertEqual(tile.slug, "team-codex")
         XCTAssertEqual(tile.modelLabel, "GPT-5.6 Sol")
         let created = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(
-            CreateSessionRequest(prompt: "do it", agentId: "ag1", provider: tile.slug,
-                                 model: AgentDefaults.defaultModel(for: tile.slug,
+            CreateSessionRequest(prompt: "do it", agentId: "ag1", engine: "codex", provider: tile.slug,
+                                 model: AgentDefaults.defaultModel(engine: "codex", provider: tile.slug,
                                                                    catalog: codexCatalog,
                                                                    configured: providers)))) as? [String: Any])
+        XCTAssertEqual(created["engine"] as? String, "codex")
         XCTAssertEqual(created["provider"] as? String, "team-codex")
         XCTAssertEqual(created["model"] as? String, "gpt-5.6-sol")
     }

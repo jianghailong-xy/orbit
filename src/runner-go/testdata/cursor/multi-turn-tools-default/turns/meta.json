@@ -1,0 +1,104 @@
+{
+ "scenario": "multi-turn-tools-default",
+ "process": "turns",
+ "version": "2026.10.14-941492e",
+ "exit": null,
+ "actions": [
+  {
+   "t": 12,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "-f",
+     "-qq",
+     "-e",
+     "trace=execve",
+     "-o",
+     "<RUN>/turns.strace",
+     "<CLI>/cursor-agent",
+     "acp"
+    ],
+    "cwd": "<RUN>/work",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "HTTPS_PROXY",
+     "HTTP_PROXY",
+     "LANG",
+     "NODE_USE_ENV_PROXY",
+     "NO_OPEN_BROWSER",
+     "NO_PROXY",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 12,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 493,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 9022,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/prompt"
+  },
+  {
+   "t": 18590,
+   "channel": "client->agent",
+   "id": 0,
+   "method": null
+  },
+  {
+   "t": 19726,
+   "channel": "client->agent",
+   "id": 1,
+   "method": null
+  },
+  {
+   "t": 23758,
+   "channel": "client->agent",
+   "id": 2,
+   "method": null
+  },
+  {
+   "t": 26034,
+   "channel": "client->agent",
+   "id": 3,
+   "method": null
+  },
+  {
+   "t": 29450,
+   "channel": "client->agent",
+   "id": 4,
+   "method": "session/prompt"
+  },
+  {
+   "t": 33649,
+   "channel": "client->agent",
+   "id": 4,
+   "method": null
+  },
+  {
+   "t": 36268,
+   "channel": "client->agent",
+   "id": 5,
+   "method": null
+  }
+ ]
+}

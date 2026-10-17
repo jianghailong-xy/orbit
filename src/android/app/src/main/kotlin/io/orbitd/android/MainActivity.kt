@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -35,6 +36,7 @@ import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastHost
 import io.orbitd.android.tasks.TasksScreen
+import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDrawerCount
@@ -42,6 +44,7 @@ import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
 import io.orbitd.android.watch.WatchDestination
+import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.ReaderResources
@@ -147,6 +150,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
         val revision = if (live.first === signedIn.handle) live.second else 0L
+        // The sessions parked on a watch that will resume them, as Following last read them: a project row's line says so (A05-6).
+        val watches by remember(signedIn.handle) { WatchStore.of(app.session, signedIn.handle, app.processScope).state }.collectAsState()
         val holder = rememberSaveableStateHolder()
         // A13's settings and runner pages are built anew each time they are pushed, as on iOS: once such a route has
         // left every stack, its saved state goes too, so a cancelled edit or an old draft never comes back.
@@ -178,11 +183,16 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         LaunchedEffect(route, signedIn.handle, live.first) {
             if (live.first === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
         }
+        // iOS `NavigationDrawer(live: progress > 0)`: the drawer's animated marks move only while any of it is on screen. The closed
+        // drawer stays composed, one sheet's width off screen (Material's closed anchor), where a spinner would redraw every frame.
+        var sheetWidth by remember { mutableIntStateOf(0) }
+        val drawerLive by remember { derivedStateOf { sheetWidth > 0 && drawer.currentOffset > -sheetWidth } }
         ModalNavigationDrawer(drawerState = drawer,
             drawerContent = {
-                ModalDrawerSheet(drawerContainerColor = LocalOrbitColors.current.drawer,
+                ModalDrawerSheet(modifier = Modifier.onSizeChanged { sheetWidth = it.width }, drawerContainerColor = LocalOrbitColors.current.drawer,
                     drawerContentColor = MaterialTheme.colorScheme.onSurface) {
                     Column(Modifier.fillMaxHeight().widthIn(max = 360.dp).verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {
+                        val projects = rememberDrawerProjects(api, revision)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("Orbit", style = MaterialTheme.typography.headlineMedium)
                             IconButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SEARCH, origin = Origin.DRAWER)) }) {
@@ -198,7 +208,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                         if (dest == Destination.WIKI && navigation.section != name) wikiEntered(app, signedIn.handle, navigation)
                                         select(name, OrbitRoute(dest, origin = Origin.DRAWER))
                                     },
-                                    badge = if (dest == Destination.WIKI) ({ WikiDrawerCount(app, signedIn.handle) }) else null)
+                                    badge = when (dest) {
+                                        Destination.WIKI -> ({ WikiDrawerCount(app, signedIn.handle) })
+                                        Destination.PROJECTS -> ({ ProjectsDrawerCount(projects) })
+                                        else -> null
+                                    })
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
@@ -217,7 +231,17 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }
-                        DrawerProjects(api, revision, navigation.section) { key, root -> select(key, root) }
+                        // A drawer project row: the project's sessions page as its root, over its coordinator's workspace — or the one
+                        // showing, or the first — and the project's page when there is no workspace to open it over (iOS 6f5f883c8).
+                        DrawerProjects(projects, ProjectAttention.coordinatorPulses(data.sessions["open"].orEmpty()), drawerLive,
+                            navigation.section, root = { id ->
+                            val coordinator = (data.sessions["open"].orEmpty() + data.sessions["completed"].orEmpty()).firstOrNull {
+                                it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, id)
+                            }
+                            val over = coordinator?.workspace ?: route.workspaceId ?: workspaces.firstOrNull()?.id
+                            if (over == null) OrbitRoute(Destination.PROJECT, id, origin = Origin.DRAWER)
+                            else OrbitRoute(Destination.PROJECT_SESSIONS, id, over, origin = Origin.DRAWER)
+                        }) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
                         val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
                         Button(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, origin = Origin.DRAWER)) },
@@ -229,7 +253,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 }
             }) {
             Scaffold(topBar = {
-                TopAppBar(title = { PageBar.Title(route) { Text(routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) } },
+                // iOS `ConsoleView.foldsChrome`: a phone's page folds the bar away while its own composer holds the
+                // keyboard — back, title and the page's buttons come back when the keyboard goes.
+                if (!PageBar.folds(route)) TopAppBar(modifier = Modifier.testTag("app-bar"),
+                    title = { PageBar.Title(route) { Text(routeTitle(route, data), maxLines = 2, style = MaterialTheme.typography.titleMedium) } },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
                             Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
@@ -249,7 +276,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
-                                Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open) { app.realtime.refreshDirectory() }
+                                Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open, { app.realtime.refreshDirectory() },
+                                    revision, watches.summaries)
+                                Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, revision, ::open)
                                 Destination.SEARCH -> SearchScreen(api, ::open)
                                 Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open) {
                                     navigation = navigation.dropSession(route.id!!)
@@ -287,7 +316,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                     ToastHost(open = { toast -> OrbitToasts.dismiss(toast.id); toast.sessionId?.let(::openSession) },
                         undo = { toast ->
                             OrbitToasts.dismiss(toast.id)
-                            toast.sessionId?.let { SessionActions(api, app.processScope) { app.realtime.refreshDirectory(); app.realtime.refreshSession() }.restore(it, toast.subtitle) }
+                            toast.sessionId?.let { SessionActions(api, app) { app.realtime.refreshDirectory(); app.realtime.refreshSession() }.restore(it, toast.subtitle) }
                         },
                         resolve = { toast ->
                             val session = toast.sessionId; val conflict = toast.mergeConflict
@@ -309,6 +338,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.FOLDER -> data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
+    Destination.PROJECT_SESSIONS -> "Project"
     Destination.WIKI, Destination.WIKI_ENTRY -> "Wiki"
     Destination.WIKI_BROWSE -> "Browse"
     Destination.WIKI_INDEX -> "Index"

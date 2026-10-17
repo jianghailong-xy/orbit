@@ -48,7 +48,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { WikiController } from './wiki.controller';
-import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { wikiMaintenanceRunOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
@@ -467,6 +467,28 @@ test('the pin holds: a run its settings cannot carry is claimed with its refusal
     assert.deepEqual(await h.prisma.session.findUniqueOrThrow({ where: { id }, select: { status: true, error: true } }),
       { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR }, `an ordinary session on ${slug}`);
   }
+});
+
+// The settings' key on another engine is not that run: a run's clean start and its disallowed tools hold
+// on Claude Code alone (docs/provider-engine-contract.md §3.5), whatever else the key runs.
+test('T3 a maintenance run on its pinned key starts only on Claude Code, whatever else that key runs', { skip }, async () => {
+  const h = await boot();
+  const who = await owner(h, 'other-engine');
+  const local = await provider(h, who.id);
+  const { listId } = await maintainedSpace(h, who, local.slug);
+  const runOf = async (id: string) =>
+    wikiMaintenanceRunOf(h.prisma as never, await h.prisma.session.findUniqueOrThrow({ where: { id } }));
+
+  // On Claude Code, recorded or from before engines were: it starts.
+  const onClaude = await queued(h, who, { provider: local.slug, taskId: await task(h, who, listId) });
+  assert.equal((await runOf(onClaude))?.refusal, undefined);
+  await h.prisma.session.update({ where: { id: onClaude }, data: { engine: 'claude' } });
+  assert.equal((await runOf(onClaude))?.refusal, undefined);
+  // The same key on OpenCode, which runs it too: refused, for the engine.
+  const onOpenCode = await queued(h, who, { provider: local.slug, taskId: await task(h, who, listId) });
+  await h.prisma.session.update({ where: { id: onOpenCode }, data: { engine: 'opencode' } });
+  assert.equal((await runOf(onOpenCode))?.refusal,
+    'This Wiki maintenance run did not start: it runs only on Claude Code, and this session runs on OpenCode.');
 });
 
 // ── 4. the settings door ────────────────────────────────────────────────────────────────────────

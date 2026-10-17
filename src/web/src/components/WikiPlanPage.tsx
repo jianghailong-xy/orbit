@@ -1,7 +1,6 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Drawer, Dropdown, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import {
   BranchesOutlined,
   CheckCircleFilled,
@@ -25,6 +24,15 @@ import { relTime } from './Transcript';
 import { WikiContentsButton } from './WikiDirectory';
 import { WikiDocRow } from './WikiDocList';
 import { WikiSourceCard } from './WikiSources';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
+import { Drawer } from './ui/Drawer';
+import { Input } from './ui/Input';
+import { Menu } from './ui/Menu';
+import { NumberInput } from './ui/NumberInput';
+import { Select } from './ui/Select';
+import { Switch } from './ui/Switch';
+import { Textarea } from './ui/Textarea';
 import {
   wikiDocsQuery,
   wikiEntriesQuery,
@@ -328,7 +336,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
 
   const moreItems = [
     ...(shown && page.base && shown.version !== page.base.version
-      ? [{ key: 'compare', label: comparing ? WIKI_PLAN_HIDE_COMPARE : wikiPlanCompare(page.base.version) }]
+      ? [{ key: 'compare', label: comparing ? WIKI_PLAN_HIDE_COMPARE : wikiPlanCompare(page.base.version), onSelect: () => setComparing(!comparing) }]
       : []),
   ];
 
@@ -374,7 +382,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
         {shown && (
           <div className="wk-pl-acts">
             {(shown.status === 'draft' || shown.status === 'failed') && (
-              <Button type="primary" disabled={shown.status === 'failed' || confirm.isPending} loading={confirm.isPending} onClick={onConfirm}>
+              <Button variant="primary" disabled={shown.status === 'failed' || confirm.isPending} loading={confirm.isPending} onClick={onConfirm}>
                 {WIKI_PLAN_CONFIRM}
               </Button>
             )}
@@ -384,9 +392,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
               </Button>
             )}
             {moreItems.length > 0 && (
-              <Dropdown menu={{ items: moreItems, onClick: ({ key }) => key === 'compare' && setComparing(!comparing) }} trigger={['click']}>
-                <Button icon={<EllipsisOutlined />} aria-label="More" />
-              </Dropdown>
+              <Menu items={moreItems} trigger={<Button icon={<EllipsisOutlined />} aria-label="More" />} />
             )}
           </div>
         )}
@@ -457,18 +463,21 @@ function PlanVersionMenu({ page, spaceSlug }: { page: PlanPage; spaceSlug: strin
         <span className={`tdp-badge tone-${row.status === 'confirmed' ? 'blue' : 'muted'}`}>{WIKI_PLAN_STATUS_LABELS[row.status]}</span>
       </span>
     ),
+    selected: row.version === shown.version,
+    onSelect: () => navigate(wikiPlanPath(spaceSlug, row.version)),
   }));
   return (
-    <Dropdown
-      trigger={['click']}
-      menu={{ items, selectable: true, selectedKeys: [String(shown.version)], onClick: ({ key }) => navigate(wikiPlanPath(spaceSlug, Number(key))) }}
-    >
-      <button type="button" className="wk-pl-ver">
-        <span>{wikiPlanVersionLabel(shown.version)}</span>
-        <span className={`tdp-badge tone-${shown.status === 'confirmed' ? 'blue' : 'muted'}`}>{WIKI_PLAN_STATUS_LABELS[shown.status]}</span>
-        <DownOutlined className="ic" />
-      </button>
-    </Dropdown>
+    <Menu
+      items={items}
+      popupClassName="wk-pl-vermenu"
+      trigger={
+        <button type="button" className="wk-pl-ver">
+          <span>{wikiPlanVersionLabel(shown.version)}</span>
+          <span className={`tdp-badge tone-${shown.status === 'confirmed' ? 'blue' : 'muted'}`}>{WIKI_PLAN_STATUS_LABELS[shown.status]}</span>
+          <DownOutlined className="ic" />
+        </button>
+      }
+    />
   );
 }
 
@@ -534,7 +543,7 @@ function PlanEmpty({
       <ProfileOutlined className="ic" />
       <b>{WIKI_PLAN_EMPTY_TITLE}</b>
       <p>{wikiPlanEmptyText(provider, serverExecutes)}</p>
-      <Button type="primary" loading={busy} onClick={onDraft}>
+      <Button variant="primary" loading={busy} onClick={onDraft}>
         {WIKI_PLAN_DRAFT}
       </Button>
       <div className="note">{wikiPlanEmptyNote(where, provider, serverExecutes)}</div>
@@ -1338,6 +1347,7 @@ function PlanRedraftModal({
 }) {
   const message = useToast();
   const [words, setWords] = useState('');
+  const field = useRef<HTMLTextAreaElement>(null);
   const redraft = useWikiWrite((instructions: string) => redraftWikiPlan(spaceId, instructions));
   const newest = wikiPlanNewest(plan);
   const submit = async () => {
@@ -1351,24 +1361,29 @@ function PlanRedraftModal({
     }
   };
   return (
-    <Modal
+    <Dialog
       open={open}
-      onCancel={onClose}
+      onClose={onClose}
       title={
         <span className="wk-pl-modal-t">
           <SyncOutlined className="ic" /> {WIKI_PLAN_REDRAFT_TITLE}
         </span>
       }
-      okText={WIKI_PLAN_REDRAFT_GO}
-      cancelText={WIKI_PLAN_CANCEL}
-      onOk={() => void submit()}
-      confirmLoading={redraft.isPending}
-      destroyOnHidden
+      initialFocus={field}
+      className="wk-pl-redraft-dialog"
+      footer={
+        <>
+          <Button onClick={onClose}>{WIKI_PLAN_CANCEL}</Button>
+          <Button variant="primary" loading={redraft.isPending} onClick={() => void submit()}>
+            {WIKI_PLAN_REDRAFT_GO}
+          </Button>
+        </>
+      }
     >
       <p className="wk-pl-modal-p">{wikiPlanRedraftNote(provider, newest ? { version: newest.version, inForce: newest.status === 'confirmed' } : null, serverExecutes)}</p>
-      <Input.TextArea autoFocus value={words} onChange={(event) => setWords(event.target.value)} rows={4} placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER} />
+      <Textarea ref={field} value={words} onChange={(event) => setWords(event.target.value)} rows={4} placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER} />
       {protectedDocs.length > 0 && <div className="wk-pl-modal-note">{wikiPlanProtectedKept(protectedDocs)}</div>}
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -1437,7 +1452,7 @@ function PlanEditDrawer({
       onClose={onClose}
       placement="right"
       width={phone ? '100%' : 560}
-      rootClassName="wk-pl-drawer"
+      className="wk-pl-drawer"
       title={
         <div className="wk-pl-drawer-t">
           <div className="sub">{wikiPlanEditHead(shown, category)}</div>
@@ -1450,7 +1465,7 @@ function PlanEditDrawer({
         <div className="wk-pl-dfoot">
           <span className="l">{wikiPlanSaveNote(next)}</span>
           <Button onClick={onClose}>{WIKI_PLAN_CANCEL}</Button>
-          <Button type="primary" loading={save.isPending} onClick={() => void submit()}>
+          <Button variant="primary" loading={save.isPending} onClick={() => void submit()}>
             {WIKI_PLAN_SAVE_DRAFT}
           </Button>
         </div>
@@ -1463,34 +1478,34 @@ function PlanEditDrawer({
         </label>
         <label className="wk-pl-f">
           <span className="l">{WIKI_PLAN_QUESTION}</span>
-          <Input.TextArea autoSize value={form.question} onChange={(event) => setForm({ ...form, question: event.target.value })} />
+          <Textarea autoSize value={form.question} onChange={(event) => setForm({ ...form, question: event.target.value })} />
         </label>
         <label className="wk-pl-f">
           <span className="l">
             {WIKI_PLAN_WRITTEN_FOR} <span className="dim">{WIKI_PLAN_ONE_PER_LINE}</span>
           </span>
-          <Input.TextArea autoSize value={form.audience.join('\n')} onChange={(event) => setForm({ ...form, audience: event.target.value.split('\n') })} />
+          <Textarea autoSize value={form.audience.join('\n')} onChange={(event) => setForm({ ...form, audience: event.target.value.split('\n') })} />
         </label>
         <label className="wk-pl-f">
           <span className="l">
             {WIKI_PLAN_COVERS} <span className="dim">{WIKI_PLAN_ONE_PER_LINE}</span>
           </span>
-          <Input.TextArea autoSize value={form.scopeIn.join('\n')} onChange={(event) => setForm({ ...form, scopeIn: event.target.value.split('\n') })} />
+          <Textarea autoSize value={form.scopeIn.join('\n')} onChange={(event) => setForm({ ...form, scopeIn: event.target.value.split('\n') })} />
         </label>
         <div className="wk-pl-f row2">
           <div className="grow">
             <span className="l">{WIKI_PLAN_LENGTH}</span>
             <div className="len">
-              <InputNumber min={1} value={form.length.min} onChange={(value) => setForm({ ...form, length: { ...form.length, min: Number(value) || 1 } })} />
+              <NumberInput min={1} value={form.length.min} onValueChange={(value) => setForm({ ...form, length: { ...form.length, min: Number(value) || 1 } })} />
               <span>–</span>
-              <InputNumber min={1} value={form.length.max} onChange={(value) => setForm({ ...form, length: { ...form.length, max: Number(value) || 1 } })} />
+              <NumberInput min={1} value={form.length.max} onValueChange={(value) => setForm({ ...form, length: { ...form.length, max: Number(value) || 1 } })} />
               <span className="dim">chars</span>
             </div>
           </div>
           <div>
             <span className="l">{WIKI_PLAN_PROTECTED}</span>
             <div className="sw">
-              <Switch checked={form.protected} onChange={(value) => setForm({ ...form, protected: value })} />
+              <Switch checked={form.protected} onCheckedChange={(value) => setForm({ ...form, protected: value })} />
               <span className="dim">{WIKI_PLAN_PROTECTED_SWITCH}</span>
             </div>
           </div>
@@ -1519,7 +1534,15 @@ function PlanEditDrawer({
               ) : (
                 <Input size="small" value={row.title} placeholder={WIKI_PLAN_EDIT_TITLE_FIELD} onChange={(event) => setSection(i, { title: event.target.value })} />
               )}
-              <Select size="small" value={row.kind} options={KIND_OPTIONS} onChange={(kind: WikiPlanSectionKind) => setSection(i, { kind })} aria-label={WIKI_PLAN_EDIT_KIND} />
+              <Select<WikiPlanSectionKind>
+                size="small"
+                value={row.kind}
+                options={KIND_OPTIONS}
+                onValueChange={(kind) => {
+                  if (kind !== null) setSection(i, { kind });
+                }}
+                aria-label={WIKI_PLAN_EDIT_KIND}
+              />
               <button type="button" className="x" aria-label="Remove" onClick={() => setForm({ ...form, sections: form.sections.filter((_, j) => j !== i) })}>
                 <CloseOutlined />
               </button>
@@ -1577,7 +1600,20 @@ function PlanSectionEditModal({
     }
   };
   return (
-    <Modal open onCancel={onClose} title={wikiPlanEditSection(index + 1)} okText={WIKI_PLAN_SAVE_DRAFT} cancelText={WIKI_PLAN_CANCEL} onOk={() => void submit()} confirmLoading={save.isPending}>
+    <Dialog
+      open
+      onClose={onClose}
+      title={wikiPlanEditSection(index + 1)}
+      className="wk-pl-section-dialog"
+      footer={
+        <>
+          <Button onClick={onClose}>{WIKI_PLAN_CANCEL}</Button>
+          <Button variant="primary" loading={save.isPending} onClick={() => void submit()}>
+            {WIKI_PLAN_SAVE_DRAFT}
+          </Button>
+        </>
+      }
+    >
       <div className="wk-pl-form">
         <label className="wk-pl-f">
           <span className="l">{WIKI_PLAN_EDIT_TITLE_FIELD}</span>
@@ -1585,15 +1621,21 @@ function PlanSectionEditModal({
         </label>
         <label className="wk-pl-f">
           <span className="l">{WIKI_PLAN_EDIT_KIND}</span>
-          <Select value={form.kind} options={KIND_OPTIONS} onChange={(kind: WikiPlanSectionKind) => setForm({ ...form, kind })} />
+          <Select<WikiPlanSectionKind>
+            value={form.kind}
+            options={KIND_OPTIONS}
+            onValueChange={(kind) => {
+              if (kind !== null) setForm({ ...form, kind });
+            }}
+          />
         </label>
         <label className="wk-pl-f">
           <span className="l">{WIKI_PLAN_COVERS}</span>
-          <Input.TextArea autoSize value={form.covers} onChange={(event) => setForm({ ...form, covers: event.target.value })} />
+          <Textarea autoSize value={form.covers} onChange={(event) => setForm({ ...form, covers: event.target.value })} />
         </label>
         <label className="wk-pl-f">
           <span className="l">{WIKI_PLAN_LENGTH}</span>
-          <InputNumber min={1} value={form.length} onChange={(value) => setForm({ ...form, length: Number(value) || 1 })} />
+          <NumberInput min={1} value={form.length} onValueChange={(value) => setForm({ ...form, length: Number(value) || 1 })} />
         </label>
         <div className="wk-pl-f hint">{wikiPlanSaveNote(wikiPlanNextVersion(plan))}</div>
         {refused && (
@@ -1606,7 +1648,7 @@ function PlanSectionEditModal({
           </div>
         )}
       </div>
-    </Modal>
+    </Dialog>
   );
 }
 

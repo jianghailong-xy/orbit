@@ -165,8 +165,11 @@ final class AcceptedTurnPlaceholderTests: XCTestCase {
         let drawnRows = rows(reducer)
         let history = reducer.state.items.map(\.id)
         let next = try XCTUnwrap(reducer.state.queued.first)
-        XCTAssertEqual(drawnRows.map(\.id), history + [head.id, "queued-\(next.id)", "transcript-bottom"],
-                       "the head is not drawn after the history and ahead of the queue")
+        XCTAssertEqual(drawnRows.map(\.id), history + [head.id, "transcript-bottom"],
+                       "the head is not drawn after the history")
+        // The message queued behind it is the reader's, still on its way: the tray holds it.
+        XCTAssertEqual(PendingTray.rows(state: reducer.state, withdrawing: [], steering: [], steerOffered: false).map(\.id),
+                       [next.id])
         let brief = drawn("t-brief", in: drawnRows)
         XCTAssertEqual(brief.count, 1)
         XCTAssertEqual(brief.first?.queued, false, "the head is drawn as the queue's row, with its Cancel")
@@ -530,7 +533,7 @@ final class AcceptedTurnPlaceholderTests: XCTestCase {
         let full = QueuedTurnInfo(
             turnId: "t", kind: "message", content: "words",
             attachments: [QueuedTurnInfo.Attachment(id: "a", mimeType: "image/png")],
-            openItemDelivery: .object([:]), taskStart: .object([:]), projectStarted: .object([:]),
+            openItemDelivery: .object([:]), ownerAnswer: .object([:]), taskStart: .object([:]), projectStarted: .object([:]),
             sessionMessage: .object([:]), sessionReplies: .array([]), authoredByOrbit: true,
             confirmationReviewRequest: .object([:]), confirmationReturn: .object([:]),
             placement: "accepted", createdAt: Self.filedAt, targetTurnId: "t-a", delivery: "failed",

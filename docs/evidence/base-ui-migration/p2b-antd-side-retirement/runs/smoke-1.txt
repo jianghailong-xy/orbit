@@ -1,0 +1,14 @@
+argv: env KW2_BURST=1 KW2_PACED=1 KW2_RESULTS=/mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/runs/smoke-1-out npx playwright test --config /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.config.mjs --project chromium-dark-desktop --grep orbit-menu menu-enter burst sample 0$
+tree: /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34 HEAD a55e9d1131d6b6e1c540f12d37b0cb72841cafcc
+uncommitted: 
+start: 2026-10-11T03:55:06Z load: 15.33 12.33 10.28
+mem: 5812M available, swap 21365M free
+disk: / 66675M available
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium-dark-desktop] › ../../docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs:198:3 › orbit-menu menu-enter burst sample 0 (1.8s)
+
+  1 passed (3.1s)
+end: 2026-10-11T03:55:10Z load: 16.82 12.69 10.40
+exit=0

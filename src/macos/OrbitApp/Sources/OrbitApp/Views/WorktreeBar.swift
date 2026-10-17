@@ -144,9 +144,7 @@ struct WorktreeBar: View {
         // read as one surface (web parity: `.wt-bar` and `.bg-tray` are both `--bg-subtle`). This
         // fill is also what lets the pill stand on the bare content backdrop now that `ComposerBand`
         // carries no surface of its own.
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
+        .composerBandCard()
         .padding(.bottom, .composerBandGap)
     }
 
@@ -822,9 +820,7 @@ struct BackgroundTrayView: View {
             // the stack above the composer reads as one system, not a full-bleed grey strip. The
             // surface is a light translucent tint rather than the `.bar` material, which rendered muddy
             // and border-less — web uses a near-white subtle fill (`--bg-subtle`) here for the crisper look.
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
+            .composerBandCard()
             .padding(.bottom, .composerBandGap)
         }
     }

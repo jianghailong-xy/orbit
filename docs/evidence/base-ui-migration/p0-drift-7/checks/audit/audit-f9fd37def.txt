@@ -1,0 +1,37 @@
+{
+  "baseline": {
+    "commit": "f9fd37defb75ed792ec0c510946cbf7328032b06",
+    "scopeHash": "83a940fa11998ec04719c249b2db9b75e8856728950d5cdc981d5be60c231e77"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json",
+    "2026-10-08b.json",
+    "2026-10-09.json",
+    "2026-10-09b.json"
+  ],
+  "unowned": [
+    {
+      "path": "src/web/src/App.managedRunner.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/WorkspaceView.managedRunner.test.tsx",
+      "reason": "no owner"
+    }
+  ],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P4.4": 55,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 94,
+    "P6": 42
+  }
+}
+Ownership gaps: 2 use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.
+exit 1

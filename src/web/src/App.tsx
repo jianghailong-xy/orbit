@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Spin } from 'antd';
 import { getToken } from './api';
 import { encodeId } from './lib/idCodec';
 import { useManagedRunner } from './lib/managedRunner';
@@ -10,6 +9,7 @@ import { AppShell, DocView, FlushView } from './components/AppShell';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
 import { WorkspaceConsole } from './components/WorkspaceConsole';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
+import { Spinner } from './components/ui/Spinner';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
@@ -95,7 +95,7 @@ function DefaultLanding() {
     return (
       <main className="app-main">
         <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
-          <Spin />
+          <Spinner aria-busy="true" />
         </div>
       </main>
     );

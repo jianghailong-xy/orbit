@@ -112,7 +112,7 @@ function finished(
   };
 }
 
-/** The antd migration the owner reported on 2026-10-06: started, OPEN, six criteria and every one
+/** The component migration the owner reported on 2026-10-06: started, OPEN, six criteria and every one
  *  of them Not met yet — whose coordinator conversation carried the card all the same, with "Ask
  *  the coordinator to handle it" on it. */
 function antdMigration(over: Partial<Doc> = {}): Doc {
@@ -143,7 +143,7 @@ describe('what “looks finished” means', () => {
     expect(held(finished({ tasksByStatus: {} }))).toBe(true);
   });
 
-  it('holds of nothing with a criterion still unmet — the antd migration the owner reported', () => {
+  it('holds of nothing with a criterion still unmet — the component migration the owner reported', () => {
     expect(held(antdMigration())).toBe(false);
     const oneUnmet = finished({}, [criterion('c1', true, null), criterion('c2', false, 'CODELESS')]);
     expect(held(oneUnmet)).toBe(false);

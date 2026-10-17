@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import type { WikiDocMaterialRecord } from '@orbit/shared';
+import type { WikiDocMaterialRecord, WikiRepoFileRead } from '@orbit/shared';
 
+import { WikiDocsSnapshotRepo } from './wiki-docs-build-job';
 import {
   wikiDocApplyMerge,
   wikiDocBodyOf,
-  wikiDocCleanPath,
   wikiDocDispositions,
   wikiDocEndOnlyNote,
   wikiDocEndOnlyParagraphs,
@@ -34,7 +34,6 @@ import {
   wikiDocUnfoundCitations,
   wikiDocWritePrompt,
   type WikiDocPiece,
-  type WikiDocRepo,
   type WikiDocsPlanDoc,
   type WikiDocWrittenSection,
 } from './wiki-docs-writer';
@@ -87,15 +86,17 @@ const FIXTURE = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared
   factTokens: Array<{ sentence: string; tokens: string[] }>;
 };
 
-/** The fixture's files at its commit, as `git show <sha>:<path>` answers them. */
-const repo: WikiDocRepo = {
-  sha: FIXTURE.sha,
-  show: (raw) => {
-    const at = wikiDocCleanPath(raw);
-    return at !== '' && at in FIXTURE.files ? { text: FIXTURE.files[at], cut: false } : null;
-  },
-  under: (dir) => Object.keys(FIXTURE.files).sort().filter((file) => file.startsWith(`${wikiDocCleanPath(dir).replace(/\/$/u, '')}/`)),
-};
+/**
+ * The fixture's files at its commit, as the build's reader shows them (`WikiDocsSnapshotRepo`): their sizes from the
+ * snapshot, their text from a read, and a path that is no file of the commit as `git show <sha>:<path>` shows it.
+ */
+const sizes = new Map(Object.entries(FIXTURE.files).map(([file, text]) => [file, Buffer.byteLength(text, 'utf8')]));
+const repo = new WikiDocsSnapshotRepo(
+  FIXTURE.sha,
+  sizes,
+  [...sizes.keys()].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b))),
+  async (wanted) => new Map(wanted.map((file): [string, WikiRepoFileRead] => [file, { path: file, state: 'found', text: FIXTURE.files[file], sizeBytes: sizes.get(file) ?? 0 }])),
+);
 
 /** The document as the runner decodes the plan read (`wikiDocsPlanDoc`). */
 const doc = FIXTURE.doc as unknown as WikiDocsPlanDoc;
@@ -122,7 +123,8 @@ function plain(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value));
 }
 
-test('each section comes out of the server\'s writer exactly as it comes out of the runner\'s, step for step', () => {
+test('each section comes out of the server\'s writer exactly as it comes out of the runner\'s, step for step', async () => {
+  await repo.prepare(Object.keys(FIXTURE.files));
   const written: Array<WikiDocWrittenSection | null> = doc.sections.map(() => null);
   const fingerprints: string[] = doc.sections.map(() => '');
   let at = 0;

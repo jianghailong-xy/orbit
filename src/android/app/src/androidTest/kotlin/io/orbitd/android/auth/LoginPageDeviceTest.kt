@@ -75,15 +75,15 @@ class LoginPageDeviceTest {
         MockWebServer().use { server ->
             val requests = java.util.concurrent.CopyOnWriteArrayList<RecordedRequest>()
             server.dispatcher = fixture(requests)
-            // Loopback HTTP, which only a debug build accepts, as the A03 fixtures do.
+            // Loopback HTTP, as the A03 fixtures use: every build takes http:// on any host since 2026-10-15.
             val address = server.url("/").toString()
-            val canonical = ServerAddress.parse(address, allowLoopbackHttp = true).value
+            val canonical = ServerAddress.parse(address).value
 
             // Three taps on the logo, as a person makes them: the Server dialog, on the page's server.
             tapScreen(compose.onNodeWithContentDescription("Orbit"), times = 3)
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Server address").fetchSemanticsNodes().isNotEmpty() }
             capture("server")
-            compose.onNodeWithText("Server address").performTextReplacement("http://remote.example")
+            compose.onNodeWithText("Server address").performTextReplacement("ftp://remote.example")
             compose.onNodeWithText("Save").performClick()
             compose.onNodeWithText("Enter a valid server address.").assertIsDisplayed()
             capture("server-invalid")

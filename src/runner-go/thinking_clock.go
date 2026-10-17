@@ -13,9 +13,9 @@ import "time"
 //
 // A stretch runs from its first delta until the model moves on to output of another kind (a
 // reply's first chunk, a tool call); the durable block claims every stretch since the last one
-// was claimed. Most engines close a block straight after its deltas, where that is the same as
-// first delta to closing event. Kimi closes one block for the whole turn at its end, after the
-// tool calls and the reply, and the pauses are what keep those out of its reasoning time.
+// was claimed. Engines that close a block straight after its deltas make that the same as first
+// delta to closing event; claude keeps a block open while the reply text of its own message
+// streams past it, and the pauses are what keep that text out of its reasoning time.
 //
 // The boundaries the clients clear their live drafts on (the web's supersedesLiveDrafts, the
 // control plane's supersededPrefixes) clear it too, so a stretch that never got a block of its own

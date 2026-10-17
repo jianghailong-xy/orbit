@@ -1,0 +1,129 @@
+{
+ "scenario": "permission-auto-review",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "recordedAt": "2026-10-16T17:48:10.412Z",
+ "reason": "The scenario read the session store without its -wal file, found no tables and threw before its checks ran (fixed in lib/harness.mjs). The prompt itself completed and is fully recorded.",
+ "basis": "committed protocol recording (seq numbers below) plus files the recorded turn left in its run directory",
+ "checks": [
+  {
+   "name": "--auto-review on the ACP path: `touch` still asks",
+   "ok": true,
+   "detail": [
+    "`touch auto-shell.txt`",
+    "p0probe-record: record",
+    "Fetch https://example.com/"
+   ]
+  },
+  {
+   "name": "…the MCP call still asks",
+   "ok": true
+  },
+  {
+   "name": "…the fetch still asks",
+   "ok": true
+  },
+  {
+   "name": "…the workspace write does not ask (same as the default allowlist)",
+   "ok": true,
+   "detail": [
+    "auto-write.txt",
+    "auto-shell.txt"
+   ]
+  },
+  {
+   "name": "the session store records mode default and isRunEverything false",
+   "ok": true,
+   "detail": {
+    "isRunEverything": false,
+    "mode": "default"
+   }
+  }
+ ],
+ "facts": {
+  "permissionRequests": [
+   {
+    "seq": 44,
+    "sessionId": "<UUID_1>",
+    "title": "`touch auto-shell.txt`",
+    "kind": "execute",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ]
+   },
+   {
+    "seq": 96,
+    "sessionId": "<UUID_1>",
+    "title": "p0probe-record: record",
+    "kind": "other",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ]
+   },
+   {
+    "seq": 127,
+    "sessionId": "<UUID_1>",
+    "title": "Fetch https://example.com/",
+    "kind": "fetch",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ]
+   }
+  ],
+  "toolCards": [
+   {
+    "title": "Edit `<RUN>/work/auto-write.txt`",
+    "kind": "edit",
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ]
+   },
+   {
+    "title": "`touch auto-shell.txt`",
+    "kind": "execute",
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ]
+   },
+   {
+    "title": "p0probe: record",
+    "kind": "other",
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ]
+   },
+   {
+    "title": "Web Fetch: https://example.com/",
+    "kind": "fetch",
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ]
+   }
+  ],
+  "files": [
+   "auto-write.txt",
+   "auto-shell.txt"
+  ],
+  "mcpEffects": 1,
+  "stopReasons": [
+   {
+    "seq": 153,
+    "id": 3,
+    "stopReason": "end_turn"
+   }
+  ]
+ }
+}

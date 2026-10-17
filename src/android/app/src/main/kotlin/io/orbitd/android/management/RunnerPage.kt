@@ -1,5 +1,6 @@
 package io.orbitd.android.management
 
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -21,7 +22,6 @@ internal object RunnerCopy {
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
     fun versionTag(version: String) = "v$version"
     fun runningOf(active: Int, max: Int) = "$active of $max running"
-    fun slots(active: Int, max: Int) = "$active/$max"
     const val ADD = "Add Runner"
     const val ADD_FOOTER = "Run one command on the new machine — it installs Orbit, then asks you to confirm it’s yours."
     const val NEEDS_ATTENTION = "Needs Attention"
@@ -49,6 +49,10 @@ internal object RunnerCopy {
     const val ENGINES_FOOTER = "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends " +
         "that subscription, nothing to paste."
     const val ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
+    /** DeepSeek Harness has no sign-in: its row, its page and the footer under it say what it runs on instead (board 1 ⑤⑥⑦). */
+    const val USES_API_KEYS = "Uses API keys"
+    const val DSH_READY = "Ready · each session uses the DeepSeek key it was started with"
+    const val DSH_FOOTER = "Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key."
     fun enginesChecked(whenText: String) = "Checked $whenText"
     fun enginesReported(whenText: String) = "Reported $whenText"
     fun accountsSignedIn(count: Int) = "$count accounts signed in"
@@ -167,6 +171,22 @@ internal object EngineAccounts {
         else -> "codex-account-move/v1"
     }
 
+    /** CodexAccounts.automaticOffered (web `automaticOfferedOn`): Automatic is on offer for [engine] where the workspace picked
+     * none of its accounts ([pick]), its [env] selects no other config directory and no key of its own — for Kimi Code, no model of
+     * its own either, which only both of its variables together are — and the runner has two accounts or more to choose between. */
+    fun automaticOffered(engine: String, pick: String?, env: JsonObject?, accounts: Int): Boolean {
+        if (accounts < 2 || !pick.isNullOrEmpty()) return false
+        fun set(key: String) = (env?.get(key) as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
+        if (engine == "kimi" && set("KIMI_MODEL_NAME") && set("KIMI_MODEL_API_KEY")) return false
+        val deciding = when (engine) {
+            "claude" -> listOf("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN")
+            "antigravity" -> listOf("ORBIT_ANTIGRAVITY_GOOGLE_DIR", "GEMINI_API_KEY")
+            "kimi" -> listOf("KIMI_CODE_HOME")
+            else -> listOf("CODEX_HOME", "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")
+        }
+        return deciding.none(::set)
+    }
+
     /** One Antigravity bucket as the window it names, for weighing quota against quota: what agy says is left, as the
      * share used every other window speaks in. What a page shows stays agy's remaining fraction (usageRows). */
     fun bucketWindow(bucket: JsonObject): JsonObject = buildJsonObject {
@@ -276,7 +296,7 @@ internal object RunnerPage {
     /** Keep Free's choices: what PATCH /runners/:id sends as minFreeDiskMb, and what the picker says. */
     val KEEP_FREE_TIERS = listOf<Pair<Int?, String>>(null to "Off", 10_240 to "10 GB", 20_480 to "20 GB", 51_200 to "50 GB")
     /** The engines a runner reports on, in the page's order, with each CLI's own name. */
-    val engineOrder = listOf("claude", "codex", "kimi", "opencode", "antigravity")
+    val engineOrder = listOf("claude", "codex", "kimi", "opencode", "antigravity", "dsh")
     /** The engines Orbit signs in on a runner (LoginEngine), in the Engines list's order. */
     val loginEngines = listOf("claude", "codex", "kimi", "antigravity")
     private val loginNames = mapOf("claude" to "Claude", "codex" to "Codex", "kimi" to "Kimi", "antigravity" to "Antigravity")
@@ -289,12 +309,8 @@ internal object RunnerPage {
     private val codexWindows = listOf("5h limit" to "5-hour limit", "Daily limit" to "daily limit",
         "Weekly limit" to "weekly limit", "Monthly limit" to "monthly limit", "Annual limit" to "annual limit")
 
-    fun engineName(engine: String) = when (engine) {
-        "claude" -> "Claude Code"; "codex" -> "Codex"; "kimi" -> "Kimi Code"
-        "opencode" -> "OpenCode"; "antigravity" -> "Antigravity"; else -> engine
-    }
-    /** The CLI's name where an update of it is named (runnerEngines.ts ENGINE_CLI_NAME): Antigravity's is still its CLI's. */
-    private fun cliName(engine: String) = if (engine == "antigravity") "Antigravity CLI" else engineName(engine)
+    /** Each engine by its CLI's own product name (ENGINE_CLI_NAMES), the one every engine list, title and pin says. */
+    fun engineName(engine: String) = ProviderEngines.cliName(engine)
     /** The engines whose CLI keeps a login per directory, so one machine holds several accounts of them (shared
      * ACCOUNT_ENGINES): an Antigravity account is a Google sign-in in a Gemini directory of its own, a Kimi Code account a
      * KIMI_CODE_HOME of its own. */
@@ -434,8 +450,10 @@ internal object RunnerPage {
         else -> names.firstOrNull().orEmpty()
     }
 
+    /** The workspaces whose sessions run on this engine's own sign-in on this machine: the engine is theirs and so is its credential.
+     * One that runs the engine on a key (Claude Code on a DeepSeek key) does not depend on the sign-in at all. */
     private fun workspacesOn(workspaces: List<JsonObject>, engine: String) =
-        workspaces.filter { it.str("lastProvider") == engine }.map { it.text("name") }
+        workspaces.filter { it.str("lastProvider") == engine && (it.str("lastEngine") ?: engine) == engine }.map { it.text("name") }
 
     private fun engineHealth(runner: JsonObject, engine: String) =
         (runner["engines"] as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { it.str("engine") == engine }
@@ -571,7 +589,7 @@ internal object RunnerPage {
     private fun engineUpdateItems(runner: JsonObject, nowMs: Long) = engineOrder.mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return@mapNotNull null
         val note = updateNoteOf(health.obj("update"), nowMs)?.takeIf { it.first == "warn" } ?: return@mapNotNull null
-        val summary = "${cliName(engine)} update failed"
+        val summary = "${engineName(engine)} update failed"
         AttentionItem("engineNotUpdating", "warn", summary, summary,
             "${note.second.replaceFirstChar { it.uppercase() }}. Orbit retries every 30 min — Update Engines Now tries again right away.",
             AttentionAction("updateEngines", engine = engine))
@@ -647,7 +665,8 @@ internal object RunnerPage {
     }
 
     // engines
-    /** The engines a runner reports on, in the page's order. A runner predating Antigravity keeps its row too, from what
+    /** The engines a runner reports on, in the page's order, then any the page doesn't know yet as reported — but not one this
+     * app does not draw yet (ProviderEngines.androidShowsEngine). A runner predating Antigravity keeps its row too, from what
      * the server says of it (`runner.antigravity`), so the page can say it needs an update. */
     fun engines(runner: JsonObject): List<JsonObject> {
         var reported = runner.list("engines")
@@ -656,7 +675,7 @@ internal object RunnerPage {
             runner.obj("antigravity")?.let { state -> state.bool("installed")?.let { put("installed", it) }; state.str("version")?.let { put("version", it) } }
         }
         return engineOrder.mapNotNull { engine -> reported.firstOrNull { it.str("engine") == engine } } +
-            reported.filter { it.str("engine") !in engineOrder }
+            reported.filter { it.str("engine") !in engineOrder && ProviderEngines.androidShowsEngine(it.str("engine")) }
     }
 
     /** Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY (web runsOnEnvKey): the engine answers yes —
@@ -714,6 +733,7 @@ internal object RunnerPage {
     /** With several accounts the engine is signed in only when every one of them is. An Antigravity that can't sign in with
      * Google here says why (given its [runner]); one on the machine's Gemini key says "env key", whose Default counts as in. */
     fun engineStatus(health: JsonObject, runner: JsonObject? = null): Pair<String, String>? {
+        if (health.text("engine") == ProviderEngines.DSH) return dshStatus(health, runner)
         if (health.text("engine") == "antigravity" && runner != null && health.bool("installed") != false && health.str("auth") != "yes") {
             when (runner.obj("antigravity")?.str("googleLogin")) {
                 "unsupported_platform" -> return AccountCopy.NOT_SUPPORTED_YET to "muted"
@@ -731,6 +751,16 @@ internal object RunnerPage {
         val auths = accounts.map { if (runsOnEnvKey(health, it.text("id"), it.str("auth"))) "yes" else it.str("auth") }
         if (auths.all { it == "yes" }) return RunnerCopy.accountsSignedIn(accounts.size) to "ok"
         return if (auths.any { it == "no" }) authStatus("no") else null
+    }
+
+    /** DeepSeek Harness's row (web board 1): it has no sign-in, every session runs on a DeepSeek key — or why it can't run here, most
+     * fundamental first, as the server admits it (web `dshRunnerState`). */
+    fun dshStatus(health: JsonObject, runner: JsonObject? = null): Pair<String, String> = when {
+        runner != null && "provider:dsh" !in runner.strings("capabilities") -> "Update runner" to "muted"
+        Regex("^DSH_(PLATFORM|NODE)_UNSUPPORTED").containsMatchIn(health.str("installationError").orEmpty()) -> "Not supported here" to "muted"
+        health.bool("installed") != true -> RunnerCopy.NOT_INSTALLED to "muted"
+        health.obj("dsh")?.let { it.bool("versionCompatible") != true } == true -> "Unsupported version" to "warn"
+        else -> RunnerCopy.USES_API_KEYS to "muted"
     }
 
     /** The Engines row's Sign In: a login it needs is out — never an Antigravity Default on the machine's Gemini key. */

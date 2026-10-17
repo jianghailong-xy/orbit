@@ -87,6 +87,7 @@ import {
   criteriaWeakeningSupersessionReason,
 } from './criteria-weakening-intent';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { countOwnerDecisionsBySession } from './owner-decision-signal';
 import {
   type StandardSetConfirmationStanding,
   criteriaFromDefinitions,
@@ -124,6 +125,7 @@ import {
 } from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
+import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
 import { openFuseEpisodeId } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
@@ -158,11 +160,13 @@ import {
 import {
   configureProjectIntegration,
   type IntegrationSettings,
+  lastMainBranchView,
   projectIntegrationView,
+  readMainBranchMemory,
   readProjectIntegrationView,
   type ProjectIntegrationView,
   readProjectCodebase,
-  readProjectIntegrationLines,
+  readProjectListBindings,
 } from './project-integration-line';
 import {
   findMergeCheckApproval,
@@ -1011,6 +1015,10 @@ export class ProjectsService {
     // reading they never reach. Its absence costs that one read the fuse row and nothing else.
     private readonly convergence: CoordinatorConvergenceService =
       undefined as unknown as CoordinatorConvergenceService,
+    // Only `coordinator` needs it, beside `openItems` and for the same reason: the evidence that
+    // waited for the conversation being replaced is the new one's to decide. Defaulted like the rest.
+    private readonly evidenceQueue: CoordinatorEvidenceQueueService =
+      undefined as unknown as CoordinatorEvidenceQueueService,
   ) {}
 
   /**
@@ -2528,10 +2536,10 @@ export class ProjectsService {
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key; the integration bindings by
     // `(project_id, slot)`; the exception items grouped in the database.
-    const [rollups, attention, integration] = await Promise.all([
+    const [rollups, attention, bindings] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
-      readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
+      readProjectListBindings(this.prisma, projects.map((project) => project.id)),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
@@ -2550,7 +2558,9 @@ export class ProjectsService {
         // Where this project's finished work lands (§7.1 V1). Null rather than absent for the
         // common case — a project nobody has decided a line for — so a client draws its row from
         // one shape, and never has to tell "no line yet" from "this server does not report lines".
-        integration: integration.get(project.id) ?? null,
+        integration: bindings.get(project.id)?.integration ?? null,
+        // The main branch the row's merge approval names; null with no repository bound.
+        mainBranch: bindings.get(project.id)?.mainBranch ?? null,
         // What moves a project that its task rollup cannot see: the coordinator working. Null on a
         // project with no coordinator bound.
         coordinatorActivity: coordinatorActivityOf(coordinatorSession),
@@ -2612,6 +2622,7 @@ export class ProjectsService {
       independence,
       blockers,
       standardSetConfirmation,
+      mainBranchMemory,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2666,6 +2677,10 @@ export class ProjectsService {
       // that none of the lanes beside it reads. Served on this document so a client renders WHY
       // the column says what it says instead of re-deriving the rule for itself.
       readStandardSetConfirmationState(this.prisma, project.acceptanceCriterionDefinitions, id),
+      // And the main branch this account chose last for the project's repository (contract L6),
+      // one statement keyed by the project: what a coordinator reads before it asks to start, to
+      // know whether it has to suggest one.
+      readMainBranchMemory(this.prisma, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2715,7 +2730,10 @@ export class ProjectsService {
         ...criterionIndependenceAnswer(independent.get(item.id)),
       })),
       blockers,
-      integration: projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+      integration: {
+        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+        lastMainBranch: lastMainBranchView(mainBranchMemory),
+      },
       // The projection itself, whole: `withheld` is every clause that does not hold — ALL of them,
       // not the first — and `criteria` carries each one's three lane answers. One fold
       // (`derivedDoneFromLanes`) is shared with the write at the bottom of this file, so what a
@@ -2764,12 +2782,12 @@ export class ProjectsService {
       select: SIDEBAR_PROJECT_SELECT,
     });
     if (projects.length === 0) return [];
-    const [rollups, attention, integration] = await Promise.all([
+    const [rollups, attention, bindings] = await Promise.all([
       readProjectSidebarRollups(this.prisma, ownerId),
       // The same reader the index folds, narrowed to the projects this read returns, so the rail
       // and the page cannot disagree about what waits on the reader.
       readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
-      readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
+      readProjectListBindings(this.prisma, projects.map((project) => project.id)),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => ({
       ...project,
@@ -2782,7 +2800,9 @@ export class ProjectsService {
       }),
       attention: attention.get(project.id) ?? emptyProjectListAttention(),
       coordinatorActivity: coordinatorActivityOf(coordinatorSession),
-      integration: integration.get(project.id) ?? null,
+      integration: bindings.get(project.id)?.integration ?? null,
+      // The main branch the session list's landing line names; null with no repository bound.
+      mainBranch: bindings.get(project.id)?.mainBranch ?? null,
     }));
   }
 
@@ -4458,6 +4478,9 @@ export class ProjectsService {
     // The conversation being REPLACED goes with it (§5.2 R11): an owner's answer to a question that
     // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
     await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
+    // And the evidence revisions waiting for a coordinator: handed to this one, oldest first
+    // (projects/coordinator-evidence-queue.service.ts).
+    await this.evidenceQueue?.deliverOwed(id);
     return { sessionId: session.id, created: true, workspaceId: runIn };
   }
 
@@ -5084,12 +5107,21 @@ export class ProjectsService {
           ? ('COORDINATION_WORKSPACE_TRASHED' as const)
           : null;
 
-    // The cards the conversation is still being asked, counted the way the session list counts them
-    // — one function, so the two surfaces cannot come to different totals for the same row. That
-    // includes a self-driven turn, which stays at AWAITING_INPUT while it runs and whose prompt is
-    // no less blocking for it, and the card a runner-hosted job is still reading on a conversation
-    // that is parked: a coordinator conversation is exactly the shape such a job asks on.
-    const pendingApprovals = session == null ? 0 : await countLiveApprovals(this.prisma, session);
+    // What waits on the owner in this conversation, counted the way the session list counts its row
+    // — the same two reads, so the two surfaces cannot come to different totals for the same row.
+    // The cards it is still being asked: that includes a self-driven turn, which stays at
+    // AWAITING_INPUT while it runs and whose prompt is no less blocking for it, and the card a
+    // runner-hosted job is still reading on a conversation that is parked — a coordinator
+    // conversation is exactly the shape such a job asks on. And the owner decisions drawn in it: a
+    // question it asked with `ask_owner`, an item escalated to the owner, a merge to approve, a
+    // request to start or close the project. Those wait while the conversation is parked, and the
+    // card says "Needs you" off this count alone — a turn that merely ended reads Idle (owner
+    // decision, 2026-10-15), so a question left out here would read as nothing waiting.
+    const pendingApprovals = session == null
+      ? 0
+      : await countLiveApprovals(this.prisma, session)
+        + ((await countOwnerDecisionsBySession(this.prisma, ownerId, { sessionIds: [session.id] }))
+          .get(session.id) ?? 0);
 
     // The two progress rows (§7.2 V9). Read here rather than on their own endpoint because they are
     // the same subject as everything else on this card — what the conversation is doing and whether

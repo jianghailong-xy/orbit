@@ -272,6 +272,17 @@ describe('session project copy', () => {
     }
   });
 
+  it('says what a start request suggests directly into the main branch it names, main as before', () => {
+    const direct = { line: 'MAIN' as const, automatic: false, maxConcurrentTasks: 1 };
+    expect(SESSION_PROJECT_COPY.startSuggestion(direct)).toBe('Directly into main · Automatic off · 1 at a time');
+    expect(SESSION_PROJECT_COPY.startSuggestion({ ...direct, upstreamRef: 'refs/heads/master' }))
+      .toBe('Directly into master · Automatic off · 1 at a time');
+    // The branch the start card opens with, when the page holds the read that says it.
+    expect(SESSION_PROJECT_COPY.startSuggestion(direct, 'develop')).toBe('Directly into develop · Automatic off · 1 at a time');
+    expect(SESSION_PROJECT_COPY.startSuggestion({ ...direct, line: 'PROJECT_BRANCH', upstreamRef: 'refs/heads/master' }))
+      .toBe('Project branch · Automatic off · 1 at a time');
+  });
+
   it('keeps the progress and navigation words in the cross-client contract', () => {
     expect(SESSION_PROJECT_COPY.progress(3, 8)).toBe('3/8');
     expect(SESSION_PROJECT_COPY.progressHint(9, 2)).toBe('9 sessions · 2 running');

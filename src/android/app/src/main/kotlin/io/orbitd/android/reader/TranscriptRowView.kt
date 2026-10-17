@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,10 +12,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -24,6 +29,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.realtime.*
+import io.orbitd.android.core.cards.AntigravityRepair
+import io.orbitd.android.core.cards.DshRuntime
+import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
@@ -51,7 +59,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
-    fun loadFull(copy: Boolean = false) { scope.launch {
+    // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading.
+    val answerLine = cards.singleOrNull()?.takeIf { event.type == "user" && it.key.endsWith(":ownerAnswer") }
+    /** [reveal]: a failed read opens the card to say so — except for a question card reading itself whole while folded. */
+    fun loadFull(copy: Boolean = false, reveal: Boolean = true) { scope.launch {
         loading = true; error = false
         try {
             if (fullEvent == null && event.truncated) fullEvent = model.full(event.seq)
@@ -62,16 +73,31 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 if (value.length > COPY_TEXT_LIMIT) copyOverflow = value else clipboard.setText(AnnotatedString(value))
             }
         } catch (cancel: CancellationException) { throw cancel }
-        catch (_: Exception) { error = true; expanded = true }
+        catch (_: Exception) { error = true; if (reveal) expanded = true }
         finally { loading = false }
     } }
+    val resultText = result?.let { contentText(it.fields["content"]) ?: it.fields.string("result") }
+    val isError = result?.fields?.string("isError") == "true" || result?.fields?.string("is_error") == "true"
+    // A06-15: an agent's question, once it has ended, is the record of it — what was asked and how it was answered (iOS 94f61b52c).
+    val questions = remember(shown) {
+        if (event.type == "tool_use" && (shown.fields.string("name") ?: shown.fields.string("toolName")) == "AskUserQuestion")
+            QuestionRecords.questions(shown.fields["input"]) else emptyList()
+    }
+    val outcome = remember(questions, resultText, isError) { if (questions.isEmpty()) null else QuestionRecords.outcome(questions, resultText, isError) }
+    var questionOpen by rememberSaveable(row.key) { mutableStateOf<Boolean?>(null) }
+    // A result this reader cannot read, once it is whole: its own words are the only answer there is, so the card opens on them.
+    val questionShown = questionOpen ?: (outcome == null && !isError && !resultText.isNullOrEmpty() && (row.result?.truncated != true || fullResult != null))
+    // The folded card is the record, so it reads a clipped call and result whole while still folded: the questions' text, or
+    // the answers after the cut, would otherwise be missing from the one place they are shown.
+    LaunchedEffect(row.key, questions.isNotEmpty()) { if (questions.isNotEmpty() && (event.truncated || row.result?.truncated == true)) loadFull(reveal = false) }
     val title = when (event.type) {
         "user" -> if (cards.isNotEmpty()) "Orbit" else (event.fields["sessionMessage"] as? JsonObject)?.let { "From ${it.string("fromTitle") ?: "another Orbit session"}" } ?: "You"
         "assistant" -> "Assistant"
         "thinking" -> "Thinking"
-        "tool_use" -> shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
+        "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
         "tool_result" -> "Tool output"
-        "interrupt" -> "Interrupted"
+        // Nobody pressed Stop on a turn the runner tore down while restarting (runner-go's watchShutdownDrain): say what did.
+        "interrupt" -> if (event.fields.string("reason") == "runner_restart") "Interrupted — the runner restarted" else "Interrupted"
         "error", "auth_error" -> "Error"
         "notice" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
@@ -79,16 +105,39 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
-        event.type == "user" -> MaterialTheme.colorScheme.surfaceVariant
+        event.type == "user" && answerLine == null -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
     // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
     val taskKind = (shown.fields.string("name") ?: shown.fields.string("toolName")).takeIf { event.type == "tool_use" && it in setOf("Agent", "Task", "Workflow") }
     val activity = LocalTaskActivity.current
     val progress = if (taskKind != null) activity?.progress(event.toolId()) else null
-    val resultText = result?.let { contentText(it.fields["content"]) ?: it.fields.string("result") }
+    // A07-4: an Antigravity failure on a session Antigravity runs is its repair card, in place of the line (iOS d2737d665).
+    val console = LocalSessionConsole.current
+    val repair = if (event.type == "error" || event.type == "assistant") AntigravityRepair.of(shown.body().trim())?.takeIf { console?.executesAntigravity == true } else null
+    // A07-5: so is a DeepSeek Harness failure on a session Harness runs (iOS e789ce3dc).
+    val dshRepair = if (event.type == "error") DshRuntime.repair(shown.body().trim())?.takeIf { console?.executesDsh == true } else null
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (!detailOnly) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        if (answerLine != null) { TranscriptCardView(answerLine, open, shown); return@Column }
+        if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
+        if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
+        if (event.type == "auto_retry" && console != null) {
+            AutoRetryCard(AutoRetryNotice(shown.body(), shown.fields.string("variant") == "quota", shown.fields["stale"] == JsonPrimitive(true),
+                shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
+            return@Column
+        }
+        // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
+        if (!detailOnly && event.type != "thinking") Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
+            .clickable(onClickLabel = if (questionShown) "Hide options" else "Show options", role = Role.Button) { questionOpen = !questionShown }
+            .semantics { stateDescription = if (questionShown) "Expanded" else "Collapsed" }),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            if (questions.isNotEmpty()) Text("▸", Modifier.padding(end = 6.dp).rotate(if (questionShown) 90f else 0f).clearAndSetSemantics { },
+                color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelLarge)
             Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelMedium)
+            // Several questions are told apart by their headers; the replay names each over its own question.
+            questions.mapNotNull { it.header }.ifEmpty { null }?.joinToString("  ·  ")?.let { headers ->
+                Text(headers, Modifier.padding(start = 6.dp).weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             // A workflow's agents done out of all, an agent's tool calls.
             progress?.let(TaskProgressCopy::badge)?.let { badge -> Text(badge, Modifier.padding(start = 6.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 5.dp, vertical = 1.dp),
@@ -96,11 +145,28 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             Spacer(Modifier.weight(1f))
             TextButton(enabled = !loading, onClick = { loadFull(copy = true) }) { Text("Copy message") }
         }
-        if (tool) {
-            val isError = result?.fields?.string("isError") == "true" || result?.fields?.string("is_error") == "true"
+        if (questions.isNotEmpty()) {
+            // Answered, or replied to in the conversation, the record says how it ended — a reply is never a red "Failed". A real
+            // failure, a result still to come or one this reader cannot read says so as any call does.
+            if (!detailOnly && outcome == null) Text(when { isError -> "Failed"; result != null -> "Complete"; else -> "Awaiting result" },
+                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            if (questionShown || detailOnly) {
+                QuestionReplay(questions, outcome)
+                // Once read, a question's result is only the replay said again; its own words show while they can't be read.
+                if (outcome == null) resultText?.takeIf { it.isNotEmpty() }?.let { Text("Output", style = MaterialTheme.typography.labelMedium); CodeText(it) }
+            } else QuestionFoldedLines(questions, outcome, Modifier.clickable(onClickLabel = "Show options") { questionOpen = true })
+            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (error) TextButton(onClick = { loadFull(reveal = false) }) { Text("Couldn't load full output · Retry") }
+        } else if (tool) {
             val liveOutput = live?.toolOutputs?.get(event.toolId())?.string("content")
             // The call returned the moment its work started, so its own "Complete" would sit on work just begun.
             val taskRunning = taskKind != null && activity?.isRunning(event.toolId()) == true
+            // Workflow progress rows open these same agents; the rest stay ordinary nested records.
+            val shownAgents = progress?.agents.orEmpty().mapNotNull { it.transcriptKey }.toSet()
+            val nested = row.children.filter { !(it.event.type == "tool_use" && it.event.toolId() in shownAgents) }
+            // A06-17: folded and still running, a background task's card says what its sub-agent is on right now (iOS ea175e5af).
+            // Once the sub-agent has relayed something, that line takes the progress line's place; until then the progress line stays.
+            val liveLine = if (taskKind != null && !expanded && (taskRunning || result == null)) SubagentLiveLine.of(nested) else null
             if (taskKind == "Workflow") TaskProgressCopy.workflowTitle(shown.fields["input"], resultText, progress)?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
@@ -110,7 +176,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 TextButton(onClick = { expanded = !expanded; if (expanded && (shown.truncated || result?.truncated == true)) loadFull() }) {
                     Text(if (expanded) "Hide input and output" else "Show input and output")
                 }
-                if (taskRunning) progress?.let(TaskProgressCopy::trayLine)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                if (liveLine != null) Text(liveLine, Modifier.testTag("subagent-live-line"), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                else if (taskRunning) progress?.let(TaskProgressCopy::trayLine)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
             if (expanded || detailOnly) {
                 // A workflow opens to its progress, its script folded under it; a sub-agent's totals close its transcript.
@@ -123,9 +191,6 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     TextButton(onClick = { scriptOpen = !scriptOpen }) { Text((if (scriptOpen) "▾ " else "▸ ") + "Workflow script") }
                     if (scriptOpen) CodeText(script, "js")
                 } else shown.fields["input"]?.let { input -> Text("Input", style = MaterialTheme.typography.labelMedium); CodeText(input.toString(), "json") }
-                // Workflow progress rows open these same agents; the rest stay ordinary nested records.
-                val shownAgents = progress?.agents.orEmpty().mapNotNull { it.transcriptKey }.toSet()
-                val nested = row.children.filter { !(it.event.type == "tool_use" && it.event.toolId() in shownAgents) }
                 if (taskKind != null && taskKind != "Workflow" && progress != null) TaskProgressView(progress)
                 // A launch receipt says only that the work started: hidden once the progress speaks for the work,
                 // and always for an agent's ack. A workflow before any progress keeps it.
@@ -147,8 +212,18 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             EngineLine(shown)
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         } else if (event.type == "thinking") {
-            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide thinking" else "Show thinking") }
-            if (expanded) MarkdownText(shown.body(), open = open)
+            // A06-11 (iOS 471b2afbb, d55e9900b): settled, a stretch of reasoning folds to one line that says what it cost —
+            // adjacent blocks folded into it — and opens to the reasoning itself.
+            val text = remember(row) { row.thinkingText() }
+            val label = remember(row, text) { ThinkingSummary.settledLabel(text.length, row.blocks, row.thinkingMs()) }
+            ThinkingFold(label, expanded) { expanded = !expanded }
+            if (expanded) {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) { MarkdownText(text, open = open) }
+                TextButton(onClick = { if (text.length > COPY_TEXT_LIMIT) copyOverflow = text else clipboard.setText(AnnotatedString(text)) }) { Text("Copy message") }
+            }
+        } else if (event.type == "interrupt") {
+            // The title is the whole row, as on web and iOS: the payload is the runner's bookkeeping (the request a Stop answered, the
+            // restart's reason), which the body below would print as raw JSON.
         } else {
             cards.forEach { TranscriptCardView(it, open, shown) }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
@@ -170,6 +245,13 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 Text("Sent by another Orbit session, not by you", style = MaterialTheme.typography.bodySmall)
                 sender.string("fromSessionId")?.let { id -> TextButton(onClick = { open("orbit-session:$id") }) { Text("Open sender session") } }
             }
+            // How a steer of the reader's came out; words that never reached the engine are offered back to the composer.
+            row.steer?.let { steer ->
+                val words = shown.personWords().trim()
+                val composer = console?.composer?.takeIf { steer.delivery == "failed" && words.isNotEmpty() }
+                val loaded = composer?.state?.collectAsState()?.value?.loaded == true
+                SteerStateLine(steer, putBack = composer?.takeIf { loaded }?.let { box -> { box.putBack(words) } })
+            }
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         }
     }
@@ -181,6 +263,36 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             LazyColumn { items(row.children.filter { !(it.event.type == "tool_use" && it.event.toolId() in shownAgents) }, key = { it.key }) {
                 TranscriptRowView(it, model, live, open) } }
         } }
+    }
+}
+
+/**
+ * How a steer of the reader's came out, under its words (web `SteerState` and `UserBubble`'s undelivered line, OrbitApp's meta line): its
+ * state in every client's words — in the warning tone once it did not land or nobody can say it did, the server's reason a long press
+ * away — then [why] it did not land in the sender's words, and [putBack], its words' way back to the composer.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SteerStateLine(steer: SteerOutcome, why: String? = null, putBack: (() -> Unit)? = null) {
+    val undelivered = SteerDelivery.undelivered(steer.delivery)
+    val tone = if (undelivered) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.testTag("steer-state")) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val label = @Composable {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (undelivered) Text("⚠", Modifier.clearAndSetSemantics { }, color = tone, style = MaterialTheme.typography.labelSmall)
+                    Text(SteerDelivery.label(steer.delivery), color = tone, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            val reason = steer.reason?.takeIf { undelivered && it.isNotBlank() }
+            if (reason == null) label()
+            else TooltipBox(TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above), tooltip = { PlainTooltip { Text(reason) } },
+                state = rememberTooltipState()) { label() }
+            putBack?.let { TextButton(onClick = it, Modifier.testTag("steer-state:put-back")) {
+                Text(SteerDelivery.PUT_BACK, style = MaterialTheme.typography.labelSmall)
+            } }
+        }
+        why?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

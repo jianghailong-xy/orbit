@@ -131,13 +131,13 @@ private struct RunnerEngineContent: View {
 
     // MARK: sections
 
-    /// DeepSeek Harness has no sign-in here: every session runs on the configured API key it was
-    /// started with. What this machine decides is whether it can start Harness at all — and the one
-    /// fix that happens here is installing the pinned CLI (web parity: the Harness key's machine rows on Infrastructure).
+    /// DeepSeek Harness has no sign-in here: every session runs on the DeepSeek key it was started with.
+    /// What this machine decides is whether it can start Harness at all — and the one fix that happens
+    /// here is installing the pinned CLI (web parity: DeepSeek Harness's machine rows on Infrastructure).
     @ViewBuilder private func dshSection(offline: Bool) -> some View {
         let state = DshRuntime.state(of: runner)
         Section {
-            Text(state.label ?? "Ready · sessions use the DeepSeek Harness API key they were started with")
+            Text(state.label ?? DshRuntime.readyLine)
                 .foregroundStyle(state == .ready ? Color.secondary : RunnerInk.amber)
             if let hint = state.hint {
                 Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
@@ -263,7 +263,8 @@ private struct RunnerEngineContent: View {
         }
     }
 
-    /// Update Engines Now updates every CLI on the machine, this one with them.
+    /// Update Engines Now updates every CLI on the machine, this one with them. DeepSeek Harness's footer
+    /// says it has no sign-in rather than where sign-ins live.
     @ViewBuilder private func updateSection(offline: Bool) -> some View {
         Section {
             Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
@@ -274,7 +275,8 @@ private struct RunnerEngineContent: View {
                     .foregroundStyle(Color.secondary)
             }
         } footer: {
-            Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER : RunnerPageCopy.RUNNER_ENGINES_FOOTER)
+            Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER
+                 : engine == "dsh" ? DshRuntime.enginePageFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER)
         }
     }
 

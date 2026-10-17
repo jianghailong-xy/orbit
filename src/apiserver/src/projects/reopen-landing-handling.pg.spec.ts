@@ -42,8 +42,9 @@ import { readTaskIntegrationViews } from './project-task-integration';
  *   conflict -> reopen -> DONE      old card is OPEN/handling the new LAND_TASK
  *   new generation LANDED            old card is HANDLED
  *   new generation conflicts again    old card is RETRIED and a new card is OPEN
- *   active MAIN_SYNC handling         another task is not held by the old card; a new stop is
- *                                      still a blocker
+ *   active MAIN_SYNC handling         the old card still holds another task's landing — the reader
+ *                                      says WAITING_MAIN_SYNC and `claimOne` hands that task nothing
+ *                                      — and a new stop is a blocker in the same words
  *   active handling                  no coordinator delivery or clock escalation
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/reopen-landing-handling.pg.spec.ts
@@ -502,7 +503,7 @@ test('a reopened generation that conflicts again RETRIES the old card and opens 
     }
   });
 
-test('an active hand-off of MAIN_SYNC no longer blocks another task, but a new MAIN_SYNC stop does',
+test('a MAIN_SYNC card being handled still holds another task, and the reader names the generation doing it',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
@@ -516,17 +517,37 @@ test('an active hand-off of MAIN_SYNC no longer blocks another task, but a new M
         select: { id: true },
       });
       const prisma = stack.db as unknown as PrismaService;
+      // H1 handed the old card to the reopened generation, and the claim still reads the card: the
+      // reader has to say what the claim will do with the row, which is to hold it (M2).
       let views = await readTaskIntegrationViews(prisma, w.ownerId, w.projectId, [otherTaskId]);
-      assert.notEqual(views.get(otherTaskId)?.landTask?.blockingReason?.code, 'WAITING_MAIN_SYNC',
-        'the old MAIN_SYNC card is being handled by the reopened generation');
+      let blocked = views.get(otherTaskId)?.landTask?.blockingReason;
+      assert.equal(blocked?.code, 'WAITING_MAIN_SYNC', 'the handled conflict card still holds');
+      assert.equal(blocked?.openItemId, failed.firstItemId, 'and it names the item doing the holding');
+      assert.match(blocked?.summary ?? '', /generation 2\) is resolving it$/,
+        'the reason names the generation that is re-landing the fix');
 
-      const repair = await claim(stack, w);
+      // The claim agrees, which is what makes that reason true: this beat takes the conflicted
+      // task's own new generation, and the other task's landing is handed out to nobody.
+      const first = await stack.jobs.dispatch({
+        runnerId: w.runnerId, leaseOwner: w.leaseOwner, draining: false, capabilities: CAPABLE,
+      });
+      assert.deepEqual(first.map((job) => job.jobId), [reopened.jobId], 'only the repair generation goes');
+      assert.notEqual(reopened.jobId, otherJob.id);
+      assert.deepEqual(await stack.jobs.dispatch({
+        runnerId: w.runnerId, leaseOwner: w.leaseOwner, draining: false, capabilities: CAPABLE,
+      }), [], 'the other task is handed nothing while that item is open');
+
+      // Still true once that generation stops again: H3 opens a fresh card, and the queue is held
+      // by it in the same words — only its id and the job that failed are new.
+      const repair = first[0]!;
       assert.equal(repair.jobId, reopened.jobId);
       assert.equal((await report(stack, w, repair, MAIN_SYNC_CONFLICT)).accepted, true);
       views = await readTaskIntegrationViews(prisma, w.ownerId, w.projectId, [otherTaskId]);
-      assert.equal(views.get(otherTaskId)?.landTask?.blockingReason?.code, 'WAITING_MAIN_SYNC',
+      blocked = views.get(otherTaskId)?.landTask?.blockingReason;
+      assert.equal(blocked?.code, 'WAITING_MAIN_SYNC',
         'H3 opens a fresh MAIN_SYNC blocker when the new generation stops again');
-      assert.equal(views.get(otherTaskId)?.landTask?.blockingReason?.jobId, repair.jobId);
+      assert.equal(blocked?.jobId, repair.jobId);
+      assert.notEqual(blocked?.openItemId, failed.firstItemId, 'the new card, not the handled one');
       assert.notEqual(otherJob.id, repair.jobId);
     } finally {
       await stack.db.$disconnect();

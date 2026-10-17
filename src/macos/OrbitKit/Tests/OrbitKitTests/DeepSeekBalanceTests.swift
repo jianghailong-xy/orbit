@@ -163,20 +163,30 @@ final class DeepSeekBalanceTests: XCTestCase {
         // GET /providers/mine names the endpoint and whether a key is stored.
         let mine = try decoder.decode([ConfiguredProvider].self, from: Data("""
         [{"id": "p1", "slug": "deepseek", "label": "DeepSeek", "runtime": "claude", "presetSlug": "deepseek",
-          "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": true, "models": [], "defaultModel": "deepseek-v4-pro"},
+          "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": true, "models": [], "defaultModel": "deepseek-v4-pro",
+          "engines": ["claude", "opencode", "dsh"]},
          {"id": "p2", "slug": "deepseek-harness", "label": "DeepSeek Harness", "runtime": "dsh", "presetSlug": "deepseek-harness",
-          "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": true, "models": [], "defaultModel": ""},
+          "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": true, "models": [], "defaultModel": "",
+          "engines": ["dsh", "claude", "opencode"]},
          {"id": "p3", "slug": "mine", "label": "Mine", "runtime": "codex", "presetSlug": null,
-          "baseUrl": "https://api.deepseek.com/v1", "hasApiKey": true, "models": [], "defaultModel": null},
+          "baseUrl": "https://api.deepseek.com/v1", "hasApiKey": true, "models": [], "defaultModel": null,
+          "engines": ["codex", "opencode"]},
          {"id": "p4", "slug": "proxy", "label": "Proxy", "runtime": "claude", "presetSlug": null,
-          "baseUrl": "https://deepseek-proxy.example.com/anthropic", "hasApiKey": true, "models": [], "defaultModel": null},
+          "baseUrl": "https://deepseek-proxy.example.com/anthropic", "hasApiKey": true, "models": [], "defaultModel": null,
+          "engines": ["claude", "opencode"]},
          {"id": "p5", "slug": "moonshot", "label": "Kimi", "runtime": "kimi", "presetSlug": "moonshot",
-          "baseUrl": "https://api.moonshot.ai/v1", "hasApiKey": true, "models": [], "defaultModel": null},
+          "baseUrl": "https://api.moonshot.ai/v1", "hasApiKey": true, "models": [], "defaultModel": null,
+          "engines": ["kimi", "opencode"]},
          {"id": "p6", "slug": "deepseek-2", "label": "Keyless", "runtime": "claude", "presetSlug": "deepseek",
-          "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": false, "models": [], "defaultModel": null}]
+          "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": false, "models": [], "defaultModel": null,
+          "engines": ["claude", "opencode", "dsh"]}]
         """.utf8))
         XCTAssertEqual(mine.filter(DeepSeekBalance.applies(to:)).map(\.providerID), ["p1", "p2", "p3"])
-        XCTAssertEqual(mine.map { DeepSeekBalance.engine(of: $0) }, ["Claude Code", "DeepSeek Harness", "Codex", "Claude Code", "Claude Code", "Claude Code"])
+        // Each key's engines, as the server lists them: every DeepSeek key on DeepSeek Harness too.
+        XCTAssertEqual(mine.map { DeepSeekBalance.engine(of: $0) },
+                       ["Claude Code · OpenCode · DeepSeek Harness", "DeepSeek Harness · Claude Code · OpenCode",
+                        "Codex · OpenCode", "Claude Code · OpenCode", "Kimi Code · OpenCode",
+                        "Claude Code · OpenCode · DeepSeek Harness"])
         XCTAssertEqual(DeepSeekBalance.endpointHost(mine[0]), "api.deepseek.com")
         // The pickers' catalogue (GET /providers) carries neither, so nothing there reads as a DeepSeek key.
         XCTAssertFalse(DeepSeekBalance.applies(to: ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude",
@@ -191,8 +201,8 @@ final class DeepSeekBalanceTests: XCTestCase {
                                                                  presetSlug: "deepseek"), mine: mine),
                      "a shared key, on nobody's own list, opens no page")
 
-        XCTAssertEqual(ProvidersOverview.keyLine(mine[0]), "deepseek-v4-pro")
-        XCTAssertEqual(ProvidersOverview.keyLine(mine[1]), "Runs on DeepSeek Harness")
-        XCTAssertNil(ProvidersOverview.keyLine(mine[3]))
+        XCTAssertEqual(ProvidersOverview.keyLine(mine[0]), "Claude Code · OpenCode · DeepSeek Harness")
+        XCTAssertEqual(ProvidersOverview.keyLine(mine[1]), "DeepSeek Harness · Claude Code · OpenCode")
+        XCTAssertEqual(ProvidersOverview.keyLine(mine[3]), "Claude Code · OpenCode")
     }
 }

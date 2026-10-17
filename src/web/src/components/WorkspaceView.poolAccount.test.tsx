@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -153,11 +152,9 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[entry]}>
-            <AntApp>
-              <Routes>
-                <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
-              </Routes>
-            </AntApp>
+            <Routes>
+              <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -294,7 +291,7 @@ describe('the status bar of a session on an account pool', { timeout: 60_000 }, 
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 12%');
     const card = mounted().querySelector<HTMLElement>('.np-card')!;
     // The hero names the engine; the pool is the provider it spends, picked in the composer.
-    expect(card.getAttribute('aria-label')).toBe('Engine: Claude');
+    expect(card.getAttribute('aria-label')).toBe('Engine: Claude Code');
   });
 
   it("on a shared pool, names the key the session's claim chose and what the others spent of its cap", async () => {

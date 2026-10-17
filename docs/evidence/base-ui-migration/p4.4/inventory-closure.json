@@ -1,0 +1,1160 @@
+{
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json",
+  "2026-10-09.json",
+  "2026-10-09b.json",
+  "2026-10-09c.json"
+ ],
+ "before": {
+  "baseline": {
+   "commit": "c55c2ef2b5812cf14615cd57281038e17d7bf4c9",
+   "scopeHash": "6602eb8721576055c48dff2a4158b5411fdf906b67200009634c03677a46fde3"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.4": 55,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 95,
+   "P6": 42
+  },
+  "unowned": [
+   {
+    "path": "src/web/src/App.managedRunner.test.tsx",
+    "reason": "no owner"
+   }
+  ],
+  "pending": [],
+  "p44": [
+   {
+    "path": "src/web/src/App.loginNext.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/App.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WatchCard.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WatchCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WatchEditor.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WatchEditor.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WatchRelations.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WatchRelations.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiActivityPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiActivityPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiArticlePage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiArticlePage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiDirectory.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiDocPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiDocPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiEntryDrawer.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiEntryMarks.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiEntryMarks.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiHome.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiHome.window.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiHomeContent.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiNewEntry.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiPlanCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiPlanPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiPlanPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiReviewPage.challenge.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiReviewPage.decided.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiReviewPage.edit.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiReviewPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiRunPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiRunPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiSettingsButton.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiSettingsPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WikiSettingsPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WikiShareButton.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 20121,
+    "kind": "ant-class",
+    "text": ".ant-popover .watch-row-list {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 21570,
+    "kind": "antd-reference",
+    "text": "stand against the link chrome antd sets for the presses drawn in this weight, which comes in at"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 21947,
+    "kind": "ant-class",
+    "text": ".wk-activity-btn.ant-btn { position: relative; overflow: visible; }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 21949,
+    "kind": "ant-class",
+    "text": ".wk-activity-btn.on.ant-btn, .wk-activity-btn.on.ant-btn:hover { border-color: var(--brand-border); background: var(--brand-tint); color: var(--brand); }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 22278,
+    "kind": "ant-class",
+    "text": ".wk-modes.ant-radio-group { display: flex; flex-direction: column; gap: 4px; width: 100%; }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 22306,
+    "kind": "ant-class",
+    "text": ".wk-setup-limit .ant-input-number { width: 72px; }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 22328,
+    "kind": "ant-class",
+    "text": ".wk-maint-off > .ant-btn { grid-column: 1 / -1; justify-self: start; }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 22396,
+    "kind": "antd-reference",
+    "text": "footnote's card is antd's Popover — on a phone the Drawer from the bottom. The Contents drawer is"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 22485,
+    "kind": "ant-class",
+    "text": ".wk-fnsheet .ant-drawer-content { border-radius: 12px 12px 0 0; }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 22486,
+    "kind": "ant-class",
+    "text": ".wk-fnsheet .ant-drawer-body::before { content: \"\"; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--border);"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 22747,
+    "kind": "antd-reference",
+    "text": "/* the plan check, and the job's card — an antd Alert-coloured card, one row a check */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 23099,
+    "kind": "ant-class",
+    "text": ".wk-pl-acts > .ant-btn:not(.ant-btn-icon-only) { flex: 1; height: 40px; }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 23104,
+    "kind": "ant-class",
+    "text": ".wk-pl-empty .ant-btn { width: 100%; height: 40px; }"
+   },
+   {
+    "path": "src/web/src/pages/FollowingPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/SharedLinksPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/SharedLinksPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/SharedProjectPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/SharedProjectPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/SharedWikiPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/SharedWikiPage.tsx",
+    "category": "production"
+   }
+  ]
+ },
+ "after": {
+  "baseline": {
+   "commit": "f4ec61864e53a13aa35cbff25b5ea1ae03c99453",
+   "scopeHash": "33cf994720f55abeeaccd795ab6497dd92603232aaaf52c1b0c989924dc7b2c7"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 95,
+   "P6": 42
+  },
+  "unowned": [],
+  "pending": [],
+  "p44": []
+ },
+ "counts": {
+  "scannedFiles": [
+   765,
+   765
+  ],
+  "productionFiles": [
+   380,
+   380
+  ],
+  "testFiles": [
+   383,
+   383
+  ],
+  "antdProductionFiles": [
+   42,
+   19
+  ],
+  "antdTestFiles": [
+   62,
+   49
+  ],
+  "antSelectorTestFiles": [
+   27,
+   13
+  ],
+  "antClassTestFiles": [
+   28,
+   13
+  ],
+  "iconProductionFiles": [
+   111,
+   111
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   241,
+   216
+  ],
+  "retirementBlockingFiles": [
+   139,
+   96
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   209,
+   140
+  ],
+  "ant-design-support": [
+   19,
+   19
+  ],
+  "ant-selector": [
+   202,
+   135
+  ],
+  "antd-reference": [
+   224,
+   180
+  ],
+  "icon-class": [
+   82,
+   83
+  ],
+  "icon-reference": [
+   122,
+   122
+  ],
+  "imperative-confirm": [
+   11,
+   10
+  ],
+  "imperative-feedback": [
+   221,
+   221
+  ],
+  "internal-ref": [
+   4,
+   4
+  ],
+  "provider": [
+   75,
+   62
+  ],
+  "rc-support": [
+   236,
+   236
+  ],
+  "ref-focus": [
+   28,
+   28
+  ],
+  "theme": [
+   2,
+   2
+  ],
+  "use-app": [
+   6,
+   4
+  ],
+  "use-token": [
+   1,
+   1
+  ]
+ },
+ "files": {
+  "src/web/src/App.loginNext.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 3,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/App.managedRunner.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/App.tsx": {
+   "before": {
+    "antdImports": [
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WatchCard.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WatchCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Popconfirm"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WatchEditor.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 10,
+     "ant-selector": 10
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WatchEditor.tsx": {
+   "before": {
+    "antdImports": [
+     "Checkbox",
+     "Modal",
+     "Radio",
+     "Select"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WatchRelations.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WatchRelations.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Popover"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiActivityPage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiActivityPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiArticlePage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiArticlePage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Drawer",
+     "Popover"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiDirectory.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiDocPage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiDocPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Drawer",
+     "Popover",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiEntryDrawer.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Dropdown",
+     "Input",
+     "Modal"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 3
+    }
+   }
+  },
+  "src/web/src/components/WikiEntryMarks.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiEntryMarks.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 2
+    }
+   }
+  },
+  "src/web/src/components/WikiHome.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiHome.window.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiHomeContent.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiNewEntry.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Input",
+     "Modal",
+     "Select"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiPlanCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 2
+    }
+   }
+  },
+  "src/web/src/components/WikiPlanPage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiPlanPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Drawer",
+     "Dropdown",
+     "Input",
+     "InputNumber",
+     "Modal",
+     "Select",
+     "Switch"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 15
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 15
+    }
+   }
+  },
+  "src/web/src/components/WikiReviewPage.challenge.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiReviewPage.decided.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 3,
+     "ant-selector": 3,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiReviewPage.edit.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 5,
+     "ant-selector": 5,
+     "antd-reference": 2,
+     "provider": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiReviewPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Dropdown",
+     "Modal"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiRunPage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiRunPage.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Button",
+     "Dropdown"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-confirm": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiSettingsButton.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiSettingsPage.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 5,
+     "ant-selector": 5,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WikiSettingsPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Card",
+     "InputNumber",
+     "Modal",
+     "Radio",
+     "Select",
+     "Switch"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/WikiShareButton.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/index.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 69,
+     "ant-selector": 69,
+     "antd-reference": 28,
+     "icon-class": 27
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 59,
+     "ant-selector": 59,
+     "antd-reference": 25,
+     "icon-class": 28
+    }
+   }
+  },
+  "src/web/src/pages/FollowingPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SharedLinksPage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 15,
+     "ant-selector": 15
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SharedLinksPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Popconfirm",
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 5
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 5
+    }
+   }
+  },
+  "src/web/src/pages/SharedProjectPage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SharedProjectPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Empty",
+     "List",
+     "Tag",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SharedWikiPage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/SharedWikiPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Drawer",
+     "Popover"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  }
+ }
+}

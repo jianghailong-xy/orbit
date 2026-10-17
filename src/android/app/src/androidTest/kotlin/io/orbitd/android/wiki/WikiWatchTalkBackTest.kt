@@ -115,6 +115,22 @@ class WikiWatchTalkBackTest {
         readBack("review", "double tap on Accept -> one POST …/decide {action: accept}", since)
     }
 
+    /** A12f (iOS 2ba6765d9): the bar's globe, on a space with a link open, is read as "Share…" and "Live link"; its double tap
+     * opens Share wiki, which TalkBack reads through — Access, the link, the space's Documents and its Footnotes with their
+     * risk sentence. */
+    @Test fun share() = journey("share", { "orbit://wiki/${it.string("space")}" }, control = """{"share":true}""") {
+        awaitTag("wiki-home-line")
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("wiki-bar-share") and hasStateDescription("Live link")).fetchSemanticsNodes().isNotEmpty() }
+        touch("home", "wiki-bar-share", "Share…")?.let { (node, _) ->
+            if (!spoken(node).contains("Live link")) problem("home: TalkBack reads the globe without \"Live link\"", "it reads \"${spoken(node)}\"")
+        }
+        activate("home", "wiki-bar-share", "Live link")
+        awaitTag("share-sheet")
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("486 footnotes", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        log("double tap on Share -> Share wiki opened")
+        page("share", steps = 30, fromTop = true)
+    }
+
     /** Wiki settings from the home's gear by double tap: a review mode and the spot-check switch, each by double tap, are
      * written, and TalkBack reads the switch's new state. */
     @Test fun settings() = journey("settings", { "orbit://wiki/${it.string("space")}" }) {
@@ -322,9 +338,11 @@ class WikiWatchTalkBackTest {
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
     /** A cold start from [target]'s link with TalkBack on, then [block]. The report, the problems and the journal are kept
-     * whatever happens; the problems fail the journey once its Activity is gone. */
-    private fun journey(name: String, target: (JsonObject) -> String, block: (JsonObject) -> Unit) {
+     * whatever happens; the problems fail the journey once its Activity is gone. [control] is what the server holds for the
+     * journey, set before the app reads anything. */
+    private fun journey(name: String, target: (JsonObject) -> String, control: String? = null, block: (JsonObject) -> Unit) {
         http("/__control", """{"reset":true}""")
+        if (control != null) http("/__control", control)
         val ids = http("/__ids")
         instrument.sendStatus(0, Bundle().apply { putString("a12_pid", Process.myPid().toString()) })
         File(output, "talkback-$name-identity.txt").writeText("sha=${BuildConfig.SOURCE_SHA}\ndirty=${BuildConfig.SOURCE_DIRTY}\nfixture=loopback-18770\n" +

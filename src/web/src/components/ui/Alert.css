@@ -12,6 +12,8 @@
 .orbit-alert-error .orbit-alert-icon { color: var(--orbit-control-error); }
 .orbit-alert-warning { background: var(--orbit-badge-warning-bg); border-color: var(--orbit-alert-warning-border); }
 .orbit-alert-warning .orbit-alert-icon { color: var(--orbit-badge-warning); }
+.orbit-alert-info { background: var(--orbit-badge-info-bg); border-color: var(--orbit-alert-info-border); }
+.orbit-alert-info .orbit-alert-icon { color: var(--orbit-control-primary); }
 .orbit-alert-section { flex: 1; min-width: 0; }
 .orbit-alert-actions { margin-inline-start: 8px; }
 .orbit-alert-with-description { align-items: flex-start; padding: 20px 24px; }

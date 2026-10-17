@@ -1,7 +1,8 @@
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, DownOutlined, EditOutlined } from '@ant-design/icons';
+import { AgentProvider, ENGINE_CLI_NAMES, keyDialect } from '@orbit/shared';
 import { api } from '../api';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
@@ -9,21 +10,21 @@ import { providersQuery, publishedRunnerVersionQuery, runnersQuery, workspacesQu
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
 import { latestRunnerVersion, runnerAttention, type AttentionWorkspace } from '../lib/runnerAttention';
-import { providerDisplayLabel } from '../lib/sessionProviderChoices';
 import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, NewPoolModal, PoolHint } from '../components/AccountPools';
 import { EngineOverview, NeedsAttention } from '../components/InfrastructureOverview';
-import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { KeyImpact } from '../components/KeyImpact';
+import { EngineTile, ProviderGallery, ProviderTile, vendorName, vendorOf } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
-import { DshRunnerStatus } from '../components/DshRunnerStatus';
 import { DeepSeekBalanceLine } from '../components/DeepSeekBalance';
 import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { Menu, type MenuItem } from '../components/ui/Menu';
-import { Popconfirm } from '../components/ui/Popconfirm';
 import { TableEmptyRow, TableFrame } from '../components/ui/Table';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
+import { ago } from '../lib/watches';
 import { useToast } from '../lib/toast';
 import type { Runner } from '../components/TasksSidePanel';
 
@@ -40,6 +41,50 @@ interface KeyColumn {
 /** From here up the keys table shows its wide columns (the replaced table's `md` breakpoint). */
 const WIDE_KEYS_QUERY = '(min-width: 768px)';
 
+/** The exact time behind a Last used cell's relative one, for its tooltip. */
+const stampOf = (iso: string): string =>
+  new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+/** The keys under their vendors (vendorOf): a group each, in the order of each vendor's first key, and
+ *  in each its keys in the list's own order. */
+function byVendor(rows: ProviderRow[]): Array<{ vendor: string; rows: ProviderRow[] }> {
+  const groups = new Map<string, ProviderRow[]>();
+  for (const row of rows) {
+    const vendor = vendorOf(row.presetSlug);
+    groups.set(vendor, [...(groups.get(vendor) ?? []), row]);
+  }
+  return [...groups].map(([vendor, keys]) => ({ vendor, rows: keys }));
+}
+
+/**
+ * The engines a key runs on, in the server's order (`engines`, its default first) — the engines the
+ * overview above lists it under. A Claude subscription token, which Anthropic serves to Claude Code
+ * alone, says why that is the only one: an Anthropic-protocol key runs on OpenCode too otherwise.
+ */
+function KeyEngines({ row }: { row: ProviderRow }) {
+  const subscription =
+    keyDialect(row.runtime) === 'anthropic' && row.engines.length === 1 && row.engines[0] === AgentProvider.CLAUDE;
+  return (
+    <div className="prov-runtime prov-engines">
+      {row.engines.map((engine, index) => (
+        <Fragment key={engine}>
+          {index > 0 && <> <span className="prov-engine-sep">·</span> </>}
+          <span className="prov-engine">
+            <EngineTile engine={engine} size={12} />
+            {ENGINE_CLI_NAMES[engine]}
+          </span>
+        </Fragment>
+      ))}
+      {subscription && (
+        <>
+          {' '}
+          <span className="prov-engine-sep">·</span> <span>subscription token, Claude Code only</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * Where the user's agents run, and whose model quota they spend — what the Runners and Providers
  * pages used to split between them, on one page (docs/mocks/infrastructure-page).
@@ -51,8 +96,10 @@ const WIDE_KEYS_QUERY = '(min-width: 768px)';
  * spent only by sessions on that machine and needs nothing pasted, which is what most sessions
  * actually run on. Each card is also where its machine is renamed, reordered and deleted.
  *
- * Then the API keys on the account — usable from every machine and billed per token. Adding or
- * editing one happens on its own page (ProviderConnectPage), so a vendor's setup stays deep-linkable.
+ * Then the API keys on the account — usable from every machine and billed per token — under their
+ * vendors, each saying which engines it runs on (docs/mocks/provider-engine-decoupling, board 1).
+ * Adding or editing one happens on its own page (ProviderConnectPage), so a vendor's setup stays
+ * deep-linkable. Deleting one first says what uses it on each of those engines (KeyImpact).
  * Before there is an account pool, the list opens with the offer to make one — but only when at least
  * two keys could join, since a pool of one is the key.
  *
@@ -69,7 +116,7 @@ export function InfrastructurePage() {
   const { hash } = useLocation();
   const isMobile = useIsMobile();
   const wide = useMediaQuery(WIDE_KEYS_QUERY);
-  const machineSection = useRef<HTMLDivElement>(null);
+  const [confirm, confirmHolder] = useConfirm();
   const keySection = useRef<HTMLDivElement>(null);
   const poolSection = useRef<HTMLDivElement>(null);
   const runners = useQuery(runnersQuery());
@@ -77,9 +124,6 @@ export function InfrastructurePage() {
   const online = machines.filter((runner) => runner.online);
   const busySlots = online.reduce((n, runner) => n + (runner.activeSessions ?? 0), 0);
   const allSlots = online.reduce((n, runner) => n + (runner.maxConcurrent ?? 0), 0);
-  const geminiReady = online.filter(
-    (runner) => runner.antigravity?.supported && runner.antigravity.installed === true,
-  ).length;
   // What each machine's card says it needs a person for: read from the machine's workspaces, and the
   // newest release anyone can see.
   const workspaces = (useQuery(workspacesQuery()).data ?? []) as Array<
@@ -137,8 +181,17 @@ export function InfrastructurePage() {
       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
       message.success('Provider deleted');
     },
-    onError: (e: Error) => message.error("Couldn't delete the provider", e.message),
+    // A delete that fails says so in the dialog that asked for it (deleteKey).
   });
+  const deleteKey = (p: ProviderRow) =>
+    void confirm({
+      title: `Delete ${p.label}?`,
+      description: <KeyImpact row={p} action="delete" />,
+      confirmText: 'Delete key',
+      danger: true,
+      width: 440,
+      onConfirm: () => deleteMut.mutateAsync(p.id),
+    });
 
   const addItems: MenuItem[] = [
     {
@@ -178,37 +231,15 @@ export function InfrastructurePage() {
 
   const columns: KeyColumn[] = [
     {
-      key: 'provider',
-      title: 'Provider',
-      // The dispatch slug is the server's to generate and nobody's to read, so the row shows the
-      // vendor: its logo (by preset, not by the row's identifier) and the name it was given.
+      key: 'key',
+      title: 'Key',
+      // The dispatch slug is the server's to generate and nobody's to read, so the row shows the name
+      // the key was given — its vendor heads its group — and the engines it runs on.
       cell: (p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <ProviderTile slug={p.presetSlug ?? p.slug} label={providerDisplayLabel(p.label, p.presetSlug)} size={32} />
           <div style={{ minWidth: 0 }}>
-            <div className="prov-cell-name">{providerDisplayLabel(p.label, p.presetSlug)}</div>
-            {p.runtime === 'antigravity' && (
-              <div className="prov-runtime">
-                <div>Runs on the Antigravity CLI</div>
-                <div>
-                  <span style={geminiReady === 0 ? { color: 'var(--warning)' } : undefined}>
-                    {geminiReady === 0 ? 'Not ready on any machine' : `Ready on ${geminiReady} machine${geminiReady === 1 ? '' : 's'}`}
-                  </span>{' '}
-                  <a className="re-link" href="#machines" onClick={(event) => {
-                    event.preventDefault();
-                    machineSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }}>
-                    See machines ↑
-                  </a>
-                </div>
-              </div>
-            )}
-            {p.runtime === 'dsh' && <DshRunnerStatus runners={machines} />}
-            {p.runtime === 'claude' && p.presetSlug === 'deepseek' && (
-              <div className="prov-runtime">
-                <div>Runs on Claude Code</div>
-              </div>
-            )}
+            <div className="prov-cell-name">{p.label}</div>
+            <KeyEngines row={p} />
             {/* A DeepSeek key also carries its whole account's balance (DeepSeekBalance.tsx). */}
             {hasDeepSeekBalance(p) && <DeepSeekBalanceLine row={p} />}
           </div>
@@ -230,12 +261,25 @@ export function InfrastructurePage() {
     ...(wide
       ? [
           { key: 'models', title: 'Models', width: 96, cell: (p: ProviderRow) => (p.models?.length ? `${p.models.length}` : '—') },
-          { key: 'baseUrl', title: 'Endpoint', width: 200, cell: (p: ProviderRow) => <code className="prov-endpoint">{p.baseUrl}</code> },
+          { key: 'baseUrl', title: 'Endpoint', width: 170, cell: (p: ProviderRow) => <code className="prov-endpoint">{p.baseUrl}</code> },
           {
             key: 'enabled',
             title: 'Enabled',
             width: 100,
             cell: (p: ProviderRow) => <Badge tone={p.enabled ? 'green' : 'default'}>{p.enabled ? 'Enabled' : 'Disabled'}</Badge>,
+          },
+          {
+            // When a session last ran on the key: the relative answer the row is read for, with the
+            // exact time on hover; a key nothing has spent says so rather than showing a date.
+            key: 'lastUsed',
+            title: 'Last used',
+            width: 110,
+            cell: (p: ProviderRow) =>
+              p.lastUsedAt ? (
+                <span title={stampOf(p.lastUsedAt)}>{ago(p.lastUsedAt, nowMs)}</span>
+              ) : (
+                <span className="prov-never">Never used</span>
+              ),
           },
         ]
       : []),
@@ -253,7 +297,7 @@ export function InfrastructurePage() {
               size="small"
               variant="text"
               icon={<EditOutlined />}
-              aria-label={`Edit ${providerDisplayLabel(p.label, p.presetSlug)}`}
+              aria-label={`Edit ${p.label}`}
               onClick={() => navigate(`/providers/${p.id}`)}
             />
           ) : (
@@ -261,19 +305,13 @@ export function InfrastructurePage() {
               Edit
             </Button>
           )}
-          <Popconfirm
-            title={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}?`}
-            onConfirm={() => deleteMut.mutate(p.id)}
-            trigger={
-              isMobile ? (
-                <Button size="small" variant="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}`} />
-              ) : (
-                <Button size="small" danger>
-                  Delete
-                </Button>
-              )
-            }
-          />
+          {isMobile ? (
+            <Button size="small" variant="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${p.label}`} onClick={() => deleteKey(p)} />
+          ) : (
+            <Button size="small" danger onClick={() => deleteKey(p)}>
+              Delete
+            </Button>
+          )}
         </span>
       ),
     },
@@ -300,14 +338,30 @@ export function InfrastructurePage() {
           {rows.length === 0 ? (
             <TableEmptyRow colSpan={columns.length} />
           ) : (
-            rows.map((row) => (
-              <tr key={row.id}>
-                {columns.map((column) => (
-                  <td key={column.key} style={column.end ? end : undefined}>
-                    {column.cell(row)}
+            byVendor(rows).map((group) => (
+              <Fragment key={group.vendor}>
+                <tr className="prov-group">
+                  <td colSpan={columns.length}>
+                    <div className="prov-group-in">
+                      <ProviderTile slug={group.vendor} label={vendorName(group.vendor)} size={22} />
+                      <b>{vendorName(group.vendor)}</b>
+                      {group.rows.length > 1 && <> <span>{group.rows.length} keys</span></>}{' '}
+                      <Link className="prov-group-add" to={`/providers/new/${group.vendor}`}>
+                        + Add key
+                      </Link>
+                    </div>
                   </td>
+                </tr>
+                {group.rows.map((row) => (
+                  <tr key={row.id} className="prov-key">
+                    {columns.map((column) => (
+                      <td key={column.key} style={column.end ? end : undefined}>
+                        {column.cell(row)}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
+              </Fragment>
             ))
           )}
         </tbody>
@@ -342,7 +396,7 @@ export function InfrastructurePage() {
         </>
       )}
 
-      <div ref={machineSection} id="machines">
+      <div id="machines">
         <RunnerEngines
           attentionOf={attentionOf}
           head={
@@ -404,6 +458,7 @@ export function InfrastructurePage() {
       </div>
 
       {creatingPool && <NewPoolModal rows={providers.data ?? []} onClose={() => setCreatingPool(false)} />}
+      {confirmHolder}
     </div>
   );
 }

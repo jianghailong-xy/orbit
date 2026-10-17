@@ -105,8 +105,9 @@ class RunnerEnginePageTest {
         fixture.runnerExtra = extra() + claudeUsage
         page(null)
         await("2 accounts signed in")
-        compose.onNodeWithText("Antigravity", useUnmergedTree = true).assertExists()
-        assertEquals("the engine is Antigravity, not its CLI", 0, shown("Antigravity CLI"))
+        // The engine by its CLI's name, as every engine list says it (ENGINE_CLI_NAMES; the owner's call on the provider/engine
+        // boards, 2026-10-09, which renamed this row from "Antigravity").
+        compose.onNodeWithText("Antigravity CLI", useUnmergedTree = true).assertExists()
         // Work's 5 hours are down to 4%: a new session starts on Default, and the row carries Default's binding bucket only.
         await("Next: Default")
         await("3p-weekly"); await("98% remaining")

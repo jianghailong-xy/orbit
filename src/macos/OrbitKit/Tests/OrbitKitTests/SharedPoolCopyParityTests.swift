@@ -263,11 +263,13 @@ final class SharedPoolCopyParityTests: XCTestCase {
         XCTAssertEqual(ProviderPools.asProviders([drawn]).first?.runtime, "codex")
 
         // The picker's row: a choice on that CLI, wearing how many keys it holds.
-        let choices = SessionProviderChoices.choices(configured: providers, pools: [drawn])
+        let choices = SessionProviderChoices.providers(for: "codex", sources: ChoiceSources(configured: providers, pools: [drawn]))
         let tile = try XCTUnwrap(choices.first { $0.slug == "team-codex" })
         let choicesSource = try web(Self.sessionProviderChoices)
+        assertSays(choicesSource, "const poolEngine = (pool: PoolChoiceSource): AgentProvider =>",
+                   in: Self.sessionProviderChoices)
         assertSays(choicesSource,
-                   "const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;",
+                   "pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;",
                    in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit: 'key' as const", in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit?: 'key';", in: Self.sessionProviderChoices)

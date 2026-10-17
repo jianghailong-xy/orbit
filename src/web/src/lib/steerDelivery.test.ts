@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSteerKind, steerDeliveryState, supersedesLiveDrafts } from './steerDelivery';
+import { isSteerKind, offersSteerWithdraw, steerDeliveryState, supersedesLiveDrafts } from './steerDelivery';
 
 describe('steer delivery states', () => {
   it('names every stage the runner reports', () => {
@@ -7,8 +7,8 @@ describe('steer delivery states', () => {
     // the runner's own acceptance: both are a promise that it will be offered to the engine.
     expect(steerDeliveryState(undefined).label).toBe('Sending…');
     expect(steerDeliveryState('enqueued').label).toBe('Sending…');
-    expect(steerDeliveryState('written').label).toBe('Delivering…');
-    expect(steerDeliveryState('acknowledged').label).toBe('Sent into this turn');
+    expect(steerDeliveryState('written').label).toBe('Waiting to be read');
+    expect(steerDeliveryState('acknowledged').label).toBe('Read in this turn');
     expect(steerDeliveryState('failed').label).toBe('Not delivered');
     // The one non-delivery that is not a loss: it missed the turn it was aimed at and is
     // coming back as a turn of its own, so it reads as progress rather than failure.
@@ -59,5 +59,27 @@ describe('what clears the live streaming drafts', () => {
     // An ordinary message still opens a turn, so it still supersedes.
     expect(supersedesLiveDrafts({ type: 'user', payload: { steer: false } })).toBe(true);
     expect(supersedesLiveDrafts({ type: 'user', payload: {} })).toBe(true);
+  });
+});
+
+describe('taking a steer back', () => {
+  it('reads like chat receipts: waiting to be read, then read', () => {
+    // "Delivering…" said the message was still in transit when it had already arrived; what it
+    // waits for is the engine, and a long tool call made it look stuck.
+    expect(steerDeliveryState('written').label).toBe('Waiting to be read');
+    expect(steerDeliveryState('acknowledged').label).toBe('Read in this turn');
+    // What is unknown is whether it was read, not whether it arrived.
+    expect(steerDeliveryState('unconfirmed').label).toBe("Couldn't confirm it was read");
+    expect(steerDeliveryState('unconfirmed').tone).toBe('failed');
+  });
+
+  it('is offered only where the runner said the engine can drop it, and only before it is read', () => {
+    for (const delivery of [undefined, null, 'enqueued', 'written']) {
+      expect(offersSteerWithdraw(delivery, true), String(delivery)).toBe(true);
+      expect(offersSteerWithdraw(delivery, undefined), String(delivery)).toBe(false);
+    }
+    for (const delivery of ['acknowledged', 'requeued', 'failed', 'unconfirmed', 'withdrawn']) {
+      expect(offersSteerWithdraw(delivery, true), delivery).toBe(false);
+    }
   });
 });

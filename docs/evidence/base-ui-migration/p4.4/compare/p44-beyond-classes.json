@@ -1,0 +1,387 @@
+{
+ "chromium-dark-desktop/p44-doc-footnote-44.png": {
+  "class": "a card above its number: vertical rounding",
+  "pixelsOver2": 5462,
+  "max": 172
+ },
+ "chromium-dark-desktop/p44-entry-edit.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 7
+ },
+ "chromium-dark-desktop/p44-entry-more.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 97,
+  "max": 43
+ },
+ "chromium-dark-desktop/p44-entry-reject.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 9,
+  "max": 13
+ },
+ "chromium-dark-desktop/p44-entry-retire.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 7
+ },
+ "chromium-dark-desktop/p44-entry.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 9,
+  "max": 13
+ },
+ "chromium-dark-desktop/p44-landing.png": {
+  "class": "loading dots frame",
+  "pixelsOver2": 67,
+  "max": 21
+ },
+ "chromium-dark-desktop/p44-new-entry-kinds.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 4,
+  "max": 9
+ },
+ "chromium-dark-desktop/p44-settings-workspaces.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 14717,
+  "max": 15
+ },
+ "chromium-dark-desktop/p44-watch-editor-filled.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 8
+ },
+ "chromium-dark-desktop/p44-watch-editor-sessions.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 12,
+  "max": 8
+ },
+ "chromium-dark-phone/p44-doc-footnote-44.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 23,
+  "max": 9
+ },
+ "chromium-dark-phone/p44-doc-mark-footnote.png": {
+  "class": "the replaced tip stays open under the sheet",
+  "pixelsOver2": 18229,
+  "max": 242
+ },
+ "chromium-dark-phone/p44-entry-edit.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 28967,
+  "max": 115
+ },
+ "chromium-dark-phone/p44-entry-more.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 48319,
+  "max": 209
+ },
+ "chromium-dark-phone/p44-entry-reject.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 46841,
+  "max": 209
+ },
+ "chromium-dark-phone/p44-entry-retire.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 30424,
+  "max": 115
+ },
+ "chromium-dark-phone/p44-entry.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 46889,
+  "max": 209
+ },
+ "chromium-dark-phone/p44-landing.png": {
+  "class": "loading dots frame",
+  "pixelsOver2": 35,
+  "max": 20
+ },
+ "chromium-dark-phone/p44-plan-edit-changed.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 3,
+  "max": 4
+ },
+ "chromium-dark-phone/p44-plan-edit-kinds.png": {
+  "class": "the replaced list's own scrollbar",
+  "pixelsOver2": 1631,
+  "max": 63
+ },
+ "chromium-dark-phone/p44-plan-versions.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 4
+ },
+ "chromium-dark-phone/p44-settings-workspaces.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 10045,
+  "max": 15
+ },
+ "chromium-dark-phone/p44-watch-editor-filled.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 9
+ },
+ "chromium-dark-phone/p44-watch-editor-sessions.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 9
+ },
+ "chromium-light-desktop/p44-doc-footnote-44.png": {
+  "class": "a card above its number: vertical rounding",
+  "pixelsOver2": 6393,
+  "max": 224
+ },
+ "chromium-light-desktop/p44-entry-more.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 89,
+  "max": 55
+ },
+ "chromium-light-desktop/p44-landing.png": {
+  "class": "loading dots frame",
+  "pixelsOver2": 37,
+  "max": 20
+ },
+ "chromium-light-desktop/p44-new-entry-kinds.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 7,
+  "max": 6
+ },
+ "chromium-light-desktop/p44-plan-edit-kinds.png": {
+  "class": "the replaced list's own scrollbar",
+  "pixelsOver2": 1636,
+  "max": 128
+ },
+ "chromium-light-desktop/p44-review-reject.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 3
+ },
+ "chromium-light-desktop/p44-settings-workspaces.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 14683,
+  "max": 10
+ },
+ "chromium-light-desktop/p44-watch-editor-filled.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 9
+ },
+ "chromium-light-desktop/p44-watch-editor-sessions.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 9
+ },
+ "chromium-light-phone/p44-activity-revert.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 18,
+  "max": 3
+ },
+ "chromium-light-phone/p44-doc-footnote-44.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 12,
+  "max": 7
+ },
+ "chromium-light-phone/p44-doc-mark-footnote.png": {
+  "class": "the replaced tip stays open under the sheet",
+  "pixelsOver2": 28508,
+  "max": 249
+ },
+ "chromium-light-phone/p44-entry-edit.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 29049,
+  "max": 126
+ },
+ "chromium-light-phone/p44-entry-more.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 51841,
+  "max": 229
+ },
+ "chromium-light-phone/p44-entry-reject.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 51865,
+  "max": 229
+ },
+ "chromium-light-phone/p44-entry-retire.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 30529,
+  "max": 126
+ },
+ "chromium-light-phone/p44-entry.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 47007,
+  "max": 229
+ },
+ "chromium-light-phone/p44-new-entry-filled.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 12
+ },
+ "chromium-light-phone/p44-new-entry-kinds.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 12
+ },
+ "chromium-light-phone/p44-new-entry.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 12
+ },
+ "chromium-light-phone/p44-plan-compared.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 3
+ },
+ "chromium-light-phone/p44-plan-edit-changed.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 5,
+  "max": 4
+ },
+ "chromium-light-phone/p44-plan-edit-kinds.png": {
+  "class": "the replaced list's own scrollbar",
+  "pixelsOver2": 1633,
+  "max": 128
+ },
+ "chromium-light-phone/p44-settings-lookback.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 3
+ },
+ "chromium-light-phone/p44-settings-setup.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 3
+ },
+ "chromium-light-phone/p44-settings-workspaces.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 9997,
+  "max": 10
+ },
+ "chromium-light-phone/p44-watch-editor-filled.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 10
+ },
+ "chromium-light-phone/p44-watch-editor-sessions.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 10
+ },
+ "webkit-dark-desktop/p44-doc-footnote-44.png": {
+  "class": "a card above its number: vertical rounding",
+  "pixelsOver2": 3475,
+  "max": 167
+ },
+ "webkit-dark-desktop/p44-plan-edit-kinds.png": {
+  "class": "the replaced list's own scrollbar",
+  "pixelsOver2": 1770,
+  "max": 158
+ },
+ "webkit-dark-desktop/p44-settings-workspaces.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 14725,
+  "max": 15
+ },
+ "webkit-dark-phone/p44-doc-mark-footnote.png": {
+  "class": "the replaced tip stays open under the sheet",
+  "pixelsOver2": 22504,
+  "max": 242
+ },
+ "webkit-dark-phone/p44-entry-edit.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 28592,
+  "max": 115
+ },
+ "webkit-dark-phone/p44-entry-more.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 48023,
+  "max": 209
+ },
+ "webkit-dark-phone/p44-entry-reject.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 46618,
+  "max": 209
+ },
+ "webkit-dark-phone/p44-entry-retire.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 30080,
+  "max": 115
+ },
+ "webkit-dark-phone/p44-entry.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 46630,
+  "max": 209
+ },
+ "webkit-dark-phone/p44-plan-edit-kinds.png": {
+  "class": "the replaced list's own scrollbar",
+  "pixelsOver2": 1710,
+  "max": 158
+ },
+ "webkit-dark-phone/p44-settings-setup.png": {
+  "class": "hover kept under the new backdrop (WebKit, pointer not moved)",
+  "pixelsOver2": 376,
+  "max": 89
+ },
+ "webkit-dark-phone/p44-settings-workspaces.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 10053,
+  "max": 15
+ },
+ "webkit-light-desktop/p44-doc-footnote-44.png": {
+  "class": "a card above its number: vertical rounding",
+  "pixelsOver2": 4370,
+  "max": 205
+ },
+ "webkit-light-desktop/p44-entry-more.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 3
+ },
+ "webkit-light-desktop/p44-plan-edit-kinds.png": {
+  "class": "the replaced list's own scrollbar",
+  "pixelsOver2": 1767,
+  "max": 224
+ },
+ "webkit-light-desktop/p44-settings-workspaces.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 14667,
+  "max": 10
+ },
+ "webkit-light-phone/p44-doc-mark-footnote.png": {
+  "class": "the replaced tip stays open under the sheet",
+  "pixelsOver2": 29137,
+  "max": 249
+ },
+ "webkit-light-phone/p44-entry-edit.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 28794,
+  "max": 126
+ },
+ "webkit-light-phone/p44-entry-more.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 52449,
+  "max": 229
+ },
+ "webkit-light-phone/p44-entry-reject.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 52630,
+  "max": 229
+ },
+ "webkit-light-phone/p44-entry-retire.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 30306,
+  "max": 126
+ },
+ "webkit-light-phone/p44-entry.png": {
+  "class": "the entry drawer's 40px phone buttons",
+  "pixelsOver2": 46927,
+  "max": 229
+ },
+ "webkit-light-phone/p44-plan-edit-kinds.png": {
+  "class": "the replaced list's own scrollbar",
+  "pixelsOver2": 1706,
+  "max": 224
+ },
+ "webkit-light-phone/p44-settings-workspaces.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 9995,
+  "max": 10
+ }
+}

@@ -39,7 +39,20 @@ export interface ProjectIntegrationSettings<Instant = string> {
   lineAbsentReason: 'NOT_DECIDED' | null;
   /** The integration line's branch, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string | null;
+  /** The project's main branch, short (no `refs/heads/`); null while it has no binding. */
   upstreamRef: string | null;
+  /**
+   * When the account owner chose this project's main branch (§1.2 L6) — null while it is still
+   * the default, or the choice a new binding carried over from this account's last one for the
+   * same repository, and for a project with no binding. Absent on servers that predate it.
+   */
+  upstreamChosenAt?: Instant | null;
+  /**
+   * The main branch this account chose last for this project's repository (§1.2 L6), which is what
+   * a new binding of that repository starts from — null when it has never chosen one there, or the
+   * project has no repository. Absent on servers that predate it.
+   */
+  lastMainBranch?: ProjectLastMainBranch<Instant> | null;
   source: IntegrationRefSource | null;
   /** Integration started, so the line can no longer change (§1.2 L4). */
   locked: boolean;
@@ -51,6 +64,28 @@ export interface ProjectIntegrationSettings<Instant = string> {
   escalationSeconds: number;
 }
 
+/** An account's last choice of main branch for one repository (§1.2 L6). */
+export interface ProjectLastMainBranch<Instant = string> {
+  /** The branch, short (no `refs/heads/`). */
+  branch: string;
+  /** The repository, short: the last two segments of its canonical URL, as `repository` gives it. */
+  repository: string;
+  chosenAt: Instant;
+}
+
+/**
+ * The branches a project's main branch can be chosen from (§1.6): the local branches the runner
+ * last reported for a session of the project's coordination workspace (`session.merge_targets`),
+ * without Orbit's own `orbit/*` session branches and without the account's project branches (the
+ * branch each of its projects on a project branch integrates into).
+ */
+export interface ProjectBranchCandidates<Instant = string> {
+  names: string[];
+  /** The coordination workspace they were reported for. */
+  workspaceName: string;
+  reportedAt: Instant;
+}
+
 /**
  * The settings plus what the integration queue has done with them (§1.6): the five facts the
  * project page's line row is drawn from.
@@ -60,6 +95,16 @@ export interface ProjectIntegrationSettings<Instant = string> {
  * that synced at the epoch.
  */
 export interface ProjectIntegrationView<Instant = string> extends ProjectIntegrationSettings<Instant> {
+  /**
+   * The project's repository, short — the last two segments of its canonical URL, as
+   * `acme/payments-api`: its binding's, or before it has one, its coordination workspace's. Null
+   * when neither names one, and then the project has no main branch to choose. Absent on servers
+   * that predate it.
+   */
+  repository?: string | null;
+  /** What its main branch can be chosen from; null when nothing has been reported. Absent on
+   *  servers that predate it. */
+  branches?: ProjectBranchCandidates<Instant> | null;
   /** Distance measured by the last successful `LAND_TASK` that reported it; a historical snapshot. */
   commitsAheadOfUpstream: number | null;
   commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET' | null;
@@ -277,6 +322,12 @@ export interface TaskIntegrationView<Instant = string> {
   checksRunningForMs: number | null;
   /** Null when no LAND_TASK exists; absent only on servers predating the unified read model. */
   landTask?: LandTaskIntegrationView<Instant> | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — that
+   * `ON_UPSTREAM` is on. Null when the task is in no project or its project has no repository
+   * bound. Absent from an older server.
+   */
+  mainBranch?: string | null;
 }
 
 /**
@@ -441,8 +492,10 @@ export interface OpenItemFacts {
   } | null;
   /** The landing question and the declaration used for a DELIVERY_REVIEW item. */
   review?: {
-    reason: 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
+    reason: 'CRITERION_EXEMPTION_ARGUED' | 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
     declaredPaths: string[];
+    /** The task's written reason for keeping its completion criterion (CRITERION_EXEMPTION_ARGUED). */
+    argument?: string;
   } | null;
 }
 
@@ -652,6 +705,11 @@ export interface ProjectOpenItemsView<Instant = string> {
    * the reason `startRequest` is. Absent from a server that predates done requests.
    */
   doneRequest?: ProjectOpenItemRow<Instant> | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — which
+   * a row's merge into main is a merge into. Null when the project has no repository bound.
+   */
+  mainBranch?: string | null;
 }
 
 /**
@@ -718,6 +776,32 @@ export interface OpenItemDeliveryCard {
     upstream: string;
     integration: string;
   } | null;
+}
+
+/**
+ * What the turn telling a coordinator the owner's answer carries beside its words (§5.2 R10): the
+ * answer to a question it asked (`ask_owner`), or the owner's Not yet… to its request to record the
+ * project done.
+ *
+ * The words are written for the AGENT — `From Orbit · owner answer: you asked "…"`, the question
+ * replayed in full and the answer with its ISO moment — and they stay exactly what they were: a
+ * coordinator rotated in after the answer learns from them what was asked. Without this a client
+ * had nothing else to draw the turn from, and drew the platform's message as a bubble the owner had
+ * typed. Recorded beside the runner's echo like `OpenItemDeliveryCard`, so a client draws the turn as
+ * one line — `Sent to the coordinator · 08:29`, opening to those words.
+ */
+export interface OwnerAnswerCard {
+  /** The item answered, in the uuid spelling every other read of one uses. */
+  itemId: string;
+  /** What was answered: a coordinator's question, or its request to record the project done. */
+  kind: Extract<OpenItemKind, 'COORDINATOR_QUESTION' | 'DONE_REQUEST'>;
+  /** The conversation the answer was delivered to: the one this turn is on. */
+  sessionId: string;
+  /**
+   * When this conversation was handed the answer — its own delivery row's moment, which for a
+   * coordinator rotated in after the answer is when IT was told, not when the owner answered.
+   */
+  deliveredAt: string;
 }
 
 /**
@@ -880,6 +964,14 @@ export interface ProjectPromotionView<Instant = string> {
    * able to say "2m so far" when the platform has neither rather than print a zero it made up.
    */
   recheck: { upstreamMovedBy: number | null; startedAt: Instant; typicalMs: number | null } | null;
+  /**
+   * What the check in flight leads to when it passes (§3.6): `MERGE` when the project's Automatic
+   * setting will merge it into main by itself (§3.3 M-T11), `ASK` when the owner will get the card.
+   * Read as the project stands now, so a project whose Automatic is switched while the check runs
+   * reads the other answer on its next poll. Null on every state but `CHECKING`; absent from a server
+   * older than the field.
+   */
+  onPass?: 'MERGE' | 'ASK' | null;
   /** The active job for this candidate's own confirmed merge, never another project job.
    * Confirmation authorizes a merge; it does not mean a runner has started it. */
   execution?: {
@@ -1074,6 +1166,12 @@ export interface SessionOwnerItem<Instant = string> {
   since: Instant;
   /** The short reason for an escalated item, derived from its raw kind. */
   need?: string;
+  /**
+   * The item's project's main branch by name — `project_codebase.upstream_ref` without
+   * `refs/heads/` — which a merge approval asks to merge into. Null when the project has no
+   * repository bound.
+   */
+  mainBranch?: string | null;
 }
 
 /**

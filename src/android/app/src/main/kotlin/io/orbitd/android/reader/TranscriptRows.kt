@@ -2,6 +2,7 @@ package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 
 internal fun JsonObject.string(key: String) = (get(key) as? JsonPrimitive)?.contentOrNull
@@ -28,14 +29,20 @@ internal fun contentImages(value: JsonElement?): List<String> = when (value) {
     else -> emptyList()
 }
 
+/** [folded] is the later `thinking` blocks folded into this one's row (A06-11): the row keeps the first block's identity. [steer]: how
+ * the row's message came out, when it is one of the reader's steers ([SteerDelivery.outcomes]) — said under it. */
 @Immutable
-internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList()) {
+internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList(),
+    val folded: List<RunEvent> = emptyList(), val steer: SteerOutcome? = null) {
     val key: String get() = "event:${event.seq}"
-    fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || children.any { it.contains(seq) }
+    fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) }
 }
 
-/** Project only durable changes. Live text and tool snapshots are passed to their own row. */
-internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
+/** Project only durable changes. Live text and tool snapshots are passed to their own row. [holdsSteers]: a window that reaches the
+ * live tail draws the reader's steers where their delivery settled and leaves out the ones nothing has read yet, which the tray above
+ * the composer holds ([SteerDelivery.place], settled by the queue's [receipts] too). A window short of the tail cannot see how a steer
+ * near its end came out, so it draws each where it was sent, as history always was. */
+internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> = emptyList(), holdsSteers: Boolean = true): List<TranscriptRow> {
     // Project an unexplained end as a readable error with the original anchor. A bounded page
     // starting mid-turn cannot prove there was no earlier reply, so wait for an ordinary user or boundary.
     // A steer joins the current turn; it cannot establish the start of a truncated one.
@@ -60,7 +67,13 @@ internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
     val results = events.filter { it.type == "tool_result" && it.toolId() != null }
         .associateBy { parent(it) to it.toolId() }
     val usedResults = mutableSetOf<Long>()
-    val grouped = events.groupBy(::parent)
+    // Only where rows stand moves: what each event says about its turn is still read in the order it happened.
+    val grouped = (if (holdsSteers) SteerDelivery.place(events, receipts).drawn else events).groupBy(::parent)
+    // How each of the reader's steers came out — but one the engine dropped unread, which a window short of the tail still draws.
+    val outcomes = SteerDelivery.outcomes(events, receipts)
+    fun steer(e: RunEvent) = if (!SteerDelivery.readersSteer(e)) null
+        else (e.turnId?.let { outcomes[ObjectId.canonical(it) ?: it] } ?: SteerOutcome(e.fields.string("delivery")))
+            .takeIf { it.delivery != SteerDelivery.WITHDRAWN }
     fun rows(parent: String?, visited: Set<String>): List<TranscriptRow> {
         return grouped[parent].orEmpty().mapNotNull { e ->
             if (e.seq in unexplained) return@mapNotNull TranscriptRow(e.copy(type = "error", payload = buildJsonObject {
@@ -68,14 +81,17 @@ internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
             }))
             if (e.seq in engine.rows) return@mapNotNull engine.rows[e.seq]?.let(::TranscriptRow)
             if (e.type in setOf("turn_end", "status", "user_delivery", "init", "system", "result")) return@mapNotNull null
+            // A block the provider closed empty, with nothing this device streamed into it, draws no row (iOS 471b2afbb): a cold
+            // read of claude's transcript would otherwise be a wall of blank "Thinking" lines.
+            if (e.type == "thinking" && e.body().isEmpty()) return@mapNotNull null
             if (e.type == "tool_result" && e.seq in usedResults) return@mapNotNull null
             val result = if (e.type == "tool_use") engine.toolFailures[e.toolId()]?.takeIf { e.parent().isNullOrEmpty() }
                 ?: results[parent to e.toolId()] else null
             result?.let { usedResults += it.seq }
             val id = e.toolId()
             val children = if (e.type == "tool_use" && id != null && id !in visited) rows(id, visited + id) else emptyList()
-            TranscriptRow(e, result, children)
-        }
+            TranscriptRow(e, result, children, steer = steer(e))
+        }.let(::foldThinking)
     }
     // Results may precede calls in a restored partial window; suppress matched results independent of order.
     events.filter { it.type == "tool_use" }.forEach { e -> results[parent(e) to e.toolId()]?.let { usedResults += it.seq } }
@@ -208,6 +224,18 @@ internal class EngineReading(events: List<RunEvent>) {
 /** A signed-out engine's own words (OrbitKit `EngineAuth.isAuthErrorText`): a sign-in remedy, not an API error. */
 internal object EngineAuth {
     fun isAuthErrorText(text: String?): Boolean = text != null && text.trimStart().startsWith("Failed to authenticate")
+}
+
+/**
+ * A run of adjacent `thinking` rows as one row that counts them (A06-11; OrbitKit `foldIntoPrecedingThinking`, web `buildNodes`).
+ * A provider closes a block per tool call — a DeepSeek turn closes 10 at the median, 51 at p90 — and a row each was a stack of
+ * identical lines. Only ADJACENT rows fold: a block either side of a tool call keeps its own row, where it explains that call.
+ */
+private fun foldThinking(rows: List<TranscriptRow>): List<TranscriptRow> = rows.fold(ArrayList(rows.size)) { out, row ->
+    val previous = out.lastOrNull()
+    if (row.event.type == "thinking" && previous?.event?.type == "thinking") out[out.lastIndex] = previous.copy(folded = previous.folded + row.event + row.folded)
+    else out += row
+    out
 }
 
 internal fun anchorRow(rows: List<TranscriptRow>, seq: Long): TranscriptRow? =

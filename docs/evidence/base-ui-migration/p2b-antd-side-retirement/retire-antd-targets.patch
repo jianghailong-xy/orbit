@@ -1,0 +1,83 @@
+--- a/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs
++++ b/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs
+@@ -7,6 +7,10 @@
+ // has moved into it, as input queued behind a busy main thread does; "paced" presses the same keys 300ms apart,
+ // the reference where focus has already moved. Same key observer, plus the shown popups at each key. Every sample
+ // is a new page.
++//
++// The old AntD-side targets are retired (P6 judgment 1A): P6 deleted the AntD half of the fixtures, so every
++// `?system=antd` URL draws the Orbit sample and none of the elements those targets waited for exist. What remains
++// is the Orbit side. See docs/evidence/base-ui-migration/p2b-antd-side-retirement/README.md.
+ const choices = '/ui-migration/choices.html';
+ const overlays = '/ui-migration/overlays.html';
+ const button = (name) => (page) => page.getByRole('button', { name, exact: true }).first();
+@@ -14,38 +18,31 @@
+ const output = (name) => (page) => page.getByRole('status', { name, exact: true }).first().textContent();
+ const sample = (page) => page.getByRole('region', { name: 'Appearance sample' }).innerText();
+ const TARGETS = {
+-  // Menus: the field page's attachment Menu reports its action (its outputs); the samples are the pair the appearance
+-  // tests compare, so their outcome comes from the DOM (an Enter or Space on a menu item that closed the menu ran it).
++  // Menus: the field page's attachment Menu reports its action (its outputs); the sample's outcome comes from the
++  // DOM (an Enter or Space on a menu item that closed the menu ran it).
+   'orbit-menu': { kind: 'menu', url: choices, field: button('Add attachment'), outputs: true },
+   'orbit-menu-sample': { kind: 'menu', url: `${choices}?system=orbit&sample=attachment`, field: button('Add attachment') },
+-  'antd-menu': { kind: 'menu', url: `${choices}?system=antd&sample=attachment`, field: button('Add attachment') },
+-  // Submenus: the parent menu is opened with paced keys, each system its own way, and the sequence starts once its
+-  // Provider item (the submenu trigger) has focus. The old Dropdown leaves focus on its trigger until Tab.
++  // Submenus: the parent menu is opened with paced keys and the sequence starts once its Provider item (the
++  // submenu trigger) has focus.
+   'orbit-submenu': { kind: 'submenu', url: choices, field: button('Session actions'), open: ['ArrowDown', 'ArrowDown'], outputs: true },
+   'orbit-submenu-sample': { kind: 'submenu', url: `${choices}?system=orbit&sample=submenu`, field: button('Add attachment'), open: ['Enter'] },
+-  'antd-submenu': { kind: 'submenu', url: `${choices}?system=antd&sample=submenu`, field: button('Add attachment'), open: ['Enter', 'Tab'] },
+-  // The same pair inside a menu with other items around the submenu (the shape of the workspace menus), reporting the
+-  // item picked. Provider is the second item.
++  // The submenu inside a menu with other items around it (the shape of the workspace menus), reporting the item
++  // picked. Provider is the second item.
+   'orbit-session': { kind: 'submenu', url: `${choices}?system=orbit&sample=session`, field: button('Session actions'), open: ['Enter', 'ArrowDown'], outputs: true },
+-  'antd-session': { kind: 'submenu', url: `${choices}?system=antd&sample=session`, field: button('Session actions'), open: ['Enter', 'Tab', 'ArrowDown'], outputs: true },
+   // Selects, as in the earlier probe.
+   'orbit-field': { kind: 'select', url: choices, field: combobox('Expires'), read: output('Expiry value') },
+   'orbit-sample': { kind: 'select', url: `${choices}?system=orbit&sample=expiry`, field: combobox('Sample choice'), read: sample },
+-  'antd-sample': { kind: 'select', url: `${choices}?system=antd&sample=expiry`, field: combobox('Sample choice'), read: sample },
+-  // The task panel's delete question on one trigger for both systems; the sample reports the answer.
++  // The task panel's delete question; the sample reports the answer.
+   'orbit-popconfirm': { kind: 'popconfirm', url: `${choices}?system=orbit&sample=popconfirm`, field: button('Delete task'), outputs: true },
+-  'antd-popconfirm': { kind: 'popconfirm', url: `${choices}?system=antd&sample=popconfirm`, field: button('Delete task'), outputs: true },
+-  // The overlay fixture's appearance pairs: Dialog and Modal, ConfirmDialog and modal.confirm (cancel focused).
++  // The overlay fixture's dialogs: Dialog and ConfirmDialog (cancel focused).
+   'orbit-dialog': { kind: 'dialog', url: overlays, field: button('Orbit dialog') },
+-  'antd-dialog': { kind: 'dialog', url: overlays, field: button('AntD dialog') },
+   'orbit-confirm': { kind: 'dialog', url: overlays, field: button('Orbit confirm') },
+-  'antd-confirm': { kind: 'dialog', url: overlays, field: button('AntD confirm') },
+ };
+-const MENUS = ['orbit-menu', 'orbit-menu-sample', 'antd-menu'];
+-const SUBMENUS = ['orbit-submenu', 'orbit-submenu-sample', 'antd-submenu', 'orbit-session', 'antd-session'];
+-const SELECTS = ['orbit-field', 'orbit-sample', 'antd-sample'];
+-const POPCONFIRMS = ['orbit-popconfirm', 'antd-popconfirm'];
+-const DIALOGS = ['orbit-dialog', 'antd-dialog', 'orbit-confirm', 'antd-confirm'];
++const MENUS = ['orbit-menu', 'orbit-menu-sample'];
++const SUBMENUS = ['orbit-submenu', 'orbit-submenu-sample', 'orbit-session'];
++const SELECTS = ['orbit-field', 'orbit-sample'];
++const POPCONFIRMS = ['orbit-popconfirm'];
++const DIALOGS = ['orbit-dialog', 'orbit-confirm'];
+ // `control` names the same sequence without the key under test: a key that leaves the paced result equal to its
+ // control's has no function on that component. `from` is a Select's value before the sequence, as before.
+ const SEQUENCES = [
+@@ -182,7 +179,7 @@
+ }
+ 
+ const read = async (page, target) => (await TARGETS[target].read(page)).trim().split('\n').map((line) => line.trim()).filter(Boolean).join(' | ');
+-// The old AntD sample text repeats the selected label (`7 days | 7 days`); the value is its first part.
++// The sample reads as several lines; the value is its first part.
+ const value = async (page, target) => (await read(page, target)).split(' | ')[0];
+ // Pages without outputs: the last Enter or Space whose target was a menu item or a button inside a popup, after which
+ // fewer popups were shown than at that key, activated it. A submenu trigger (Provider) only opens its submenu.
+@@ -214,7 +211,7 @@
+     await field.focus();
+     if (open) {
+       for (const key of open) { await page.keyboard.press(key); await page.waitForTimeout(300); }
+-      // The old submenu title also carries its arrow icon's name ("Provider right").
++      // A submenu title may also carry its arrow icon's name ("Provider right").
+       await expect(page.getByRole('menuitem', { name: /^Provider/ })).toBeFocused();
+       await page.waitForTimeout(300);
+     }

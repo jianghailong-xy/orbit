@@ -20,7 +20,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { SESSION_CREATED_TASKS_COPY } from '@orbit/shared';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, openTaskListConsole } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
@@ -1039,6 +1039,41 @@ export function TaskListView() {
     };
   }, [view, filter]);
 
+  // The toolbar is as tall as the bulk bar, the bar's own scrollbar included. WebKit settles an
+  // overflow:auto box's scrollbars only after the page column's flex layout around it, and then
+  // lays out that box alone: where a scrollbar takes room (the 8px ::-webkit-scrollbar), a bar too
+  // narrow for its buttons grows by its scrollbar while the toolbar keeps the height it was laid
+  // out at, so the list starts 8px too high (8px too low once the bar loses it) until something
+  // else lays the toolbar out again. So the toolbar takes the bar's height as its minimum. On a
+  // commit that can turn the bar's scrollbar on or off (the bar appearing, its count, the panel
+  // opening or closing, the view), reading the bar's height here settles the scrollbar before the
+  // first paint. When only the room around it changes (the window, the panel's width), the bar's
+  // ResizeObserver catches it and the toolbar follows on the next frame: following inside the
+  // callback would resize the list body after the viewport observer above was told about it, which
+  // the browser reports as an undelivered ResizeObserver notification.
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const bulkbarRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const toolbar = toolbarRef.current;
+    const bar = bulkbarRef.current;
+    if (!toolbar || !bar) return;
+    const fit = () => {
+      toolbar.style.minHeight = `${bar.getBoundingClientRect().height}px`;
+    };
+    fit();
+    let frame = 0;
+    const resize = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    });
+    resize.observe(bar, { box: 'border-box' });
+    return () => {
+      resize.disconnect();
+      cancelAnimationFrame(frame);
+      toolbar.style.minHeight = '';
+    };
+  }, [selectedRows.length, selectedTaskId, view]);
+
   const windowed = useMemo(() => {
     const total = rows.length;
     if (total === 0) return { start: 0, end: 0, padTop: 0, padBottom: 0, rows: [] as any[] };
@@ -1377,12 +1412,12 @@ export function TaskListView() {
             {/* The filter row belongs to the rows it filters. In Batches nothing below it is a
                 task — a status tab there highlights a filter that changes nothing, and a label
                 picker duplicates the table itself. */}
-            <div className="tasks-toolbar" hidden={view === 'batches'}>
+            <div className="tasks-toolbar" hidden={view === 'batches'} ref={toolbarRef}>
               {selectedRows.length > 0 ? (
                 // Selection mode: the batch-action bar takes over the whole toolbar row so it
                 // never has to share width with the filters (which made it wrap to a 2nd line).
                 // Clear restores the filter toolbar.
-                <div className="tasks-bulkbar">
+                <div className="tasks-bulkbar" ref={bulkbarRef}>
                   <span className="tasks-bulkbar-count">{selectedRows.length} selected</span>
                   <Button
                     variant="primary"

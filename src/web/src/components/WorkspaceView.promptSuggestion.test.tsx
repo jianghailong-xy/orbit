@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -220,9 +219,7 @@ async function mount(): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[SESSION_PATH]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -295,11 +292,11 @@ describe('the composer offers the engine’s suggested next message', () => {
     await waitForUi(() => expect(box().value).toBe(SUGGESTION));
     expect(offered()).toBeNull();
     expect(posted(), 'a double-tap only fills the box').toEqual([]);
-    expect(stored['orbit.suggestionDoubleTapLearned'], 'learned on this device').toBe('1');
+    expect(stored['orbit.suggestionDoubleTapLearned'], 'nothing to learn anymore').toBeUndefined();
 
     await type('');
     await waitForUi(() => expect(offered()).toBe(SUGGESTION));
-    expect(tapHint(), 'and the hint is gone for good').toBeNull();
+    expect(tapHint(), 'and the hint stays').toBe('Double-tap to use');
   });
 
   it('hands a lone tap on the idle box on as its focus once the double-tap window passes', async () => {
@@ -313,10 +310,9 @@ describe('the composer offers the engine’s suggested next message', () => {
   });
 
   it('leaves a focused box its taps, and counts two apart in time or place as two', async () => {
-    stored['orbit.suggestionDoubleTapLearned'] = '1';
     await mount();
     await waitForUi(() => expect(offered()).toBe(SUGGESTION));
-    expect(tapHint(), 'learned before: the words alone').toBeNull();
+    expect(tapHint(), 'the hint follows the words').toBe('Double-tap to use');
     box().focus();
 
     expect((await lift(120, 30, 1_000)).defaultPrevented, 'a focused box keeps its first tap').toBe(false);

@@ -192,10 +192,10 @@ test('the opening message points at the standing-instructions lever', async () =
   await f.open();
 
   const prompt: string = f.created[0][1].prompt;
-  assert.match(prompt, /不要逐个改任务描述/);
+  assert.match(prompt, /not the task descriptions one by one/);
   // And it must not start editing on its own — the console reports, the human decides.
-  assert.match(prompt, /不要自行改动任何东西/);
-  assert.match(prompt, /带上 note 说明原因/);
+  assert.match(prompt, /do not change anything on your own/);
+  assert.match(prompt, /Give every change a note with the reason/);
 });
 
 test('the id it carries is the public one, not the uuid the column holds', async () => {

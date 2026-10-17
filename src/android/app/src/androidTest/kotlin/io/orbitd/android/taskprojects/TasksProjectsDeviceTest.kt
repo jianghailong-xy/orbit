@@ -310,7 +310,7 @@ class TasksProjectsDeviceTest {
         compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Checked the fixed source and current server record")
         hideKeyboard()
-        compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
+        compose.onNodeWithTag("item:x1:mark-handled-confirm").performScrollTo().performClick()
         compose.waitUntil(20_000) { journal().any { row ->
             row.text("method") == "POST" && row.text("path") == "/api/projects/$projectId/open-items/x1/resolve" &&
                 row.obj("body")?.text("note") == "Checked the fixed source and current server record"
@@ -412,8 +412,15 @@ class TasksProjectsDeviceTest {
             put("criteriaDigest", "seal1"); put("requestId", "start1"); put("line", "PROJECT_BRANCH"); put("automatic", true); put("maxConcurrentTasks", 2)
             put("mergeCheckCommand", "./verify"); put("projectBranchName", "refs/heads/project/cards")
         }, journal().drop(before).last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
-        // The review says the decision was recorded, then closes itself.
-        awaitGone("card-review"); capture("start-asked-4-accepted")
+        // The review stays open as the record the start made: its settings one line, who started it where Start was.
+        compose.waitUntil(20_000) {
+            compose.onAllNodes(hasTestTag("card-review:footer-line") and hasText("Started by you · ", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("card-review:title").assertTextEquals(CardPreviews.decisionRecorded)
+        compose.onNodeWithTag("start:start1-settings").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithTag("start:start1:START").assertCountEquals(0)
+        capture("start-asked-4-accepted")
+        compose.onNodeWithTag("card-review:close").performClick(); awaitGone("card-review")
     }
 
     @Test fun aDeliveryBlockerIsReviewedWithItsReasonRecorded() = journey("project-blocker") {
@@ -773,12 +780,12 @@ class TasksProjectsDeviceTest {
     @Test fun a11cLandingJobsAndRetry() = journey("a11c-landing-jobs") {
         login(); http("/__control", """{"landingJobs":true}""")
         open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
-        awaitScrollTo("project-detail", hasTestTag("landing-row"))
-        compose.onNodeWithTag("landing-row").assertTextContains("2 jobs · 1 timed out", substring = true).assertTextContains("Timed out", substring = true)
+        awaitScrollTo("project-detail", hasTestTag("landing-card"))
+        compose.onNodeWithTag("landing-card:body").assertTextContains("2 jobs · 1 timed out", substring = true).assertTextContains("Timed out", substring = true)
             .assertTextContains("limit 10m", substring = true)
-        compose.onNodeWithTag("landing-timed-out", useUnmergedTree = true).assertExists()
-        capture("a11c-landing-row-timed-out")
-        tap("landing-row", "project-detail"); awaitTag("landing-jobs-sheet")
+        compose.onNodeWithTag("landing-head:timed-out", useUnmergedTree = true).assertExists()
+        capture("a11c-landing-card-timed-out")
+        tap("landing-card:body", "project-detail"); awaitTag("landing-jobs-sheet")
         compose.onNodeWithTag("landing-jobs-title").assertTextEquals("2 jobs in flight")
         compose.onNodeWithTag("landing-job:34cJobStuck:detail", useUnmergedTree = true)
             .assertTextContains("Runner workstation-gpu took it at ", substring = true).assertTextContains(" · stopped at fetching · no push recorded", substring = true)
@@ -877,9 +884,9 @@ class TasksProjectsDeviceTest {
         login(case = "promotion"); http("/__control", """{"promotionExecution":{"state":"RUNNING","phase":"PUSH","startedAt":"2026-10-05T00:00:00.000Z"}}""")
         open("orbit-session:$sessionId"); awaitTag("interaction-cards")
         awaitScrollTo("transcript-list", hasTestTag("promotion:promotion1"))
-        // A08-2: the merge is a preview in the conversation titled by where its job is, and its review keeps that title and the
-        // job's own status line (iOS `PromotionCards.previewTitle`, `PromotionReviewSheet`).
-        awaitText("Merging… · main"); tap("promotion:promotion1:preview"); awaitTag("card-review")
+        // A11-9: the merge is one line in the conversation saying where its job is, as the sessions page's card does, and its review
+        // keeps the review's title and the job's own status line (iOS `PromotionCards.eventLine`, `previewTitle`, `PromotionReviewSheet`).
+        awaitText("Merging into main…"); tap("promotion:promotion1:preview"); awaitTag("card-review")
         compose.onNodeWithTag("card-review:title").assertTextEquals("Merging… · main")
         awaitText("confirmed — publishing the tested tree to main")
         compose.onNodeWithTag("promotion:promotion1:merging").assertTextEquals("Merging…").assertIsNotEnabled()
@@ -888,7 +895,7 @@ class TasksProjectsDeviceTest {
         http("/__control", """{"promotionExecution":{"state":"QUEUED","startedAt":"2026-10-05T00:00:00.000Z"}}""")
         tap("card-review:close"); awaitGone("card-review")
         compose.onNodeWithText("Check status").performScrollTo().performClick()
-        awaitText("Queued · main")
+        awaitText("Merge into main queued")
         awaitScrollTo("transcript-list", hasTestTag("promotion:promotion1:preview")); tap("promotion:promotion1:preview"); awaitTag("card-review")
         awaitText("confirmed — queued to merge into main")
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("promotion:promotion1:CANCEL_MERGE") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }

@@ -244,7 +244,7 @@ async function runRound(round: FixtureRound): Promise<{ prompts: Record<string, 
     for (const unit of state.units) byCat.set(unit.cat, [...(byCat.get(unit.cat) ?? []), unit]);
     for (const [c, units] of byCat) {
       const ids = units.map((unit) => unit.id);
-      prompts[`details/${c + 1}`] = `${wikiPlanDetailMaterials(state)}\n# 文档目录\n${text}\n${wikiPlanDetailPrompt(state, c, ids)}`;
+      prompts[`details/${c + 1}`] = `${wikiPlanDetailMaterials(state)}\n# Document catalogue\n${text}\n${wikiPlanDetailPrompt(state, c, ids)}`;
       const answer = round.details?.[String(c + 1)];
       if (answer === undefined) continue;
       const details = parseWikiPlanDetails(answer);
@@ -252,7 +252,7 @@ async function runRound(round: FixtureRound): Promise<{ prompts: Record<string, 
     }
     const now = refs();
     for (const unit of state.units) {
-      prompts[`outline/${unit.slug}`] = `${wikiPlanDocMaterials(state, unit)}\n# 文档目录\n${text}\n${wikiPlanOutlinePrompt(unit)}`;
+      prompts[`outline/${unit.slug}`] = `${wikiPlanDocMaterials(state, unit)}\n# Document catalogue\n${text}\n${wikiPlanOutlinePrompt(unit)}`;
       const answer = round.outlines?.[unit.slug];
       if (answer === undefined) continue;
       const body = parseWikiPlanDocBody(answer);

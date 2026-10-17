@@ -41,7 +41,7 @@ import { shortWikiHash } from './wiki-plan-repo';
  *               convention, only into the agents' category, and never out of a protected one;
  *   references  every file, docs section, symbol and contract is on origin/main at the sha, every project,
  *               topic and entry kind is one there is, every document a scope leaves something to is one of the
- *               plan's, and every `→ 3.2` or `见 3.2` in the text names a document of this plan.
+ *               plan's, and every `→ 3.2` or `see 3.2` in the text names a document of this plan.
  *
  * Its errors carry the server's paths (`plan.docs[3].sections[1].sources.code[0].symbols[2]`), so one list of
  * errors — this gate's or the server's — is handed back to the model the same way.
@@ -385,10 +385,10 @@ class Gate {
     });
     const length = wikiPlanRange(h.length);
     if (length.ok) doc.length = { min: length.min, max: length.max };
-    else if (unit.hasBody || h.length !== '') this.fail('schema', `${path}.length`, `篇幅 ${wikiQuote(h.length)} is not a length: write it as <a–b 字>`);
+    else if (unit.hasBody || h.length !== '') this.fail('schema', `${path}.length`, `Length ${wikiQuote(h.length)} is not a length: write it as <a–b characters>`);
     for (const line of unit.stray) {
-      this.fail('schema', path, `${wikiQuote(cutRunes(line, 80))} is not a field of the plan: a document has 标题, 问题, 读者, 含, 不含 and 篇幅, then its `
-        + 'sections — drop it');
+      this.fail('schema', path, `${wikiQuote(cutRunes(line, 80))} is not a field of the plan: a document has Title, Question, Audience, Includes, Excludes `
+        + 'and Length, then its sections — drop it');
     }
     unit.sections.forEach((s, j) => doc.sections.push(this.section(`${path}.sections[${j}]`, s, unit.refs)));
     this.limits(path, doc);
@@ -409,7 +409,7 @@ class Gate {
     }
     const length = wikiPlanRange(s.length);
     if (length.ok) out.length = length.min;
-    else this.fail('schema', `${path}.length`, `字数 ${wikiQuote(s.length)} is not a number of characters`);
+    else this.fail('schema', `${path}.length`, `the length ${wikiQuote(s.length)} is not a number of characters`);
     out.covers = this.crossRefs(`${path}.covers`, s.covers, refs);
     for (const c of s.contracts) out.sources.contracts.push({ path: c });
     const c = s.sessions;
@@ -425,12 +425,12 @@ class Gate {
         evidence: c.evidence,
       };
       for (const part of c.stray) {
-        this.fail('schema', `${path}.sources.sessions`, `${wikiQuote(cutRunes(part, 80))} is not a part of a session condition: it has 项目, 时间, 关键词, 锚点, `
-          + 'kind, 主题 and 要找 — drop it');
+        this.fail('schema', `${path}.sources.sessions`, `${wikiQuote(cutRunes(part, 80))} is not a part of a session condition: it has projects, dates, `
+          + 'keywords, anchors, kind, topics and look for — drop it');
       }
     }
     for (const line of s.stray) {
-      this.fail('schema', path, `${wikiQuote(cutRunes(line, 80))} is not a line of a section: a section has 讲什么, 文档, 代码, 契约 and 会话 lines and `
+      this.fail('schema', path, `${wikiQuote(cutRunes(line, 80))} is not a line of a section: a section has Covers, Docs, Code, Contracts and Sessions lines and `
         + 'nothing else — drop it');
     }
     this.sources(path, out.sources, true);

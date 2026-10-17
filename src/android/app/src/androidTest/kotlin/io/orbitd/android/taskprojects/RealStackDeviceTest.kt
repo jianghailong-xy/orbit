@@ -392,7 +392,7 @@ class RealStackDeviceTest {
         compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput(note)
         hideKeyboard()
-        compose.onNodeWithTag("item:$item:MARK_HANDLED").performScrollTo().performClick()
+        compose.onNodeWithTag("item:$item:mark-handled-confirm").performScrollTo().performClick()
         compose.waitUntil(30_000) { get("/projects/$id/open-items").jsonObject.objects("needsYou").none { it.text("itemId") == item } }
         val settled = get("/projects/$id/open-items").jsonObject.objects("settled").firstOrNull { it.text("itemId") == item }
         record("item after Mark handled", settled ?: "not open, not in settled")
@@ -408,16 +408,16 @@ class RealStackDeviceTest {
         val before = get("/projects/$id/promotions/current").jsonObject
         record("promotion before", "${before.text("promotionId")} ${before.text("state")} ${before.text("sourceSha")}")
         signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", main.text("title")!!)
-        awaitScrollTo("project-detail", hasTestTag("open-item:${item.text("id")}")); compose.onNodeWithTag("open-item:${item.text("id")}").performClick()
+        // A11-4: the project's open items are in the toolbar's sheet; the merge's item opens its line in the coordinator conversation.
+        tap("project-open-items"); awaitTag("open-item:${item.text("id")}"); compose.onNodeWithTag("open-item:${item.text("id")}").performClick()
         awaitTag("interaction-cards")
         compose.waitUntil(30_000) { runCatching { compose.onNodeWithTag("promotion:$promotion").assertIsDisplayed() }.isSuccess }
         capture("stack-merge-card")
-        // A08-2: the merge is a preview in the conversation; Merge is pressed in the review it opens.
+        // A11-9: the merge is one line in the conversation; Merge to main is pressed in the review it opens (iOS: no second ask).
         tap("promotion:$promotion:preview"); awaitTag("card-review")
         compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("promotion:$promotion:CONFIRM_MERGE") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         capture("stack-merge-review")
         compose.onNodeWithTag("promotion:$promotion:CONFIRM_MERGE").performClick()
-        awaitTag("confirm:CONFIRM_MERGE"); capture("stack-merge-confirm"); compose.onNodeWithTag("confirm:CONFIRM_MERGE").performClick()
         fun state() = runCatching { get("/projects/$id/promotions/current").jsonObject }.getOrNull()
             ?.takeIf { it.text("promotionId") == promotion }?.text("state")
             ?: if (get("/projects/$id/promotions/merged").toString().contains(promotion)) "MERGED (listed under merged)" else "not current"
@@ -697,10 +697,10 @@ class RealStackDeviceTest {
         })
         assertEquals(true, inFlight().single { it.text("jobId") == jobId }.flag("retryable"))
         signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", stuck.text("title")!!)
-        awaitScrollTo("project-detail", hasTestTag("landing-row"), 60_000)
-        compose.onNodeWithTag("landing-timed-out", useUnmergedTree = true).assertExists()
-        capture("stack-landing-0-row")
-        tap("landing-row", "project-detail"); awaitTag("landing-jobs-sheet")
+        awaitScrollTo("project-detail", hasTestTag("landing-card"), 60_000)
+        compose.onNodeWithTag("landing-head:timed-out", useUnmergedTree = true).assertExists()
+        capture("stack-landing-0-card")
+        tap("landing-card:body", "project-detail"); awaitTag("landing-jobs-sheet")
         compose.onNodeWithTag("landing-job:$jobId:retry").assertTextEquals(ProjectPage.landingRetry)
         capture("stack-landing-1-jobs")
         tap("landing-job:$jobId:retry")
@@ -741,7 +741,13 @@ class RealStackDeviceTest {
         compose.waitUntil(30_000) { card(before.text("id")!!).text("status") != "PENDING" }
         val after = record("GET approvals → the batch card after Create 3 tasks", card(before.text("id")!!).let { "${it.text("status")} decidedAt=${it.text("decidedAt")}" })
         assertTrue(after, after.startsWith("ALLOWED"))
-        awaitGone("card-review"); capture("stack-a08c-batch-3-recorded")
+        // The review stays open as the record the batch's yes made, who answered where its buttons were.
+        compose.waitUntil(30_000) {
+            compose.onAllNodes(hasTestTag("card-review:footer-line") and hasText("Approved by you · ", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("card-review:title").assertTextEquals(CardPreviews.answeredTitle)
+        capture("stack-a08c-batch-3-recorded")
+        tap("card-review:close"); awaitGone("card-review")
     }
 
     /** A08-8: the merge-check change offers no standing yes and no Deny — saying no is Chat about this — and Allow is recorded on

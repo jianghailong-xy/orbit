@@ -120,7 +120,7 @@ def reset():
                         'pendingOps': 0, 'settings': {'reviewMode': 'manual', 'automaticSpotChecks': False,
                         'maintenance': {'enabled': False, 'workspaceId': None, 'provider': 'local-vllm', 'dailyRunLimit': 4, 'lookbackDays': 14}}},
                  notesPlan={'spaceId': NOTES, 'confirmed': None, 'draft': notes_draft, 'proposals': [], 'job': None},
-                 docsPlan=True, idempotency={}, lostResponse=False, wikiDisabled=False)
+                 docsPlan=True, idempotency={}, lostResponse=False, wikiDisabled=False, share=None)
     state['space']['pendingOps'] = sum(o['decision'] == 'pending' for o in run['ops'])
     BASE.state.mode = 'REVIEW'
     BASE.state.record_denial = BASE.state.denial = BASE.state.page_denial = BASE.state.snapshot_status = 0
@@ -128,6 +128,13 @@ def reset():
     BASE.state.epoch += 1
 
 reset()
+
+def wiki_link():
+    """A12f: the space's public link as the owner view answers it (share-links.service.ts): kind WIKI, the space for its root
+    (a slug, no status), and its one layer, Footnotes, off until chosen."""
+    return {'id': uid('5a'), 'token': 'a12f-wiki-token', 'kind': 'WIKI', 'state': 'ACTIVE', 'stateReason': None,
+            'root': {'id': SPACE, 'title': state['space']['title'], 'slug': state['space']['slug']}, 'include': {'footnotes': False},
+            'expiresAt': None, 'revokedAt': None, 'viewCount': 0, 'lastViewedAt': None, 'createdAt': AT, 'updatedAt': AT}
 
 class Handler(BASE.Handler):
     def send_response(self, code, message=None):
@@ -173,6 +180,13 @@ class Handler(BASE.Handler):
             with LOCK:
                 value = self.read_module(path, query)
                 return self.reply(value, 404 if value is None else 200)
+        if path == '/api/share-links':
+            # A12f: Settings → Shared links. The server lists the kinds a client names, and without `kind` the three every
+            # shipped client knows — never a wiki's link.
+            if self.refusal(path): return
+            kinds = ','.join(query['kind']).split(',') if 'kind' in query else ['SESSION', 'TASK', 'PROJECT']
+            with LOCK:
+                return self.reply({'links': [copy.deepcopy(state['share'])] if state['share'] and 'WIKI' in kinds else []})
         return super().do_GET()
 
     def read_module(self, path, query):
@@ -203,6 +217,7 @@ class Handler(BASE.Handler):
         if path == prefix: return self.space_row()
         tail = path.removeprefix(prefix)
         if path == tail: return None
+        if tail == '/share': return {'link': copy.deepcopy(state['share']), 'counts': {'documents': 12, 'footnotes': 486}}
         if tail == '/entries':
             # WikiService.listEntries: of the kind asked, newest recorded first, 200 at most (50 unasked).
             kind = query.get('kind', [None])[0]; limit = min(max(int(query.get('limit', ['50'])[0]), 1), 200)
@@ -278,6 +293,7 @@ class Handler(BASE.Handler):
                     state['plan']['draft'] = draft
                     if draft: state['versions']['v' + str(draft['version'])] = draft
                 if body.get('proposals'): state['plan']['proposals'] = remap(copy.deepcopy(DOCS['plan']['proposals']))
+                if body.get('share'): state['share'] = wiki_link()
             return self.reply({'ok': True})
         self.begin(body)
         if path in ('/api/auth/login', '/api/auth/refresh'):
@@ -293,6 +309,8 @@ class Handler(BASE.Handler):
             self.reply(result, status)
 
     do_PATCH = do_POST
+    do_PUT = do_POST
+    do_DELETE = do_POST
 
     def link_previews(self, body):
         # The cards a page names: the inherited session and task are this account's; anything else is unavailable.
@@ -306,6 +324,16 @@ class Handler(BASE.Handler):
 
     def mutate(self, path, body):
         if path == '/api/link-previews': return self.link_previews(body)
+        if path == '/api/wiki/spaces/' + SPACE + '/share':
+            # A12f: PUT opens the link with the defaults, or changes the layer it names, and answers the link; DELETE turns it off.
+            if self.command == 'DELETE':
+                state['share'] = None
+                return {}, 200
+            if self.command != 'PUT': return {}, 404
+            link = state['share'] or wiki_link()
+            link['include'] = {**link['include'], **(body.get('include') or {})}
+            state['share'] = link
+            return link, 200
         if path.startswith('/api/watches/'):
             id_, action = path.split('/')[-2:]
             watch = state['watches'].get(id_)

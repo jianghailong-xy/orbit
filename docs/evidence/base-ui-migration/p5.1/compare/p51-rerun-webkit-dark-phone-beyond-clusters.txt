@@ -1,0 +1,5 @@
+webkit-dark-phone      p51-reset-confirm.png          all=  3140 gt2=  1509 max=110 clusters=  5 [772px x8-231 y536-575 m110] [494px x8-335 y624-663 m93] [227px x304-335 y536-559 m85]
+webkit-dark-phone      p51-reset-done.png             all=  1949 gt2=  1819 max=168 clusters=  4 [662px x8-143 y464-487 m72] [422px x56-135 y624-639 m142] [393px x56-135 y600-615 m168]
+webkit-dark-phone      p51-reset-started.png          all=  1949 gt2=  1819 max=168 clusters=  4 [662px x8-143 y480-495 m72] [422px x56-135 y640-655 m142] [393px x56-135 y616-631 m168]
+webkit-dark-phone      p51-reset-unanswered.png       all=  1949 gt2=  1819 max=168 clusters=  3 [815px x56-135 y584-623 m168] [662px x8-143 y448-463 m72] [342px x8-335 y664-679 m32]
+webkit-dark-phone      p51-usage.png                  all=  3194 gt2=  1527 max=200 clusters=  5 [781px x8-231 y536-575 m200] [496px x8-335 y624-663 m168] [234px x304-335 y536-559 m155]

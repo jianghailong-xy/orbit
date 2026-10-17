@@ -1,0 +1,115 @@
+argv: bash -c cd ../.. && npm run test:ui-choices -w @orbit/web -- --project chromium-light-phone
+tree: /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del
+head: f4ec61864e53a13aa35cbff25b5ea1ae03c99453
+uncommitted:
+load: 61.24 51.35 40.48 16/5819 393955
+mem: 4614M available
+disk: / 8810M available, TMPDIR /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/tmp
+started: 2026-10-09T23:05:54Z
+
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-phone
+
+P0 expected screenshots: 87 P0.2 originals, 143 main drift references, 22 accepted migration differences.
+
+Running 85 tests using 1 worker
+
+  ✓   1 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › menu is drawn where it settles from its first frame, at the replaced popup's place (16.9s)
+  ✓   2 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:210:3 › menu keeps its place through the normal entrance motion (4.5s)
+  ✓   3 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › submenu is drawn where it settles from its first frame, at the replaced popup's place (19.4s)
+  ✓   4 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:210:3 › submenu keeps its place through the normal entrance motion (4.7s)
+  ✓   5 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › select is drawn where it settles from its first frame, at the replaced popup's place (11.9s)
+  ✓   6 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:210:3 › select keeps its place through the normal entrance motion (2.1s)
+  ✓   7 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › combobox is drawn where it settles from its first frame, at the replaced popup's place (12.6s)
+  ✓   8 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:210:3 › combobox keeps its place through the normal entrance motion (2.8s)
+  ✓   9 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › multiselect is drawn where it settles from its first frame, at the replaced popup's place (13.3s)
+  ✓  10 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:210:3 › multiselect keeps its place through the normal entrance motion (3.0s)
+  ✓  11 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › popover is drawn where it settles from its first frame, at the replaced popup's place (11.7s)
+  ✓  12 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:210:3 › popover keeps its place through the normal entrance motion (3.0s)
+  ✓  13 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › tooltip is drawn where it settles from its first frame, at the replaced popup's place (13.5s)
+  ✓  14 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:210:3 › tooltip keeps its place through the normal entrance motion (2.6s)
+  ✓  15 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › popconfirm is drawn where it settles from its first frame, at the replaced popup's place (12.4s)
+  ✓  16 [chromium-light-phone] › ui-migration/choices-first-frame.browser.mjs:210:3 › popconfirm keeps its place through the normal entrance motion (3.3s)
+  ✓  17 [chromium-light-phone] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the left of the page settles where the replaced submenu does (11.4s)
+  ✓  18 [chromium-light-phone] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the middle of the page settles where the replaced submenu does (11.1s)
+  ✓  19 [chromium-light-phone] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the right edge settles where the replaced submenu does (10.4s)
+  ✓  20 [chromium-light-phone] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the right edge of a dialog settles where the replaced submenu does (13.0s)
+  ✓  21 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.2s)
+  ✓  22 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.8s)
+  ✓  23 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion attachment has no transition and dismisses cleanly (1.2s)
+  ✓  24 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion expiry has no transition and dismisses cleanly (1.2s)
+  ✓  25 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion search has no transition and dismisses cleanly (1.5s)
+  ✓  26 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion multiple has no transition and dismisses cleanly (1.4s)
+  ✓  27 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion popover has no transition and dismisses cleanly (1.1s)
+  ✓  28 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion tooltip has no transition and dismisses cleanly (1.1s)
+  ✓  29 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal attachment can reopen during exit without stale unmount (2.1s)
+  ✓  30 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal expiry can reopen during exit without stale unmount (1.9s)
+  ✓  31 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal search can reopen during exit without stale unmount (2.2s)
+  ✓  32 [chromium-light-phone] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal popover can reopen during exit without stale unmount (1.7s)
+  ✓  33 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment (2.8s)
+  ✓  34 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment (3.1s)
+  ✓  35 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (3.0s)
+  ✓  36 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry (3.1s)
+  ✓  37 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry (2.8s)
+  ✓  38 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry (2.7s)
+  ✓  39 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search (2.6s)
+  ✓  40 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search (2.8s)
+  ✓  41 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search (2.7s)
+  ✓  42 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple (2.7s)
+  ✓  43 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple (2.9s)
+  ✓  44 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple (2.9s)
+  ✓  45 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover (2.8s)
+  ✓  46 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover (3.1s)
+  ✓  47 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover (3.1s)
+  ✓  48 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip (3.1s)
+  ✓  49 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip (2.8s)
+  ✓  50 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip (2.9s)
+  ✓  51 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:141:83 › popover center zoom origin matches (2.9s)
+  ✓  52 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (3.2s)
+  ✓  53 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches (3.2s)
+  ✓  54 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches (3.1s)
+  ✓  55 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view (4.0s)
+  ✓  56 [chromium-light-phone] › ui-migration/choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view (4.4s)
+  ✓  57 [chromium-light-phone] › ui-migration/choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape (3.3s)
+  ✓  58 [chromium-light-phone] › ui-migration/choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape (3.3s)
+  ✓  59 [chromium-light-phone] › ui-migration/choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape (3.3s)
+  ✓  60 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (4.0s)
+  ✓  61 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (4.3s)
+  ✓  62 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (4.4s)
+  ✓  63 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (4.1s)
+  ✓  64 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (4.9s)
+  ✓  65 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (3.7s)
+  ✓  66 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (4.4s)
+  ✓  67 [chromium-light-phone] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (18.7s)
+  ✓  68 [chromium-light-phone] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (4.2s)
+  ✓  69 [chromium-light-phone] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.8s)
+  ✓  70 [chromium-light-phone] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.8s)
+  ✓  71 [chromium-light-phone] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.7s)
+  ✓  72 [chromium-light-phone] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (1.4s)
+  ✓  73 [chromium-light-phone] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (2.8s)
+  ✓  74 [chromium-light-phone] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.9s)
+  ✓  75 [chromium-light-phone] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (4.3s)
+  ✓  76 [chromium-light-phone] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (2.1s)
+  ✓  77 [chromium-light-phone] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (1.4s)
+  ✓  78 [chromium-light-phone] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (2.1s)
+  ✓  79 [chromium-light-phone] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (5.8s)
+  ✓  80 [chromium-light-phone] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (4.7s)
+  ✓  81 [chromium-light-phone] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.6s)
+  ✓  82 [chromium-light-phone] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (2.4s)
+  ✓  83 [chromium-light-phone] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (2.0s)
+  ✓  84 [chromium-light-phone] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (1.3s)
+  ✓  85 [chromium-light-phone] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.5s)
+
+  85 passed (6.6m)
+exit=0
+load: 25.99 32.36 35.10 12/5647 457284
+ended: 2026-10-09T23:12:33Z

@@ -46,14 +46,14 @@ internal fun MergeRecoveryRow(recovery: MergeRecovery, working: Boolean, open: (
  * A merge held for target recovery, reviewed full screen (iOS `MergeRecoverySheet`): what holds it, the
  * branches and how local and remote targets stand, the commits the push adds and the complete candidate
  * diff, the merge check — and the step the state asks for pinned at the foot. It reads the bar live, and
- * closes itself once the recovery is gone.
+ * closes itself once the recovery is gone. [turnActive] is the bar's own gate (`WorktreeBarLogic.turnActive`),
+ * so a turn in flight holds the steps back here exactly as it holds Merge and Commit there.
  */
 @Composable
-internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRecovery, open: (String) -> Unit, close: () -> Unit) {
+internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRecovery, turnActive: Boolean, open: (String) -> Unit, close: () -> Unit) {
     val state by model.state.collectAsState()
     var pressed by remember { mutableStateOf<MergeRecovery.Button?>(null) }
     val supported = (d["mergeRecoverySupported"] as? JsonPrimitive)?.booleanOrNull == true
-    val turnActive = (d.string("runStatus") ?: d.string("status")) == "RUNNING"
     val working = state.busy || d.string("mergeStatus") == "pending"
     val repair = d["mergeRepairSession"] as? JsonObject
     val repairState = repair?.let { it.string("runState") ?: it.string("runStatus") }

@@ -21,8 +21,8 @@ import org.robolectric.annotation.Config
 
 /** A05-8 (iOS 3d50935b4, 6f5f883c8, 9fb95f4eb): every drawer row is a destination. Another destination's row lands on
  * that destination's root page, with the drawer's button leading it; the row of the destination already showing only
- * closes the drawer; the row drawn as selected is the destination the page belongs to. A project row opens its project
- * as a destination of its own. */
+ * closes the drawer; the row drawn as selected is the destination the page belongs to. A project row opens its project's
+ * sessions page (A05-7) as a destination of its own. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = NavShellApplication::class, qualifiers = "w411dp-h891dp")
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -60,15 +60,15 @@ class DrawerDestinationTest {
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
     }
 
-    @Test fun aProjectRowOpensItsProjectAsADestinationOfItsOwn() {
+    @Test fun aProjectRowOpensItsSessionsPageAsADestinationOfItsOwn() {
         signIn()
         openDrawer(); row("Tasks").performClick()
         await { compose.onAllNodesWithTag("task:${NavShell.TASK}").fetchSemanticsNodes().isNotEmpty() }
         openDrawer()
         await { compose.onAllNodes(drawerRow("Launch")).fetchSemanticsNodes().isNotEmpty() }
         row("Launch").performClick()
-        await { compose.onAllNodesWithTag("project-detail").fetchSemanticsNodes().isNotEmpty() }
-        // The project's page is the destination's root: the drawer's button leads it, not Back.
+        await { compose.onAllNodesWithTag("project-sessions").fetchSemanticsNodes().isNotEmpty() }
+        // The project's sessions page is the destination's root: the drawer's button leads it, not Back.
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
         compose.onAllNodesWithTag("task:${NavShell.TASK}").assertCountEquals(0)
         openDrawer(); row("Launch").assertIsSelected(); row("Projects").assertIsNotSelected(); row("Tasks").assertIsNotSelected()

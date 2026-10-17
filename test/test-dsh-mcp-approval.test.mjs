@@ -15,7 +15,8 @@ const json = (events) => `${events.map((event) => JSON.stringify(event)).join('\
 
 test(guardNames[0], () => {
   for (const required of ['RealApprovalAllowOnce', 'RealApprovalReject', 'RealApprovalStop', 'RealApprovalDisconnect',
-    'RealOrbitMCPAndAgentInstructions', 'RealDontAskRejectsUnasked', 'RealAutoWorkspaceBoundary', 'RealThirdPartyMCPAsksFirst']) {
+    'RealOrbitMCPAndAgentInstructions', 'RealDontAskRejectsUnasked', 'RealAutoWorkspaceBoundary', 'RealThirdPartyMCPAsksFirst',
+    'RealAutoCacheRoot', 'RealDefaultCacheRootDenied']) {
     assert.ok(realScenarios.includes(`TestDsh${required}`), `missing mandatory real scenario ${required}`);
   }
   for (const required of ['PermissionBridge/late-allow-after-stop-is-never-sent', 'PermissionBridge/unknown-tool-call-is-rejected',

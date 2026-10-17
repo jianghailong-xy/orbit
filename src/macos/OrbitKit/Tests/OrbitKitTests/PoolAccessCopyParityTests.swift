@@ -447,7 +447,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
         let source = try web(Self.choices)
         assertSays(source, "unavailable: pool.unavailable,", in: Self.choices)
         let zhang = SharedPools.asProviderPool(PoolAccessBoards.access(PoolAccessBoards.zhang, keys: []))
-        let tile = SessionProviderChoices.choices(configured: ProviderPools.asProviders([zhang]), pools: [zhang])
+        let tile = SessionProviderChoices.providers(for: "codex", sources: ChoiceSources(configured: ProviderPools.asProviders([zhang]), pools: [zhang]))
             .first { $0.slug == "codex-pool" }
         XCTAssertNil(tile?.unavailable, "his accounts can run: the pool takes the pick")
         XCTAssertEqual(tile?.poolSize, 2)

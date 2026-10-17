@@ -82,7 +82,8 @@ test('reclaim preserves lease state and snapshots an inherited runtime model onc
       findUniqueOrThrow: async () => ({ model: storedModel }),
     },
     user: { findUnique: async () => null },
-    runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
+    // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
+    $queryRaw: async () => [{ max: 0 }],
     $transaction: async () => {
       transactionCalls += 1;
       throw new Error('reclaim must not mutate lease state');
@@ -156,7 +157,8 @@ test('a concurrent Session model edit wins reclaim materialization', async () =>
       findUniqueOrThrow: async () => ({ model: 'gpt-user-choice' }),
     },
     user: { findUnique: async () => null },
-    runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
+    // run_event max(seq) for the reclaim snapshot — raw SQL, never `aggregate`.
+    $queryRaw: async () => [{ max: 0 }],
     $executeRaw: async () => 0,
   } as never;
   const controller = new RunnerApiController(

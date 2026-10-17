@@ -148,13 +148,13 @@ class GoogleSignInFlowTest {
         // An address the app would not sign in to is refused by the Server dialog and never asked.
         answerMethods(google = true)
         compose.onNodeWithContentDescription("Orbit").performCustomAccessibilityActionWithLabel("Change server")
-        compose.onNodeWithText("Server address").performTextReplacement("http://remote.example")
+        compose.onNodeWithText("Server address").performTextReplacement("ftp://remote.example")
         compose.onNodeWithText("Save").performClick()
         compose.onNodeWithText("Enter a valid server address.").assertExists()
         compose.onNodeWithText("Cancel").performClick()
         compose.mainClock.advanceTimeBy(2_000)
         compose.waitForIdle()
-        assertFalse(synchronized(app.requests) { app.requests.any { it.server.value.startsWith("http://remote.example") } })
+        assertFalse(synchronized(app.requests) { app.requests.any { it.server.value.contains("remote.example") } })
         compose.onNodeWithText("Continue with Google").assertDoesNotExist()
     }
 

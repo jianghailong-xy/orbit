@@ -691,6 +691,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			setTurn("")
 
 		case "interrupt":
+			// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this session's
+			// background work with the turn; see bgTailer.stopBackgroundWork.
+			stopBackgroundWorkForTurn(bg, resp)
 			emit(evInterrupt, map[string]interface{}{})
 			requestActiveInterrupt(true)
 
@@ -1047,6 +1050,11 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	// ORBIT_* go on, so a person's own credential is dropped, and the runner's mark put on, here
 	// whatever the caller handed in.
 	cmd.Env = runnerChildEnv(processEnv)
+	// The session's own Go and npm caches: one runner-owned root shared by every session of this
+	// machine, instead of $HOME/.cache (read-only under the sandbox) or a directory the agent
+	// invents (cache_root.go). The cache root is also a writable root of the sandbox policy
+	// (codexRuntimeWorkspaceRoots), so a confined command may write it.
+	cmd.Env = append(cmd.Env, runnerCacheEnv()...)
 	cmd.Env = append(cmd.Env,
 		"ORBIT_SESSION_ID="+publicID(job.SessionID),
 		"ORBIT_AGENT_ID="+publicID(job.AgentID),

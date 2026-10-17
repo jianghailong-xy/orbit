@@ -1,7 +1,6 @@
 package io.orbitd.android.composer
 
 import android.content.ClipboardManager
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -27,9 +26,14 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -38,22 +42,38 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.edit
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
 import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.DshRuntime
+import io.orbitd.android.core.cards.WatchWakeQueue
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.management.EngineAccounts
+import io.orbitd.android.management.LocalDefaultModels
+import io.orbitd.android.management.LocalRememberModel
 import io.orbitd.android.management.LocalSmartSelection
+import io.orbitd.android.management.RunnerPage
+import io.orbitd.android.management.personalPermissions
+import io.orbitd.android.reader.SteerDelivery
+import io.orbitd.android.reader.UnreadSteer
+import io.orbitd.android.reader.queuedTail
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.ui.typingFold
 import kotlinx.serialization.json.*
 
+/** [unreadSteers]: the reader's steers nothing has read yet, which the conversation leaves to the tray above this box
+ * ([SteerDelivery.place]). */
 @Composable
-fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
-    inputFocusChanged: (Boolean) -> Unit = {}, openTask: ((String) -> Unit)? = null) {
+internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
+    inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
+    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
+    unreadSteers: List<UnreadSteer> = emptyList()) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -74,6 +94,8 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     var models by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<StagedAttachment?>(null) }
     var queued by remember { mutableStateOf(false) }
+    // The watch's wake the queue's Withdraw is asking about first (A08-14).
+    var withdrawingWake by remember { mutableStateOf<String?>(null) }
     var slashScope by remember { mutableStateOf<String?>(null) }
     var selectionNotice by remember { mutableStateOf<String?>(null) }
     val usable = state.loaded && session.canCompose()
@@ -87,8 +109,31 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     }
     val clipboard = context.getSystemService(ClipboardManager::class.java)
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
-    val effective = JsonObject(detail + draft.resumeConfig)
+    val picked = JsonObject(detail + draft.resumeConfig)
+    // A07-19 (e): a new session that names no model starts on the one last picked for its engine and credential (iOS
+    // `draftModelSeed`) while the runner still offers it — read once the account remembers any.
+    val remembered = LocalDefaultModels.current
+    LaunchedEffect(model, remembered.isNotEmpty()) {
+        if (target != null && remembered.isNotEmpty() && model.state.value.let { it.catalog == null && !it.catalogLoading }) model.loadCatalog()
+    }
+    val seed = if (target == null || draft.resumeConfig["model"] != null) null else state.catalog?.let { catalog ->
+        catalog.engineOf(picked).let { engine -> catalog.liveRememberedModel(engine, picked.text("provider") ?: engine, remembered) }
+    }
+    val effective = if (seed == null) picked else JsonObject(picked + ("model" to JsonPrimitive(seed)))
+    // What is still waiting, as the transcript's tail draws it (A07-14): never the accepted head — the runner's now, which nothing
+    // withdraws — nor a steer's receipt.
+    val waiting = remember(session?.snapshot?.queuedTurns, session?.transcript?.events) {
+        queuedTail(session?.snapshot?.queuedTurns.orEmpty(), session?.transcript?.events.orEmpty())
+    }
     val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
+    // The engine this session's turns run on, which no pick here changes: whether a message can go into a running one — the tray's
+    // Steer, and Send's other way — and who it was that read one too late to withdraw.
+    val engine = ProviderChoices.engine(detail, state.catalog?.providers.orEmpty())
+    val midTurn = SteerDelivery.runtimeTakesMidTurnSteer(engine)
+    // The tray above the box (docs/mocks/steer-tray): the reader's steers nothing has read yet and their messages still on the queue.
+    val trayRows = if (target != null) emptyList() else PendingTray.rows(unreadSteers, waiting, state, steerOffered = usable && running && midTurn)
+    // DeepSeek Harness takes no ! command, and picks its own model until the runner reports one (A07-5).
+    val dsh = ProviderChoices.engine(effective, state.catalog?.providers.orEmpty()) == DshRuntime.ENGINE
     // The decision behind this task run, while the chip still shows the model it picked (A11-1).
     val smart = smartRoute(detail.text("taskId"), detail["route"] as? JsonObject, effective.text("model").orEmpty(), LocalSmartSelection.current)
     // The engine's guess at the next message, offered in the empty box and taken with a double-tap on it,
@@ -100,12 +145,18 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     val suggestion = if (target != null || standing == spent) null else offeredPromptSuggestion(standing, detail,
         draftEmpty = draft.text.isEmpty() && draft.attachments.isEmpty() && draft.pending == null,
         usable = usable && !state.busy && !state.waiting)
-    val send = { spent = standing; model.send() }
+    val send = { queueForNextTurn: Boolean -> spent = standing; model.send(seed, queueForNextTurn) }
     var inputFocused by remember { mutableStateOf(false) }
-    // Set by the first double-tap that takes a suggestion on this device: from then on the box shows the guess alone,
-    // without "Double-tap to use" after it.
-    val composerPrefs = remember { context.getSharedPreferences("orbit.composer", Context.MODE_PRIVATE) }
-    var suggestionTapLearned by remember { mutableStateOf(composerPrefs.getBoolean(SUGGESTION_TAP_LEARNED, false)) }
+    // Android hides its keyboard without taking the field's focus with it, where iOS's first responder resigns. The
+    // reader's chrome fold (iOS `ConsoleView.foldsChrome`) reads this box's editing state, so the keyboard going
+    // hands the page its bar and rows back instead of leaving a phone without them.
+    val focusManager = LocalFocusManager.current
+    var imeWasUp by remember { mutableStateOf(false) }
+    val imeUp = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    LaunchedEffect(imeUp) {
+        if (imeUp) imeWasUp = true
+        else if (imeWasUp) { imeWasUp = false; if (inputFocused) focusManager.clearFocus() }
+    }
     val focusField: () -> Unit = { focus.requestFocus(); keyboard?.show() }
     val useSuggestion: () -> Unit = {
         suggestion?.let {
@@ -113,11 +164,12 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             model.edit(it, it.length, it.length)
             focusField()
         }
-        if (!suggestionTapLearned) {
-            suggestionTapLearned = true
-            composerPrefs.edit { putBoolean(SUGGESTION_TAP_LEARNED, true) }
-        }
     }
+    Column {
+    // Directly above the box, and not folded while a phone types: it is about the messages being typed into. It takes what room the
+    // box leaves, scrolling past about four rows.
+    PendingTrayCard(trayRows, enabled = usable, steer = { model.steer(it.turnId) },
+        withdraw = { model.withdraw(it.turnId, it.restores, it.steer, engine) }, modifier = Modifier.weight(1f, fill = false))
     Surface(tonalElevation = 2.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -157,7 +209,9 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                     state.uploads[att.id]?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
                     state.failures[att.id]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
-                ComposerUsage(model, state, effective, session)
+                // The context line folds away with the page's chrome while this box holds a phone's keyboard
+                // (`foldsChrome`), as the reader's rows above do; the input and its buttons stay where they are.
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { ComposerUsage(model, state, effective, session) }
             SuggestionTaps(suggestion != null, inputFocused, focusField, useSuggestion) { taps ->
                 OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
                     modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocused = it.isFocused; inputFocusChanged(it.isFocused) }
@@ -167,11 +221,11 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                         .semantics { if (suggestion != null) customActions = listOf(CustomAccessibilityAction("Use suggestion") { useSuggestion(); true }) }
                         .onPreviewKeyEvent {
                             if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
-                                send(); true
+                                send(false); true
                             } else false
                         }, enabled = state.loaded,
                     placeholder = {
-                        if (suggestion != null) SuggestionPlaceholder(suggestion, showsHint = !suggestionTapLearned)
+                        if (suggestion != null) SuggestionPlaceholder(suggestion)
                         else Text("Message…", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     minLines = 1, maxLines = 4,
@@ -193,25 +247,50 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                         listOf("command" to "Command", "skill" to "Skill").forEach { (kind, label) ->
                             DropdownMenuItem(text = { Text(label) }, enabled = usable, onClick = { menu = false; slashScope = kind; model.loadCatalog() })
                         }
-                        DropdownMenuItem(text = { Text("Shell command") }, onClick = { menu = false; if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1) })
-                        if (target == null) DropdownMenuItem(text = { Text("Queued messages (${session?.snapshot?.queuedTurns?.size ?: 0})") }, onClick = { menu = false; queued = true })
+                        DropdownMenuItem(text = { Text("Shell command") }, onClick = {
+                            menu = false
+                            if (dsh) model.refuse(DshRuntime.SHELL_REFUSAL) else if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
+                        })
+                        if (target == null) DropdownMenuItem(text = { Text("Queued messages (${waiting.size})") }, onClick = { menu = false; queued = true })
+                        // A pick held for this session travels with the re-send, which would otherwise run on what it already has.
                         if (target == null) DropdownMenuItem(text = { Text("Retry last failed message") }, enabled = usable && !state.busy,
-                            onClick = { menu = false; model.control("retry-message", body = JsonObject(emptyMap())) })
+                            onClick = { menu = false; model.retryFailed() })
                         if (detail.text("retryAt") != null) DropdownMenuItem(text = { Text("Cancel automatic retry") }, enabled = usable && !state.busy,
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
                 }
-                ModelChip(effective.text("model")?.ifBlank { "Runtime default" } ?: "Model", effortLabel(effective.text("effort")), smart != null,
+                ModelChip(if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else effective.text("model")?.ifBlank { "Runtime default" } ?: "Model",
+                    effortLabel(effective.text("effort")), smart != null,
                     enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f)) {
                     models = true; model.loadCatalog()
                 }
                 val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
-                Button(enabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (running && !hasDraft) true else hasDraft && draft.pending == null),
-                    onClick = { if (running && !hasDraft) model.control("interrupt") else send() }, modifier = Modifier.testTag("composer-send")) {
-                    Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (running && !hasDraft) "Stop" else "Send")
+                val sendEnabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (running && !hasDraft) true else hasDraft && draft.pending == null)
+                // Held while a turn runs, Send offers the other way to send it: queued for the next turn instead of into this one (decided
+                // 2026-10-16, docs/mocks/steer-tray; iOS's context menu on Send, the web's ⌥Enter). Only where the engine would otherwise
+                // take it into the turn, and never for a `!cmd`, which always waits.
+                val queueOffered = target == null && running && hasDraft && midTurn && sendEnabled && !draft.text.trim().startsWith("!")
+                var queueMenu by remember { mutableStateOf(false) }
+                LaunchedEffect(queueOffered) { if (!queueOffered) queueMenu = false }
+                Box {
+                    Button(enabled = sendEnabled, onClick = { if (running && !hasDraft) model.control("interrupt") else send(false) },
+                        modifier = Modifier.testTag("composer-send").holdToOffer(queueOffered) { queueMenu = true }.semantics {
+                            if (queueOffered) customActions = listOf(CustomAccessibilityAction(PendingTray.QUEUE_FOR_NEXT_TURN) { send(true); true })
+                        }) {
+                        Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (running && !hasDraft) "Stop" else "Send")
+                    }
+                    DropdownMenu(queueMenu, onDismissRequest = { queueMenu = false }) {
+                        DropdownMenuItem(text = { Text(PendingTray.QUEUE_FOR_NEXT_TURN) }, modifier = Modifier.testTag("composer-queue-next-turn"),
+                            leadingIcon = { Icon(painterResource(R.drawable.ic_queue_next), null, Modifier.size(16.dp)) },
+                            onClick = { queueMenu = false; send(true) })
+                    }
                 }
             }
+            // A07-19 (a): what the provider picked here will do, and when — under the box, for as long as the pick stands.
+            state.switchNote?.let { Text(it, Modifier.fillMaxWidth().padding(top = 4.dp).testTag("composer-switch-note"),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
+    }
     }
     preview?.let { att ->
         val images = draft.attachments.filter { it.mime.startsWith("image/") }; val index = images.indexOfFirst { it.id == att.id }
@@ -224,7 +303,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                 if (state.catalogLoading) CircularProgressIndicator()
                 state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry catalog") } }
-                val items = state.catalog?.slashItems(effective.text("provider").orEmpty(), detail.text("agentId")).orEmpty().filter { it.text("type") == kind }
+                val items = state.catalog?.let { it.slashItems(it.engineOf(effective), detail.text("agentId")) }.orEmpty().filter { it.text("type") == kind }
                 if (!state.catalogLoading && state.catalogError == null && items.isEmpty()) Text("No ${kind}s reported for this runtime.")
                 items.forEach { item ->
                     TextButton(onClick = {
@@ -237,31 +316,39 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             }
         }, confirmButton = { TextButton(onClick = { slashScope = null }) { Text("Close") } })
     }
-    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable, smart, detail.text("taskId"), openTask) { models = false }
+    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable, smart, detail.text("taskId"), openTask,
+        openRunner) { models = false }
     if (queued) AlertDialog(onDismissRequest = { queued = false }, title = { Text("Queued messages") }, text = {
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
             if (session?.fresh != true) Text("Reconnect to check the queue.")
-            val turns = session?.snapshot?.queuedTurns.orEmpty()
-            if (turns.isEmpty()) Text("No queued messages")
-            turns.forEach { turn ->
-                Text(turn.text("content") ?: "Message")
-                TextButton(enabled = usable && !state.busy, onClick = {
-                    (turn.text("turnId") ?: turn.text("id"))?.let { model.control("turns/$it", HttpMethod.DELETE) }
+            if (waiting.isEmpty()) Text("No queued messages")
+            waiting.forEach { turn ->
+                Text(turn.event.fields.text("text") ?: "Message")
+                // As the tail's Cancel: a steer is on its way into the running turn, and a turn with no id is nobody's to name yet.
+                // A watch's wake asks first, as its line at the transcript's end does (A08-14).
+                if (turn.cancelable) TextButton(enabled = usable && !state.busy, onClick = {
+                    if (turn.watch != null) withdrawingWake = turn.turnId else model.control("turns/${turn.turnId}", HttpMethod.DELETE)
                 }) { Text("Withdraw") }
             }
         }
     }, confirmButton = { TextButton(onClick = { queued = false }) { Text("Close") } })
+    withdrawingWake?.let { turnId ->
+        AlertDialog(onDismissRequest = { withdrawingWake = null }, title = { Text(WatchWakeQueue.confirmTitle) },
+            text = { Text(WatchWakeQueue.consequence) },
+            confirmButton = { TextButton(onClick = { withdrawingWake = null; model.control("turns/$turnId", HttpMethod.DELETE) }) {
+                Text(WatchWakeQueue.withdraw, color = MaterialTheme.colorScheme.error)
+            } },
+            dismissButton = { TextButton(onClick = { withdrawingWake = null }) { Text(WatchWakeQueue.keep) } })
+    }
 }
 
-private const val SUGGESTION_TAP_LEARNED = "suggestionDoubleTapLearned"
-
-/** The engine's guess in the empty box (docs/prompt-suggestions-design.md §4.3): the words, cut at the end, and — until the first
- * double-tap that takes one on this device — "Double-tap to use" right after them. TalkBack skips the hint: its own double-tap is
- * "activate", and it takes the guess with the field's "Use suggestion" action. */
+/** The engine's guess in the empty box (docs/prompt-suggestions-design.md §4.3): the words, cut at the end, and "Double-tap to use"
+ * right after them. TalkBack skips the hint: its own double-tap is "activate", and it takes the guess with the field's
+ * "Use suggestion" action. */
 @Composable
-internal fun SuggestionPlaceholder(suggestion: String, showsHint: Boolean) = Row(verticalAlignment = Alignment.CenterVertically) {
+internal fun SuggestionPlaceholder(suggestion: String) = Row(verticalAlignment = Alignment.CenterVertically) {
     Text(suggestion, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
-    if (showsHint) Text("Double-tap to use", Modifier.padding(start = 8.dp).testTag("composer-suggestion-hint").clearAndSetSemantics {},
+    Text("Double-tap to use", Modifier.padding(start = 8.dp).testTag("composer-suggestion-hint").clearAndSetSemantics {},
         style = MaterialTheme.typography.bodySmall, maxLines = 1)
 }
 
@@ -302,6 +389,22 @@ internal fun Modifier.doubleTapToUse(enabled: Boolean, use: () -> Unit): Modifie
     }
 }
 
+/** A press held past the long-press timeout runs [offer] instead of the press (Send's Queue for next turn): the lift that ends the hold
+ * is kept from the button, so it is not a send as well. A shorter press, or one that slides away, is the button's own. Watched in the
+ * Initial pass, ahead of the button's own gestures. */
+internal fun Modifier.holdToOffer(enabled: Boolean, offer: () -> Unit): Modifier = if (!enabled) this else composed {
+    val latestOffer by rememberUpdatedState(offer)
+    pointerInput(Unit) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { waitForUpOrCancellation(PointerEventPass.Initial); true }
+            if (ended == true) return@awaitEachGesture
+            latestOffer()
+            waitForUpOrCancellation(PointerEventPass.Initial)?.consume()
+        }
+    }
+}
+
 /** The model chip (iOS `modelChipLabel`): the model's name, and — on a task run still on the model smart selection picked — a ✦ before
  * it on a light tint of the accent. Named aloud "Model X, effort Y", and ", picked by smart selection" while it carries the ✦. */
 @Composable
@@ -318,6 +421,19 @@ internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Bo
     }
 }
 
+/** One account in its engine's section of the Provider list (iOS `accountRowLabel`): its name, and under it its own quota — "5h 12%",
+ * what an Antigravity bucket has left, "gemini-5h 4% left" — or what Automatic does, or why it can't take the session. */
+@Composable
+private fun AccountRow(name: String, detail: String?, enabled: Boolean, nearLimit: Boolean = false, spoken: String? = null, press: () -> Unit) {
+    TextButton(enabled = enabled, onClick = press, modifier = if (spoken == null) Modifier else Modifier.semantics { contentDescription = spoken }) {
+        Column(Modifier.fillMaxWidth()) {
+            Text(name)
+            detail?.let { Text(it, style = MaterialTheme.typography.bodySmall,
+                color = if (nearLimit) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
 /** What the chip's menu opens on for a task run on smart selection's pick (iOS 6826eed7e, 7c49be60a): the tier it picked, its first
  * reason, and the note — a sentence an item, as a phone's menu cuts an item at its third line. */
 @Composable
@@ -330,24 +446,37 @@ internal fun SmartRouteNote(route: JsonObject) = Column(Modifier.testTag("compos
 }
 
 @Composable
-private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, smart: JsonObject?, taskId: String?,
-    openTask: ((String) -> Unit)?, close: () -> Unit) {
+private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, smart: JsonObject?,
+    taskId: String?, openTask: ((String) -> Unit)?, openRunner: ((String, String) -> Unit)?, close: () -> Unit) {
     val catalog = state.catalog
     val provider = detail.text("provider") ?: ""
+    // The session's engine, which nothing here changes (contract §3.5): the menu opens on it, and every row below is its.
+    val engine = catalog?.engineOf(detail) ?: ProviderEngines.sessionEngine(detail.text("engine") ?: detail.text("lastEngine"), provider, emptyList())
     val chosen = detail.text("model") ?: ""
     val enabled = usable && !state.busy && catalog != null && state.draft.pending == null
+    val rememberModel = LocalRememberModel.current
     fun change(key: String, value: String) { model.config(buildJsonObject { put(key, value) }) }
-    AlertDialog(onDismissRequest = close, title = { Text("Model and account") }, text = {
+    AlertDialog(onDismissRequest = close, title = {
+        // The engine this session runs on for good (iOS 0557592f8), over everything below that picks for the next turn — in the
+        // dialog's head, so it stays in view as the Provider list scrolls.
+        Column {
+            Text("Model and account")
+            Text(ProviderEngines.cliName(engine), Modifier.padding(top = 4.dp).testTag("composer-engine-title"), style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             // A task run on smart selection's pick opens on why it is this model, and on where to fix the model for every run.
             smart?.let { SmartRouteNote(it); HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
-            Text("Current: $provider · $chosen")
-            val rows = catalog?.models(provider).orEmpty()
+            val rows = catalog?.models(engine, provider).orEmpty()
             rows.forEach { row ->
                 TextButton(enabled = enabled, onClick = {
                     val id = row.text("value") ?: return@TextButton
+                    // A07-19 (e): the next new session on this engine and credential starts on it (`<engine>:<provider>`, contract
+                    // §6.5): one key's model on Claude Code is not its model on DeepSeek Harness.
+                    if (provider.isNotEmpty()) rememberModel(engine, provider, id)
                     model.config(buildJsonObject {
                         put("model", id)
                         val effort = detail.text("effort") ?: ""
@@ -356,41 +485,22 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
                 }) { Text((if (row.text("value") == chosen) "✓ " else "") + (row.text("label") ?: row.text("value").orEmpty())) }
             }
             if (catalog != null && rows.isEmpty()) Text("This provider has not reported available models.")
-            val selected = rows.firstOrNull { it.text("value") == chosen }
-            selected?.strings("reasoningLevels")?.let { levels ->
-                if (levels.isNotEmpty()) { Text("Effort"); (listOf("") + levels).forEach { effort ->
-                    TextButton(enabled = enabled, onClick = { change("effort", effort) }) { Text(effort.ifBlank { "Default" }) }
-                } }
-            }
-            val modes = catalog?.permissions(provider, chosen).orEmpty()
-            if (modes.isNotEmpty()) { Text("Permissions"); modes.forEach { mode ->
-                TextButton(enabled = enabled, onClick = { change("permissionMode", mode) }) { Text(mode) }
+            val levels = catalog?.efforts(engine, provider, chosen).orEmpty()
+            if (levels.isNotEmpty()) { Text("Effort"); (listOf("") + levels).forEach { effort ->
+                TextButton(enabled = enabled, onClick = { change("effort", effort) }) { Text(effort.ifBlank { "Default" }) }
             } }
-            val fast = selected?.flag("fastMode") == true || (catalog?.runtime(provider) == "codex" && "priority" in selected?.strings("serviceTiers").orEmpty())
-            if (fast) TextButton(enabled = enabled, onClick = { model.config(buildJsonObject { put("fastMode", detail.flag("fastMode") != true) }) }) {
+            // Asked of the engine: DeepSeek Harness enforces Default, Auto and Don't Ask alone, as the server does.
+            val modes = catalog?.permissions(engine, provider, chosen).orEmpty()
+            if (modes.isNotEmpty()) { Text("Permissions"); modes.forEach { mode ->
+                TextButton(enabled = enabled, onClick = { change("permissionMode", mode) }, modifier = Modifier.testTag("composer-mode:$mode")) {
+                    Text((if (mode == detail.text("permissionMode")) "✓ " else "") + (personalPermissions.firstOrNull { it.first == mode }?.second ?: mode))
+                }
+            } }
+            if (catalog?.fast(engine, provider, chosen) == true) TextButton(enabled = enabled, onClick = { model.config(buildJsonObject { put("fastMode", detail.flag("fastMode") != true) }) }) {
                 Text(if (detail.flag("fastMode") == true) "Speed: Fast" else "Speed: Standard")
             }
-            Text("Provider")
-            catalog?.options(provider, model.target != null)?.forEach { option ->
-                TextButton(enabled = enabled && option.unavailable == null, onClick = {
-                    model.config(buildJsonObject {
-                        put("provider", option.id); put("model", option.models.firstOrNull()?.text("value") ?: ""); put("effort", "")
-                    })
-                }) { Text(option.label + (option.unavailable?.let { " · $it" } ?: "")) }
-            }
-            // A draft starts on any of the runner's accounts; a session moves only where the runner carries it across.
-            val accounts = catalog?.takeIf { model.target != null || it.movesAccounts(provider) }?.accountChoices(provider).orEmpty()
-            if (accounts.isNotEmpty()) {
-                Text("Account")
-                TextButton(enabled = enabled, onClick = { model.config(buildJsonObject { put("account", "automatic") }, true) }) { Text("Automatic") }
-                accounts.forEach { account -> TextButton(enabled = enabled && account.unavailable == null, onClick = {
-                    model.config(buildJsonObject { put("account", account.id) }, true)
-                }) {
-                    Text(account.label + (account.unavailable?.let { " · $it" } ?: ""))
-                    // Its own quota beside it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left".
-                    account.quota?.let { Text(" · $it", color = if (account.nearLimit) LocalOrbitColors.current.needsYou else Color.Unspecified) }
-                } }
-            }
+            if (catalog != null) ProviderChoices(model, catalog, engine, provider, detail, state.draft.resumeConfig, enabled,
+                fix = openRunner?.let { open -> { engine: String -> catalog.runner.text("id")?.let { runner -> close(); open(runner, engine) } } })
             // …and ends on the task, pushed over this run, so Back returns to it.
             if (smart != null && taskId != null && openTask != null) {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -398,4 +508,167 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             }
         }
     }, confirmButton = { TextButton(onClick = close) { Text("Close") } })
+}
+
+/**
+ * The Provider part of the menu (boards 4 ④⑤ and 5): only the credentials the session's [engine] runs, grouped by where they come
+ * from — the runner's own sign-in (its accounts, where it keeps several: Automatic first with what it does, then each with its own
+ * quota, iOS 9ee358083), or OpenCode's own configuration there; the account pools; the keys. Picking one moves the session's
+ * credential and never its engine. A row this runner can't run says why and, where the engine's page on the runner fixes that,
+ * goes there ([fix], iOS d2737d665). A session whose key the menu no longer lists — turned off, deleted — shows it first, under
+ * its own heading, saying what became of it; a credential below fixes the session.
+ */
+@Composable
+private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engine: String, provider: String, detail: JsonObject, held: JsonObject,
+    enabled: Boolean, fix: ((engine: String) -> Unit)?) {
+    val antigravityKey = catalog.antigravityKeyAvailable(detail)
+    val options = catalog.credentials(engine, antigravityKey)
+    val current = catalog.current(engine, provider, antigravityKey)
+    val gone = catalog.gone(engine, provider)
+    val runnerName = RunnerPage.displayName(catalog.runner)
+    val amber = LocalOrbitColors.current.needsYou
+    val draft = model.target != null
+    val remembered = LocalDefaultModels.current
+    fun pick(option: ProviderOption, account: String? = null) = model.config(buildJsonObject {
+        put("provider", option.id); put("engine", engine)
+        account?.let { put("account", it) }
+        // A draft lands on the model last picked for the engine and this credential (A07-19 (e)).
+        put("model", if (draft) catalog.newSessionModel(engine, option.id, remembered) else catalog.defaultModel(engine, option.id)); put("effort", "")
+    })
+    @Composable fun header(text: String) = Text(text, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    @Composable fun row(option: ProviderOption) {
+        // The one the session is on is the list's own caption, whatever stops it; any other this runner can't run says why.
+        val here = option.id == provider
+        val blocked = option.unavailable != null && !here
+        val repair = option.fixEngine?.takeIf { blocked && fix != null }
+        TextButton(enabled = enabled && (!blocked || repair != null), onClick = { if (repair != null) fix?.invoke(repair) else if (!here) pick(option) },
+            modifier = Modifier.testTag("composer-provider:${option.id}")) {
+            // What a sign-in is (`opencode auth`, a Google account) goes under its name, as the boards' menus put it.
+            Column {
+                Text(if (blocked) "${option.label} — ${option.unavailable}" + (option.fixEngine?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
+                    else (if (here) "✓ " else "") + option.label)
+                option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
+    }
+    Row(Modifier.padding(top = 8.dp).testTag("composer-provider"), verticalAlignment = Alignment.CenterVertically) {
+        Text(EngineCopy.PROVIDER, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+        // A07-19 (d): a sign-in by the account in use — Automatic while Orbit picks it — OpenCode's own configuration as its own sign-in.
+        Text(gone ?: catalog.providerValue(current, engine, detail, held, draft), Modifier.testTag("composer-provider-value"),
+            color = if (gone != null) amber else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (options.none { it.id == provider } && provider.isNotEmpty()) {
+        if (current.kind == CredentialKind.KEY) header(EngineCopy.THIS_SESSIONS_KEY)
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp).testTag("composer-provider-current"), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f, fill = false)) {
+                Text(current.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                current.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            gone?.let { Text("  " + if (it == EngineCopy.KEY_DELETED) "Deleted" else it, color = amber) }
+        }
+    }
+    val own = options.filter { it.kind == CredentialKind.LOGIN || it.kind == CredentialKind.OPENCODE }
+    if (own.isNotEmpty()) {
+        header(if (own.any { it.kind == CredentialKind.LOGIN && it.unavailable == null }) EngineCopy.signedInOn(runnerName) else EngineCopy.on(runnerName))
+        own.forEach { option ->
+            // An engine's own sign-in with several accounts is its accounts. On the sign-in the session is on, those are the ones it
+            // moves between — a draft starts on any of them, a session moves only where the runner carries it across; a draft on
+            // another credential of this engine lands on the one picked.
+            val here = option.id == provider
+            val accounts = if (option.kind != CredentialKind.LOGIN || option.unavailable != null && !here) emptyList()
+                else catalog.accountChoices(engine).takeIf { it.size >= 2 && (draft || here && catalog.movesAccounts(engine)) }.orEmpty()
+            if (accounts.isEmpty()) { row(option); return@forEach }
+            // The account this session (or draft) is on, as the Provider row names it (A07-19 (d)): Automatic while Orbit picks it,
+            // else the one picked, its own, its workspace's — Default, which dispatch resolves a sign-in with no account named to.
+            val on = if (here) catalog.accountOn(engine, detail, held, draft) else null
+            fun mark(account: String) = if (on != null && account == (if (on.automatic) EngineAccounts.AUTOMATIC else on.account)) "✓ " else ""
+            fun take(account: String) = if (here) model.config(buildJsonObject { put("account", account) }, true) else pick(option, account)
+            AccountRow(mark(EngineAccounts.AUTOMATIC) + EngineCopy.AUTOMATIC, EngineCopy.AUTOMATIC_DETAIL, enabled,
+                spoken = "Automatic: starts on the ${ProviderEngines.cliName(engine)} account whose quota resets soonest, and switches when it hits its limit") {
+                take(EngineAccounts.AUTOMATIC)
+            }
+            accounts.forEach { account ->
+                // Its own quota under it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left". A signed-out account is a
+                // request for its sign-in, on the runner's page for the engine.
+                AccountRow(mark(account.id) + account.label, account.unavailable?.let { "$it, sign in →" } ?: account.quota,
+                    enabled && (account.unavailable == null || fix != null), nearLimit = account.nearLimit && account.unavailable == null) {
+                    if (account.unavailable == null) take(account.id) else fix?.invoke(engine)
+                }
+            }
+        }
+    }
+    options.filter { it.kind == CredentialKind.POOL }.takeIf { it.isNotEmpty() }?.let { pools -> header(EngineCopy.ACCOUNT_POOLS); pools.forEach { row(it) } }
+    options.filter { it.kind == CredentialKind.KEY }.takeIf { it.isNotEmpty() }?.let { keys -> header(EngineCopy.API_KEYS); keys.forEach { row(it) } }
+    // A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run: its absence there is said.
+    if (engine == ProviderEngines.OPENCODE) catalog.providers.filter { it.flag("pool") != true && it.text("runtime") == ProviderEngines.CLAUDE &&
+        it["engines"] is JsonArray && catalog.providerEngines(it.text("slug")) == listOf(ProviderEngines.CLAUDE) }.mapNotNull { it.text("label") ?: it.text("slug") }.takeIf { it.isNotEmpty() }?.let {
+        Text(EngineCopy.subscriptionOnly(it), Modifier.padding(top = 8.dp).testTag("composer-provider-note"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * The new session's Engine list (board 4 ①; iOS `EngineSwitchSheet`): the CLI the session will run on for good, one row per engine
+ * in ALL_ENGINES order, each saying the model where a pick of it lands — or why it can't run here. Which credential and which
+ * account it spends is the composer's Provider menu's question. DeepSeek Harness with no DeepSeek key offers the connection, on
+ * the web, instead.
+ */
+@Composable
+internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, server: String,
+    openRunner: ((runner: String, engine: String) -> Unit)? = null, close: () -> Unit) {
+    val catalog = state.catalog
+    val uri = LocalUriHandler.current
+    val current = catalog?.engineOf(detail)
+    val remembered = LocalDefaultModels.current
+    // Where each engine lands: the draft's pick, then what the workspace last ran there.
+    val preferred = listOf(detail.text("engine") to detail.text("provider"), detail.text("lastEngine") to (detail.text("lastProvider") ?: detail.text("provider")))
+    AlertDialog(onDismissRequest = close, title = { Text(EngineCopy.ENGINE) }, text = {
+        Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()).testTag("engine-choices")) {
+            if (state.catalogLoading) CircularProgressIndicator()
+            state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
+            if (catalog != null) catalog.engines(preferred, catalog.antigravityKeyAvailable(detail)).forEach { option ->
+                val connect = option.unavailable == EngineCopy.CONNECT_DEEPSEEK_KEY
+                val landing = option.landing
+                // An engine this runner can't run goes to the runner's page for it, where that fixes it (iOS d2737d665).
+                val repair = option.fixEngine?.takeIf { openRunner != null }
+                val secondary = when {
+                    connect -> "${EngineCopy.CONNECT_DEEPSEEK_KEY} →"
+                    option.unavailable != null -> option.unavailable + (option.fixEngine?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
+                    landing != null -> catalog.modelLabel(option.engine, landing.id, catalog.defaultModel(option.engine, landing.id))
+                    else -> ""
+                }
+                Row(Modifier.fillMaxWidth().clickable(enabled = connect || repair != null || option.unavailable == null && !state.busy, role = Role.Button) {
+                    if (connect) runCatching { uri.openUri(server.trimEnd('/') + EngineCopy.DEEPSEEK_CONNECT_PATH) }
+                    else if (repair != null) catalog.runner.text("id")?.let { runner -> openRunner?.invoke(runner, repair) }
+                    else if (landing != null && option.engine != current) model.config(buildJsonObject {
+                        put("engine", option.engine); put("provider", landing.id)
+                        // The model last picked for the engine and where it lands, while still offered (A07-19 (e), iOS `pickDraft`).
+                        val next = catalog.newSessionModel(option.engine, landing.id, remembered)
+                        put("model", next); put("effort", "")
+                        // A mode the new engine refuses is not carried over: DeepSeek Harness takes Default, Auto and Don't Ask.
+                        detail.text("permissionMode")?.takeIf { it !in catalog.permissions(option.engine, landing.id, next) }?.let { put("permissionMode", "default") }
+                    })
+                    close()
+                }.padding(vertical = 10.dp).testTag("engine:${option.engine}"), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // The offer to connect a key goes under Harness's name, whole (board 4 ①); a model or a reason beside its engine.
+                    if (connect) Column(Modifier.weight(1f)) {
+                        Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        // The engine's name is the row: it keeps its width and the model beside it gives way first (iOS 0ae7ec209). Half
+                        // the row each cut "DeepSeek Harness" beside its model and tick on a 360 dp phone.
+                        Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = if (option.unavailable == null) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(secondary, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (option.engine == current) Text("✓", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Text(EngineCopy.ENGINE_FOOTER, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }, confirmButton = { TextButton(onClick = close) { Text("Done") } })
 }

@@ -6,6 +6,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -34,7 +35,19 @@ data class DirectorySession(
     val pendingApprovals: Int = 0, val runningBgJobCount: Int = 0,
     val confirmationUnderReview: JsonObject? = null,
     val lastAssistantText: String? = null, val lastUserText: String? = null,
+    /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
+     *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
+     *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
+     *  it back (`LocalSessionRecaps`). */
+    val recapText: String? = null, val recapAt: String? = null,
     val tags: List<Tag> = emptyList(), val capabilities: SessionCapabilities? = null,
+    // What SessionLine reads beyond the above (OrbitKit `Session`): null from a server that does not send it.
+    val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
+    val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
+    val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
+    val waitingKind: String? = null, val ownerItems: JsonArray? = null,
+    /** The project this session belongs to in any role; null for an ordinary conversation and from an older server. */
+    val projectMembership: SessionProjectMembership? = null,
 ) {
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
@@ -46,6 +59,13 @@ data class DirectorySession(
         runState == "RUNNING" || status == "RUNNING" -> "Running"
         else -> (runState ?: status).lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
+}
+/** A session's project membership (OrbitKit `SessionProjectMembership`): derived from its coordinator, task, context, judgment or
+ * root relation. A role or status this build does not know is kept as the server spelled it, and matches none of the known ones. */
+@Serializable
+data class SessionProjectMembership(val projectId: String, val projectTitle: String = "", val projectStatus: String = "UNKNOWN",
+    val role: String = "UNKNOWN") {
+    val isCoordinator get() = role == "COORDINATOR"
 }
 @Serializable
 data class SearchHit(val id: String, val title: String, val status: String = "UNKNOWN",
@@ -94,20 +114,25 @@ fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, groupin
             listOfNotNull(sorted.filter { it.tags.isEmpty() }.takeIf { it.isNotEmpty() }?.let { SessionGroup("bucket:untagged", "Untagged", it) })
     }
     val today = now.atZone(zone).toLocalDate()
-    val titles = listOf("Pinned", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older")
-    val buckets = sorted.groupBy { s ->
-        val days = date(s)?.atZone(zone)?.toLocalDate()?.let { ChronoUnit.DAYS.between(it, today) }
-        when {
-            view == SessionView.OPEN && s.pinnedAt != null -> 0
-            days == null -> 5
-            days <= 0 -> 1
-            days == 1L -> 2
-            days <= 7 -> 3
-            days <= 30 -> 4
-            else -> 5
-        }
+    val buckets = sorted.groupBy { s -> if (view == SessionView.OPEN && s.pinnedAt != null) 0 else recencyBucket(date(s), today, zone) }
+    return recencyTitles.mapIndexedNotNull { i, title -> buckets[i]?.let { SessionGroup("time:$i", title, it) } }
+}
+
+/** The list's sections in order, Pinned first; [recencyBucket] indexes into them. */
+internal val recencyTitles = listOf("Pinned", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older")
+
+/** 1 Today · 2 Yesterday · 3 2–7 days ago · 4 8–30 days ago · 5 Older, for any instant — so a row that is not a session (a merge on a
+ * project's timeline) lands in the section its time says. A future instant reads as Today; none at all falls to Older. */
+internal fun recencyBucket(at: Instant?, today: java.time.LocalDate, zone: ZoneId): Int {
+    val days = at?.atZone(zone)?.toLocalDate()?.let { ChronoUnit.DAYS.between(it, today) }
+    return when {
+        days == null -> 5
+        days <= 0 -> 1
+        days == 1L -> 2
+        days <= 7 -> 3
+        days <= 30 -> 4
+        else -> 5
     }
-    return titles.mapIndexedNotNull { i, title -> buckets[i]?.let { SessionGroup("time:$i", title, it) } }
 }
 
 /** A missing folder never hides a session. Trash is flat. A folder page contains its own rows once. */
