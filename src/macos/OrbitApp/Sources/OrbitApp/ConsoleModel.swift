@@ -3581,6 +3581,30 @@ final class ConsoleModel {
         }
     }
 
+    /// "Put back in the composer" (web parity: `restoreUndelivered`, and `takeBackUndelivered` for a
+    /// receipt): the words of a message that never reached the engine, back in the box under any
+    /// draft as a withdrawal hands them back — an explicit press, so a draft keeps its place above
+    /// them. Nothing is sent. The conversation's own bubble stays, the record of what happened; a
+    /// row at the tail goes, and one the server still lists — a delivery's receipt — is discarded
+    /// there too, or the next listing would bring it back. Attachments aren't rehydrated (the
+    /// composer needs their bytes), as with Cancel. Offered where `SteerDelivery.offersPutBack` says.
+    func putBack(_ bubble: UserBubble) async {
+        guard let words = ComposerLogic.restorableText(of: bubble) else { return }
+        let body = bubble.shell ? "!" + words : words
+        composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? body : composerText + "\n\n" + body
+        guard reducer.state.queued.contains(where: { $0.id == bubble.id }) else { return }
+        reducer.removeQueued(id: bubble.id)
+        publishStateNow()
+        guard bubble.delivery != nil, let turnId = bubble.turnId else { return }
+        do {
+            try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+        } catch {
+            onToast(ToastRequest(message: "Couldn't discard the message",
+                                 detail: APIClient.failureReason(error), tone: .error))
+        }
+    }
+
     /// An interrupt drops the still-queued (not-yet-leased) follow-ups server-side, and the reducer
     /// clears them locally to match (web parity). Rather than silently lose what the user typed, fold
     /// that queued text back into the composer so it can be edited and resent. Called just before the

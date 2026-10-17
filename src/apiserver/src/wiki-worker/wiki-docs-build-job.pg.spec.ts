@@ -27,7 +27,11 @@
  *  12. a worker stopped once the build's first section is written hands the job back, and the next one finishes it: the
  *      report the replay ends with — the job's and the plan job's — is the whole build's (contract `jobs.carry`): the
  *      section written before the stop is written, not unchanged, every section once and every call once, exactly what
- *      the same build reports when nothing stops it.
+ *      the same build reports when nothing stops it;
+ *  13. a build of the version in force that ended failed, as production's did on 2026-10-15 (10 attempts on a checkout
+ *      the runner could not read), asked for again on the plan page (contract `plan.jobs.rebuild`): a build of its own,
+ *      the worker writes every document with the System model, no task is made, and a second ask while it is on its
+ *      way answers the same job.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-docs-build-job.pg.spec.ts
  *
@@ -1288,4 +1292,62 @@ test('a worker stopped once the first section is written hands the build back, a
   } finally {
     h.model.before = async () => undefined;
   }
+});
+
+// ── 13. a build that failed, asked for again ─────────────────────────────────────────────────────────
+
+test('a build that failed is asked for again on the plan page: the worker writes every document, and a second ask answers the same job', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  h.model.hits.length = 0;
+  const s = await scene(h, 'rebuild');
+  const v1 = await draft(h, s, planFor(s));
+  executor('canary', [s.owner.id]);
+  await confirm(h, s, v1);
+  // Its one build ends as production's did on 2026-10-15, before it read anything: ten attempts on a checkout the
+  // space's runner could not read, the job ended failed/infra and its plan job with it (settleWikiJobRows).
+  const [first] = await builds(h, s.spaceId);
+  const fault = 'Ended after 10 attempts: REPO_OP_FAILED: the snapshot of origin/main failed: /tmp/docs-build-spec is not a git checkout: exit status 128';
+  await h.sql.query(`UPDATE "wiki_job" SET "state" = 'failed', "attempts" = 10, "failure_kind" = 'infra', "error" = $2, "ended_at" = now() WHERE "id" = $1`, [first.job_id, fault]);
+  await h.sql.query(`UPDATE "wiki_plan_job" SET "state" = 'ended', "outcome" = 'failed', "error" = $2, "ended_at" = now() WHERE "id" = $1`, [first.id, fault]);
+  // Production's space had no draft on its way: the one the space's creation asked for (held for the runner's
+  // provider, which the scene never set) is not this case's, and would be the job the plan's read shows.
+  await h.sql.query(`DELETE FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" IN ('draft', 'revise')`, [s.spaceId]);
+  const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.deepEqual([page.body.job.kind, page.body.job.state, page.body.job.error], ['build', 'failed', fault], 'the plan page shows the writing stopped short');
+  const unwritten = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs`);
+  assert.deepEqual(unwritten.body.docs, { total: 1, written: 0 });
+
+  // The owner asks again: a build of its own, the server's, and a second ask while it waits answers it.
+  const asked = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${v1}/build`, {});
+  expectStatus(asked, 200, 'the owner asks for the documents again');
+  assert.deepEqual([asked.body.created, asked.body.job.kind, asked.body.job.trigger, asked.body.job.state, asked.body.job.version],
+    [true, 'build', 'owner', 'running', v1]);
+  const again = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${v1}/build`, {});
+  expectStatus(again, 200, 'the owner asks once more');
+  assert.deepEqual([again.body.created, again.body.job.id], [false, asked.body.job.id], 'the same job');
+  const [, second, third] = await builds(h, s.spaceId);
+  assert.equal(third, undefined, 'one build asked for again, not two');
+  assert.deepEqual([second.state, second.version, second.task_id], ['made', v1, null]);
+  const made = await job(h, second.job_id!);
+  assert.deepEqual([made.kind, made.priority, made.state, made.input], [WIKI_DOCS_BUILD_JOB.kind, WIKI_DOCS_BUILD_JOB.priority, 'queued', { planJobId: second.id }]);
+  assert.equal(await buildTasks(h, s), 0, 'no task of the hidden list');
+
+  // The worker writes every document of the version in force with the System model, through the space's runner.
+  const HEAD = createHash('sha1').update(`rebuild-${randomUUID()}`).digest('hex');
+  playRunner(h, s.runner.id, () => tree(HEAD));
+  const w = worker(h);
+  const ended = await runToEnd(h, w, made.id);
+  assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+  assert.deepEqual([(ended.report as Record<string, unknown>).written, (ended.report as Record<string, unknown>).failed], [3, 0]);
+  assert.ok(h.model.hits.length >= 3, `${h.model.hits.length} calls`);
+  const [, built] = await builds(h, s.spaceId);
+  assert.deepEqual([built.state, built.outcome, built.version], ['ended', 'succeeded', v1]);
+  const written = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs`);
+  assert.deepEqual(written.body.docs, { total: 1, written: 1 }, 'the document is written');
+  const doc = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/${SLUG}`);
+  assert.deepEqual(doc.body.sections.map((section: { written: boolean; repoSha: string }) => [section.written, section.repoSha]),
+    [[true, HEAD], [true, HEAD], [true, HEAD]]);
+  const after = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.deepEqual([after.body.job.id, after.body.job.state], [asked.body.job.id, 'succeeded']);
 });

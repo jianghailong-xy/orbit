@@ -52,5 +52,6 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/plan/edits',
   'POST /wiki/spaces/:id/plan/versions/:version/confirm',
   'POST /wiki/spaces/:id/plan/redraft',
+  'POST /wiki/spaces/:id/plan/versions/:version/build',
   'POST /wiki/plan-proposals/:id/decide',
 ];
