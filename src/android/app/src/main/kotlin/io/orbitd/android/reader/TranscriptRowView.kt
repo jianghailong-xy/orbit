@@ -241,6 +241,13 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 Text("Sent by another Orbit session, not by you", style = MaterialTheme.typography.bodySmall)
                 sender.string("fromSessionId")?.let { id -> TextButton(onClick = { open("orbit-session:$id") }) { Text("Open sender session") } }
             }
+            // How a steer of the reader's came out; words that never reached the engine are offered back to the composer.
+            row.steer?.let { steer ->
+                val words = shown.personWords().trim()
+                val composer = console?.composer?.takeIf { steer.delivery == "failed" && words.isNotEmpty() }
+                val loaded = composer?.state?.collectAsState()?.value?.loaded == true
+                SteerStateLine(steer, putBack = composer?.takeIf { loaded }?.let { box -> { box.putBack(words) } })
+            }
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         }
     }
@@ -252,6 +259,36 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             LazyColumn { items(row.children.filter { !(it.event.type == "tool_use" && it.event.toolId() in shownAgents) }, key = { it.key }) {
                 TranscriptRowView(it, model, live, open) } }
         } }
+    }
+}
+
+/**
+ * How a steer of the reader's came out, under its words (web `SteerState` and `UserBubble`'s undelivered line, OrbitApp's meta line): its
+ * state in every client's words — in the warning tone once it did not land or nobody can say it did, the server's reason a long press
+ * away — then [why] it did not land in the sender's words, and [putBack], its words' way back to the composer.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SteerStateLine(steer: SteerOutcome, why: String? = null, putBack: (() -> Unit)? = null) {
+    val undelivered = SteerDelivery.undelivered(steer.delivery)
+    val tone = if (undelivered) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.testTag("steer-state")) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val label = @Composable {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (undelivered) Text("⚠", Modifier.clearAndSetSemantics { }, color = tone, style = MaterialTheme.typography.labelSmall)
+                    Text(SteerDelivery.label(steer.delivery), color = tone, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            val reason = steer.reason?.takeIf { undelivered && it.isNotBlank() }
+            if (reason == null) label()
+            else TooltipBox(TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above), tooltip = { PlainTooltip { Text(reason) } },
+                state = rememberTooltipState()) { label() }
+            putBack?.let { TextButton(onClick = it, Modifier.testTag("steer-state:put-back")) {
+                Text(SteerDelivery.PUT_BACK, style = MaterialTheme.typography.labelSmall)
+            } }
+        }
+        why?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

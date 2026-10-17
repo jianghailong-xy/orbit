@@ -2,6 +2,7 @@ package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 
 internal fun JsonObject.string(key: String) = (get(key) as? JsonPrimitive)?.contentOrNull
@@ -28,10 +29,11 @@ internal fun contentImages(value: JsonElement?): List<String> = when (value) {
     else -> emptyList()
 }
 
-/** [folded] is the later `thinking` blocks folded into this one's row (A06-11): the row keeps the first block's identity. */
+/** [folded] is the later `thinking` blocks folded into this one's row (A06-11): the row keeps the first block's identity. [steer]: how
+ * the row's message came out, when it is one of the reader's steers ([SteerDelivery.outcomes]) — said under it. */
 @Immutable
 internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList(),
-    val folded: List<RunEvent> = emptyList()) {
+    val folded: List<RunEvent> = emptyList(), val steer: SteerOutcome? = null) {
     val key: String get() = "event:${event.seq}"
     fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) }
 }
@@ -67,6 +69,11 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
     val usedResults = mutableSetOf<Long>()
     // Only where rows stand moves: what each event says about its turn is still read in the order it happened.
     val grouped = (if (holdsSteers) SteerDelivery.place(events, receipts).drawn else events).groupBy(::parent)
+    // How each of the reader's steers came out — but one the engine dropped unread, which a window short of the tail still draws.
+    val outcomes = SteerDelivery.outcomes(events, receipts)
+    fun steer(e: RunEvent) = if (!SteerDelivery.readersSteer(e)) null
+        else (e.turnId?.let { outcomes[ObjectId.canonical(it) ?: it] } ?: SteerOutcome(e.fields.string("delivery")))
+            .takeIf { it.delivery != SteerDelivery.WITHDRAWN }
     fun rows(parent: String?, visited: Set<String>): List<TranscriptRow> {
         return grouped[parent].orEmpty().mapNotNull { e ->
             if (e.seq in unexplained) return@mapNotNull TranscriptRow(e.copy(type = "error", payload = buildJsonObject {
@@ -83,7 +90,7 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
             result?.let { usedResults += it.seq }
             val id = e.toolId()
             val children = if (e.type == "tool_use" && id != null && id !in visited) rows(id, visited + id) else emptyList()
-            TranscriptRow(e, result, children)
+            TranscriptRow(e, result, children, steer = steer(e))
         }.let(::foldThinking)
     }
     // Results may precede calls in a restored partial window; suppress matched results independent of order.

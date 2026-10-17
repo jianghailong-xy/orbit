@@ -26,15 +26,18 @@ import kotlinx.serialization.json.*
  * as its text, and every card the listing carries — so a session reply is its reply cards and a resumed task's brief its task-start
  * card, not the blocks they are delivered with. A steer and a turn the server has not named yet take no Cancel.
  *
- * [inTray]: the reader's own words still on their way — queued for the next turn, or a steer no runner has taken yet — which the tray
- * above the composer holds instead of the tail (docs/mocks/steer-tray; web `inPendingTray`, OrbitKit `PendingTray.holds`). What Orbit
- * queued — a brief, a delivery, another session's message, a wake — keeps its card in the tail. [shell] is a `!cmd`, [createdAt] when
- * the server filed it.
+ * [readersOwn]: the reader's own words, named by their turn (web `returnsToComposer`) — not what Orbit queued: a brief, a delivery,
+ * another session's message, a wake, which keeps its card in the tail. [shell] is a `!cmd`, [createdAt] when the server filed it.
+ * [delivery], with its [deliveryCode] and [deliveryReason]: the server's durable receipt that a steer was not delivered (`failed`) or
+ * not known to be read (`unconfirmed`) — over, and no turn of the queue's.
  */
 internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val event: RunEvent, val cards: List<InteractionCard>,
     val wake: JsonObject?, val watch: JsonObject? = null, val shell: Boolean = false, val createdAt: String? = null,
-    val inTray: Boolean = false) {
-    val cancelable: Boolean get() = turnId != null && !steer
+    val readersOwn: Boolean = false, val delivery: String? = null, val deliveryCode: String? = null, val deliveryReason: String? = null) {
+    /** The reader's own words still on their way — queued for the next turn, or a steer no runner has taken yet — which the tray above
+     * the composer holds instead of the tail (docs/mocks/steer-tray; web `inPendingTray`, OrbitKit `PendingTray.holds`). */
+    val inTray: Boolean get() = readersOwn && delivery == null
+    val cancelable: Boolean get() = turnId != null && !steer && delivery == null
     val key: String get() = "queued:" + (turnId?.let { ObjectId.canonical(it) ?: it } ?: event.fields.text("text").hashCode().toString())
 }
 
@@ -47,15 +50,43 @@ internal fun queuedTail(rows: List<JsonObject>, events: List<RunEvent>): List<Qu
         if (row.isReceipt() || row.text("placement") == "accepted") return@mapNotNull null
         val turnId = row.text("turnId")
         if (turnId != null && delivered.any { ObjectId.same(it, turnId) }) return@mapNotNull null
-        val content = row.text("content").orEmpty()
-        val event = RunEvent("user", 0, echoPayload(row), turnId)
-        val cards = transcriptCards(event)
-        val wake = io.orbitd.android.core.cards.queuedWake(content)
-        val orbits = row["authoredByOrbit"] == JsonPrimitive(true) || SteerDelivery.cardKeys.any { row[it] != null && row[it] != JsonNull }
-        QueuedTurn(turnId, row.text("kind") == "steer", event, cards, wake, cards.firstOrNull { it.key.endsWith(":watch") }?.source,
-            shell = row.text("kind") == "shell", createdAt = row.text("createdAt"),
-            inTray = turnId != null && !orbits && cards.isEmpty() && wake == null)
+        listedTurn(row)
     }
+}
+
+/**
+ * The reader's steers known only from the server's receipt not to have been delivered (web `queuedTurnsOutsideTranscript`): a receipt
+ * of their own words whose turn the window holds no word of — no echo, which is drawn with how it came out instead, and no runner's
+ * `user_delivery` that it failed or went unconfirmed. Drawn at the end of the queued tail, as the one place they are drawn at all. What
+ * Orbit filed keeps showing what it showed: nothing.
+ */
+internal fun undeliveredTail(rows: List<JsonObject>, events: List<RunEvent>): List<QueuedTurn> {
+    val spoken = events.mapNotNull { event ->
+        when {
+            event.type == "user" -> event.turnId
+            event.type == "user_delivery" && SteerDelivery.undelivered(event.fields.string("delivery")) -> event.fields.string("turnId") ?: event.turnId
+            else -> null
+        }
+    }
+    return rows.mapNotNull { row ->
+        val turnId = row.text("turnId")
+        if (!row.isReceipt() || turnId == null || spoken.any { ObjectId.same(it, turnId) }) return@mapNotNull null
+        listedTurn(row).takeIf { it.readersOwn }
+    }
+}
+
+/** One row of the queue's listing as the turn it will be — or, for a receipt, the turn it was. */
+private fun listedTurn(row: JsonObject): QueuedTurn {
+    val turnId = row.text("turnId")
+    val content = row.text("content").orEmpty()
+    val event = RunEvent("user", 0, echoPayload(row), turnId)
+    val cards = transcriptCards(event)
+    val wake = io.orbitd.android.core.cards.queuedWake(content)
+    val orbits = row["authoredByOrbit"] == JsonPrimitive(true) || SteerDelivery.cardKeys.any { row[it] != null && row[it] != JsonNull }
+    return QueuedTurn(turnId, row.text("kind") == "steer", event, cards, wake, cards.firstOrNull { it.key.endsWith(":watch") }?.source,
+        shell = row.text("kind") == "shell", createdAt = row.text("createdAt"),
+        readersOwn = turnId != null && !orbits && cards.isEmpty() && wake == null,
+        delivery = row.text("delivery"), deliveryCode = row.text("deliveryCode"), deliveryReason = row.text("deliveryReason"))
 }
 
 /**
@@ -92,11 +123,17 @@ private fun echoPayload(row: JsonObject) = buildJsonObject {
 }
 
 /** One queued turn at the transcript's end: its card (dashed while it can still be withdrawn), its reply cards, its wake's line, or its
- * words — then the queue's own line: "Queued" and "Cancel", or, for a steer on its way into the running turn, how far it got. */
+ * words — then the queue's own line: "Queued" and "Cancel", or, for a steer on its way into the running turn, how far it got. A steer
+ * known only from its receipt says how it came out and why, with [putBack], its words' way back to the composer (web `QueuedTurnMeta`). */
 @Composable
-internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabled: Boolean, cancel: (String) -> Unit) {
+internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabled: Boolean, putBack: (() -> Unit)? = null,
+    cancel: (String) -> Unit) {
     val withdraw: (() -> Unit)? = if (turn.cancelable && cancelEnabled) ({ cancel(turn.turnId!!) }) else null
-    val foot = @Composable { if (withdraw != null) QueuedFoot(cancel = withdraw) else if (turn.steer) SteerLine() }
+    val foot = @Composable {
+        if (turn.delivery != null) SteerStateLine(SteerOutcome(turn.delivery, turn.deliveryReason),
+            why = SteerDelivery.failureExplanation(turn.deliveryCode, turn.deliveryReason), putBack = putBack)
+        else if (withdraw != null) QueuedFoot(cancel = withdraw) else if (turn.steer) SteerLine()
+    }
     Column(Modifier.fillMaxWidth().testTag(turn.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         when {
             turn.wake != null -> BackgroundWakeLine(turn.wake, null, steerState = if (turn.steer) "Sending…" else null, queued = turn.cancelable,
