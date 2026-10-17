@@ -2654,12 +2654,13 @@ test('an anchor check whose write waits six seconds is recorded: its transaction
   const ids = await anchoredEntries(h, fx.spaceId, '0b5e5000', THREE_PATHS);
   const hold = await holdEntryWrite(ids[1]!, 6_000);
   try {
-    await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), { checkAnchor: checkAnchorAgainstRepo });
+    // Rounds enough for the hold and the run around it on a fast host, where a round is a few tens of milliseconds.
+    await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), { checkAnchor: checkAnchorAgainstRepo }, 2_000);
   } finally {
     await hold.release();
   }
   const waited = await hold.waited;
-  assert.ok(waited >= 6_000, `the entry's UPDATE was held ${waited} ms: past the 5 s Prisma gives a transaction by default`);
+  assert.ok(waited > 5_000, `the entry's UPDATE was held ${waited} ms: past the 5 s Prisma gives a transaction by default`);
 
   const job = await jobOf(h, fx.jobId);
   assert.equal(job.state, 'succeeded', `the anchor check's transaction expired: ${job.error ?? ''}`);
@@ -2697,7 +2698,8 @@ test('an anchor check held past its budget times out as P2028, which is the plat
   } finally {
     await hold.release();
   }
-  assert.ok((await hold.waited) >= 16_000);
+  const waited = await hold.waited;
+  assert.ok(waited > 15_000, `the entry's UPDATE was held ${waited} ms: past the transaction's 15 s`);
 
   const first = await jobAfterStop(h, fx.jobId);
   assert.equal(first.state, 'queued', `a transaction the database closed under the run is the platform's to retry: ${first.error ?? ''}`);
