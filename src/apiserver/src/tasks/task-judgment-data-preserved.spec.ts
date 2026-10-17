@@ -2317,6 +2317,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every
       // stored key reads unchecked.
       '0428_model_provider_key_check',
+      // A plan job asked for by an administrator for support (0429, contracts/wiki.contract.json
+      // `plan.jobs.rebuild`): `wiki_plan_job_trigger_chk` dropped and re-added with one more value,
+      // `support`, which every stored row (`space_created` or `owner`) satisfies — inside a DO block that
+      // replaces it only while it does not read that value yet. Only `wiki_plan_job` is named: no `task`,
+      // `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it is not
+      // another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0429_wiki_plan_job_support_trigger',
       // A managed runner mapping's run backend (0430, docs/managed-runner-design.md "Implementation record:
       // Docker backend"): one TEXT NOT NULL column on `managed_runner` (0399's table) with the constant
       // default 'kubernetes' — catalog-only — and a CHECK every stored row satisfies (the two backends).

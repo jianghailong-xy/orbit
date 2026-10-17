@@ -15,10 +15,12 @@ package main
 // its code-tracking database, the user's own MCP servers, hooks and rules (§8.1, §8.4) — so the CLI runs
 // with a HOME of the session's, and the runner user's ~/.cursor and ~/.config/cursor are never touched.
 // The commands the agent runs are another matter: they inherit the CLI's whole environment, and must
-// see the real HOME. The CLI runs every command, and the login-shell snapshot before it, in $SHELL
-// when that path names bash (§8.3), so SHELL is orbit-bash, a wrapper that puts the real HOME back and
-// drops the CLI's own variables before it execs bash: approach A of D4 (§8.4). That the pinned CLI
-// picks the wrapper up is still to be measured with a real prompt (§17.1, item 3).
+// see what a session of any other engine shows them. The CLI runs every command, and the login-shell
+// snapshot before it, in $SHELL when that path names bash and not zsh (§8.3), so SHELL is the session's
+// orbit-bash (writeCursorShellWrapper), a wrapper that puts the real HOME back, gives back the XDG
+// directories and the variables Orbit sets only for the CLI as any other engine's session has them, and
+// drops the CLI's credentials and directories before it execs bash: approach A of D4, which P0c measured
+// on the pinned CLI with a real prompt (§8.4).
 //
 // The environment comes in three layers, each over the ones before (§16.3): the allowlist of the
 // runner's own (cursorBaseEnv), of which nothing else is passed on; the session's agent environment —
@@ -28,6 +30,11 @@ package main
 // no direnv, no debug log, the session's own Orbit variables, and the credential Orbit chose for it
 // (cursorLaunchCredential). The agent's commands see the workspace's variables too: orbit-bash takes away
 // only the CLI's own.
+//
+// A session dispatched onto one of the runner's Cursor CLI accounts (ORBIT_CURSOR_ACCOUNT_DIR) borrows that
+// account's login: the token its sign-in saved, handed over as CURSOR_AUTH_TOKEN and held in memory
+// (cursor_account_slot.go). Nothing else of the account's directory is the session's: its conversation
+// store and the CLI's settings stay in the session's own directories, whichever account it runs on.
 //
 // A Cursor API key saved in Orbit arrives as ORBIT_CURSOR_API_KEY (cursorAPIKeyVar), and the CLI gets
 // it as its own CURSOR_API_KEY (§16.3), held in memory: it trades the key for a token itself and writes
@@ -46,6 +53,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -167,7 +175,7 @@ func (s CursorLaunchSpec) MarshalJSON() ([]byte, error) {
 // cursorACPArgs are the arguments every `agent acp` Orbit starts carries (§16.3): no self-update — ACP
 // runs no update check today (§1.1), and the flag keeps it so whatever a later build adds — and no
 // codebase indexing, D1's default, which uploads whole files from some accounts (§14.3). The flags a
-// permission mode adds are the driver's.
+// permission mode adds follow them (cursorPermissionArgs).
 func cursorACPArgs() []string {
 	return []string{"acp", "--disable-auto-update", "--disable-indexing"}
 }
@@ -225,7 +233,7 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 		return CursorLaunchSpec{}, errors.New("CURSOR_CONFIG_CONFLICT: the session's working directory must be a directory")
 	}
 	spec := CursorLaunchSpec{
-		Executable: exe, Args: cursorACPArgs(), Cwd: cwd,
+		Executable: exe, Args: append(cursorACPArgs(), cursorPermissionArgs(job.Agent.PermissionMode)...), Cwd: cwd,
 		ConfigDir: filepath.Join(dir, "config"), DataDir: filepath.Join(dir, "data"), Home: filepath.Join(dir, "home"),
 		Version: cursorSupportedVersion,
 	}
@@ -237,7 +245,7 @@ func prepareCursorLaunch(job *ClaimedSession, execDir, exe, dir string) (CursorL
 	if err := writeCursorSessionConfig(spec.ConfigDir); err != nil {
 		return CursorLaunchSpec{}, err
 	}
-	shell, err := writeCursorShellWrapper()
+	shell, err := writeCursorShellWrapper(dir, job.Agent.Env)
 	if err != nil {
 		return CursorLaunchSpec{}, fmt.Errorf("CURSOR_CONFIG_CONFLICT: cannot write the shell Cursor CLI runs commands in: %w", err)
 	}
@@ -303,19 +311,30 @@ func cursorOverlay(env []string, values map[string]string) []string {
 }
 
 // cursorLaunchCredential is the credential Orbit chooses for the session's CLI, as the variable the CLI
-// reads it from and its value (§2.3, §16.3): the Cursor API key the session was dispatched (P2); none of
-// Orbit's when the workspace's own variables bring a CURSOR_API_KEY or a CURSOR_AUTH_TOKEN, as the
-// control plane's sign-in preflight counts them (hasInjectedCredentials reads the same); else the login
-// saved for the runner's Default account (§16.2), as a token. Nothing at all is a session that cannot
-// sign in, which the driver refuses before anything starts.
+// reads it from and its value (§2.3, §16.3): the Cursor API key the session was dispatched (P2), else the
+// login of the added account it was dispatched onto, as a token — either one Orbit's choice, over any key
+// or token of the workspace's; none of Orbit's when the workspace's own variables bring a CURSOR_API_KEY
+// or a CURSOR_AUTH_TOKEN, as the control plane's sign-in preflight counts them (hasInjectedCredentials
+// reads the same); else the login saved for the runner's Default account (§16.2), as a token. Nothing at
+// all is a session that cannot sign in, which the driver refuses before anything starts. An added account
+// that is not signed in, or whose sign-in has expired, refuses the session: it never falls back to another
+// account's login.
 func cursorLaunchCredential(job *ClaimedSession) (string, string, error) {
 	if key := cursorSessionKey(job); key != "" {
 		return "CURSOR_API_KEY", key, nil
 	}
 	env := job.Agent.Env
-	if dir := strings.TrimSpace(env[cursorAccountDirVar]); dir != "" && filepath.Clean(dir) != filepath.Clean(cursorDefaultAccountDir()) {
-		return "", "", errors.New("Failed to authenticate: this Cursor CLI session runs on an account added to this runner, " +
-			"and this runner cannot run sessions on added Cursor CLI accounts yet")
+	dir, err := cursorSessionAccountDir(env)
+	if err != nil {
+		return "", "", errors.New("Failed to authenticate: " + err.Error())
+	}
+	if def, err := filepath.Abs(cursorDefaultAccountDir()); err != nil || dir != def {
+		token, err := cursorAccountLogin(dir)
+		if err != nil {
+			return "", "", errors.New("Failed to authenticate: the Cursor CLI account this session runs on " + err.Error() +
+				" — sign it in again from here, or pick another account")
+		}
+		return "CURSOR_AUTH_TOKEN", token, nil
 	}
 	if strings.TrimSpace(env["CURSOR_API_KEY"]) != "" || strings.TrimSpace(env["CURSOR_AUTH_TOKEN"]) != "" {
 		return "", "", nil
@@ -330,11 +349,22 @@ func cursorLaunchCredential(job *ClaimedSession) (string, string, error) {
 	return "CURSOR_AUTH_TOKEN", token, nil
 }
 
+// cursorSignedOutMessage is how a session that has no credential to run Cursor CLI on ends: no key of its
+// own, and the Default account not signed in.
+func cursorSignedOutMessage() string {
+	return "Failed to authenticate: Cursor CLI is not signed in on this runner, and this session brings no Cursor API key. " +
+		"Sign in with: " + cursorLoginHint()
+}
+
 // writeCursorSessionConfig sets what Orbit owns in the session's cli-config.json and leaves the rest —
-// the allow-always rules the CLI saves there, the model it last ran — as the CLI wrote it. `channel:
-// static` turns the CLI's update check off; ACP runs none today (§1.1), and this keeps a later build
-// that brings one into ACP from running it (unmeasured, §17.1 item 9). The pinned build keeps the
-// value and fills in its own defaults around it (measured).
+// the model it last ran, the CLI's own preferences — as the CLI wrote it. `channel: static` turns the
+// CLI's update check off; ACP runs none today (§1.1), and this keeps a later build that brings one into
+// ACP from running it (unmeasured, §17.1 item 9). The pinned build keeps the value and fills in its own
+// defaults around it (measured). What decides that something runs unasked is Orbit's as well
+// (cursor_permissions.go): the allowlist goes back to the CLI's own default — `ls`, no deny rules — with
+// approval by allowlist and no web search accepted unasked (§5.3), so no rule that did not come from a
+// person's answer on Orbit's card lets a command, a tool or a search run unasked. Orbit never answers with
+// Cursor's allow-always, so the CLI never adds one of its own.
 func writeCursorSessionConfig(configDir string) error {
 	path := filepath.Join(configDir, "cli-config.json")
 	config := map[string]interface{}{}
@@ -349,10 +379,21 @@ func writeCursorSessionConfig(configDir string) error {
 	default:
 		return fmt.Errorf("CURSOR_CONFIG_CONFLICT: the session's %s cannot be read: %w", path, err)
 	}
-	if config["channel"] == "static" {
+	owned := map[string]interface{}{
+		"channel":             "static",
+		"permissions":         map[string]interface{}{"allow": []interface{}{"Shell(ls)"}, "deny": []interface{}{}},
+		"approvalMode":        "allowlist",
+		"autoAcceptWebSearch": false,
+	}
+	changed := false
+	for key, value := range owned {
+		if !reflect.DeepEqual(config[key], value) {
+			config[key], changed = value, true
+		}
+	}
+	if !changed {
 		return nil
 	}
-	config["channel"] = "static"
 	out, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return err
@@ -360,30 +401,103 @@ func writeCursorSessionConfig(configDir string) error {
 	return writeFileAtomically(path, append(out, '\n'), configFilePerm)
 }
 
-// writeCursorShellWrapper writes orbit-bash, the shell the CLI runs an agent's commands in (see the top
-// of this file), and returns its path, which has to name bash or the CLI looks for bash on PATH
-// instead (§8.3). The real HOME is the runner user's, written into the script.
-func writeCursorShellWrapper() (string, error) {
+// cursorCommandRestored are variables the CLI's environment holds for the CLI's own sake, which a command
+// the agent runs gets back as a session of any other engine has them: Orbit's settings for the CLI (§16.3)
+// and the compile cache Cursor's launcher points into the CLI's HOME (§8.4). SHELL is not among them: it
+// stays orbit-bash, so a command that starts $SHELL gets the same environment back.
+var cursorCommandRestored = []string{"AGENT_CLI_CREDENTIAL_STORE", "CURSOR_AGENT_DISABLE_DEBUG_LOG", "DIRENV_DISABLE",
+	"NODE_COMPILE_CACHE", "NO_OPEN_BROWSER"}
+
+// cursorCommandXDG are the XDG base-directory variables, which the CLI's allowlist leaves out: restored for
+// a command whether or not anything sets them, beside every other XDG_ variable the runner or the
+// workspace sets.
+var cursorCommandXDG = []string{"XDG_CACHE_HOME", "XDG_CONFIG_DIRS", "XDG_CONFIG_HOME", "XDG_DATA_DIRS", "XDG_DATA_HOME",
+	"XDG_RUNTIME_DIR", "XDG_STATE_HOME"}
+
+// cursorCommandDropped are the CLI's credentials and directories, which no command gets (§8.4).
+var cursorCommandDropped = []string{"CURSOR_API_KEY", "CURSOR_AUTH_TOKEN", "CURSOR_CONFIG_DIR", "CURSOR_DATA_DIR"}
+
+var shellNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// cursorCommandEnv is what orbit-bash gives a command of the variables it restores: the names, sorted,
+// and the value of each that a session of any other engine has (envWithAgent) — the workspace's, else
+// the runner's own; one in neither is left unset.
+func cursorCommandEnv(agentEnv map[string]string) ([]string, map[string]string) {
+	names := map[string]bool{}
+	for _, name := range append(append([]string(nil), cursorCommandRestored...), cursorCommandXDG...) {
+		names[name] = true
+	}
+	for _, entry := range os.Environ() {
+		if name, _, _ := strings.Cut(entry, "="); strings.HasPrefix(name, "XDG_") {
+			names[name] = true
+		}
+	}
+	for name := range agentEnv {
+		if strings.HasPrefix(name, "XDG_") {
+			names[name] = true
+		}
+	}
+	keys := make([]string, 0, len(names))
+	values := map[string]string{}
+	for name := range names {
+		if !shellNamePattern.MatchString(name) {
+			continue
+		}
+		keys = append(keys, name)
+		if value, ok := agentEnv[name]; ok {
+			values[name] = value
+		} else if value, ok := os.LookupEnv(name); ok {
+			values[name] = value
+		}
+	}
+	sort.Strings(keys)
+	return keys, values
+}
+
+// cursorShellPathUsable is whether the CLI runs its commands through a shell at path: it takes $SHELL only
+// when the path names bash, and treats it as zsh first when the path names zsh anywhere (§8.3; index.js
+// checks the whole path with includes("zsh") before includes("bash")).
+func cursorShellPathUsable(path string) bool {
+	return strings.Contains(path, "bash") && !strings.Contains(path, "zsh")
+}
+
+// writeCursorShellWrapper writes the session's orbit-bash, the shell the CLI runs the agent's commands in
+// (see the top of this file), in the session's Cursor CLI directory dir, and returns its path. The real
+// HOME is the runner user's; what else it restores is the session's (cursorCommandEnv), so each session
+// has a wrapper of its own. A path the CLI would not take as bash is refused: the CLI would run the
+// commands in a bash of its own choosing, on the CLI's HOME and with its credentials.
+func writeCursorShellWrapper(dir string, agentEnv map[string]string) (string, error) {
 	home := userHome()
 	if home == "" {
 		return "", errors.New("the runner user's home directory is unknown")
 	}
-	dir := filepath.Join(cursorRoot(), "bin")
-	if err := ensurePrivateDir(dir); err != nil {
+	bin := filepath.Join(dir, "bin")
+	path := filepath.Join(bin, "orbit-bash")
+	if !cursorShellPathUsable(path) {
+		return "", fmt.Errorf("Cursor CLI would not run commands through %s: it takes $SHELL only when that path names bash and not zsh", path)
+	}
+	if err := ensurePrivateDir(bin); err != nil {
 		return "", err
 	}
-	script := "#!/bin/sh\n" +
-		"# Orbit: the shell Cursor CLI runs an agent's commands in. The CLI itself runs with a HOME of\n" +
-		"# the session's own; its commands get the real one back, without the CLI's own variables.\n" +
+	keys, values := cursorCommandEnv(agentEnv)
+	var script strings.Builder
+	script.WriteString("#!/bin/sh\n" +
+		"# Orbit: the shell Cursor CLI runs this session's commands in. The CLI runs with a HOME of the\n" +
+		"# session's own; its commands get the real one back, the environment a session of any other engine\n" +
+		"# gives them, and none of the CLI's credentials or directories.\n" +
 		"HOME=" + shellQuote(home) + "\n" +
 		"export HOME\n" +
-		"unset CURSOR_API_KEY CURSOR_AUTH_TOKEN XDG_CONFIG_HOME CURSOR_CONFIG_DIR CURSOR_DATA_DIR\n" +
-		"exec " + shellQuote(cursorBash()) + " \"$@\"\n"
-	path := filepath.Join(dir, "orbit-bash")
-	if current, err := os.ReadFile(path); err == nil && string(current) == script {
+		"unset " + strings.Join(cursorCommandDropped, " ") + " " + strings.Join(keys, " ") + "\n")
+	for _, key := range keys {
+		if value, ok := values[key]; ok {
+			script.WriteString(key + "=" + shellQuote(value) + "\n" + "export " + key + "\n")
+		}
+	}
+	script.WriteString("exec " + shellQuote(cursorBash()) + " \"$@\"\n")
+	if current, err := os.ReadFile(path); err == nil && string(current) == script.String() {
 		return path, nil
 	}
-	if err := writeFileAtomically(path, []byte(script), 0o700); err != nil {
+	if err := writeFileAtomically(path, []byte(script.String()), 0o700); err != nil {
 		return "", err
 	}
 	return path, nil

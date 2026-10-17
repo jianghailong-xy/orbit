@@ -7396,7 +7396,7 @@ model WikiPlanJob {
   space        WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_plan_job_space_fkey")
   /// `draft` | `revise` | `build`.
   kind         String
-  /// `space_created` | `owner`: the fact that asked for it.
+  /// `space_created` | `owner` | `support` (an administrator, 0429): what asked for it.
   trigger      String
   /// A revision's instructions: the owner's words.
   instructions String?

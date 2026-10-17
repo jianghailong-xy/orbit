@@ -319,10 +319,12 @@ public enum WikiPlanJobKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// The fact that asked for a job (contract `plan.jobs.triggers`): the space was created, or its owner asked.
+/// The fact that asked for a job (contract `plan.jobs.triggers`): the space was created, its owner asked, or an
+/// administrator asked for the build of the version in force again, for support (`plan.jobs.rebuild`).
 public enum WikiPlanJobTrigger: String, Codable, Sendable, CaseIterable {
     case spaceCreated = "space_created"
     case owner
+    case support
     case unknown
 
     public init(from decoder: Decoder) throws {

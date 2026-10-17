@@ -29,7 +29,7 @@ export const sharedCases = {
     'P1 cursor is the seventh engine under its CLI name, with an opaque model space defaulting to Auto',
     'P1 a runner sign-in to cursor runs on cursor alone, and no other credential runs on cursor',
     'P1 cursor is one resident JSON-RPC process per session with no mid-turn steer and no fast lane',
-    'P1 cursor keeps Accept Edits, Plan, Don’t Ask and Bypass, and refuses Default and Auto with notes',
+    'P5c cursor keeps Accept Edits, Plan, Auto, Don’t Ask and Bypass, and refuses Default with a note',
     'P1 the six existing engines keep their names, transports, steer and permission tables',
   ],
   // The compatibility table every client and the server share (docs/provider-engine-contract.md §2.1).

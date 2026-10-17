@@ -1677,6 +1677,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside, and none after: the worker\'s next pass claims the job; no task is published.',
     answer: 'Typed 503 from the global boundary; the plan job stays queued or held, and the owner\'s next request or settings change asks again.',
   },
+  // The documents of a version in force asked for again (contracts/wiki.contract.json `plan.jobs.rebuild`, migration
+  // 0429): by its owner, or by an administrator for support, who is recorded with why.
+  {
+    at: 'wiki/wiki-plan-job.ts#requestRebuild',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s wiki_space row (rank 60) by SELECT … FOR NO KEY UPDATE — the lock a confirmation and an edit of the plan take — before any build of it is read; then its wiki_plan_job builds read under it, and either nothing written, one UPDATE of the space\'s waiting build by id while it still waits (pointing it at the version in force), or one INSERT of a queued build (60; its composite foreign key takes FOR KEY SHARE on the space row this transaction holds). Then, for an administrator\'s request, one INSERT of an `activity` row, which has no foreign key and no trigger. Ascending throughout.',
+    identity: 'The space and the version in force. Under the space lock the version\'s own build that has not ended, or the space\'s waiting build, is read first and answers the request; only with neither is a build written — so of two requests at once the second, waiting on the lock, finds the first one\'s. A confirmation\'s request, which takes no lock, can record the waiting build meanwhile: the INSERT then meets the partial unique index of waiting builds (P2002), the closure rolls back whole, and the caller asks once more and is answered with that build.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The builds are re-read under the space lock inside the closure and the answer re-derived from them, and the Activity row is written by the same attempt that decided the answer, so a re-run either finds its own committed build or writes the same rows; a rolled-back attempt takes its build and its Activity row with it.',
+    effects: 'None inside. After the commit and outside the closure: the build is asked to be made (advanceWikiPlanJob — the server\'s maker, makeOnServer, in a transaction of its own), and one `wiki.changed` for the space (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary with nothing written; the owner or the administrator asks again, and a build recorded meanwhile answers them.',
+  },
   // The rollback sweep's per-job settle (contracts/wiki.contract.json `jobs.executor.rollback`, the
   // 2026-10-08 incident): one job's whole cancellation, with every row that waits on its conclusion.
   {
