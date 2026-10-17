@@ -48,9 +48,14 @@ type cursorRunOptions struct {
 	recording, session string // the recorded process replayed; the one session of a recording of two
 	// script adjusts how the recording is replayed: how the CLI ends, what `agent models` says.
 	script func(*fakeCursorACPScript)
+	// replay is handed the recorded CLI before the session starts on it.
+	replay func(*cursorReplay)
 	// first is delivered at once; then is asked, after each turn-complete, what to deliver next.
 	first []RunInboxResponse
 	then  func(completed int, last TurnCompleteRequest) []RunInboxResponse
+	// stopEngine and stopRunner end, at the first event each holds for, the session's engine context —
+	// as a session cancel or an idle recycle ends it — and the runner's shutdown context.
+	stopEngine, stopRunner func(event cursorEvent) bool
 	// onEvent is asked, as each event goes out, what to deliver next: a message, a steer or an interrupt
 	// that arrives while a turn runs. It is called from more than one goroutine.
 	onEvent func(event cursorEvent) []RunInboxResponse
@@ -123,6 +128,9 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 		opts.script(&script)
 	}
 	fake := newCursorReplayScript(t, script)
+	if opts.replay != nil {
+		opts.replay(fake)
+	}
 	env := opts.env
 	if env == nil {
 		env = map[string]string{"CURSOR_API_KEY": cursorTestKey}
@@ -206,16 +214,27 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 		}
 		return nil
 	}
+	engineCtx, stopEngine := context.WithCancel(ctx)
+	defer stopEngine()
+	shutdownCtx, stopRunner := context.WithCancel(context.Background())
+	defer stopRunner()
 	emitFor := func(turn, typ string, payload map[string]interface{}) {
 		events.emitFor(turn, typ, payload)
+		event := cursorEvent{turn, typ, payload}
+		if opts.stopEngine != nil && opts.stopEngine(event) {
+			stopEngine()
+		}
+		if opts.stopRunner != nil && opts.stopRunner(event) {
+			stopRunner()
+		}
 		if opts.onEvent != nil {
-			for _, next := range opts.onEvent(cursorEvent{turn, typ, payload}) {
+			for _, next := range opts.onEvent(event) {
 				inbox <- next
 			}
 		}
 	}
 	status, ended, reload := providerRuntimeFor(runtimeProvider(job)).run(sessionProcessArgs{
-		ctx: ctx, shutdownCtx: context.Background(), t: NewTransport(server.URL, "synthetic-runner-token"),
+		ctx: engineCtx, shutdownCtx: shutdownCtx, t: NewTransport(server.URL, "synthetic-runner-token"),
 		job: job, execDir: execDir, scratchDir: run.scratch, cursorLaunchSpec: &spec,
 		emit:    func(typ string, payload map[string]interface{}) { emitFor("", typ, payload) },
 		emitFor: emitFor, setTurn: func(string) {}, completeTurn: complete,

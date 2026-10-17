@@ -80,6 +80,7 @@ func (e *cursorCallError) Error() string { return e.text }
 
 type cursorACPClient struct {
 	cmd     *exec.Cmd
+	scope   *sessionScope // what the process runs in (session_scope.go): everything it starts ends with it
 	cancel  context.CancelFunc
 	stdin   io.WriteCloser
 	mapper  *cursorEventMapper
@@ -138,14 +139,17 @@ func startCursorACP(ctx context.Context, spec CursorLaunchSpec, mapper *cursorEv
 		cancel()
 		return nil, err
 	}
-	if err := startSessionProcess(cmd); err != nil {
+	// In a scope of its own: the CLI runs its commands detached, and one it leaves behind when it ends —
+	// above all when it is killed mid-turn — must end with the session too (§3.4).
+	scope, err := startInSessionScope(cmd)
+	if err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
 		_ = stderr.Close()
 		cancel()
 		return nil, err
 	}
-	a := &cursorACPClient{cmd: cmd, cancel: cancel, stdin: stdin, mapper: mapper, secrets: cursorLaunchSecrets(spec.Env),
+	a := &cursorACPClient{cmd: cmd, scope: scope, cancel: cancel, stdin: stdin, mapper: mapper, secrets: cursorLaunchSecrets(spec.Env),
 		pending: map[string]cursorPending{}, writes: make(chan cursorWrite, 16), done: make(chan struct{}), readDone: make(chan struct{}),
 		stderrDone: make(chan struct{}), reapNow: make(chan struct{}), exited: make(chan struct{})}
 	a.wg.Add(4)
@@ -510,7 +514,8 @@ func (a *cursorACPClient) prompt(ctx context.Context, sessionID string, blocks [
 }
 
 // dispose ends the process the way it ends cleanly — SIGTERM, which it handles, and its whole tree
-// after a grace — since closing stdin does not end it (§3.4). What the CLI wrote before it exited is
+// after a grace — since closing stdin does not end it (§3.4). On Linux its exit is its scope's: by then
+// whatever it started has gone too, the commands it detached among them. What the CLI wrote before it exited is
 // read first: reaping the process closes its stdout, and a title can still be on its way after the last
 // turn (§3.2).
 func (a *cursorACPClient) dispose() {
@@ -529,6 +534,7 @@ func (a *cursorACPClient) dispose() {
 	}
 	a.cancel()
 	a.wg.Wait()
+	a.scope.close()
 }
 
 // redact masks the session's credential in text Cursor CLI wrote.
