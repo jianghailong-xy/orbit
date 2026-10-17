@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunnerApiController } from './runner-api.controller';
 import { noSessionRequests } from '../test-support/prisma-transaction-double';
+import { CURRENT_WORK_INTERRUPTED } from '../sessions/current-work-delivery';
 
 /**
  * A steer settles only itself.
@@ -23,9 +24,19 @@ function harness(
   pendingCurrentWork = false,
   /** What the steer being completed was filed as. Null is the legacy no-intent row. */
   steerIntent: 'CURRENT_WORK' | null = null,
+  {
+    stopFiled = false,
+    steerKey = 'client-turn',
+  }: {
+    /** Somebody pressed Stop after the target turn was filed (`stopOvertookTarget`). */
+    stopFiled?: boolean;
+    /** The steer's own clientTurnId: a `session-reply:` key makes it a reply steer. */
+    steerKey?: string;
+  } = {},
 ) {
   const sessionWrites: Record<string, unknown>[] = [];
   const turnWrites: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
+  const requestWrites: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
   const inboxWakes: string[] = [];
   const queueChanges: string[] = [];
   const published: Array<{ type: string; turnId?: string; payload: Record<string, unknown> }> = [];
@@ -36,7 +47,16 @@ function harness(
     // over can never be answered, so it stops being a question there
     // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
-    sessionRequest: noSessionRequests(),
+    sessionRequest: {
+      ...noSessionRequests(),
+      updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        requestWrites.push(args);
+        return { count: 1 };
+      },
+    },
+    // What a wake steer a Stop wrote off carried (wake-turn-withdraw.ts). No fixture here files one.
+    backgroundJobWake: { deleteMany: async () => ({ count: 0 }) },
+    sessionScheduledWakeup: { updateMany: async () => ({ count: 0 }) },
     // No confirmation request was put to this session for review (owner-confirmation-review.ts T5).
     taskOwnerConfirmationReview: { findMany: async () => [] },
     conversationTurn: {
@@ -48,9 +68,13 @@ function harness(
                 sendIntent: steerIntent,
                 targetTurnId: steerIntent === 'CURRENT_WORK' ? CURRENT_WORK_ID : null,
                 deliveryStatus: null,
+                clientTurnId: steerKey,
+                ...(steerIntent === 'CURRENT_WORK' ? { targetTurn: { seq: 1 } } : {}),
               }
             : null;
         }
+        // The Stop, when one was filed after the target.
+        if (where.kind === 'interrupt') return stopFiled ? { id: 'stop' } : null;
         return {
           id: TURN_ID,
           kind,
@@ -62,14 +86,23 @@ function harness(
           coordinatorContextKey: null,
         };
       },
-      findMany: async () => pendingCurrentWork
-        ? [{
-            id: CURRENT_WORK_ID,
-            content: 'late adjustment',
-            targetTurnId: TURN_ID,
-            attachments: [],
-          }]
-        : [],
+      findMany: async ({ where }: { where?: { id?: { in?: string[] }; clientTurnId?: { startsWith?: string } } } = {}) => {
+        // The steer being completed, read back by id when a Stop writes it off.
+        if (kind === 'steer') {
+          const prefix = where?.clientTurnId?.startsWith;
+          return where?.id?.in?.includes(TURN_ID) && (!prefix || steerKey.startsWith(prefix))
+            ? [{ id: TURN_ID, clientTurnId: steerKey, targetTurnId: CURRENT_WORK_ID, status: 'IN_FLIGHT' }]
+            : [];
+        }
+        return pendingCurrentWork
+          ? [{
+              id: CURRENT_WORK_ID,
+              content: 'late adjustment',
+              targetTurnId: TURN_ID,
+              attachments: [],
+            }]
+          : [];
+      },
       findUnique: async () => ({ kind }),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         turnWrites.push(args);
@@ -122,7 +155,7 @@ function harness(
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
-  return { controller, sessionWrites, turnWrites, inboxWakes, queueChanges, published };
+  return { controller, sessionWrites, turnWrites, requestWrites, inboxWakes, queueChanges, published };
 }
 
 const complete = (h: ReturnType<typeof harness>, status: string, result?: string) =>
@@ -256,4 +289,75 @@ test('a legacy re-filed steer keeps the row shape it always had', async () => {
   assert.equal(write?.data.kind, 'message');
   assert.equal(write?.data.sendIntent, undefined);
   assert.equal(write?.data.targetTurnId, undefined);
+});
+
+// ── Stop (owner, 2026-10-16: option A) ─────────────────────────────────────────────────────────
+// A message still waiting to be read when somebody stops its turn is not delivered, and is never put
+// back in the queue, where it would run as a turn of its own straight after the Stop.
+
+/** The receipt written for the steer `id`, if any. */
+const receiptFor = (h: ReturnType<typeof harness>, id: string) =>
+  h.turnWrites.find((write) => (write.where.id as { in?: string[] } | undefined)?.in?.includes(id));
+
+test('a target that ended interrupted writes off its unread CURRENT_WORK instead of re-filing it', async () => {
+  const h = harness('message', true);
+
+  await complete(h, 'INTERRUPTED');
+
+  const receipt = receiptFor(h, CURRENT_WORK_ID);
+  assert.equal(receipt?.data.kind, undefined, 'the unread steer was re-filed as a turn of its own');
+  assert.equal(receipt?.data.status, 'ANSWERED');
+  assert.equal(receipt?.data.deliveryStatus, 'FAILED');
+  assert.equal(receipt?.data.deliveryFailureCode, CURRENT_WORK_INTERRUPTED);
+  assert.ok(!h.turnWrites.some((write) => write.data.kind === 'message' && write.data.sendIntent === 'NEXT_TURN'));
+  assert.equal(h.sessionWrites[0].status, RunStatus.AWAITING_INPUT);
+  assert.deepEqual(h.queueChanges, [SESSION_ID]);
+});
+
+test('a Stop filed after the target overtakes its unread CURRENT_WORK even when the target ended on its own', async () => {
+  // The Stop lost the race to the turn's own end; the steer was still waiting to be read when it was pressed.
+  const h = harness('message', true, null, { stopFiled: true });
+
+  await complete(h, 'SUCCEEDED');
+
+  const receipt = receiptFor(h, CURRENT_WORK_ID);
+  assert.equal(receipt?.data.kind, undefined);
+  assert.equal(receipt?.data.deliveryFailureCode, CURRENT_WORK_INTERRUPTED);
+});
+
+test('a CURRENT_WORK steer handed back after a Stop is written off, not filed back', async () => {
+  // A runner older than this rule hands every unread steer back, whatever ended the turn.
+  const h = harness('steer', false, 'CURRENT_WORK', { stopFiled: true });
+
+  await h.controller.turnComplete({ id: RUNNER_ID }, SESSION_ID, {
+    turnId: TURN_ID,
+    status: 'SUCCEEDED',
+    subtype: 'steer_requeue',
+    numTurns: 0,
+    costUsd: 0,
+  } as never);
+
+  const receipt = receiptFor(h, TURN_ID);
+  assert.equal(receipt?.data.deliveryStatus, 'FAILED');
+  assert.equal(receipt?.data.deliveryFailureCode, CURRENT_WORK_INTERRUPTED);
+  assert.ok(!h.turnWrites.some((write) => write.data.kind === 'message'), 'the steer was filed back after a Stop');
+  assert.deepEqual(h.inboxWakes, [], 'the inbox was woken to run it');
+  assert.equal(h.sessionWrites.length, 0);
+});
+
+test('a reply steer the runner reports undelivered after a Stop keeps its outcome for the next turn', async () => {
+  const reason = 'steer not delivered to the engine: the turn was interrupted by Stop before the engine read this message';
+  const h = harness('steer', false, 'CURRENT_WORK', { stopFiled: true, steerKey: 'session-reply:request-1:0a1b2c3d' });
+
+  await complete(h, 'FAILED', reason);
+
+  const receipt = receiptFor(h, TURN_ID);
+  assert.equal(receipt?.data.deliveryFailureCode, CURRENT_WORK_INTERRUPTED);
+  assert.equal(receipt?.data.deliveryFailureReason, reason);
+  // Held, not let go for the request worker: handed back now, it would open the turn just stopped.
+  const outcome = h.requestWrites.find((write) => 'replyHeldAt' in write.data);
+  assert.ok(outcome?.data.replyHeldAt instanceof Date, 'the outcome was let go to be handed back after the Stop');
+  assert.equal(outcome?.data.replyClientTurnId, null);
+  assert.deepEqual(outcome?.where.replyClientTurnId, { in: ['session-reply:request-1:0a1b2c3d'] });
+  assert.equal(h.sessionWrites.length, 0);
 });

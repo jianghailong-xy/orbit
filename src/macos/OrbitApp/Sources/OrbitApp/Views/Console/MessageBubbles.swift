@@ -15,6 +15,9 @@ struct UserBubbleView: View {
     /// Provided only for the queued tail (`ConsoleView`): withdraws this still-waiting message.
     /// Nil for every settled/inline bubble, so the Cancel affordance shows on queued turns alone.
     var onCancelQueued: (() -> Void)? = nil
+    /// Provided by the console's rows (`UserTurnRow`): takes back a steer nothing has read yet, and
+    /// says when that has been asked. Nil where there is no console to act through.
+    var steer: SteerControls? = nil
     @State private var expanded = false
     @State private var hovering = false
     @State private var copied = false
@@ -175,12 +178,12 @@ struct UserBubbleView: View {
     /// Anything not yet (or never) confirmed keeps its label on screen permanently; a settled turn
     /// shows its timestamp on hover alone.
     /// A steer keeps its line up after it settles too: unlike a message, whose reply is its
-    /// receipt, "Sent into this turn" is the only thing that ever says the engine took it.
+    /// receipt, "Read in this turn" is the only thing that ever says the engine took it.
     private var unconfirmed: Bool { bubble.pending || bubble.undelivered || bubble.steer }
 
     /// Touch has no hover, so a hover-gated copy button can never be reached on iOS: the only user
     /// turns copyable from a phone were the ones whose row is pinned up anyway (a steer, a send in
-    /// flight), which is why "Sent into this turn" carried a copy button and the message above it
+    /// flight), which is why "Read in this turn" carried a copy button and the message above it
     /// didn't. On iOS it is simply always shown.
     private var copyShown: Bool {
         #if os(iOS)
@@ -242,11 +245,25 @@ struct UserBubbleView: View {
                 } else if bubble.steer {
                     // A steer is not waiting its turn — it is on its way into the one already
                     // running — and the turn it joined answers something else, so this line is the
-                    // only report it gets. Shown whether or not it is still pending: "Sent into
-                    // this turn" is what says the engine took it, and it arrives after the durable
-                    // `user` event has already settled the bubble.
-                    Text(SteerDelivery.state(bubble.delivery).label)
-                        .font(.orbitMeta).foregroundStyle(.secondary)
+                    // only report it gets. Shown whether or not it is still pending: "Read in this
+                    // turn" is what says the engine took it, and it arrives after the durable
+                    // `user` event has already settled the bubble. While nothing has read it, the
+                    // way to take it back sits beside the state it would undo, styled as the queued
+                    // Cancel is (web parity: `SteerState`); once asked, the line says so in place of
+                    // both, so it cannot be pressed twice.
+                    if steer?.withdrawing == true {
+                        Text("Withdrawing…").font(.orbitMeta).foregroundStyle(.secondary)
+                    } else {
+                        Text(SteerDelivery.state(bubble.delivery).label)
+                            .font(.orbitMeta).foregroundStyle(.secondary)
+                        if let onWithdraw = steer?.onWithdraw {
+                            Button { onWithdraw() } label: {
+                                Text("Withdraw").font(.orbitMeta)
+                            }
+                            .buttonStyle(.plain).foregroundStyle(.tint)
+                            .padding(.leading, 2).contentShape(Rectangle())
+                        }
+                    }
                 } else if bubble.pending {
                     Text(bubble.queued ? "Queued" : "Sending…").font(.orbitMeta).foregroundStyle(.secondary)
                     // A queued message can be withdrawn until the runner leases it (web parity). Offered

@@ -23,9 +23,11 @@ import type { IntegrationCheckResult } from './project-integration-job';
  * moved it to this one on 2026-09-23; it is still theirs to move, not a column somebody sets.
  *
  * What the setting authorizes is a CLEAN landing and nothing wider: no conflict, every check green,
- * no integration exception standing open on the project, and main exactly where the check left it.
- * `automaticConfirmationRefusal` below is that whole definition, and the runner enforces its last
- * clause at the moment of the push (M-T12).
+ * no exception standing open on the project's merge into main, and main exactly where the check left
+ * it. `automaticConfirmationRefusal` below is that whole definition, and the runner enforces its last
+ * clause at the moment of the push (M-T12). A landing that finds main moved lands nothing, and the
+ * candidate is checked again on the new main rather than handed to the owner — up to
+ * `AUTOMATIC_MERGE_ATTEMPTS` landings, after which the owner is asked (owner decision 2026-10-15).
  *
  * And only while the project moves: a paused project merges nothing into main by itself (Pause
  * project stops "new tasks, wake-ups and merges into main"). Its checked candidates go to the owner
@@ -161,8 +163,10 @@ export interface AutomaticConfirmationFacts {
   /** The upstream tip the check ran against, and the combined tree it passed on. */
   upstreamShaChecked: string | null;
   mergeTreeSha: string | null;
-  /** OPEN `INTEGRATION_CONFLICT` / `INTEGRATION_CHECK_FAILED` / `INTEGRATION_ERROR` items of this
-   *  project — its line's own problems, and its earlier merges' into main. */
+  /** OPEN `INTEGRATION_CONFLICT` / `INTEGRATION_CHECK_FAILED` / `INTEGRATION_ERROR` items about this
+   *  project's merges into main — a candidate's check or landing that failed (`promotion_id` set).
+   *  A task that failed to land on the project branch is not among them: its work is not on the
+   *  branch, so it is in nothing a candidate carries (owner decision 2026-10-15). */
   openIntegrationItems: number;
   /** Whether the runner that will do the landing declared that it hands back a moved upstream
    *  instead of checking again and merging (`PROMOTION_AUTOMATIC_LAND`, M-T12). */
@@ -177,12 +181,13 @@ export interface AutomaticConfirmationFacts {
  * project's own branch, and Automatic is on — and a clean landing under them, in a project that is
  * not paused. Clean is: nothing conflicted, every check green, the check said which main it ran
  * against and which tree it passed (without those there is nothing to hold the landing to), and no
- * integration exception standing open on the project. The last clause, "main has not moved since
- * the check", cannot be known here — the control plane has no repository — so it is enforced where
- * it can be, at the push: the landing is sent out bound to the checked tip, and a runner that finds
- * main elsewhere lands nothing and hands the candidate back (M-T12). Which is why a runner that has
- * not said it does that is itself a refusal: on an older one, a moved main would be checked again
- * and merged, and that is not clean.
+ * exception standing open on the project's merge into main. The last clause, "main has not moved
+ * since the check", cannot be known here — the control plane has no repository — so it is enforced
+ * where it can be, at the push: the landing is sent out bound to the checked tip, and a runner that
+ * finds main elsewhere lands nothing and hands the candidate back (M-T12), to be checked again on the
+ * new main and judged by this rule again. Which is why a runner that has not said it does that is
+ * itself a refusal: an older one checks a moved main again inside the landing and merges it, with
+ * nothing of this rule read again in between.
  *
  * Every refusal is today's behaviour, unchanged: the card, exactly as it would have opened.
  */
@@ -194,7 +199,7 @@ export function automaticConfirmationRefusal(facts: AutomaticConfirmationFacts):
   if (!facts.upstreamShaChecked || !facts.mergeTreeSha) {
     return 'the check did not say which main it ran against and which tree it passed on';
   }
-  if (facts.openIntegrationItems > 0) return 'an integration exception is still open on this project';
+  if (facts.openIntegrationItems > 0) return 'an exception on this project\'s merge into main is still open';
   if (!facts.runnerHandsBackMovedUpstream) {
     return 'the runner that would land it has not said it lands nothing when main has moved since the check';
   }
@@ -216,6 +221,31 @@ export function automaticAuthorizationRefusal(
   if (!facts.coordinatorEnabled) return 'Automatic is off for this project';
   if (facts.projectPaused) return 'the project is paused, and a paused project merges nothing into main by itself';
   return null;
+}
+
+/**
+ * How many automatic landings one candidate gets before its owner is asked instead (owner decision
+ * 2026-10-15). Each one lands only onto the main its check ran against (M-T12); one that finds main
+ * moved lands nothing, and the candidate is checked again on the new main. A third landing that
+ * finds main moved says main is moving faster than a check keeps up with, and the card stops that.
+ */
+export const AUTOMATIC_MERGE_ATTEMPTS = 3;
+
+/**
+ * What a candidate still being checked will lead to when the check passes (§3.6 `onPass`): merged
+ * into main by the Automatic setting (M-T11), or put in front of the owner as the card (M-T2) — said
+ * while the check runs, so the checking card can tell the owner which of the two to expect.
+ *
+ * The clauses of `automaticConfirmationRefusal` that are about the project rather than the check:
+ * the owner's two halves, not paused, and no exception open on the merge into main. The rest is what
+ * "passes" means — nothing conflicted, every check green, the tip and the tree reported — and the
+ * runner's declaration is not weighed, because which runner reports the check is not known until
+ * one has.
+ */
+export function promotionOnPass(
+  facts: Pick<AutomaticConfirmationFacts, 'sourceKind' | 'line' | 'coordinatorEnabled' | 'projectPaused' | 'openIntegrationItems'>,
+): 'MERGE' | 'ASK' {
+  return automaticAuthorizationRefusal(facts) === null && facts.openIntegrationItems === 0 ? 'MERGE' : 'ASK';
 }
 
 /**
@@ -334,6 +364,8 @@ export interface PromotionFacts {
   /** The re-check in flight (state B), or null when none is. */
   recheck: { upstreamMovedBy: number | null; startedAt: Date; typicalMs: number | null } | null;
   execution?: ProjectPromotionView['execution'];
+  /** What the check in flight leads to (`promotionOnPass`), or null when none is. */
+  onPass?: ProjectPromotionView['onPass'];
 }
 
 export function promotionView(row: PromotionRow, facts: PromotionFacts): ProjectPromotionView {
@@ -360,6 +392,7 @@ export function promotionView(row: PromotionRow, facts: PromotionFacts): Project
     askedAt: row.state === 'CHECKING' ? null : row.updatedAt,
     recheckedAt: row.recheckedAt,
     recheck: facts.recheck,
+    onPass: facts.onPass ?? null,
     execution: facts.execution ?? null,
     decidedAt: row.decidedAt,
     merged: row.mergedSha && row.mergedAt

@@ -76,7 +76,7 @@ class ProjectSessionsDeviceTest {
 
                 // A05-7 · the row opens the project's sessions over the list.
                 compose.onNodeWithTag("project-row:$launch").performClick()
-                await { exists(hasTestTag("project-sessions")) && exists(hasText("Shipped docs")) && exists(hasTestTag("landing-row")) }
+                await { exists(hasTestTag("project-sessions")) && exists(hasText("Shipped docs")) && exists(hasTestTag("landing-card")) }
                 await { exists(hasText("Launch") and hasText("Project · 4 sessions")) }
                 compose.onNodeWithContentDescription("Back").assertExists()
                 compose.onNodeWithContentDescription("Open Project").assertExists()

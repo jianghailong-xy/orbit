@@ -16,7 +16,9 @@ export class PushController {
 
   /**
    * Register the current owner's device. APNs refreshes by token; Android also atomically
-   * replaces the installation's previous token and returns a fresh account binding key.
+   * replaces the installation's previous token and returns a fresh account binding key. Either way
+   * the row takes the caller's login session, and is pushed to only while that session lasts
+   * (docs/push-login-session-design.md).
    */
   @UseGuards(JwtAuthGuard)
   @Post('register')
@@ -25,6 +27,7 @@ export class PushController {
       platform: dto.platform ?? 'ios',
       environment: dto.environment ?? 'production',
       bundleId: dto.bundleId,
+      loginSessionId: user.credential?.kind === 'LOGIN' ? user.credential.loginSessionId ?? null : null,
     };
     if (data.platform === 'android' && (!dto.installationId || data.environment !== 'production')) {
       throw new BadRequestException('Android requires installationId and environment=production');

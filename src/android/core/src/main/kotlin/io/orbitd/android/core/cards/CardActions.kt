@@ -107,6 +107,9 @@ class CardActions(private val auth: AuthSession, private val store: RealtimeStor
                 error is ApiError && card.family == CardFamily.OWNER_CONFIRMATION && verb in setOf(CardVerb.CONFIRM_OWNER, CardVerb.SEND_BACK) ->
                     "${OwnerReview.refusalTitle(error.code)} — $reason."
                 error is ApiError && verb == CardVerb.REOPEN_TASK -> "Task status was not changed — $reason."
+                // An exception card's doors say which one refused, in the browser's headline (`ExceptionCards`).
+                error is ApiError && card.family == CardFamily.EXCEPTION && ExceptionCards.refusalHeadline(verb) != null ->
+                    "${ExceptionCards.refusalHeadline(verb)} — $reason."
                 error is ApiError && error.status in setOf(404, 409, 410) -> listOfNotNull("This card changed, expired, or was handled elsewhere.", error.code,
                     (error.body as? JsonObject)?.text("requiredAction")).joinToString("\n")
                 error is ApiError -> (error.messages.firstOrNull() ?: "The request was refused.") + (error.code?.let { "\n$it" } ?: "")

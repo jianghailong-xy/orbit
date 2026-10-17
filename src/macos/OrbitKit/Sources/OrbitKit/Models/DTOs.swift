@@ -355,7 +355,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let agentId: String?
     public let assignedRunnerId: String?
     /// The engine the session runs on for good — the CLI on the runner that produced its runtime
-    /// session (`claude`, `codex`, `kimi`, `antigravity`, `opencode` or `dsh`). Nil from an older
+    /// session (`claude`, `codex`, `kimi`, `antigravity`, `opencode`, `dsh` or `cursor`). Nil from an older
     /// server, and for a session whose engine nobody can tell; read it with
     /// `ProviderEngines.sessionEngine`, which places such a row by its provider.
     public let engine: String?
@@ -530,6 +530,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var isGenerating: Bool {
         let state = effectiveRunState
         return state == .running || (state == .awaitingInput && engineTurnActive == true)
+    }
+    /// Whether work this session started is still running under a parked turn — a sub-agent or
+    /// workflow the runtime started, or a background process. A port of web's
+    /// `outlivingSessionWork` (src/web/src/lib/sessionActivity.ts), differing only in shape: the
+    /// stop decision needs the fact, while the row's words and glyph ask which kind it is
+    /// separately. Absent fields from an older server read as none, like web's `?? 0`.
+    public var hasOutlivingWork: Bool {
+        (runningSubagentCount ?? 0) > 0 || (runningBgCount ?? 0) > 0
     }
     /// Whether this session's failure is one the server intends to undo by itself — a port of the
     /// web console's `sessionRetryPending`. A spent quota, a provider that couldn't answer, and a
@@ -758,6 +766,10 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
     public let title: String
     /// Since when it has been waiting on the owner (ISO-8601). The bar shows the oldest.
     public let since: String
+    /// The short reason an escalated item carries — the server's one clause about what it is
+    /// (T9), which the session ROW says after the word "Escalated to you". Absent for the other
+    /// three kinds and from a server that predates it, and then the row says the word alone.
+    public let need: String?
     /// The item's project's main branch by name, which a merge approval asks to merge into. Nil
     /// with no repository bound and from an older server, and then it is main.
     public let mainBranch: String?
@@ -765,11 +777,12 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
     public var id: String { itemId }
 
     public init(itemId: String, kind: OwnerItemKind, title: String, since: String,
-                mainBranch: String? = nil) {
+                need: String? = nil, mainBranch: String? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
         self.since = since
+        self.need = need
         self.mainBranch = mainBranch
     }
 
@@ -779,8 +792,9 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
         kind = try c.decode(OwnerItemKind.self, forKey: .kind)
         title = try c.decode(String.self, forKey: .title)
         since = try c.decode(String.self, forKey: .since)
-        // A branch this build cannot read is an older server's absence: the item, and the row it
-        // arrived on, still stand.
+        // A field this build cannot read is an older server's absence: the item, and the row it
+        // arrived on, still stand. Same reading as the branch below.
+        need = try? c.decodeIfPresent(String.self, forKey: .need)
         mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
     }
 }
@@ -911,11 +925,16 @@ public struct SessionTurnRequest: Codable, Sendable {
     public let content: String
     public let kind: String           // "message" | "shell"
     public let attachmentIds: [String]?
-    public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil) {
+    /// `NEXT_TURN` to queue a message behind a running turn instead of sending it into that turn;
+    /// nil (left out of the body) keeps the server's own placement, as every send before it had.
+    public let intent: String?
+    public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
+                intent: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
+        self.intent = intent
     }
 }
 
@@ -936,6 +955,26 @@ public struct SessionInterruptRequest: Codable, Sendable {
         self.clientTurnId = clientTurnId
         self.content = content
         self.attachmentIds = attachmentIds
+    }
+}
+
+/// POST /sessions/:id/interrupt WITHOUT a follow-up — the composer's Stop, and the one thing that
+/// makes it more than an interrupt.
+///
+/// An interrupt does not kill anything: the engine's process, its conversation and its stdin
+/// survive it, which is the entire difference from ending a session. `stopBackgroundWork` is the
+/// explicit ask to also end what the session left running — the runner's jobs (a dev server or
+/// watcher included), the engine's own shells and Monitors, and its background Workflows. It has to
+/// be a field rather than a second request for the same reason the follow-up does: one press is one
+/// decision, and two requests could apply half of it.
+///
+/// Deliberately NOT sent by `interrupt(sessionID:)`'s default: an interrupt that says nothing extra
+/// must stay an interrupt that kills nothing, or the difference between stopping a turn and ending a
+/// session disappears silently. The body is omitted entirely when the flag is off.
+public struct SessionStopRequest: Codable, Sendable {
+    public let stopBackgroundWork: Bool
+    public init(stopBackgroundWork: Bool = true) {
+        self.stopBackgroundWork = stopBackgroundWork
     }
 }
 
@@ -1009,6 +1048,12 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// The card this queued turn is, read by the same function the runner's echo is read by. Nil
     /// unless `openItemDelivery` is one.
     public var itemCard: OpenItemDelivery? { OpenItemDelivery.parseCard(openItemDelivery) }
+    /// The same for the owner's answer handed to the coordinator (`ownerAnswer`) — held raw for
+    /// `OwnerAnswer.parseCard`, the reader the echo's payload is read by, so the line drawn while the
+    /// answer waits is the line its echo is drawn as. Nil on every other turn, and from a server that
+    /// predates the field.
+    public let ownerAnswer: JSONValue?
+    public var ownerAnswerCard: OwnerAnswer? { OwnerAnswer.parseCard(ownerAnswer) }
     /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
     /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
@@ -1044,7 +1089,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// cards are gathered, so the row reconciled in place and the row first seen in a listing carry
     /// the same ones (`TranscriptReducer.reconcileQueuedTurns`).
     public var cards: TurnCards {
-        TurnCards(itemCard: itemCard, taskStart: taskStartCard, startedCard: startedCard,
+        TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, taskStart: taskStartCard, startedCard: startedCard,
                   sessionMessage: senderCard, sessionReplies: replyCards,
                   reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
     }
@@ -1055,7 +1100,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                taskStart: JSONValue? = nil,
+                ownerAnswer: JSONValue? = nil, taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
                 confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
@@ -1072,6 +1117,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
+        self.ownerAnswer = ownerAnswer
         self.taskStart = taskStart
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage

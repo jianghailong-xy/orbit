@@ -16,8 +16,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.cards.PromotionHints
@@ -25,7 +28,7 @@ import io.orbitd.android.cards.PromotionReview
 import io.orbitd.android.cards.SheetHead
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.projects.LandingLine
-import io.orbitd.android.projects.LandingRow
+import io.orbitd.android.projects.ProjectLandingHead
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.WikiDate
 import java.time.Instant
@@ -40,7 +43,7 @@ import kotlinx.serialization.json.JsonObject
  * under the card.
  */
 @Composable
-internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeCard.Shape, landing: LandingLine?, now: Instant,
+internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeCard.Shape, landing: LandingLine?, blockedBy: String?, now: Instant,
     onLanding: (() -> Unit)?, onDetails: (String) -> Unit, onCoordinator: (() -> Unit)?) {
     val view = merge.current
     val tint = when (shape) {
@@ -62,15 +65,27 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).then(shapeModifier).padding(12.dp)
         .testTag("project-merge-card:${shape.name.lowercase()}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (shape) {
-            ProjectMergeCard.Shape.CHECKING -> landing?.let { LandingRow(it, onLanding) }
+            ProjectMergeCard.Shape.CHECKING -> {
+                landing?.let { LandingHeadRow(it, onLanding) }
+                // What a pass leads to, drawn as the merging card's note: the Automatic setting merges it, or it becomes the card that asks.
+                PromotionCards.onPassLine(view)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
             ProjectMergeCard.Shape.ASKING -> view?.let { Asking(it, merge.criteriaMet, tint, now, acting, ::act, merge, onDetails) }
             ProjectMergeCard.Shape.MERGING -> view?.let { Merging(it, tint, landing, onLanding, acting) { act(merge::cancel) } }
-            ProjectMergeCard.Shape.BLOCKED -> view?.let { Blocked(it, PromotionCards.holder(it.text("promotionId").orEmpty(), merge.openItems), tint, now, onDetails, onCoordinator) }
+            ProjectMergeCard.Shape.BLOCKED -> view?.let {
+                Blocked(it, PromotionCards.holder(it.text("promotionId").orEmpty(), merge.openItems), blockedBy, tint, now, onDetails, onCoordinator)
+            }
         }
         actionError?.let { Text(it, Modifier.testTag("project-merge-card:error"), color = MaterialTheme.colorScheme.error, maxLines = 3,
             overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium) }
     }
 }
+
+/** The merge job's live row — the merged line's own anatomy, so the check and the merge it becomes are one shape (iOS 3b23aa163,
+ * board docs/mocks/project-merge-check-row); a press opens the jobs in flight, where the server lists them. */
+@Composable
+private fun LandingHeadRow(line: LandingLine, onLanding: (() -> Unit)?) = ProjectLandingHead(line.word, line.head, line.running, line.timedOut,
+    if (onLanding != null) Modifier.clickable(role = Role.Button, onClick = onLanding) else Modifier)
 
 /** The card's head: the moment's mark in the tint's tile, its title, and the badge while it asks. The merging card wears the same
  * merge mark as the asking one rather than a spinner (owner decision 2026-10-07, iOS 39adc7561): its one moving mark is the landing
@@ -130,7 +145,7 @@ private fun Asking(view: JsonObject, criteriaMet: Pair<Int, Int>?, tint: Color, 
 private fun Merging(view: JsonObject, tint: Color, landing: LandingLine?, onLanding: (() -> Unit)?, acting: Boolean, cancel: () -> Unit) {
     Head(PromotionCards.pageTitle(view), R.drawable.ic_merge, tint, tint)
     Text(PromotionCards.mergingStatusLine(view), Modifier.testTag("project-merge-card:status"), style = MaterialTheme.typography.labelLarge)
-    landing?.let { LandingRow(it, onLanding) }
+    landing?.let { LandingHeadRow(it, onLanding) }
     Text(PromotionCards.pageNothingToDo, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         OutlinedButton(onClick = cancel, enabled = !acting && PromotionCards.cancellable(view),
@@ -138,13 +153,20 @@ private fun Merging(view: JsonObject, tint: Color, landing: LandingLine?, onLand
     }
 }
 
-/** D: why it cannot merge, and who has it — the coordinator, until the clock hands it over; nobody, once the project's items were read
- * and none holds it, draws no press (main's 8297b18a3). Details opens every row of it. */
+/** D: why it cannot merge, who is in front of it when the project's own line is busy (iOS befc9694c), and who has it — the
+ * coordinator, until the clock hands it over; nobody, once the project's items were read and none holds it, draws no press (main's
+ * 8297b18a3). Details opens every row of it. */
 @Composable
-private fun Blocked(view: JsonObject, holder: PromotionHolder, tint: Color, now: Instant, onDetails: (String) -> Unit, onCoordinator: (() -> Unit)?) {
+private fun Blocked(view: JsonObject, holder: PromotionHolder, blockedBy: String?, tint: Color, now: Instant, onDetails: (String) -> Unit,
+    onCoordinator: (() -> Unit)?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Head(PromotionCards.pageTitle(view), R.drawable.ic_warning, tint, tint)
     Text(PromotionCards.blockedLine(view), Modifier.testTag("project-merge-card:why"), style = MaterialTheme.typography.labelLarge)
+    // The landing holding this branch, and what is holding that one; absent while the line is doing nothing here.
+    blockedBy?.let { line ->
+        Text(buildAnnotatedString { withStyle(SpanStyle(color = muted)) { append("${ProjectMergeCard.blockedByLabel}: ") }; append(line) },
+            Modifier.fillMaxWidth().testTag("project-merge-card:blocked-by"), style = MaterialTheme.typography.labelMedium)
+    }
     PromotionCards.resolvingLine(holder, now)?.let { line ->
         val yours = PromotionCards.resolvingIsYours(holder)
         Row(Modifier.fillMaxWidth().background(muted.copy(alpha = 0.12f), RoundedCornerShape(50)).padding(vertical = 7.dp)
@@ -200,7 +222,7 @@ internal fun ProjectMergeTimelineRow(receipt: PromotionReceipt, now: Instant, on
  * and pressed at the page's model, so the card under it moves with it. Decline closes it once it went through. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ProjectMergeReviewSheet(merge: ProjectMergeModel, promotionId: String, close: () -> Unit) {
+internal fun ProjectMergeReviewSheet(merge: ProjectMergeModel, promotionId: String, blockedBy: String?, close: () -> Unit) {
     val scope = rememberCoroutineScope()
     var acting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -220,7 +242,8 @@ internal fun ProjectMergeReviewSheet(merge: ProjectMergeModel, promotionId: Stri
             SheetHead(PromotionCards.previewTitle(view), "project-merge-review", close)
             HorizontalDivider()
             PromotionReview(view, merge.criteriaMet, PromotionCards.holder(promotionId, merge.openItems), acting, error, "project-merge-review",
-                confirm = { act(press = merge::confirm) }, decline = { act(closeOnSuccess = true, press = merge::decline) }, cancel = { act(press = merge::cancel) })
+                confirm = { act(press = merge::confirm) }, decline = { act(closeOnSuccess = true, press = merge::decline) }, cancel = { act(press = merge::cancel) },
+                blockedBy = blockedBy)
         }
     }
 }

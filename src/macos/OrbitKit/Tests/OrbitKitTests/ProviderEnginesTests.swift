@@ -17,16 +17,16 @@ final class ProviderEnginesTests: XCTestCase {
     // MARK: engines
 
     func testListsEveryEngineOnceEachUnderItsCLIName() throws {
-        XCTAssertEqual(ProviderEngines.all, ["claude", "codex", "kimi", "antigravity", "opencode", "dsh"])
+        XCTAssertEqual(ProviderEngines.all, ["claude", "codex", "kimi", "antigravity", "opencode", "dsh", "cursor"])
         XCTAssertEqual(Dictionary(uniqueKeysWithValues: ProviderEngines.names.map { ($0.engine, $0.name) }), [
             "claude": "Claude Code", "codex": "Codex", "kimi": "Kimi Code", "antigravity": "Antigravity CLI",
-            "opencode": "OpenCode", "dsh": "DeepSeek Harness",
+            "opencode": "OpenCode", "dsh": "DeepSeek Harness", "cursor": "Cursor CLI",
         ])
         for engine in ProviderEngines.all { XCTAssertTrue(ProviderEngines.isEngine(engine)) }
         XCTAssertFalse(ProviderEngines.isEngine("deepseek-harness"))
         XCTAssertFalse(ProviderEngines.isEngine(""))
         XCTAssertFalse(ProviderEngines.isEngine(nil))
-        // The same six values the shared enum has, so no engine is missing on either side.
+        // The same seven values the shared enum has, so no engine is missing on either side.
         let enums = try source("src/shared/src/enums.ts")
         for engine in ProviderEngines.all {
             XCTAssertTrue(enums.contains("= '\(engine)'"), "AgentProvider has no '\(engine)'")

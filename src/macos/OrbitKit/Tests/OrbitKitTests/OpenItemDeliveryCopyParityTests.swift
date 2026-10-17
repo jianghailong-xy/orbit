@@ -128,7 +128,7 @@ final class OpenItemDeliveryCopyParityTests: XCTestCase {
                        "sessionId": "0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a6f"},
               "files": ["a", "b", "c", "d"], "targetRef": "refs/heads/main",
               "check": null, "errorCode": null, "failure": null,
-              "actions": ["OPEN_COORDINATOR", "RETRY", "CANCEL_TASK"],
+              "actions": ["OPEN_COORDINATOR", "OPEN_TASK_SESSION", "CANCEL_TASK"],
               "landing": {"receipts": 0, "state": "NOT_KNOWN", "upstream": "main",
                           "integration": "main"}}}}
             """

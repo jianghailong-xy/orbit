@@ -21,13 +21,22 @@ object ProviderEngines {
     const val ANTIGRAVITY = "antigravity"
     const val OPENCODE = "opencode"
     const val DSH = "dsh"
+    const val CURSOR = "cursor"
 
     /** Every engine a session can run on, in the order a picker lists them. */
-    val ALL_ENGINES = listOf(CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH)
+    val ALL_ENGINES = listOf(CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH, CURSOR)
 
     /** Each engine's CLI by its own product name: what every engine list, title and pin says. */
     val ENGINE_CLI_NAMES = mapOf(CLAUDE to "Claude Code", CODEX to "Codex", KIMI to "Kimi Code", ANTIGRAVITY to "Antigravity CLI",
-        OPENCODE to "OpenCode", DSH to "DeepSeek Harness")
+        OPENCODE to "OpenCode", DSH to "DeepSeek Harness", CURSOR to "Cursor CLI")
+
+    /**
+     * Whether this app draws [engine] in a list of engines: every engine but Cursor CLI, which the server knows (project P1) and which
+     * has no screens here until P7c builds the owner's design board — web `webShowsEngine`, OrbitKit `appleShowsEngine`. The New
+     * Session's engines, a task's engine pin, Infrastructure's engine cards and a runner's Engines rows leave it out, a runner's report
+     * of it included, so they read as they did before it was registered. Opening Cursor CLI here is changing this one function.
+     */
+    fun androidShowsEngine(engine: String?) = engine != CURSOR
 
     /** The engines whose own sign-in on the runner is a credential: the provider slug is the engine's name. */
     val LOGIN_ENGINES = listOf(CLAUDE, CODEX, KIMI, ANTIGRAVITY)
@@ -126,6 +135,20 @@ object ProviderEngines {
     }
 
     fun defaultEngineOf(provider: String?, rows: List<JsonObject>): String? = providerEngines(provider, rows).firstOrNull()
+
+    /** A vendor's name, as its keys are called in a sentence: one key runs on several engines, so it is never named after one. */
+    private val KEY_VENDORS = mapOf("anthropic" to "Anthropic", "openai" to "OpenAI", "gemini" to "Google Gemini", "deepseek" to "DeepSeek",
+        "deepseek-harness" to "DeepSeek", "moonshot" to "Moonshot", "glm" to "Z.AI", "minimax" to "MiniMax", "qwen" to "Qwen")
+
+    /** A key as a sentence names it, for the middle of one: `the DeepSeek key “DeepSeek 2”` — its vendor and the name its owner gave
+     * it, never its slug; a custom endpoint is DeepSeek's when DeepSeek Harness runs it (`engines`, which only the server can tell).
+     * OrbitKit `SessionProviderChoices.keyName`, web `keyName`. */
+    fun keyName(row: JsonObject): String {
+        val preset = row.text("presetSlug")
+        val vendor = if (!preset.isNullOrEmpty()) KEY_VENDORS[preset] else KEY_VENDORS["deepseek"]?.takeIf { DSH in row.strings("engines") }
+        val label = row.text("label") ?: row.text("slug").orEmpty()
+        return if (vendor != null) "the $vendor key “$label”" else "the key “$label”"
+    }
 
     /** An account pool read as a provider row: it runs on the engine it was made on and nowhere else — Claude Code for one's own
      * unless it says otherwise, Codex for a shared one ([fallback]) — with that engine's catalogue as its model space. [shared]

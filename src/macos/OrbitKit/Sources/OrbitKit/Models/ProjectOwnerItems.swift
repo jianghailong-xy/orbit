@@ -126,6 +126,20 @@ public enum ProjectOpenItemAction: String, Codable, Sendable {
     }
 }
 
+/// One task filed as a concrete fix for an open item (§4.7, `fixes_open_item_id`), as the owner's
+/// read serves it under `handledBy`: the task and where its run stands.
+public struct OpenItemFixTask: Codable, Equatable, Sendable {
+    public let taskId: String
+    public let title: String
+    public let state: String
+
+    public init(taskId: String, title: String, state: String) {
+        self.taskId = taskId
+        self.title = title
+        self.state = state
+    }
+}
+
 /// One exception item as `GET /projects/:id/open-items` serves it (§4.8).
 public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// Where this item is on its way to the coordinator (§4.4), which is the address `Open
@@ -179,6 +193,18 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let delivery: Delivery?
     /// The presses the server offers on this item.
     public let actions: [ProjectOpenItemAction]
+    /// The server's one-sentence answer to "what must happen next" — the first thing a card says
+    /// (§7.5, T9). Optional for rolling deploys: a row from a server that predates it draws what the
+    /// card drew before (`ExceptionCards.requiredAction`).
+    public let requiredAction: String?
+    /// The first executable door for the item, when the server can name one (T9): the press the card
+    /// leads with. Absent from a server that predates it, and then the kind decides the lead as it
+    /// did before (`ExceptionCards.leadingDoors`).
+    public let primaryAction: ProjectOpenItemAction?
+    /// The tasks filed as concrete fixes for this item, newest task state included (§4.7): what the
+    /// card's "The coordinator is fixing this in …" line names. Absent from an older server, and
+    /// empty when none is linked.
+    public let handledBy: [OpenItemFixTask]?
     /// What was asked, for a `COORDINATOR_QUESTION`; nil for every other kind.
     public let question: CoordinatorQuestion?
     /// The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from
@@ -202,7 +228,9 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 escalateAt: String? = nil, escalatedAt: String? = nil, taskId: String? = nil,
                 sessionId: String? = nil, promotionId: String? = nil,
                 fuseEpisodeId: String? = nil, delivery: Delivery? = nil,
-                actions: [ProjectOpenItemAction] = [], question: CoordinatorQuestion? = nil,
+                actions: [ProjectOpenItemAction] = [], requiredAction: String? = nil,
+                primaryAction: ProjectOpenItemAction? = nil, handledBy: [OpenItemFixTask]? = nil,
+                question: CoordinatorQuestion? = nil,
                 startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
                 facts: OpenItemFacts? = nil) {
         self.itemId = itemId
@@ -220,6 +248,9 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.fuseEpisodeId = fuseEpisodeId
         self.delivery = delivery
         self.actions = actions
+        self.requiredAction = requiredAction
+        self.primaryAction = primaryAction
+        self.handledBy = handledBy
         self.question = question
         self.startRequest = startRequest
         self.doneRequest = doneRequest
@@ -244,6 +275,12 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         fuseEpisodeId = try c.decodeIfPresent(String.self, forKey: .fuseEpisodeId)
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery)
         actions = try c.decodeIfPresent([ProjectOpenItemAction].self, forKey: .actions) ?? []
+        // Read with `try?`: a field this build cannot read costs the card that field and never the
+        // whole read that carried it — the same rule `startRequest` below is read under.
+        requiredAction = (try? c.decodeIfPresent(String.self, forKey: .requiredAction)) ?? nil
+        primaryAction = (try? c.decodeIfPresent(ProjectOpenItemAction.self,
+                                                forKey: .primaryAction)) ?? nil
+        handledBy = (try? c.decodeIfPresent([OpenItemFixTask].self, forKey: .handledBy)) ?? nil
         question = try c.decodeIfPresent(CoordinatorQuestion.self, forKey: .question)
         // Read with `try?`: a request this build cannot read is an item without one — the card it
         // would have drawn is not drawn — rather than an open-items read that fails to decode.
@@ -512,6 +549,30 @@ public struct OpenItemResolveRequest: Codable, Sendable {
     public init(note: String) { self.note = note }
 }
 
+/// What a rerun answers (§2.3 J-T1b, §4.7 H1): the generation it queued, the failed generation it
+/// replaces, and the reason it carried. The same three facts whichever door ran it — a failed
+/// landing's retry (`IntegrationRetried`) and a blocked candidate's re-check
+/// (`PromotionCheckRetried`) — so the card reads one shape for both and lets the read that follows
+/// say what changed.
+public struct IntegrationRetryReceipt: Codable, Equatable, Sendable {
+    public let generation: Int
+    public let retryOfJobId: String
+    public let reason: String
+
+    public init(generation: Int, retryOfJobId: String, reason: String) {
+        self.generation = generation
+        self.retryOfJobId = retryOfJobId
+        self.reason = reason
+    }
+}
+
+/// The reason a rerun press carries, as both owner doors take it (`RetryIntegrationDto`). The door
+/// requires one — the reason is the record the rerun leaves — so there is no request without it.
+public struct IntegrationRetryRequest: Codable, Sendable {
+    public let reason: String
+    public init(reason: String) { self.reason = reason }
+}
+
 /// An item its assignee closed by hand, and what that ending is called (§4.7).
 public struct OpenItemResolved: Codable, Equatable, Sendable {
     public let itemId: String
@@ -615,6 +676,12 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     /// older than the rule — both are "no moment", never an error.
     public let decidedAt: String?
     public let merged: Merged?
+    /// What a passing check leads to, while this candidate is being checked: `MERGE` when the
+    /// project's Automatic setting will merge it into main itself (§3.3 M-T11), `ASK` when the owner
+    /// will be asked first. Read as the project stands now, so switching Automatic mid-check changes it
+    /// on the next poll (`@orbit/shared`'s `onPass`). Nil in every other state, and from a server older
+    /// than the field — the checking card then says nothing about what comes next.
+    public let onPass: String?
 
     public struct Execution: Codable, Equatable, Sendable {
         public let state: String
@@ -645,7 +712,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
                 taskIds: [String] = [], tasks: [PromotionTask] = [], checks: [IntegrationCheckResult] = [],
                 conflicts: [String] = [], blockedReason: String? = nil, landsAs: String? = "MERGE_COMMIT",
                 askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
-                merged: Merged? = nil, execution: Execution? = nil) {
+                merged: Merged? = nil, execution: Execution? = nil, onPass: String? = nil) {
         self.promotionId = promotionId
         self.state = state
         self.sourceRef = sourceRef
@@ -664,6 +731,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.execution = execution
         self.decidedAt = decidedAt
         self.merged = merged
+        self.onPass = onPass
     }
 
     public init(from decoder: Decoder) throws {
@@ -686,6 +754,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         execution = try c.decodeIfPresent(Execution.self, forKey: .execution)
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
         merged = try c.decodeIfPresent(Merged.self, forKey: .merged)
+        onPass = try c.decodeIfPresent(String.self, forKey: .onPass)
     }
 }
 

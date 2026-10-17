@@ -92,7 +92,8 @@ SELECT "id"                      AS project_id,
 --
 -- An item is closed by the transaction that moves what it is about: a candidate leaving the live
 -- states, a task cancelled or replaced, a delivery under review whose task is no longer DONE
--- (0375's `DELIVERY_REVIEW`). A door that misses that edge leaves the item open about
+-- (0375's `DELIVERY_REVIEW`), a task's failure whose task is done, cancelled, replaced or being
+-- attempted again. A door that misses that edge leaves the item open about
 -- something that is gone — in front of the owner, on their badge, and (for an integration item)
 -- holding off the project's Automatic merges. The escalation tick's backstop
 -- (`ProjectOpenItemEscalationService.reconcile`) closes such an item within a minute, with a
@@ -141,6 +142,17 @@ SELECT item."project_id"                                       AS project_id,
          WHERE owed_task."id" = "item"."task_id"
            AND owed_task."status" = 'DONE'
            AND owed_task."superseded_by_task_id" IS NULL)
+      WHEN "item"."task_id" IS NOT NULL AND "item"."kind" = 'TASK_FAILED' THEN EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = "item"."task_id"
+           AND owed_task."status" NOT IN ('DONE', 'CANCELLED')
+           AND owed_task."superseded_by_task_id" IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM "session" owed_session
+              WHERE owed_session."task_id" = owed_task."id"
+                AND owed_session."starts_task_work"
+                AND owed_session."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+                AND owed_session."id" IS DISTINCT FROM "item"."session_id"))
       ELSE true
     END)
  GROUP BY item."project_id", proj."title", item."kind"

@@ -114,6 +114,10 @@ extension Font {
     /// `ArrowDownOutlined` at the same 15px, and the thin version looked faint on a solid disc.
     static let orbitControlGlyph: Font = .system(size: 15, weight: .medium)
 
+    /// The same jump arrow in the folded composer band's 28pt disc (`FoldedBandBar`): the floating
+    /// disc's mark scaled to the smaller disc, a fixed-container glyph like it.
+    static let orbitBarGlyph: Font = .system(size: 13, weight: .semibold)
+
     /// The glyph inside the compact drawer's 44pt circular buttons (search, Settings). Same
     /// fixed-container rationale as `orbitControlGlyph`, but tuned to that larger disc: at 15pt
     /// semibold the mark covered only ~36% of the diameter and read small and heavy, where the

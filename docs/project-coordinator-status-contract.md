@@ -194,7 +194,7 @@ Notes that are part of the contract, not commentary:
 | `deletedAt` | `Date?` | ISO string or `null` | `session.deleted_at` — `schema.prisma:1020` | `SESSION_NOT_TRASHED` |
 | `lastTurnAt` | `Date?` | ISO string or `null` | `session.last_turn_at` — `schema.prisma:1029`; moved by every turn the conversation takes (the same column the session list sorts by). What the card's "last active" reads: a coordinator that has talked all week started once, so `startedAt` alone reads it as a month idle | `SESSION_NEVER_TOOK_A_TURN` |
 | `engineTurnActive` | bool | bool | `session.engine_turn_active` — `schema.prisma:934` | never absent (non-nullable, default `false`) |
-| `pendingApprovals` | int | number | `COUNT(*)` over `approval` where `session_id` matches and `status = 'PENDING'` — `schema.prisma:1272`/`:1278`, indexed at `:1293`; the same total the session list computes per row, asked for one session through **`countLiveApprovals`** (`src/apiserver/src/sessions/abandoned-approvals.ts`). A generating session (`src/apiserver/src/common/session-generating.ts:17`) counts every pending row it holds; a session that is NOT generating counts only the cards a live runner-hosted job is still reading — `approval.background_job_id` in `session.running_bg_shells`, migration 0291 — because that process outlives the turn and is the reader a parked conversation can still be holding a card for | never absent — `0` when no reader is left |
+| `pendingApprovals` | int | number | What waits on the owner in this conversation — the same total the session list computes per row, from the same two reads. (1) `COUNT(*)` over `approval` where `session_id` matches and `status = 'PENDING'` — `schema.prisma:1272`/`:1278`, indexed at `:1293` — asked for one session through **`countLiveApprovals`** (`src/apiserver/src/sessions/abandoned-approvals.ts`). A generating session (`src/apiserver/src/common/session-generating.ts:17`) counts every pending row it holds; a session that is NOT generating counts only the cards a live runner-hosted job is still reading — `approval.background_job_id` in `session.running_bg_shells`, migration 0291 — because that process outlives the turn and is the reader a parked conversation can still be holding a card for. (2) Plus the owner decisions drawn in this conversation, through **`countOwnerDecisionsBySession`** (`src/apiserver/src/projects/owner-decision-signal.ts`): a question it asked with `ask_owner`, an item escalated to the owner, a merge to approve, a request to start or close the project. Those wait while the conversation is parked, which is when (1) has stopped counting (2026-10-15) | never absent — `0` when nothing waits |
 
 **The three derived state fields are produced by `withSessionState`**
 (`src/apiserver/src/sessions/session-state.ts:109`), which is the single wrapper every other
@@ -210,16 +210,21 @@ The card's live sub-states are a **client-side** read of these fields, not a fif
 | --- | --- |
 | Completed | `lifecycleState === "COMPLETED"` — decided FIRST, ahead of every row below |
 | Working | `runState === "RUNNING"` \|\| (`runState === "AWAITING_INPUT"` && `engineTurnActive`) — i.e. `isSessionGenerating` |
-| Needs you | `pendingApprovals > 0` \|\| (`runState === "AWAITING_INPUT"` && `!engineTurnActive`) |
-| Idle | anything else with `lifecycleState !== "TRASH"` — `QUEUED`, `SUCCEEDED`, `FAILED`, `INTERRUPTED`, `ENDED` |
+| Needs you | `pendingApprovals > 0` — asked ahead of Working, because a pending approval blocks inside the turn |
+| Idle | anything else with `lifecycleState !== "TRASH"` — `AWAITING_INPUT` between turns, `QUEUED`, `SUCCEEDED`, `FAILED`, `INTERRUPTED`, `ENDED` |
 
 `FAILED` sits under Idle on purpose: `coordinator()` reuses a FAILED coordinator rather than
 replacing it, so it is a conversation to reopen, not a dead one.
 
+`AWAITING_INPUT` between turns sits under Idle too (owner decision, 2026-10-15). A coordinator
+parks there between Orbit's wake-ups, so it is its resting state, not a request: *Needs you* is read
+off `pendingApprovals` alone, which is why that count takes in the owner decisions drawn in the
+conversation and not only its cards.
+
 `Completed` is first because the rows under it are all read from the RUN, and a completed
 conversation parks at `AWAITING_INPUT` (`statusAfterTurnCompleted`) before settling terminal — so
-the run-state rows alone answer *Needs you* or *Idle* about a conversation somebody declared over,
-and both invite a reply into it. It is a sub-state rather than a `state`, because `state` is about
+the run-state rows alone answer *Idle* about a conversation somebody declared over, as though it
+could still be picked up. It is a sub-state rather than a `state`, because `state` is about
 the POINTER: it resolves, and the conversation is neither in Trash nor unreachable.
 
 It is also what the card asks a QUESTION about: starting a new coordinator from a `Completed` one
@@ -331,7 +336,7 @@ Per state, in words:
   sub-states come from `lifecycleState` / `runState` / `engineTurnActive` / `pendingApprovals` as
   tabulated above. `agentName` and `workspaceName` say who coordinates and where. The card carries
   ONE control in every one of these sub-states: a lead press that goes to the conversation (*Open
-  coordinator*, or *Reply to coordinator* under `Needs you`) and a caret holding **Start a new
+  coordinator*, or *Review N request(s)* under `Needs you`, N being `pendingApprovals`) and a caret holding **Start a new
   coordinator**. That item is `POST /projects/:id/coordinator/replace` and never the plain open,
   which resolves and would hand the same conversation straight back. It opens in the workspace this
   project is fixed to, and under `Completed` it is the only thing the press does; on a conversation

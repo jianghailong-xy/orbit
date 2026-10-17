@@ -69,16 +69,16 @@ class CardsDeviceTest {
             compose.onNodeWithTag(tag).performScrollTo()
         compose.onNodeWithTag(tag).assertIsEnabled().performClick()
     }
-    /** The review's own receipt after a press ("Answer sent", "Decision recorded"), then the review closing itself. */
-    private fun receipt(title: String, name: String) {
-        var seen = false
+    /** The review turned into its record after a press: its [title], the card as it was asked, and where its buttons were, the
+     * line saying who did what ([line] is how it starts) — open until it is closed. */
+    private fun record(title: String, line: String, name: String) {
         compose.waitUntil(15_000) {
-            seen = seen || compose.onAllNodes(hasTestTag("card-review:receipt") and hasText(title)).fetchSemanticsNodes().isNotEmpty()
-            seen || !exists("card-review")
+            compose.onAllNodes(hasTestTag("card-review:footer-line") and hasText(line, substring = true)).fetchSemanticsNodes().isNotEmpty()
         }
-        if (seen) capture("$name-receipt")
-        File(output, "$name-receipt.txt").writeText("receipt=$title\nseen=$seen\n")
-        compose.waitUntil(15_000) { !exists("card-review") }
+        compose.onNodeWithTag("card-review:title").assertTextEquals(title)
+        capture("$name-record")
+        File(output, "$name-record.txt").writeText("title=$title\nline=$line\n")
+        closeReview()
     }
     private fun closeReview() {
         try { if (exists("card-review:close")) compose.onNodeWithTag("card-review:close").performClick() } catch (_: AssertionError) { /* It closed itself. */ }
@@ -125,7 +125,11 @@ class CardsDeviceTest {
         compose.onNodeWithText("Server state").assertExists()
         press("approval:a2:ANSWER")
         compose.waitUntil(15_000) { !http("/__stats").flag("pending") }
-        receipt(CardPreviews.answerSent, "question")
+        // The review stays open as the record the question became: what was picked ticked, the words typed in quotes.
+        compose.waitUntil(15_000) { exists("card-review:record") }
+        compose.onNodeWithTag("approval:a2:question:1:own").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("“Server state”").assertExists()
+        record(CardPreviews.answeredTitle, "Answered by you · ", "question")
         assertEquals("ALLOWED", http("/__stats").obj("final")?.text("status"))
         val answers = http("/__stats").objects("journal").last().obj("body")!!.obj("answers")!!
         assertEquals(listOf("Core"), answers.strings("Which scope?")); assertEquals(listOf("Server state"), answers.strings("Which evidence?")); capture("question-recorded")
@@ -264,10 +268,12 @@ class CardsDeviceTest {
             capture("$mode-owner-round-$round")
             if (round == 1) { press(send); await("Request accepted"); compose.onNodeWithTag(send).assertIsNotEnabled() }
         }
+        // The owner's own ending asks for its reason in place, and its confirm waits for one (A08-17).
+        val confirm = "item:x1:mark-handled-confirm"
         press(resolve)
-        compose.onNodeWithTag(resolve).assertIsNotEnabled()
+        compose.onNodeWithTag(confirm).assertIsNotEnabled()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Reviewed the second assignment")
-        press(resolve); await("Request accepted")
+        press(confirm); await("Request accepted")
         val stats = http("/__stats")
         assertEquals(before + 3, stats.objects("journal").size)
         assertFalse(stats.flag("pending")); assertEquals("RESOLVED", stats.obj("final")?.text("state"))
@@ -378,7 +384,7 @@ class CardsDeviceTest {
         assertEquals(200, recorded.number("status")); assertEquals("allow", recorded.obj("body")!!.text("behavior"))
         http("/__corpus").objects("requests").firstOrNull { it.text("key") == "approval:a5" && it.text("verb") == "CREATE_BATCH" }
             ?.let { assertEquals(it["body"], recorded["body"]) }
-        receipt(CardPreviews.answerSent, "batch-review")
+        record(CardPreviews.answeredTitle, "Approved by you · ", "batch-review")
     }
 
     /** A08-4: the queue's turns wait at the transcript's end as the turns they will be; Cancel withdraws one on the server. */

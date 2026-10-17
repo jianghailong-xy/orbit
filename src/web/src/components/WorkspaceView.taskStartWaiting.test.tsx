@@ -8,6 +8,7 @@ import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionMessageCard,
   SessionReplyCard,
@@ -120,8 +121,16 @@ const ITEM: OpenItemDeliveryCard = {
   check: null,
   errorCode: null,
   failure: null,
-  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none here: the card is what the server sends, and `Retry the task` is not in it.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
+};
+const ANSWER: OwnerAnswerCard = {
+  itemId: '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a70',
+  kind: 'COORDINATOR_QUESTION',
+  sessionId: '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a71',
+  deliveredAt: '2026-10-06T05:39:58.000Z',
 };
 const STARTED: ProjectStartedCard = {
   by: 'CONFIRMATION',
@@ -167,6 +176,7 @@ const REPLY: SessionReplyCard = {
  *  compile here until it is given a value. */
 const EVERY_CARD: Required<TurnCards> = {
   openItemDelivery: ITEM,
+  ownerAnswer: ANSWER,
   taskStart: TASK,
   projectStarted: STARTED,
   confirmationReviewRequest: REVIEW_REQUEST,
@@ -179,6 +189,7 @@ const EVERY_CARD: Required<TurnCards> = {
  *  for a session ride on the owner's next message, so the reply cards come with the owner's words. */
 const ACCEPTED_ONE_CARD_EACH: { field: keyof TurnCards; content: string; drawnAs: string }[] = [
   { field: 'openItemDelivery', content: '【例外待办】合并时冲突，请处理。', drawnAs: '.oic' },
+  { field: 'ownerAnswer', content: 'From Orbit · owner answer: you asked "Merge now?". The owner answered: Wait.', drawnAs: '.owner-answer' },
   { field: 'taskStart', content: BRIEF, drawnAs: '.tsc' },
   { field: 'projectStarted', content: 'The owner started this project.', drawnAs: '.psc' },
   { field: 'confirmationReviewRequest', content: '<orbit-confirmation-review/>', drawnAs: '.crc:not(.is-returned)' },

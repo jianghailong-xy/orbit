@@ -42,6 +42,8 @@ enum class CardFamily {
     OWNER_QUESTION, EXCEPTION, PROMOTION, WIKI, SESSION_REQUEST, BACKGROUND,
     /** A revision waiting for its project's paused coordinator, or sent to it once back (`CoordinatorQueue`). */
     COORDINATOR_QUEUE,
+    /** A coordinator's question that has ended, drawn as the record it became (`CoordinatorQuestions`). */
+    QUESTION_RECORD,
 }
 
 enum class CardVerb(val label: String) {
@@ -53,6 +55,8 @@ enum class CardVerb(val label: String) {
     REJECT_CRITERIA("Keep current criteria"), CONFIRM_CRITERIA("Confirm criteria"), START("Start project"),
     OWNER_ANSWER("Send answer"), RETURN_COORDINATOR("Ask the coordinator again"), RESUME("Resume"),
     MARK_HANDLED("Mark as handled"), RETRY_TASK("Retry task"), CANCEL_TASK("Cancel task"),
+    /** RETRY on an integration item (A08-17): its task's landing queued again, or the merge candidate's check run again. */
+    RETRY_INTEGRATION("Retry"), RERUN_CHECK("Re-run the check"),
     CONFIRM_MERGE("Merge"), DECLINE_MERGE("Not now"), CANCEL_MERGE("Cancel merge"),
     WIKI_ACCEPT("Accept"), WIKI_EDIT("Save edit"), WIKI_REJECT("Reject"), WIKI_CONFIRM("Confirm entry"),
     WIKI_REVERT("Revert run"), WIKI_REJECT_ENTRY("Reject entry"), PLAN_CONFIRM("Confirm plan"), PLAN_ACCEPT("Accept proposal"), PLAN_REJECT("Reject proposal"),
@@ -93,9 +97,10 @@ fun approvalQuestions(input: JsonObject): List<CardQuestion> = input.objects("qu
 /** A source read, not a UI flag, grants each door. Unknown states/actions stay read-only. */
 object CardCatalog {
     /** [engine] is the CLI running the session: the server says it (`engine`); a reader that knows better from the account's keys,
-     * on a server that doesn't, says it here. */
+     * on a server that doesn't, says it here. [answered] holds the records of answers pressed in this window, by item, which stand
+     * in for their questions until the read carries them (`CoordinatorQuestions.answeredHere`). */
     fun session(id: String, snapshot: SessionSnapshot, now: java.time.Instant = java.time.Instant.now(),
-        engine: String? = snapshot.detail.text("engine")): List<InteractionCard> = buildList {
+        engine: String? = snapshot.detail.text("engine"), answered: Map<String, JsonObject> = emptyMap()): List<InteractionCard> = buildList {
         val detail = snapshot.detail
         val wireId = detail.text("id") ?: id
         val projectId = detail.text("projectId") ?: detail.obj("project")?.text("id")
@@ -199,7 +204,7 @@ object CardCatalog {
                     "$requestId:returned", status = "Recorded", context = ownerContext("returned", view)))
             }
         }
-        if (projectId != null) addAll(project(id, projectId, standing))
+        if (projectId != null) addAll(project(id, projectId, standing, answered))
     }
 
     private fun receipt(family: CardFamily, title: String, source: JsonObject, session: String, id: String, revision: String) =
@@ -209,7 +214,8 @@ object CardCatalog {
      * left — beside the confirmation read it was drawn from (`OwnerReview`). */
     private fun ownerContext(kind: String, view: JsonObject) = buildJsonObject { put("ownerCard", kind); put("view", view) }
 
-    fun project(session: String, project: String, standing: Map<String, JsonElement>): List<InteractionCard> = buildList {
+    fun project(session: String, project: String, standing: Map<String, JsonElement>,
+        answered: Map<String, JsonObject> = emptyMap()): List<InteractionCard> = buildList {
         val document = standing["project"] as? JsonObject
         if (document == null || document.text("id") != project) return@buildList
         (standing["criteriaDecisions"] as? JsonObject)?.let { queue ->
@@ -243,10 +249,20 @@ object CardCatalog {
                 "${request.text("criteriaDigest")}:${request.text("planDigest")}", if (allowed) listOf(CardVerb.START) else emptyList(),
                 context = document))
         }
+        // A08-13: each question that has ended is the record it became, under its question card's address, the earliest-ended
+        // first. A record asks nothing, and it stands for its question: a read that left before an answer here still lists it open.
+        val records = CoordinatorQuestions.receipts(openItems, answered)
+        records.forEach { record ->
+            val itemId = record.text("itemId") ?: return@forEach
+            add(InteractionCard("item:$itemId", CardFamily.QUESTION_RECORD, CoordinatorQuestions.recordHeading(record), record, session, project,
+                itemId, "record:${record.text("resolvedAt")}:${record["delivery"]}", status = "Recorded"))
+        }
+        val recorded = records.mapNotNull { it.text("itemId") }.toSet()
         openItems?.objects("needsYou")?.forEach { row ->
             val itemId = row.text("itemId") ?: return@forEach
             val kind = row.text("kind")
             if (kind in setOf("PROMOTION_APPROVAL", "START_REQUEST")) return@forEach
+            if (kind == "COORDINATOR_QUESTION" && itemId in recorded) return@forEach
             val verbs = row.strings("actions")
             val owned = row.text("assignee") == "OWNER"
             val actions = buildList {
@@ -254,14 +270,15 @@ object CardCatalog {
                 if (kind == "COORDINATOR_QUESTION" && "ANSWER" in verbs && row.obj("question") != null) add(CardVerb.OWNER_ANSWER)
                 if ("ASK_COORDINATOR_AGAIN" in verbs) add(CardVerb.RETURN_COORDINATOR)
                 if ("RESUME" in verbs && row.text("fuseEpisodeId") != null) add(CardVerb.RESUME)
-                if ("RETRY" in verbs && row.text("taskId") != null) add(CardVerb.RETRY_TASK)
+                // RETRY is three doors under one name, chosen by the item (`ExceptionCards.retryVerb`).
+                if ("RETRY" in verbs) ExceptionCards.retryVerb(row)?.let(::add)
                 if ("CANCEL_TASK" in verbs && row.text("taskId") != null) add(CardVerb.CANCEL_TASK)
                 if (kind in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED")) add(CardVerb.MARK_HANDLED)
             }
             add(InteractionCard("item:$itemId", if (kind == "COORDINATOR_QUESTION") CardFamily.OWNER_QUESTION else CardFamily.EXCEPTION,
                 if (kind == "FUSE_PAUSED") "Project paused" else row.text("title") ?: "Project item", row, session, project, itemId,
                 // Returning an OPEN item resets this public timestamp; later escalation reuses its itemId.
-                "${row["question"]}:${row["actions"]}:${row["assignee"]}:${row["taskId"]}:${row["fuseEpisodeId"]}:${row["waitingSince"]}", actions))
+                "${row["question"]}:${row["actions"]}:${row["assignee"]}:${row["taskId"]}:${row["promotionId"]}:${row["fuseEpisodeId"]}:${row["waitingSince"]}", actions))
         }
         (standing["promotion"] as? JsonObject)?.let { row ->
             val promotion = row.text("promotionId") ?: return@let

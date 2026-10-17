@@ -1,0 +1,131 @@
+{
+ "stats": {
+  "startTime": "2026-10-11T03:53:59.242Z",
+  "duration": 170177.65699999998,
+  "expected": 101,
+  "skipped": 11,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "statusCounts": {
+  "expected": 101,
+  "skipped": 11
+ },
+ "byProject": {
+  "chromium-light-desktop": {
+   "expected": 14
+  },
+  "chromium-light-phone": {
+   "skipped": 2,
+   "expected": 12
+  },
+  "chromium-dark-desktop": {
+   "expected": 13,
+   "skipped": 1
+  },
+  "chromium-dark-phone": {
+   "skipped": 2,
+   "expected": 12
+  },
+  "webkit-light-desktop": {
+   "expected": 13,
+   "skipped": 1
+  },
+  "webkit-light-phone": {
+   "skipped": 2,
+   "expected": 12
+  },
+  "webkit-dark-desktop": {
+   "expected": 13,
+   "skipped": 1
+  },
+  "webkit-dark-phone": {
+   "skipped": 2,
+   "expected": 12
+  }
+ },
+ "byFileStatus": {
+  "breakpoints.browser.mjs expected": 4,
+  "breakpoints.browser.mjs skipped": 4,
+  "feedback-production.browser.mjs expected": 8,
+  "known-failures.browser.mjs expected": 16,
+  "pages.browser.mjs expected": 56,
+  "performance.browser.mjs expected": 1,
+  "performance.browser.mjs skipped": 7,
+  "states.browser.mjs expected": 16
+ },
+ "retriesAboveZero": 0,
+ "notExpected": [],
+ "skipped": [
+  {
+   "project": "chromium-light-phone",
+   "title": "both sides of existing 600, 640 and 960px rules"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "title": "both sides of existing 600, 640 and 960px rules"
+  },
+  {
+   "project": "webkit-light-phone",
+   "title": "both sides of existing 600, 640 and 960px rules"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "title": "both sides of existing 600, 640 and 960px rules"
+  },
+  {
+   "project": "chromium-light-phone",
+   "title": "record browser performance baseline"
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "title": "record browser performance baseline"
+  },
+  {
+   "project": "chromium-dark-phone",
+   "title": "record browser performance baseline"
+  },
+  {
+   "project": "webkit-light-desktop",
+   "title": "record browser performance baseline"
+  },
+  {
+   "project": "webkit-light-phone",
+   "title": "record browser performance baseline"
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "title": "record browser performance baseline"
+  },
+  {
+   "project": "webkit-dark-phone",
+   "title": "record browser performance baseline"
+  }
+ ],
+ "expectedLayers": {
+  "p0-drift": 165,
+  "p0.2": 44,
+  "accepted": 43
+ },
+ "screenshotsAsserted": {
+  "expected": 252,
+  "captured": 252,
+  "unique": 252,
+  "missing": [],
+  "extra": []
+ },
+ "capturesByLayer": [
+  [
+   "p0.2",
+   44
+  ],
+  [
+   "p0-drift",
+   165
+  ],
+  [
+   "accepted",
+   43
+  ]
+ ]
+}

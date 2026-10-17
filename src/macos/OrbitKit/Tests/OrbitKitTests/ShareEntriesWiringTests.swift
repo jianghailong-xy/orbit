@@ -109,7 +109,7 @@ final class ShareEntriesWiringTests: XCTestCase {
         let console = code(try appSource("Views/Console/ConsoleView.swift"))
         XCTAssertEqual(try branches(of: "@State private var showShare = false", in: console), [],
                        "the flag the sheet reads exists on both platforms")
-        let body = try slice(console, from: "private func consoleBody(", to: "private struct ConsoleNavTitle")
+        let body = try slice(console, from: "private func consoleBody(", to: "struct TranscriptView: View {")
 
         let mac = try slice(body, from: "ToolbarItem(placement: .primaryAction) {", to: ".help(")
         XCTAssertEqual(try branches(of: "ToolbarItem(placement: .primaryAction) {", in: console), ["!os(iOS)"],

@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 
 /**
  * iOS `AntigravityRepairCardView` (d2737d665, b173e3a28, cd8e8a41a): what keeps an Antigravity session from running, and the way
- * to fix it from here — a Google sign-in on this runner or a Gemini key in Providers, the CLI's install, a runner update. Drawn
+ * to fix it from here — a Google sign-in on this runner or a Gemini key in Infrastructure, the CLI's install, a runner update. Drawn
  * where the failure is said: on the transcript's line, and above the composer for a session still queued behind the runner.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -30,7 +30,7 @@ internal fun AntigravityRepairCard(repair: AntigravityRepair, console: SessionCo
     val tint = LocalOrbitColors.current.needsYou
     val uri = LocalUriHandler.current
     val scope = rememberCoroutineScope()
-    // Read again on arrival and on coming back to the app — from Providers, where a key may just have been connected.
+    // Read again on arrival and on coming back to the app — from Infrastructure, where a key may just have been connected.
     val resumed = rememberResumed()
     LaunchedEffect(resumed) { if (resumed) console.reload() }
     // The runner's one install relay, followed while this card is up.
@@ -63,7 +63,7 @@ internal fun AntigravityRepairCard(repair: AntigravityRepair, console: SessionCo
             } else {
                 if (repair == AntigravityRepair.NOT_INSTALLED) Button(enabled = console.canInstallAntigravity, onClick = console::installAntigravity) { Text("Install") }
                 val runnerId = console.runnerId
-                OutlinedButton(enabled = runnerId != null, onClick = { runnerId?.let { console.openRunner(it, "antigravity") } }) { Text("Open in Providers") }
+                OutlinedButton(enabled = runnerId != null, onClick = { runnerId?.let { console.openRunner(it, "antigravity") } }) { Text("Open in Infrastructure") }
             }
         }
     }

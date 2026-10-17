@@ -41,6 +41,9 @@ import {
   RUN_MERGE_CHECK_NONE_SAYS,
   RUN_MERGE_CHECK_PLACEHOLDER,
   RUN_MERGE_CHECK_SET,
+  RUN_MERGE_CHECK_TIMEOUT,
+  RUN_MERGE_CHECK_TIMEOUT_HINT,
+  RUN_MERGE_CHECK_TIMEOUT_UNIT,
   RUN_TASKS_LAND_ON,
   START_COMES_TO_YOU,
   START_COORDINATOR,
@@ -151,6 +154,8 @@ export interface StartSettingsDraft {
   automatic: boolean;
   maxConcurrentTasks: number | null;
   mergeCheckCommand: string;
+  /** The check's budget in seconds — null, an empty box, for the one-hour default. */
+  mergeCheckTimeoutSeconds: number | null;
 }
 
 /** The most tasks a project may run at once, as the door bounds it (`MAX_PROJECT_CONCURRENT_TASKS`). */
@@ -180,6 +185,9 @@ export function startDraftOf(
     automatic: true,
     maxConcurrentTasks: settings.maxConcurrentTasks,
     mergeCheckCommand: settings.mergeCheckCommand ?? '',
+    // The coordinator's budget when it suggested one, and an empty box — the default — when it did
+    // not: what it sends is what the card opens on, and the owner may change it.
+    mergeCheckTimeoutSeconds: settings.mergeCheckTimeoutSeconds ?? null,
   };
 }
 
@@ -194,7 +202,8 @@ export function startDraftComplete(draft: StartSettingsDraft): boolean {
  * coordinator named rides only with a project branch — the door refuses a branch name on a line
  * that has none — and an empty merge check is none. The main branch on the card is the owner's
  * choice once pressed, so it rides whenever the card offered one: a project with no repository has
- * none, and the door refuses one for it.
+ * none, and the door refuses one for it. The check's budget rides as the box reads it: an empty box
+ * is null, which is the naming that runs the check on its one-hour default.
  */
 export function startBody(
   request: Pick<ProjectStartRequest, 'criteriaDigest' | 'settings'>,
@@ -210,6 +219,7 @@ export function startBody(
     automatic: draft.automatic,
     maxConcurrentTasks: draft.maxConcurrentTasks ?? request.settings.maxConcurrentTasks,
     mergeCheckCommand: draft.mergeCheckCommand.trim() || null,
+    mergeCheckTimeoutSeconds: draft.mergeCheckTimeoutSeconds,
     requestId,
   };
 }
@@ -550,6 +560,22 @@ export function StartProjectCard({
                   onChange={(event) => set({ mergeCheckCommand: event.target.value })}
                 />
                 <div className="start-card-hint">{runMergeCheckHint(main)}</div>
+                <div className="start-card-row-head start-card-budget">
+                  <span>{RUN_MERGE_CHECK_TIMEOUT}</span>
+                  <span className="start-card-inline">
+                    <NumberInput
+                      className="start-card-count"
+                      min={1}
+                      precision={0}
+                      value={draft.mergeCheckTimeoutSeconds}
+                      disabled={!editable}
+                      aria-label={RUN_MERGE_CHECK_TIMEOUT}
+                      onValueChange={(value) => set({ mergeCheckTimeoutSeconds: value })}
+                    />
+                    <span>{RUN_MERGE_CHECK_TIMEOUT_UNIT}</span>
+                  </span>
+                </div>
+                <div className="start-card-hint">{RUN_MERGE_CHECK_TIMEOUT_HINT}</div>
               </>
             ) : null}
           </div>
@@ -920,7 +946,10 @@ export function SessionStartProjectCard({
  * can exist) the start door says so, on the card, and the owner picks again.
  */
 export function defaultStartSettings(
-  view: Pick<ProjectIntegrationView, 'line' | 'ref' | 'upstreamRef' | 'mergeCheckCommand'>,
+  view: Pick<
+    ProjectIntegrationView,
+    'line' | 'ref' | 'upstreamRef' | 'mergeCheckCommand' | 'mergeCheckTimeoutSeconds'
+  >,
   project: { maxConcurrentTasks?: number },
   graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'> | null,
 ): ProjectStartSettings {
@@ -934,6 +963,8 @@ export function defaultStartSettings(
     automatic: true,
     maxConcurrentTasks: project.maxConcurrentTasks ?? 1,
     mergeCheckCommand: view.mergeCheckCommand ?? null,
+    // The budget the project's check already runs on, which a start that names none keeps.
+    mergeCheckTimeoutSeconds: view.mergeCheckTimeoutSeconds ?? null,
   };
 }
 

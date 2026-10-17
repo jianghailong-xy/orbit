@@ -238,7 +238,7 @@ run 结束时顺带清掉了队列，`UNDELIVERED` 和 `RECIPIENT_ENDED` 同时�
   `steer_requeue`），reply steer 在同一行上回到队列，成为普通的下一轮回信 turn，结局仍挂在它上面
   （`reply_client_turn_id` 不变）；已排队的下一轮回信 turn 并进它，不会出现两个。runner 没能把它写进这一轮
   （引擎没有确认，steer 以 FAILED 落定）时，结局从它上面放下来，由请求 worker 重新交回发送方：这一轮还能 steer 就再
-  steer，否则排到下一轮。
+  steer，否则排到下一轮。目标轮被按了 Stop 的除外，见 §4.3。
 - `session-reply:` 列为保留前缀，所有允许调用方指定 `clientTurnId` 的入口都拒收。
   `watch-turn-key.ts#assertClientTurnIdNotReserved` 今天只挡 `watch:`，要一并扩展。
 - 回信不经过 watch，所以不受 `WAKE_LOOP` 约束：A 在等 B 回复时，B 照样可以向 A 发请求追问，双方都不会卡死。
@@ -252,7 +252,9 @@ run 结束时顺带清掉了队列，`UNDELIVERED` 和 `RECIPIENT_ENDED` 同时�
   回信照常排给它，也不写任务评论。
 - 发送方被打断时，排队中的回信 turn 随队列一起被收掉：停就是停，不因为来了回信而继续跑。结局仍在请求行上，
   并在发送方**下一次被投递 turn 时**作为附加块补上，不会丢。还没被 runner 领走的 reply steer 也一样：打断把它随队列收掉
-  （记为没送达的 `CURRENT_WORK`），结局留在请求行上（held），不再被排回去，下一次投递时补上。
+  （记为没送达的 `CURRENT_WORK`），结局留在请求行上（held），不再被排回去，下一次投递时补上。已被 runner 领走、引擎还没
+  读到的 reply steer 同样处理（2026-10-16）：runner 交回（`steer_requeue`）或报没送达、或被停的目标轮落定时，它以没送达
+  落定（`CURRENT_WORK_INTERRUPTED`），结局留在请求行上（held），不交给请求 worker。
 - run 结束时（失败、finalize、reaper、结束会话）没被引擎确认的 reply steer，按随队列收掉的回信 turn 处理：排上了自动重试的，
   结局留给重试的那一轮；没有的，按本节第一条告知已结束的发送方。自动重试重发的是 reply steer 所在的那一轮（原话），
   不用一个回信 turn 顶替它；没送达的结局在重发的那一轮补上。
@@ -379,8 +381,9 @@ P0–三处待定合入后的审查（2026-10-02）：
     两条路线互不合并，runner 已领走的 steer 不再被并入。
 30. reply steer 没送达——目标轮在引擎读到之前结束，或 runner 以 `steer_requeue` 交回——时，它在同一行上回到队列，成为
     下一轮的回信 turn，结局仍挂在它上面；已排队的回信 turn 并进它，只投递一次。runner 没能写进去的 reply steer，结局由
-    请求 worker 重新交回发送方。
-31. 发送方被打断时，还没被领走的 reply steer 随队列收掉，结局留在请求行上，不被重新排回，并在下一次投递时补上。
+    请求 worker 重新交回发送方。目标轮被按了 Stop 的除外（第 31 条）。
+31. 发送方被打断时，还没被领走的 reply steer 随队列收掉，结局留在请求行上，不被重新排回，并在下一次投递时补上。已被
+    领走、引擎还没读到的 reply steer 也以没送达落定，结局同样留在请求行上，不交给请求 worker，下一次投递时补上。
 32. reply steer 所在的那一轮因临时失败停下、排上自动重试时，重试重发的是那一轮的原话，不是一个回信 turn；没送达的结局
     留给重试的那一轮，并在那一轮补上。
 

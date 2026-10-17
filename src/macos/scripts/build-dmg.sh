@@ -92,11 +92,21 @@ else
   sign "$app"
 fi
 codesign --verify --deep --strict --verbose=2 "$app" || true
+# Stapling fetches the ticket of an already accepted notarization from Apple (api.apple-cloudkit.com),
+# which sometimes drops the connection: Error 68, "The network connection was lost" (beta.207 failed
+# three times on it, on the app and on the DMG). Fetch it again rather than fail the release.
+staple() {
+  for try in 1 2 3 4 5; do
+    xcrun stapler staple "$1" && return 0
+    if [ "$try" -lt 5 ]; then echo "  staple failed (try $try of 5); again in 30s" >&2; sleep 30; fi
+  done
+  return 1
+}
 if [ -n "${NOTARIZE_PROFILE:-}" ]; then
   echo "▶ notarize + staple app ($NOTARIZE_PROFILE)"
   ditto -c -k --keepParent "$app" "$out/$APP_NAME.zip"
   xcrun notarytool submit "$out/$APP_NAME.zip" --keychain-profile "$NOTARIZE_PROFILE" --wait
-  xcrun stapler staple "$app"; rm -f "$out/$APP_NAME.zip"
+  staple "$app"; rm -f "$out/$APP_NAME.zip"
 fi
 echo "▶ create DMG (drag-to-Applications layout)"; rm -f "$dmg"
 # Retina background: pack the 1x + 2x PNGs into one HiDPI tiff so the art is crisp on Retina yet
@@ -121,7 +131,7 @@ create-dmg \
 if [ -n "${NOTARIZE_PROFILE:-}" ]; then
   echo "▶ notarize + staple DMG ($NOTARIZE_PROFILE)"   # DMG 自身也要公证,否则 stapler 报 Error 65
   xcrun notarytool submit "$dmg" --keychain-profile "$NOTARIZE_PROFILE" --wait
-  xcrun stapler staple "$dmg"
+  staple "$dmg"
 fi
 echo "▶ zip app payload (Sparkle update channel)"
 ditto -c -k --keepParent "$app" "$zip"

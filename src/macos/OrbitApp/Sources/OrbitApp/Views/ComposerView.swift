@@ -40,7 +40,7 @@ struct ComposerBand<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) { content }
             .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+            .padding(.bottom, .composerBandFoot)
             // NO surface of its own (web parity: `.workspace-composer` has none). A `.bar` fill here
             // reads as a grey panel behind the tray and the git bar, which web has nowhere; the two
             // cards and the composer box each already carry their own fill + border, so they stand on
@@ -69,6 +69,39 @@ extension EnvironmentValues {
     }
 }
 
+/// Whether a view stands in a composer band that floats over the transcript (iOS 26,
+/// `ConsoleView.transcriptAndBand`), with the rows passing behind it — where a card washed with a
+/// faint tint has to be glass instead (`composerBandWash`).
+private struct FloatsOverTranscriptKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var floatsOverTranscript: Bool {
+        get { self[FloatsOverTranscriptKey.self] }
+        set { self[FloatsOverTranscriptKey.self] = newValue }
+    }
+}
+
+private struct ComposerBandWash: ViewModifier {
+    @Environment(\.floatsOverTranscript) private var floats
+    let tint: Color
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10)
+        #if os(iOS)
+        if #available(iOS 26.0, *), floats {
+            content.glassEffect(.regular.tint(tint.opacity(0.22)), in: shape)
+        } else {
+            content.background(tint.opacity(opacity), in: shape)
+        }
+        #else
+        content.background(tint.opacity(opacity), in: shape)
+        #endif
+    }
+}
+
 extension CGFloat {
     /// The one vertical gap between `ComposerBand` members. Read it, don't retype it — the drift it
     /// replaces was four hand-written literals that stopped agreeing.
@@ -76,6 +109,8 @@ extension CGFloat {
     /// How far a scroll view fades out above the composer band — and the room it keeps clear under
     /// its last row, so at rest nothing sits in the fade. See `fadesIntoComposerBand`.
     static let composerBandFade: CGFloat = 20
+    /// The band's foot: the room it keeps under its last member, the composer or its folded bar.
+    static let composerBandFoot: CGFloat = 10
 }
 
 extension View {
@@ -95,7 +130,62 @@ extension View {
                 }
                 Color.black.frame(width: 16)
             }
+            #if os(iOS)
+            // On up behind the nav bar. The scroll view runs on up there — its frame starts at the top
+            // of the screen, its content inset by the bar — and what passes behind the bar is the
+            // bar's to soften (iOS 26's scroll-edge effect), not this mask's to cut. Sized to the
+            // layout frame alone, which stops at the bar, it sliced every row off at the bar's lower
+            // edge and left a blank strip behind the glass (the owner, 2026-10-16).
+            .ignoresSafeArea(.container, edges: .top)
+            #endif
         }
+    }
+
+    /// The surface of a card that stands in the composer band: the tray, the git bar, Tasks created
+    /// here, Watching. On iOS 26 the console's band floats over the transcript, which runs on under it
+    /// (`ConsoleView.transcriptAndBand`), so the card is Liquid Glass — the faint fill would let the
+    /// rows passing behind read straight through it. Elsewhere it stands on the bare content backdrop
+    /// as it always has: a faint fill and a hairline.
+    @ViewBuilder func composerBandCard(cornerRadius: CGFloat = 8) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            clipShape(shape).glassEffect(.regular, in: shape)
+        } else {
+            background(Color.primary.opacity(0.04), in: shape).clipShape(shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
+        }
+        #else
+        background(Color.primary.opacity(0.04), in: shape).clipShape(shape)
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.1)))
+        #endif
+    }
+
+    /// A card the composer band shows now and then, washed with what it says — a run that never
+    /// started, an engine to repair, a hand-off, the managed runner's state. Where the band floats over
+    /// the transcript (`floatsOverTranscript`) it is glass tinted that colour, as the toasts are
+    /// (`ToastHost`), for the reason `composerBandCard` gives (the owner, 2026-10-16: these too).
+    /// Anywhere else — the Runners and Tasks pages, an error row in the transcript — it keeps the faint
+    /// wash it always had.
+    func composerBandWash(_ tint: Color, opacity: Double) -> some View {
+        modifier(ComposerBandWash(tint: tint, opacity: opacity))
+    }
+
+    /// The composer card's own surface, under its hairline: an elevated fill with a soft drop shadow
+    /// that lifts a touch on focus — or, on iOS 26, glass, for the reason `composerBandCard` gives.
+    @ViewBuilder fileprivate func composerCardSurface(cornerRadius: CGFloat, focused: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular, in: shape)
+        } else {
+            background(shape.fill(Color.editorSurface)
+                .shadow(color: .black.opacity(focused ? 0.12 : 0.06), radius: focused ? 7 : 4, y: 1.5))
+        }
+        #else
+        background(shape.fill(Color.editorSurface)
+            .shadow(color: .black.opacity(focused ? 0.12 : 0.06), radius: focused ? 7 : 4, y: 1.5))
+        #endif
     }
 }
 
@@ -127,9 +217,6 @@ struct ComposerView: View {
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
-    /// Set by the first double-tap that takes a suggestion on this device: from then on the line is
-    /// the guess alone, without "Double-tap to use" after it.
-    @AppStorage("composer.suggestionDoubleTapLearned") private var suggestionDoubleTapLearned = false
     #endif
 
     // The models of the current engine and provider, in catalog order (Opus → Haiku). The model control's
@@ -247,13 +334,11 @@ struct ComposerView: View {
 
     #if os(iOS)
     /// A touch screen's way to take it: a double-tap on the field's line (`GrowingTextEditor`), or
-    /// VoiceOver's "Use suggestion". A light tap says it landed, and "Double-tap to use" has been
-    /// learned on this device.
+    /// VoiceOver's "Use suggestion". A light tap says it landed.
     private func useSuggestionByTouch() {
         guard offeredSuggestion != nil else { return }
         PlatformHaptics.tap()
         acceptSuggestion()
-        suggestionDoubleTapLearned = true
     }
     #endif
 
@@ -330,7 +415,7 @@ struct ComposerView: View {
                     .overlay(alignment: .topLeading) {
                         if let suggestion = offeredSuggestion {
                             #if os(iOS)
-                            PromptSuggestionLine(text: suggestion, showsDoubleTapHint: !suggestionDoubleTapLearned)
+                            PromptSuggestionLine(text: suggestion)
                             #else
                             PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
                             #endif
@@ -359,13 +444,8 @@ struct ComposerView: View {
             // shadow. Focus deepens the border toward the accent and lifts the shadow a touch instead
             // of flipping to a hard blue outline. The corner is `cardRadius` because the toolbar's two
             // round ends sit 8pt in from the edges with their centres 24pt from both — on the
-            // corner's own centre.
-            .background(
-                RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
-                    .fill(Color.editorSurface)
-                    .shadow(color: .black.opacity(boxFocused ? 0.12 : 0.06),
-                            radius: boxFocused ? 7 : 4, y: 1.5)
-            )
+            // corner's own centre. On iOS 26 the surface is glass instead (`composerCardSurface`).
+            .composerCardSurface(cornerRadius: Self.cardRadius, focused: boxFocused)
             .overlay {
                 RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(boxFocused ? 0.22 : 0.10), lineWidth: 1)
@@ -547,14 +627,15 @@ struct ComposerView: View {
     @ViewBuilder
     private var sendControls: some View {
         // One primary button that morphs between Send and Stop, mirroring the web composer
-        // (`showStop`): while a turn is running and there's nothing staged to send it's a
-        // Stop (interrupt); the moment the user types a follow-up it becomes Send again so
-        // the message can queue mid-turn. The running check reads the session's AUTHORITATIVE
-        // status (the live control-plane record the nav-bar title uses), not the stream-
-        // derived `console.state.status` — that never reaches `.running` on a cold open of an
-        // already-running session, so the stop affordance used to never appear.
+        // (`showStop`): while a turn is generating — or the session still has work it left
+        // running — and there's nothing staged to send, it's a Stop (interrupt); the moment the
+        // user types a follow-up it becomes Send again so the message can queue mid-turn. The
+        // check reads the session's AUTHORITATIVE record (the live control-plane row the nav-bar
+        // title and status glyph use), not the stream-derived `console.state.status` — that never
+        // reaches `.running` on a cold open of an already-running session, so the stop affordance
+        // used to never appear.
         if ComposerLogic.showsInterrupt(
-            session: app.session(id: console.sessionID)?.effectiveRunStatus,
+            session: app.session(id: console.sessionID),
             stream: console.state.status,
             hasText: !console.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             hasAttachments: !console.pendingAttachments.isEmpty,
@@ -581,7 +662,7 @@ struct ComposerView: View {
             // (`showsInterrupt`).
             #if !os(iOS)
             if ComposerLogic.offersInterruptAndSend(
-                session: app.session(id: console.sessionID)?.effectiveRunStatus,
+                session: app.session(id: console.sessionID),
                 stream: console.state.status,
                 canSend: console.canSend,
                 ordinaryDraft: !ComposerLogic.parseShell(console.composerText).shell
@@ -621,7 +702,30 @@ struct ComposerView: View {
             }
             .buttonStyle(.plain)
             .disabled(!console.canSend)
+            // Held on a phone, right-clicked on a Mac: the other way to send it while a turn runs —
+            // queued for the next turn instead of into this one (decided 2026-10-16,
+            // docs/mocks/steer-tray). The web's ⌥Enter; here ⌥Return is the system's line break.
+            .contextMenu {
+                if queueOffered {
+                    Button {
+                        let status = app.session(id: console.sessionID)?.effectiveRunStatus
+                        Task { await console.send(authoritative: status, queueForNextTurn: true) }
+                    } label: {
+                        Label("Queue for next turn", systemImage: "text.line.last.and.arrowtriangle.forward")
+                    }
+                }
+            }
+            .help(queueOffered ? "Send into the current turn — right-click to queue it for the next turn" : "Send")
         }
+    }
+
+    /// Whether Send can also queue the message for the next turn: a turn is running on an engine that
+    /// would otherwise send it into that turn, and an ordinary message is typed (a `!cmd` always waits).
+    private var queueOffered: Bool {
+        (app.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running
+            && SteerDelivery.runtimeTakesMidTurnSteer(console.engine)
+            && console.canSend && console.replyContext == nil
+            && !ComposerLogic.parseShell(console.composerText).shell
     }
 
     /// The permission mode, on the toolbar's left where the web composer has it. It outranks the
@@ -1398,13 +1502,11 @@ struct ComposerView: View {
 /// The engine's guess at the next message, drawn on the empty field's first line where the
 /// placeholder would be (docs/prompt-suggestions-design.md §4.1). On a Mac, Use at its end (or Tab)
 /// takes it, and only Use takes the click. A touch screen has no button: a double-tap on the line
-/// takes it (`GrowingTextEditor`), and until the first one on this device the words are followed by
+/// takes it (`GrowingTextEditor`), and the words are followed by
 /// "Double-tap to use". Either way a tap anywhere else lands in the field, to type something else.
 private struct PromptSuggestionLine: View {
     let text: String
-    #if os(iOS)
-    let showsDoubleTapHint: Bool
-    #else
+    #if !os(iOS)
     let accept: () -> Void
     #endif
 
@@ -1414,12 +1516,10 @@ private struct PromptSuggestionLine: View {
         // field's own line height and the words sit exactly where typed ones would.
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             words
-            if showsDoubleTapHint {
-                Text("Double-tap to use")
-                    .font(.orbitLabel)
-                    .foregroundStyle(Self.placeholderColor)
-                    .fixedSize()
-            }
+            Text("Double-tap to use")
+                .font(.orbitLabel)
+                .foregroundStyle(Self.placeholderColor)
+                .fixedSize()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .allowsHitTesting(false)

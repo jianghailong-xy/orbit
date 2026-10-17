@@ -43,7 +43,8 @@ internal fun DshRepairCard(repair: DshRuntime.Repair, console: SessionConsole) {
             Text("⚠", color = tint, modifier = Modifier.clearAndSetSemantics { })
             Text(repair.title(console.runnerName), color = tint, fontWeight = FontWeight.SemiBold)
         }
-        Text(repair.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // A rejected key is named: one DeepSeek key runs on every engine that takes it, and there can be several (A07-19 (b)).
+        Text(repair.detail(console.sessionKeyName), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         // The install is a state of the session's machine, said in the conversation for as long as it runs.
         if (console.installing || console.dshInstallInFlight) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)

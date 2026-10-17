@@ -83,6 +83,10 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 			report.Auth = "unknown"
 			report.Dsh = dshRuntimeHealth(h.version, false, h.installed && h.installError == "" && dshCatalogReadable())
 		}
+		// What every request then declares of Cursor CLI (cursorDeclared): the pinned build, ready.
+		if spec.bin == providerCursor {
+			noteCursorInstallReady(h.installed && h.installError == "")
+		}
 		// An engine that isn't here has no update state worth reporting — the record is about
 		// a binary, and a stale one left by an uninstall would describe something gone.
 		if rec, ok := updates[spec.bin]; ok && h.installed && rec.Status != "" {

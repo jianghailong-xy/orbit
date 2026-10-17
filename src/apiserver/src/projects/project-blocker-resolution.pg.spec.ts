@@ -330,7 +330,8 @@ const MERGED_INTO_MAIN = { result: 'MERGED', targetBranch: 'main', targetShaAfte
  * A blocker of a kind this file does not raise through a delivery, written the way 0125 shapes one —
  * or, with a `detail`, one a delivery used to raise and no longer does: since a delivery's landing
  * questions became the coordinator's exception items (`blocker-disposition.ts` §4), an undeclared
- * file raises no blocker, and the rows raised before that change are what is left to read and end.
+ * file or an argued exemption raises no blocker, and the rows raised before those changes are what
+ * is left to read and end.
  */
 async function insertBlocker(
   stack: Stack,
@@ -468,9 +469,10 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
     });
 
     const f = await fixture(stack, 'door');
-    // An argued exemption: a question about the ruler, and so still the owner's blocker in an
-    // Automatic project (`blocker-disposition.ts` §4). An undeclared file is the coordinator's
-    // review now, and its old rows are what `scopeRow` below stands for.
+    // An argued exemption. Since 2026-10-14 a delivery like this one is the coordinator's review
+    // (`blocker-disposition.ts`, BLOCKER_DECISION), so the blocker read and ended below is one raised
+    // before that, exactly as raiseBlocker wrote it — the shape production still holds rows of. An
+    // undeclared file is the coordinator's review too, and its old rows are what `scopeRow` stands for.
     const criterionText = '这条标准的活声称某条判据不适用';
     const [criterionKey] = await state(stack, f, [criterionText]);
     const title = 'door 的交付：写了豁免理由';
@@ -480,14 +482,21 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
     await settle(stack, taskId);
     await attempt(stack, f, taskId, 'door', [IN_SCOPE]);
     const delivered = await stack.router.routeUnlandedCriteria([f.projectId]);
-    assert.equal(
-      delivered.find((one) => one.criterionSubjectId === criterionSubjectId(f.projectId, criterionKey!))
-        ?.blockerKind,
-      'HUMAN_DECISION_REQUIRED',
-      'the fixture did not raise the blocker this case is about',
-    );
+    const spent = delivered
+      .find((one) => one.criterionSubjectId === criterionSubjectId(f.projectId, criterionKey!));
+    assert.equal(spent?.review?.reason, 'CRITERION_EXEMPTION_ARGUED',
+      'the delivery was not put to the coordinator as a review');
+    assert.equal(spent?.blockerKind, undefined, 'the delivery still raised the owner’s blocker');
+    const raisedId = await insertBlocker(stack, {
+      projectId: f.projectId,
+      kind: 'HUMAN_DECISION_REQUIRED',
+      subjectType: 'TASK',
+      subjectId: taskId,
+      dedupeKey: `HUMAN_DECISION_REQUIRED:CRITERION_EXEMPTION_ARGUED:${taskId}`,
+      detail: { reason: 'CRITERION_EXEMPTION_ARGUED', source: 'CRITERION_UNLANDED', taskId, paths: [] },
+    });
     const [raised] = await stack.db.projectBlocker.findMany({
-      where: { projectId: f.projectId, subjectId: taskId },
+      where: { id: raisedId },
       select: { id: true, requiredAction: true },
     });
     assert.ok(raised, 'the raised blocker is not on the project');
@@ -680,8 +689,9 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
   });
 
 // (b) -----------------------------------------------------------------------------------------
-test('an argued exemption, a moved standard and an undeclared-file blocker raised before reviews '
-  + 'existed wait for their work to land, then resolve themselves with the reason written down',
+test('a moved standard, and an argued exemption and an undeclared-file blocker raised before reviews '
+  + 'existed, wait for their work to land, then resolve themselves with the reason written down — and '
+  + 'so does the review an argued exemption is now',
   { skip, timeout: 300_000 }, async (t) => {
     const stack = await connect();
     t.after(() => disconnect(stack));
@@ -722,21 +732,18 @@ test('an argued exemption, a moved standard and an undeclared-file blocker raise
     assert.deepEqual(
       [spentFor(exemptionKey!)?.blockerKind, spentFor(standardKey!)?.blockerKind,
         spentFor(scopeKey!)?.blockerKind],
-      ['HUMAN_DECISION_REQUIRED', 'POLICY_MANUAL_HOLD', undefined],
-      'the fixture did not raise the two blockers this case is about, or raised a third',
+      [undefined, 'POLICY_MANUAL_HOLD', undefined],
+      'the fixture did not raise the one blocker this case is about, or raised another',
     );
-    // The undeclared file is no longer the owner's blocker: it is the coordinator's delivery review
-    // (`blocker-disposition.ts` §4), and a merge is not what ends it.
+    // The undeclared file and the argued exemption are no longer the owner's blockers: each is the
+    // coordinator's delivery review (`blocker-disposition.ts` §4). A merge is not what ends the first;
+    // it ends the second, as it ended the blocker that review replaced.
     assert.equal(spentFor(scopeKey!)?.review?.reason, 'OUTSIDE_DECLARED_SCOPE');
+    assert.equal(spentFor(exemptionKey!)?.review?.reason, 'CRITERION_EXEMPTION_ARGUED');
     const reviewId = spentFor(scopeKey!)!.review!.itemId!;
-    const reviewState = async () =>
-      (await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: reviewId } })).state;
-    const projectRead = await stack.projects.get(f.ownerId, f.projectId);
-    const exemptionView = projectRead.blockers.open.find((one) => one.subjectId === exemption);
-    assert.equal(exemptionView?.agentArgument, ARGUMENT,
-      'the project read dropped the agent explanation for an argued exemption');
-    assert.equal(exemptionView?.criterionText, texts[0],
-      'the project read dropped the current criterion wording');
+    const exemptionReviewId = spentFor(exemptionKey!)!.review!.itemId!;
+    const reviewState = async (id = reviewId) =>
+      (await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id } })).state;
 
     const keys = {
       exemption: `HUMAN_DECISION_REQUIRED:CRITERION_EXEMPTION_ARGUED:${exemption}`,
@@ -746,6 +753,24 @@ test('an argued exemption, a moved standard and an undeclared-file blocker raise
       // missing-judgment-path signal's key. Landing is not what that one is about.
       noJudgment: `HUMAN_DECISION_REQUIRED:TASK_NO_JUDGMENT:${exemption}`,
     };
+    // The argued-exemption blocker such a delivery raised before it became a review — the shape
+    // production still holds rows of — still reads with its argument, and still ends when its work
+    // lands.
+    await insertBlocker(stack, {
+      projectId: f.projectId,
+      kind: 'HUMAN_DECISION_REQUIRED',
+      subjectType: 'TASK',
+      subjectId: exemption,
+      dedupeKey: keys.exemption,
+      detail: { reason: 'CRITERION_EXEMPTION_ARGUED', source: 'CRITERION_UNLANDED', taskId: exemption, paths: [] },
+    });
+    const projectRead = await stack.projects.get(f.ownerId, f.projectId);
+    const exemptionView = projectRead.blockers.open.find((one) => one.subjectId === exemption);
+    assert.equal(exemptionView?.agentArgument, ARGUMENT,
+      'the project read dropped the agent explanation for an argued exemption');
+    assert.equal(exemptionView?.criterionText, texts[0],
+      'the project read dropped the current criterion wording');
+
     await insertBlocker(stack, {
       projectId: f.projectId,
       kind: 'HUMAN_DECISION_REQUIRED',
@@ -787,12 +812,22 @@ test('an argued exemption, a moved standard and an undeclared-file blocker raise
         result: 'CONFLICT', targetBranch: 'main', conflicts: [IN_SCOPE],
       });
       assert.deepEqual(await open(), all, 'a merge git refused was taken for landing');
+      assert.equal(await reviewState(exemptionReviewId), 'OPEN',
+        'the argued exemption’s review ended before its work landed');
     });
 
     await t.test('each resolves when its own work lands, and nothing else does', async () => {
       await recordMerge(stack, f, sessions.exemption, MERGED_INTO_MAIN);
       assert.deepEqual(await open(), [keys.standard, keys.scope, keys.noJudgment].sort(),
         'landing the argued exemption did not resolve exactly its own blocker');
+      const landedReview = await stack.db.projectOpenItem.findUniqueOrThrow({
+        where: { id: exemptionReviewId },
+      });
+      assert.equal(landedReview.state, 'RESOLVED', 'landing the argued exemption left its review open');
+      assert.equal(landedReview.resolution, 'LANDED');
+      assert.equal(landedReview.resolvedBy, 'PLATFORM');
+      assert.equal(landedReview.resolutionNote, LANDED_NOTE);
+      assert.equal(await reviewState(), 'OPEN', 'landing the argued exemption ended a review about another task');
 
       await recordMerge(stack, f, sessions.standard, {
         result: 'ALREADY_MERGED', targetBranch: 'main', targetShaAfter: sha('c'),
@@ -829,5 +864,8 @@ test('an argued exemption, a moved standard and an undeclared-file blocker raise
           where: { projectId: f.projectId, dedupeKey: { in: all } },
         }), 4, 'a landed criterion raised one of these blockers again');
         assert.deepEqual(await open(), [keys.noJudgment]);
+        assert.equal(await stack.db.projectOpenItem.count({
+          where: { projectId: f.projectId, kind: 'DELIVERY_REVIEW', taskId: exemption },
+        }), 1, 'a landed criterion filed the argued exemption’s review again');
       });
   });

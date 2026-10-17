@@ -89,6 +89,15 @@ class DshRuntimeTest {
         assertEquals("DeepSeek Harness can't run on this runner", DshRuntime.Repair.UNSUPPORTED_PLATFORM.title(null))
     }
 
+    /** A07-19 (b) (iOS 6f3083272 `Repair.detail(keyName:)`): a rejected key is named where the reader knows which one it is — one
+     * DeepSeek key runs on Claude Code, OpenCode and Harness alike, and there can be several — and said as before where it does not. */
+    @Test fun aRejectedKeyIsNamed() {
+        assertEquals("Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.",
+            DshRuntime.Repair.INVALID_KEY.detail("the DeepSeek key “DeepSeek 2”"))
+        assertEquals("Update the DeepSeek key in Infrastructure, then send your message again.", DshRuntime.Repair.INVALID_KEY.detail(null))
+        assertEquals("a missing key has none to name", DshRuntime.Repair.NEEDS_KEY.detail, DshRuntime.Repair.NEEDS_KEY.detail("the DeepSeek key “DeepSeek 2”"))
+    }
+
     @Test fun rememberIsNotOfferedOnHarnessAlone() {
         assertFalse(DshRuntime.rememberOffered("dsh"))
         listOf("claude", "codex", "kimi", "opencode", "antigravity", null).forEach { assertTrue("$it", DshRuntime.rememberOffered(it)) }

@@ -14,6 +14,12 @@ final class PushRegistrar {
     private var pendingToken: Data?
     private var report: ((Data) async -> Void)?
 
+    /// The token as the server stores it: lowercase hex.
+    nonisolated static func hex(_ token: Data) -> String { token.map { String(format: "%02x", $0) }.joined() }
+
+    /// The token APNs last gave this launch, if it has given one.
+    var tokenHex: String? { pendingToken.map(Self.hex) }
+
     /// The APNs environment this build's `aps-environment` entitlement targets. Distribution
     /// (Release/TestFlight) builds are `production`; a debug build would be `sandbox`.
     static var environment: String {
@@ -83,11 +89,21 @@ extension AppModel {
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         let bundleId = Bundle.main.bundleIdentifier ?? "io.orbitd.app"
         PushRegistrar.shared.setReporter { tokenData in
-            let hex = tokenData.map { String(format: "%02x", $0) }.joined()
+            let hex = PushRegistrar.hex(tokenData)
             try? await api.registerDeviceToken(
                 DeviceTokenRequest(token: hex, environment: PushRegistrar.environment, bundleId: bundleId))
         }
         PushRegistrar.shared.start()
+    }
+
+    /// Take this device off the account's pushes. Call from `logout` before it clears the tokens: iOS
+    /// draws an alert push itself, so a signed-out app can't hold one back — only dropping the
+    /// server's registration stops them. The access token is read now; the request goes out after.
+    func disablePush() {
+        guard let baseURL, let accessToken = tokenStore.token(for: baseURL),
+              let token = PushRegistrar.shared.tokenHex else { return }
+        let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        Task { await api.unregisterDeviceToken(token: token, accessToken: accessToken) }
     }
 }
 #endif

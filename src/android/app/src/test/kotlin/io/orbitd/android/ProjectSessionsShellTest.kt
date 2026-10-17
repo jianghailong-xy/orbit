@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.core.auth.AuthState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -67,9 +68,10 @@ class ProjectSessionsShellTest {
         assertTrue(ProjectShell.calls.any { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}" })
         assertEquals(listOf("Coordinator", "Coordinate launch", "Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), pageLines())
         compose.onNode(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")).assertExists()
-        // A task landing on the project branch is the progress card's landing row.
-        await { exists(hasTestTag("landing-row")) }
-        compose.onNode(hasTestTag("landing-row") and hasText("Landing · Wire the page", substring = true)).assertExists()
+        // A task landing on the project branch is a card of its own under the progress card (A11-11), no longer a row of it.
+        await { exists(hasTestTag("landing-card")) }
+        compose.onNode(hasTestTag("landing-card:what") and hasText("Wire the page"), useUnmergedTree = true).assertExists()
+        compose.onAllNodes(hasTestTag("landing-card") and hasAnyAncestor(hasTestTag("project-sessions-progress"))).assertCountEquals(0)
         // No page search and no New session on the page.
         compose.onAllNodes(hasText("Search sessions") and hasAnyAncestor(hasTestTag("project-sessions"))).assertCountEquals(0)
         compose.onAllNodes(hasText("New session") and hasAnyAncestor(hasTestTag("project-sessions"))).assertCountEquals(0)
@@ -77,6 +79,56 @@ class ProjectSessionsShellTest {
         await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
         compose.onAllNodesWithTag("project-sessions").assertCountEquals(0)
     }
+
+    /** A11-11 (iOS 749d995c5, owner decision 2026-10-11): the landing in flight is a card of its own under the progress card, in the
+     * merged line's anatomy — the ring turning, "Landing", the live clock, the state and the freshness under it — then the task, and
+     * the sentence that takes the reader off the hook. From a server that lists no jobs its press opens the project's page. */
+    @Test fun theLandingInFlightIsACardOfItsOwnUnderTheProgressCard() {
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("landing-card")) }
+        val progress = compose.onNodeWithTag("project-sessions-progress").fetchSemanticsNode().boundsInRoot
+        val card = compose.onNodeWithTag("landing-card").fetchSemanticsNode().boundsInRoot
+        assertTrue("the card is under the progress card: $progress / $card", card.top >= progress.bottom)
+        compose.onNode(hasTestTag("landing-head:title") and hasText("Landing"), useUnmergedTree = true).assertExists()
+        compose.onNode(hasTestTag("landing-head:detail") and hasText("checking · updated just now"), useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("landing-ring:running", useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("Nothing to do — it lands on its own.") and hasAnyAncestor(hasTestTag("landing-card")), useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("landing-card:body").performClick()
+        await { exists(hasTestTag("project-detail")) }
+    }
+
+    /** A11-13: both start sheets of this page draw the plan by the card's rule — the task graph while it fits at 0.7, the levels and a
+     * "Task graph" press otherwise — off the dependency graph they read as they open. */
+    @Test fun theCoordinatorsStartSheetListsAWidePlanByLevelWithTheTaskGraphAPressAway() {
+        ProjectShell.started = false; ProjectShell.startRequest = true
+        ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server", "c" to "C · Web", "d" to "D · Android"), listOf("a" to "b", "a" to "c", "a" to "d"))
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-review-start")) }
+        compose.onNodeWithTag("project-sessions-review-start").performClick()
+        await { exists(hasTestTag("project-start-request-task-graph")) }
+        compose.onNodeWithTag("project-start-request-plan-graph").assertDoesNotExist()
+        compose.onNodeWithTag("project-start-request-level:2").assertExists()
+        compose.onNodeWithTag("project-start-request-task-graph").performScrollTo().performClick()
+        await { exists(hasTestTag("project-graph-fullscreen")) }
+    }
+
+    @Test fun theOwnersStartSheetDrawsAPlanThatFitsAsTheTaskGraph() {
+        ProjectShell.started = false
+        ProjectShell.plan = graph(listOf("a" to "A · Contract", "b" to "B · Server"), listOf("a" to "b"))
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-start-own")) }
+        compose.onNodeWithTag("project-sessions-start-own").performClick()
+        await { exists(hasTestTag("project-start-plan-graph")) }
+        compose.onNodeWithTag("project-start-task-graph").assertDoesNotExist()
+        compose.onNode(hasText("PLAN · 2 TASKS") and hasAnyAncestor(hasTestTag("project-start-sheet"))).assertExists()
+    }
+
+    private fun graph(tasks: List<Pair<String, String>>, edges: List<Pair<String, String>>) = """{"marks":[${tasks.joinToString(",") { (id, title) ->
+        """{"kind":"TASK","id":"$id","taskId":"$id","title":"$title","status":"OPEN","completionCriterion":"EVIDENCE_JUDGMENT","autoRunWhenReady":true}""" }}],
+        "edges":[${edges.joinToString(",") { (s, t) -> """{"sourceMarkId":"$s","targetMarkId":"$t"}""" }}],"taskCount":${tasks.size},"truncated":false}"""
 
     @Test fun theRowsMenuOpensTheSessionItSpeaksForItsSessionsAndItsProject() {
         signIn(); openAlpha()
@@ -220,6 +272,79 @@ class ProjectSessionsShellTest {
         compose.onAllNodesWithTag("project-sessions-progress").assertCountEquals(0)
     }
 
+    /** A05-9 (iOS 62b7009ca): a member moved to Trash leaves the page on the press, and the project's row in the list with it — the
+     * row stops saying a member runs here — while the server has yet to answer. */
+    @Test fun aMemberMovedToTrashLeavesThePageAndItsProjectRowOnThePress() {
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row-running", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasText("Project · 4 sessions")) && exists(hasContentDescription("Options for Wire tests")) }
+        val answer = CompletableDeferred<Unit>()
+        ProjectShell.holdDelete = answer
+        memberAction("Wire tests", "Move to Trash")
+        settled { ProjectShell.calls.any { it == "DELETE sessions/${ProjectShell.WORKER}" } }
+        compose.onAllNodesWithContentDescription("Options for Wire tests").assertCountEquals(0)
+        await { exists(hasText("Project · 3 sessions")) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
+        compose.onAllNodesWithTag("project-row-running", useUnmergedTree = true).assertCountEquals(0)
+        assertFalse(toastShows("Moved to Trash"))
+        answer.complete(Unit)
+        await { toastShows("Moved to Trash") }
+        settled { app().trashing.ids.value.isEmpty() }
+        compose.onAllNodesWithTag("project-row-running", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    /** A05-9: a member read that left before a move to Trash settled — here the page's first read, still out when the move was taken
+     * and let go — answers with the row in its Completed list. It is read again rather than written, so the row stays gone. */
+    @Test fun aMemberReadFromBeforeTheMoveSettledDoesNotPutTheRowBack() {
+        signIn(); openAlpha()
+        val early = CompletableDeferred<Unit>()
+        ProjectShell.holdMembers = early
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        settled { completedReads() == 1 }
+        ProjectShell.holdMembers = null
+        // Drawn from the app's own lists while the page's read is out.
+        await { exists(hasContentDescription("Options for Shipped docs")) }
+        memberAction("Shipped docs", "Move to Trash")
+        await { toastShows("Moved to Trash") }
+        settled { app().trashing.ids.value.isEmpty() && app().trashing.releases == 1L }
+        compose.onAllNodesWithContentDescription("Options for Shipped docs").assertCountEquals(0)
+        val before = completedReads()
+        early.complete(Unit)
+        settled { completedReads() > before }
+        compose.waitForIdle()
+        compose.onAllNodesWithContentDescription("Options for Shipped docs").assertCountEquals(0)
+        await { exists(hasText("Project · 3 sessions")) }
+    }
+
+    /** A11-2's rest: a drawer project row counts what waits on you as M2's iOS does (`ProjectAttention.drawerMark`, a
+     * `NeedsYouCountCapsule`) — the four owner items by their counts, the coordinator asking to start the project, and asking to
+     * record it done — and a project with nothing waiting carries no count. */
+    @Test fun aDrawerProjectRowCountsWhatWaitsOnYou() {
+        val since = "2026-10-05T00:00:00Z"
+        ProjectShell.attention = """{"ownerItems":[{"kind":"COORDINATOR_QUESTION","count":1,"oldestWaitingSince":"$since"},
+            {"kind":"ESCALATED","count":2,"oldestWaitingSince":"$since"},{"kind":"SOMETHING_NEW","count":4,"oldestWaitingSince":"$since"}],
+            "startRequest":{"waitingSince":"$since"},"doneRequest":{"waitingSince":"$since"}}"""
+        signIn(); openAlpha()
+        openDrawer(); await { exists(drawerRow("Launch")) }
+        await { compose.onAllNodesWithTag("drawer-project-needs-you:${ProjectShell.LAUNCH}", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("drawer-project-needs-you:${ProjectShell.LAUNCH}", useUnmergedTree = true).assert(hasContentDescription("5 waiting for you"))
+        compose.onAllNodesWithTag("drawer-project-needs-you:${ProjectShell.QUIET}", useUnmergedTree = true).assertCountEquals(0)
+        compose.onNode(drawerRow("Launch")).assert(hasContentDescription("5 waiting for you"))
+    }
+
+    /** A wait on the fixture or the store, not the screen: it idles the UI on every look, or the store's coroutines (on the main
+     * looper) would never run. */
+    private fun settled(condition: () -> Boolean) = await { compose.waitForIdle(); condition() }
+    private fun completedReads() = ProjectShell.calls.count { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}" }
+    private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
+    private fun memberAction(session: String, action: String) {
+        compose.onNodeWithContentDescription("Options for $session").performScrollTo().performClick()
+        await { exists(hasText(action) and hasAnyAncestor(isDialog())) }
+        compose.onNode(hasText(action) and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+        compose.waitForIdle()
+    }
     private fun pageLines(): List<String> = compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions"))).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
         .filter { it in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch", "Wire tests", "Quota retry", "Shipped docs") }

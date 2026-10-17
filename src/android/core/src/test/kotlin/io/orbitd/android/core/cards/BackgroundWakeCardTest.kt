@@ -101,8 +101,8 @@ class BackgroundWakeCardTest {
         val said = { delivery: String? -> BackgroundWakeCard.steerState(true, delivery, false) }
         assertEquals("waiting for the runner: no event exists yet", "Sending…", said(null))
         assertEquals("Sending…", said("enqueued"))
-        assertEquals("Delivering…", said("written"))
-        assertEquals("Sent into this turn", said("acknowledged"))
+        assertEquals("Waiting to be read", said("written"))
+        assertEquals("Read in this turn", said("acknowledged"))
         assertEquals("Queued for next turn instead", said("requeued"))
         assertNull(said("failed"))
         assertNull(said("unconfirmed"))
@@ -113,8 +113,8 @@ class BackgroundWakeCardTest {
 
     /** The card keeps the delivery's own words, the confirmed receipt included, and says its details and output tail as iOS and the web do. */
     @Test fun theCardSaysItsReceiptAndItsDetailsInTheWordsIosDraws() {
-        assertEquals("Sent into this turn", BackgroundWakeCard.steerReceipt("Sent into this turn"))
-        assertEquals("Delivering…", BackgroundWakeCard.steerReceipt("Delivering…"))
+        assertEquals("Read in this turn", BackgroundWakeCard.steerReceipt("Read in this turn"))
+        assertEquals("Waiting to be read", BackgroundWakeCard.steerReceipt("Waiting to be read"))
         assertNull(BackgroundWakeCard.steerReceipt(null))
         assertEquals("Job details", BackgroundWakeCard.detailsLabel(wake(enDone)))
         assertEquals("Details", BackgroundWakeCard.detailsLabel(wake(enScheduled)))

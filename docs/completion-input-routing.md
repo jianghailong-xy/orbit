@@ -32,20 +32,39 @@ agent. `AWAITING_INPUT` neither refuses nor delays evidence/request routing. EVI
 consumers are people and use the request/inbox surface. Only VERIFICATION uses its deterministic
 verifier Task and the ordinary one-shot task execution machinery.
 
-The one clock added by the integration-line contract escalates an unhandled open item to the account
-owner (`docs/project-integration-line-contract.md` §4.6,
-`projects/open-item-escalation.service.ts`). It writes the item's assignee and nothing else: the
-owner then reads it under "needs you" in that project's open items, and the push that tells them so
-is §7.6's, sent from the rows this sweep returns. It creates no wake, no turn and no session.
+The one clock added by the integration-line contract does two things, **in one tick** — there is
+still one clock, and it is still not a scheduler
+(`docs/project-integration-line-contract.md` §4.6, `projects/open-item-escalation.service.ts`):
+
+1. It **reconciles** first: an exception item nobody owes any more is closed in that same tick with
+   a `resolution_note` that starts `backstop:` (contract §4.2). What it covers is the `owed`
+   predicate's false answers — a merge card whose candidate is no longer READY, an integration
+   item whose candidate left the live states or whose task was cancelled or replaced, a task's
+   failure whose task is DONE, cancelled, replaced or being attempted again, a delivery review
+   whose task left its DONE delivery — and it writes the ending that fact's own edge writes,
+   `resolveByFact`'s CASE family by family and `PROMOTION_MOVED_ON` for one about a candidate. The
+   kinds the predicate always says are owed (a question, a pause, a request) are never touched.
+   That is not a second clock either: it is one statement with its
+   selection in it, it writes an item's ending and nothing an agent would run, and every reader
+   already asks the same predicate — the tick only makes the `state` agree within the minute.
+2. It **escalates** what somebody still owes: an unhandled open item becomes the account owner's.
+   That is the item's assignment columns — `assignee`, `assignee_reason`, `assigned_at`,
+   `escalated_at` — and nothing else. The owner then reads it under "needs you" in that project's
+   open items, and the push that tells them so is §7.6's, sent from the rows this sweep returns.
+
+Neither step creates a wake, a turn or a session. The reconcile rides the escalation tick rather
+than a schedule of its own, so this path still adds no `setInterval`, no startup sweep and no
+scheduled service.
 
 It is an exception to the rule above and not a hole in it, because of WHO it acts on. Elapsed time
 may not start agent work: an agent woken by a timer is working on nothing that happened, which is
 the loop this document's routing removed. But an item assigned to a coordinator conversation that
 has stopped reading waits forever, and the person the platform could have asked never learns there
 was anything to ask. So the clock is allowed exactly where its output is a human's inbox and its
-write is one column — and nowhere else. `exception-escalation.pg.spec.ts` holds it to that by
+write is the item's own assignment — and nowhere else. `exception-escalation.pg.spec.ts` holds it to that by
 counting `conversation_turn`, `session`, `project_coordinator_wake` and delivery rows across the
-whole database either side of a sweep.
+whole database either side of a sweep; `open-item-owed.pg.spec.ts` holds the reconcile half to the
+same, beside the readers that must not count an item nobody owes (contract §8.3).
 
 Since migration 0243 some fact kinds do reach the Project's person-opened `coordinator_session_id`
 conversation, and each one is there because what it needs is an ACTION rather than a judgment. The

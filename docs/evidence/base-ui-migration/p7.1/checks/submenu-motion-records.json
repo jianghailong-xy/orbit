@@ -1,0 +1,1304 @@
+{
+ "webkit-light-phone": {
+  "normal bottom entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 11,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 11,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 7,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 11,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 13,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 9,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 7,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 13,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 3,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 6,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 11,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 12,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 10,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 10,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 5,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 6,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 6,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 6,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "popover center zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 11,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 11,
+     "endState": "idle"
+    }
+   ]
+  },
+  "popover end zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 11,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 11,
+     "endState": "idle"
+    }
+   ]
+  },
+  "tooltip center zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 7,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "tooltip end zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 7,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "submenu left edge zoom stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 15,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "submenu right edge zoom stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 15,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  }
+ },
+ "webkit-dark-phone": {
+  "normal bottom entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 9,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 10,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 7,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 10,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 5,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 12,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 12,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 9,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 4,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 5,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 7,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "popover center zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 12,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 9,
+     "endState": "idle"
+    }
+   ]
+  },
+  "popover end zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 12,
+     "endState": "idle"
+    }
+   ]
+  },
+  "tooltip center zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 6,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "tooltip end zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 5,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "submenu left edge zoom stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 15,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "submenu right edge zoom stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  }
+ },
+ "chromium-light-phone": {
+  "normal bottom entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 12,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 11,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of attachment stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 11,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 10,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 13,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of expiry stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 13,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 11,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 15,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of search stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 15,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-up-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-up-out",
+     "duration": 200,
+     "samples": 11,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of multiple stays in view": {
+   "enter": [
+    {
+     "name": "orbit-slide-down-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-slide-down-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 12,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 15,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of popover stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 15,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal bottom entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 10,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal top entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 7,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "normal flipped entrance and exit motion of tooltip stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "popover center zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "popover end zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  },
+  "tooltip center zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 7,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 7,
+     "endState": "idle"
+    }
+   ]
+  },
+  "tooltip end zoom runs its entrance and exit": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 100,
+     "samples": 8,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 100,
+     "samples": 8,
+     "endState": "idle"
+    }
+   ]
+  },
+  "submenu left edge zoom stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 13,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 15,
+     "endState": "idle"
+    }
+   ]
+  },
+  "submenu right edge zoom stays in view": {
+   "enter": [
+    {
+     "name": "orbit-zoom-in",
+     "duration": 200,
+     "samples": 14,
+     "endState": "finished"
+    }
+   ],
+   "exit": [
+    {
+     "name": "orbit-zoom-out",
+     "duration": 200,
+     "samples": 14,
+     "endState": "idle"
+    }
+   ]
+  }
+ }
+}

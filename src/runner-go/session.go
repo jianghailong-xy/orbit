@@ -100,6 +100,29 @@ const crashRespawnBackoff = 5 * time.Second
 // and far shorter than forever.
 const maxEventFlushServerRejections = 30
 
+// The most one /events request carries. A flush used to post everything buffered as one request,
+// and the control plane parses a body of up to 10 MB (main.ts; its gateways allow 30): an imported
+// transcript replayed in one go, or a buffer that grew while the control plane was unreachable, was
+// refused whole with a 413 that no retry clears. Well under the limit, so a slow uplink still lands
+// each request inside postEvents' timeout.
+const maxEventBatchBytes = 2 << 20
+
+// eventBatchLen is how many of events, from the first, the next /events request carries: as many as
+// keep its body within maxBytes, and never fewer than one — an event larger than that on its own is
+// still sent, alone, where its refusal holds up nothing else that was buffered with it.
+func eventBatchLen(events []RunEvent, maxBytes int) int {
+	// The request around the events: braces, field names and the lease owner, a UUID.
+	size := len(`{"leaseOwner":"00000000-0000-0000-0000-000000000000","events":[]}`)
+	for i, e := range events {
+		raw, _ := json.Marshal(e)
+		size += len(raw) + 1 // the event and the comma after it
+		if i > 0 && size > maxBytes {
+			return i
+		}
+	}
+	return len(events)
+}
+
 func isCriticalDeliveryAcknowledgement(event RunEvent) bool {
 	if event.Type != evUser && event.Type != evUserDelivery {
 		return false
@@ -210,6 +233,7 @@ const (
 	providerKimi        = "kimi"
 	providerOpenCode    = "opencode"
 	providerAntigravity = "antigravity"
+	providerCursor      = "cursor"
 )
 
 // runInteractiveSession drives a long-lived `claude` process for an interactive
@@ -255,7 +279,7 @@ func runtimeProvider(job *ClaimedSession) string {
 		p = strings.ToLower(strings.TrimSpace(job.Agent.Provider))
 	}
 	switch p {
-	case providerCodex, providerKimi, providerOpenCode, providerAntigravity, providerDsh:
+	case providerCodex, providerKimi, providerOpenCode, providerAntigravity, providerDsh, providerCursor:
 		return p
 	}
 	return providerClaude
@@ -304,21 +328,28 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 }
 
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaWithCodexState(scratch, job, execDir, "", "", "")
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false)
+}
+
+// writeClaudeSessionMeta records the account a Claude engine has actually started on. A generic
+// write before that start keeps the previous account so removing it cannot strand the conversation;
+// once the new engine is running, moving to Default must clear that old account from the record.
+func writeClaudeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true, false)
 }
 
 // writeKimiSessionMeta is writeSessionMeta from a Kimi engine that has started in the KIMI_CODE_HOME
 // its claim names, the session's conversation carried there first (carryKimiConversation): the one
 // write that moves KimiCodeHome to another account.
 func writeKimiSessionMeta(scratch string, job *ClaimedSession, execDir string) {
-	writeSessionMetaRecord(scratch, job, execDir, "", "", "", true)
+	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, true)
 }
 
 func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string) {
-	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false)
+	writeSessionMetaRecord(scratch, job, execDir, layout, partition, codexHome, false, false)
 }
 
-func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, kimiStarted bool) {
+func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string, claudeStarted, kimiStarted bool) {
 	// Generic writes happen before the provider starts and on cold claims. Preserve
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
@@ -333,19 +364,17 @@ func writeSessionMetaRecord(scratch string, job *ClaimedSession, execDir, layout
 		runtimeProvider(job) == providerKimi {
 		kimiHome = existing.KimiCodeHome
 	}
-	if layout == "" || claudeDir == "" {
-		if existing != nil {
-			if layout == "" {
-				layout = existing.CodexStateLayout
-				partition = existing.CodexStatePartition
-				codexHome = existing.CodexStateHome
-			}
-			// Same reason as the Codex scope above: a write that happens where the account is not
-			// in hand — a generic one, or a claim that names no account — must not erase which
-			// directory this session's conversation is in.
-			if claudeDir == "" {
-				claudeDir = existing.ClaudeConfigDir
-			}
+	if existing != nil {
+		if layout == "" {
+			layout = existing.CodexStateLayout
+			partition = existing.CodexStatePartition
+			codexHome = existing.CodexStateHome
+		}
+		// Before a Claude engine starts, a claim that names Default must not erase the account
+		// holding its conversation. The successful spawn below is the point that moves this
+		// record; on Default its empty directory deliberately clears the old added account.
+		if !claudeStarted && claudeDir == "" {
+			claudeDir = existing.ClaudeConfigDir
 		}
 	}
 	// The directory the session ran in before this one is kept until the session moves again.
@@ -562,6 +591,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// claim payload on a cold resume while the event flusher runs concurrently.
 	// Capture the immutable id so that goroutine never races that pointer swap.
 	sessionID := job.SessionID
+	// Non-Claude engines have no --prompt-suggestions of their own: when the control plane
+	// still asks for suggestions, the guess comes from the server instead
+	// (orbit_prompt_suggestion.go). Captured once, like sessionID — the fetch goroutine
+	// outlives the turn that spawned it, and job's fields race the same swap.
+	wantsOrbitSuggestions := job.Agent.PromptSuggestions && job.Agent.Provider != providerClaude
 	scratch := runDir(sessionID)
 	_ = os.MkdirAll(scratch, 0o755)
 	// A newer runner process may fence this process while it is still active. Keep that
@@ -663,32 +697,41 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			uploadCtx, cancelUploads := context.WithTimeout(flushCtx, replyAttachmentBudget)
 			attachLocalReplyFiles(uploadCtx, t, sessionID, events, replyFileRoots, replyFiles)
 			cancelUploads()
-			serverRejections := 0
-			err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
-				return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: events})
-			}, eventFlushRetryPolicy(&serverRejections))
-			if isLeaseOwnershipError(err) {
-				// Another process owns the session now: this batch will never be sent from here.
-				backlog.settled(len(events))
-				markOwnershipLost(err)
-				return err
-			}
-			if err != nil {
-				if serverRejections >= maxEventFlushServerRejections {
-					logln("dropping", len(events), "events for", sessionID,
-						fmt.Sprintf("(seq %d-%d)", events[0].Seq, events[len(events)-1].Seq),
-						"after", serverRejections, "server rejections:", err)
+			// Sent as requests of at most maxEventBatchBytes, one at a time and in seq order, so the
+			// control plane only ever holds a prefix of what was taken: the seq a reclaim resumes
+			// after (MaxSeq) still marks where the unsent rest begins.
+			for len(events) > 0 {
+				batch := events[:eventBatchLen(events, maxEventBatchBytes)]
+				serverRejections := 0
+				err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
+					return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: batch})
+				}, eventFlushRetryPolicy(&serverRejections))
+				if isLeaseOwnershipError(err) {
+					// Another process owns the session now: none of this will ever be sent from here.
 					backlog.settled(len(events))
-					return criticalFlushFence.recordDropped(events, err)
+					markOwnershipLost(err)
+					return err
 				}
-				// Keep the batch available to the final flush. Requests are seq-idempotent, so
-				// restoring after a lost committed response is safe and avoids dropping the tail.
-				bufMu.Lock()
-				buf = append(events, buf...)
-				bufMu.Unlock()
-				return err
+				if err != nil {
+					if serverRejections >= maxEventFlushServerRejections {
+						logln("dropping", len(batch), "events for", sessionID,
+							fmt.Sprintf("(seq %d-%d)", batch[0].Seq, batch[len(batch)-1].Seq),
+							"after", serverRejections, "server rejections:", err)
+						backlog.settled(len(batch))
+						err = criticalFlushFence.recordDropped(batch, err)
+						events = events[len(batch):]
+					}
+					// Keep what is still unsent available to the final flush. Requests are
+					// seq-idempotent, so restoring after a lost committed response is safe and avoids
+					// dropping the tail.
+					bufMu.Lock()
+					buf = append(events, buf...)
+					bufMu.Unlock()
+					return err
+				}
+				backlog.settled(len(batch))
+				events = events[len(batch):]
 			}
-			backlog.settled(len(events))
 			return nil
 		})
 	}
@@ -712,6 +755,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
 	// announces its runner-hosted jobs again behind every `resumed` handshake.
 	var bg *bgTailer
+	// Declared ahead of emitThrough, which spawns it behind a successful turn_end, and assigned
+	// once emitFor exists: the server's next-message guess for an engine without one
+	// (orbit_prompt_suggestion.go), filed against the turn it follows like the engine's own.
+	var requestOrbitSuggestion func(turnID string, atSeq int)
 	// emitThrough buffers one event, filed against turnID, if gate still admits it.
 	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		// The one place a turn the engine runs on its own shows up at all. Told before the
@@ -737,6 +784,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				coordinatorContextBarrier.mark()
 			}
 			bufMu.Unlock()
+			// Only a turn that ran to an answer earns a guess at what follows it, and only a
+			// turn the person opened: claude's own side turns arrive with no turnID at all.
+			if wantsOrbitSuggestions && eventType == evTurnEnd && turnID != "" && turnEndSucceeded(payload) {
+				go requestOrbitSuggestion(turnID, s)
+			}
 		})
 		// A `resumed` handshake says this session's engine was replaced, and the control plane empties
 		// the session's running background set on it (runner-api.controller bgReset): the replaced
@@ -760,6 +812,22 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// wrong turn — which is the crossing this avoids rather than races.
 	emitFor := func(turnID, eventType string, payload map[string]interface{}) {
 		emitThrough(emissionGate, turnID, eventType, payload)
+	}
+	// The server's guess rides eventCtx like every other post-turn send, and is dropped the
+	// moment the session has moved on: any event buffered after this turn's end (a new message
+	// has answered what the guess was predicting) or a turn already running makes it stale.
+	requestOrbitSuggestion = func(turnID string, atSeq int) {
+		fetchOrbitSuggestion(eventCtx, t, sessionID, turnID, func() bool {
+			seqMu.Lock()
+			moved := seq != atSeq+1
+			seqMu.Unlock()
+			curTurnMu.Lock()
+			busy := curTurn != ""
+			curTurnMu.Unlock()
+			return moved || busy
+		}, func(text string) {
+			emitFor(turnID, evPromptSuggestion, map[string]interface{}{"text": text, "source": "orbit"})
+		})
 	}
 	// The ordinary path: whatever turn the session is attributing to right now, through gate.
 	emitOn := func(gate *eventEmissionGate) emitFn {
@@ -1533,6 +1601,18 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		return stFailed, true, false
 	}
 	provider := runtimeProvider(job)
+	// An engine this runner knows but has no session driver for gets no engine either: nothing is
+	// installed or started for a session it cannot run. The control plane hands a Cursor CLI session
+	// only to a runner that declares it (cursorDeclared), so this is the two of them disagreeing, and it
+	// is said rather than run as some other engine.
+	if providerRuntimeFor(provider).run == nil {
+		name := provider
+		if spec, ok := specFor(provider); ok {
+			name = spec.name
+		}
+		emit(evError, map[string]interface{}{"message": name + " sessions cannot run on this Orbit runner yet: it has no session driver for them. Update the runner, then try again."})
+		return stFailed, true, false
+	}
 	// The dsh preparer owns fixed-version installation and credential preflight.
 	// Its ACP handshake alone cannot validate an API key.
 	if provider == providerDsh {
@@ -1706,6 +1786,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		emit(evError, map[string]interface{}{"message": "failed to spawn claude: " + err.Error()})
 		return stFailed, true, false // a spawn failure won't be fixed by respawning
 	}
+	writeClaudeSessionMeta(scratchDir, job, execDir)
 	// The resident runtime for this session: the child, its generation and phase, and the
 	// bounded single-writer queue every frame to its stdin goes through (claude_runtime.go).
 	rt := newClaudeRuntime(proc)
@@ -1887,6 +1968,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				delivery := newMessageDelivery(resp.TurnID, steer)
 				delivery.targetTurnID = resp.TargetTurnID
 				delivery.requeueable = resp.SteerRequeue
+				if steer {
+					// Named by its own turn on the way in (userTurnFrame), so its echo answers it
+					// and a withdrawal can find it in the CLI's queue (claude_withdraw.go).
+					delivery.uuid = resp.TurnID
+				}
 				// Build the claude user message by dispatching each attachment on its MIME
 				// type: images and PDFs are inlined as base64 content blocks; anything else is
 				// written to the session's uploads dir outside the worktree for claude to read
@@ -2020,6 +2106,12 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					// would show the same silence for a steer still on its way and one that
 					// never landed.
 					userEv["steer"] = true
+					// And whether it can still be taken back while it waits to be read: only this
+					// process knows which CLI it is writing to (claude_withdraw.go). A client offers
+					// the way out on this word alone, and only until the message is read.
+					if steerWithdrawable(rt.announcedVersion()) {
+						userEv["withdrawable"] = true
+					}
 				}
 				// Filed against its own turn either way. For a message that is the turn the
 				// cursor already names; for a steer it is the only event of its turn, and
@@ -2040,7 +2132,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						return
 					}
 				}
-				receipt := slot.commit(userFrame(job.SessionUUID, content))
+				frame := userFrame(job.SessionUUID, content)
+				if steer {
+					frame = userTurnFrame(job.SessionUUID, delivery.uuid, content)
+				}
+				receipt := slot.commit(frame)
 				if !steer {
 					rt.beginTurn() // a steer joins a turn that is already waiting
 				}
@@ -2144,6 +2240,16 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// Queued on the poller's own goroutine, so the request keeps its place in
 				// the order the session intended; waited on off to the side, because this
 				// same goroutine is how `end` and the next interrupt arrive.
+				//
+				// The one exception to "no kill on this path": a turn that ASKS for the
+				// session's background work to end with it (RunInterruptRequest.
+				// stopBackgroundWork — the composer's Stop). Honoured first and on its own,
+				// because it is the runner's own instruction and does not depend on the
+				// engine answering: an engine wedged enough that its interrupt never comes
+				// back is exactly the one somebody presses Stop over, and the jobs the runner
+				// hosts are its own to end. A turn without the flag leaves this untouched and
+				// is the interrupt this arm has always been.
+				stopBackgroundWorkForTurn(bg, resp)
 				w, err := rt.requestControl(ctrlInterrupt)
 				if err != nil {
 					logln("interrupting", rt.String(), "failed for", job.SessionID+":", err)
@@ -2173,6 +2279,28 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						emit(evError, map[string]interface{}{"message": interruptFailureMessage(err)})
 					}
 				}(w)
+			case "withdraw":
+				// A person taking back a steer the engine has not read yet (claude_withdraw.go).
+				// Waited on off to the side, like an interrupt, because this goroutine is how the
+				// next interrupt and `end` arrive. The answer goes back on the withdraw turn, which
+				// the person who asked is waiting on.
+				target, err := withdrawTarget(resp.Content)
+				if err != nil {
+					logln("unreadable withdraw request for", job.SessionID+":", err)
+					settleWithdrawTurn(resp.TurnID, withdrawFailed, err.Error(), job, completeTurn)
+					continue
+				}
+				go func(withdrawTurnID, target string) {
+					outcome, reason := withdrawSteer(procCtx, rt, deliveries, target)
+					if outcome == withdrawWithdrawn {
+						// Said on the session's own stream as well, so every client showing the
+						// bubble takes it down — not only the one that asked, which hears the
+						// outcome from the completion below.
+						reportDelivery(target, deliveryWithdrawn, "", false)
+					}
+					logln("withdraw of", target, "for", job.SessionID+":", outcome, reason)
+					settleWithdrawTurn(withdrawTurnID, outcome, reason, job, completeTurn)
+				}(resp.TurnID, target)
 			case "setconfig":
 				// Model / permission mode / reasoning effort changed, on a session whose engine
 				// is up. None of the three is built into that process the way the provider
@@ -2420,9 +2548,10 @@ scanLoop:
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes
 		// in a pipe. Replays arrive in the order the frames were read, so the oldest
-		// unacknowledged message is the one this answers (deliveryLedger).
+		// unacknowledged message is the one this answers — unless the echo carries back the
+		// uuid a steer's frame was named by, which answers that steer (deliveryLedger).
 		if isReplayedUserTurn(msg) {
-			if d, ok := deliveries.acknowledgeNext(); ok {
+			if d, ok := deliveries.acknowledgeEcho(echoUUID(msg)); ok {
 				reportDelivery(d.turnID, deliveryAcknowledged, "", false)
 				if d.steer {
 					// The echo is a steer's only answer: it has no `result` of its own, so
@@ -2488,7 +2617,22 @@ scanLoop:
 				rt.endTurn()
 			}
 			activeOrbitMu.Unlock()
+			turnStatus := stSucceeded
+			if r.Subtype == "error_during_execution" {
+				turnStatus = stInterrupted
+			} else if r.Status == stFailed {
+				turnStatus = stFailed
+			}
 			for _, d := range fenced {
+				if turnStatus == stInterrupted {
+					// Somebody stopped the turn this message was waiting to be read in. Stopping means
+					// stop: handed back to the queue, it would run as a turn of its own straight after
+					// the Stop, so it is reported undelivered instead (owner, 2026-10-16). The words
+					// are still theirs to send again.
+					reportDelivery(d.turnID, deliveryFailed, errCurrentWorkTargetInterrupted.Error(), true)
+					settleSteerTurn(d.turnID, errCurrentWorkTargetInterrupted, job, completeTurn)
+					continue
+				}
 				if d.requeueable {
 					// The generation that could have read this frame is being killed above, so
 					// "unacknowledged at this boundary" is proof it never became part of the
@@ -2505,12 +2649,6 @@ scanLoop:
 				}
 				reportDelivery(d.turnID, deliveryFailed, errCurrentWorkTargetEnded.Error(), false)
 				settleSteerTurn(d.turnID, errCurrentWorkTargetEnded, job, completeTurn)
-			}
-			turnStatus := stSucceeded
-			if r.Subtype == "error_during_execution" {
-				turnStatus = stInterrupted
-			} else if r.Status == stFailed {
-				turnStatus = stFailed
 			}
 			// A Wiki maintenance run cut short by its turn limit failed, and the run can no longer say so
 			// itself: the runner records it on the space's cursor (wiki_maintenance_session.go).

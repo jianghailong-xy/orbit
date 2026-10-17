@@ -30,6 +30,10 @@ class ComposerModelTest {
         var rejectTurn = false
         var rejectionStatus = 409
         var failCreateAckSave = false
+        /** GET /providers, and how many reads of the runners fail before one answers. */
+        var providers = "[]"
+        var failRunners = 0
+        var runners = """[{"id":"r","modelCatalog":{"codex":[{"value":"live-model","label":"Live","reasoningLevels":["low","high"]}]},"engines":[{"engine":"codex","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"yes"},{"id":"expired","auth":"no"}]}]}]"""
         fun auth() = AuthSession(HttpTransport { request ->
             val call = request.api; calls += call
             if (call.path.first() == "auth") return@HttpTransport ApiResponse(200, """{"accessToken":"access","refreshToken":"refresh","user":{"id":"u","email":"a@example.test","name":"A"}}""".toByteArray())
@@ -59,7 +63,8 @@ class ComposerModelTest {
                     if (failPosts-- > 0) throw NetworkException() // Accepted, then response lost.
                     """{"turnId":"turn-$id","kind":"message","status":"PENDING"}"""
                 }
-                call.path == listOf("runners") -> """[{"id":"r","modelCatalog":{"codex":[{"value":"live-model","label":"Live","reasoningLevels":["low","high"]}]},"engines":[{"engine":"codex","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"yes"},{"id":"expired","auth":"no"}]}]}]"""
+                call.path == listOf("runners") -> if (failRunners-- > 0) throw NetworkException() else runners
+                call.path == listOf("providers") -> providers
                 call.path.first() == "providers" -> "[]"
                 else -> "{}"
             }
@@ -185,7 +190,8 @@ class ComposerModelTest {
         rig.detail = """{"status":"RUNNING","capabilities":{"canSend":false,"canResume":false,"resumeBlockedReason":"runner_offline"}}"""
         model.edit("don't send", 0, 0); model.send(); runCurrent(); assertTrue(rig.sends.isEmpty())
         assertEquals("don't send", model.state.value.draft.text)
-        rig.deny = true; model.loadCatalog(); runCurrent(); assertNull(model.state.value.catalog)
+        // The catalogue's opening read is tried three times (A07-18) before its failure is said.
+        rig.deny = true; model.loadCatalog(); advanceTimeBy(1_000); runCurrent(); assertNull(model.state.value.catalog)
         assertNotNull(model.state.value.catalogError)
         model.config(buildJsonObject { put("model", "other") }); runCurrent()
         assertFalse(rig.calls.any { it.path.last() == "config" })
@@ -221,6 +227,8 @@ class ComposerModelTest {
         model.edit("/status\n", 0, 0); model.send(); runCurrent()
         assertTrue(rig.sends.isEmpty()); assertTrue(model.state.value.draft.text.isEmpty())
         assertTrue(model.state.value.notice!!.contains("codex"))
+        // A07-19 (c): the engine first, by its CLI's name, as iOS's status card's Engine row (iOS cef3c3f83).
+        assertEquals("Engine: Codex · Provider: codex · Model:  · Session: AWAITING_INPUT · Permission: default", model.state.value.notice)
         val runner=Wire.json.parseToJsonElement("""{"runsAsRoot":true,"commands":[{"name":"host","type":"command"},{"name":"wrong-agent","agentId":"other","type":"command"},{"name":"kimi","provider":"kimi","type":"command"}],"modelCatalog":{"claude":[{"value":"claude-opus-5","permissionModes":["default"]}]}}""").jsonObject
         val catalog=ComposerCatalog(runner,emptyList())
         assertEquals(listOf("host"),catalog.slashItems("claude","agent").map { it.text("name") })
@@ -550,5 +558,143 @@ class ComposerModelTest {
         assertEquals("dsh", resumed.text("engine")); assertEquals("deepseek-2", resumed.text("provider"))
         assertEquals(1, ended.calls.count { it.path.last() == "resume" && it.method == HttpMethod.POST })
         assertEquals(JsonObject(emptyMap()), retryIdentityOf(buildJsonObject { put("model", "x") }))
+    }
+    /** A07-18 (iOS bc790273c `fetchRunners`): the catalogue's opening read is tried three times, 300 ms and then 600 ms apart, before
+     * it fails. */
+    @Test fun theCataloguesOpeningReadIsTriedThreeTimes() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        rig.failRunners = 2
+        model.loadCatalog(); runCurrent()
+        assertNull(model.state.value.catalog); assertTrue(model.state.value.catalogLoading)
+        advanceTimeBy(300); runCurrent()
+        assertNull(model.state.value.catalog)
+        advanceTimeBy(600); runCurrent()
+        assertNotNull(model.state.value.catalog); assertNull(model.state.value.catalogError)
+        assertEquals(3, rig.calls.count { it.path == listOf("runners") })
+    }
+
+    /** A07-18 (iOS `refreshRunner`): the re-read on a reconnect, and each minute, is the session's runner row — what it says now is
+     * taken, a failed read keeps what is shown, without a spinner or an error — a catalogue whose opening read failed is read whole,
+     * and nothing is read for one nobody asked for. */
+    @Test fun theCataloguesReReadKeepsWhatIsShownWhenItFails() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.refreshCatalog()
+        assertFalse("no catalogue was asked for", rig.calls.any { it.path == listOf("runners") })
+        model.loadCatalog(); runCurrent()
+        val shown = model.state.value.catalog!!
+        rig.failRunners = 1
+        model.refreshCatalog()
+        assertSame("a failed re-read keeps what is shown", shown, model.state.value.catalog)
+        assertNull(model.state.value.catalogError); assertFalse(model.state.value.catalogLoading)
+        rig.runners = rig.runners.replace("live-model", "newer-model")
+        val keys = rig.calls.count { it.path == listOf("providers") }
+        model.refreshCatalog()
+        assertEquals("newer-model", model.state.value.catalog!!.models("codex", "codex").single().text("value"))
+        assertEquals("the runner's row alone", keys, rig.calls.count { it.path == listOf("providers") })
+        val failed = rig.model()
+        rig.failRunners = 3; failed.loadCatalog(); advanceTimeBy(1_000); runCurrent()
+        assertNotNull(failed.state.value.catalogError)
+        failed.refreshCatalog()
+        assertNotNull(failed.state.value.catalog); assertNull(failed.state.value.catalogError)
+    }
+
+    /** A07-19 (a) (iOS e6295abe7/6f3083272 `providerSwitchNote`): a provider picked for a session says by the credentials' names what
+     * it will do, and when — over a session still going, the turn in flight finishes on the one it is on — for as long as the pick
+     * stands: until the next message goes. A draft's pick is the session being made, and says nothing of the kind. */
+    @Test fun aProviderPickSaysWhatItWillDoAndWhen() = runTest {
+        val key = """[{"slug":"custom-codex","label":"Custom account","runtime":"codex","engines":["codex"],"models":[{"value":"custom-model","label":"Custom model"}]}]"""
+        val rig = Rig(this); rig.providers = key
+        val model = rig.start()
+        model.config(buildJsonObject { put("provider", "custom-codex") }); runCurrent()
+        assertNull("not before the catalogue that names them is read", model.state.value.switchNote)
+        assertEquals("Selection saved.", model.state.value.notice)
+        model.loadCatalog(); runCurrent()
+        model.config(buildJsonObject { put("provider", "custom-codex"); put("engine", "codex") }); runCurrent()
+        val live = "The turn in flight finishes on Codex. Your next one uses Custom account."
+        assertEquals(live, model.state.value.switchNote)
+        assertNull("the note says what the saved line did", model.state.value.notice)
+        model.config(buildJsonObject { put("model", "live-model") }); runCurrent()
+        assertEquals("a model picked after it leaves it standing", live, model.state.value.switchNote)
+        model.edit("go", 2, 2); model.send(); runCurrent()
+        assertNull("the next message went", model.state.value.switchNote)
+
+        val ended = Rig(this); ended.providers = key
+        val revived = ended.start()
+        ended.detail = """{"id":"s","status":"FAILED","assignedRunnerId":"r","provider":"codex","capabilities":{"canSend":false,"canResume":true}}"""
+        revived.loadCatalog(); runCurrent()
+        revived.config(buildJsonObject { put("provider", "custom-codex"); put("engine", "codex") }); runCurrent()
+        assertEquals("Your next message uses Custom account.", revived.state.value.switchNote)
+        assertNull(revived.state.value.notice)
+
+        val target = DraftTarget("w")
+        val draft = ComposerModel(ended.session, ended.handle, target.key, backgroundScope, target); runCurrent()
+        draft.loadCatalog(); runCurrent()
+        draft.config(buildJsonObject { put("provider", "custom-codex"); put("engine", "codex") }); runCurrent()
+        assertNull(draft.state.value.switchNote)
+        assertEquals("Applies when this session starts.", draft.state.value.notice)
+    }
+
+    /** Send's other way while a turn runs (docs/mocks/steer-tray): queued for the next turn, it says so; an ordinary send leaves where it
+     * goes to the server, as every send before it did. */
+    @Test fun queueingForTheNextTurnSaysSoAndASendOtherwiseLeavesItToTheServer() = runTest {
+        val rig = Rig(this)
+        rig.detail = """{"id":"s","status":"RUNNING","runState":"RUNNING","assignedRunnerId":"r","provider":"claude","capabilities":{"canSend":true,"canResume":false}}"""
+        val model = rig.start()
+        model.edit("then push it to main", 0, 0); model.send(queueForNextTurn = true); runCurrent()
+        model.edit("and tag it", 0, 0); model.send(); runCurrent()
+        val bodies = rig.sends.values.map { Wire.json.parseToJsonElement(it).jsonObject }
+        assertEquals("NEXT_TURN", bodies.single { it.text("content") == "then push it to main" }.text("intent"))
+        assertNull("no intent goes out unless asked for", bodies.single { it.text("content") == "and tag it" }["intent"])
+    }
+
+    /** The tray's Withdraw: the server takes the turn back, its words return under whatever the box holds, and the row is gone before
+     * the listing says so. */
+    @Test fun aWithdrawnMessagesWordsComeBackUnderTheDraft() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.withdraw("t-1", "then push it to main", steer = false, engine = "claude"); runCurrent()
+        assertEquals("then push it to main", model.state.value.draft.text)
+        model.edit("a draft", 7, 7)
+        model.withdraw("t-2", "!npm test", steer = true, engine = "claude"); runCurrent()
+        assertEquals("a draft\n\n!npm test", model.state.value.draft.text)
+        assertEquals("the cursor after them", "a draft\n\n!npm test".length, model.state.value.draft.selectionStart)
+        assertEquals(listOf(listOf("sessions", "s", "turns", "t-1"), listOf("sessions", "s", "turns", "t-2")),
+            rig.calls.filter { it.method == HttpMethod.DELETE }.map { it.path })
+        assertEquals(listOf("t-1", "t-2").map { io.orbitd.android.navigation.ObjectId.canonical(it) ?: it }.toSet(), model.state.value.withdrawn)
+        assertTrue(model.state.value.withdrawing.isEmpty())
+        // A message of pictures alone hands nothing back, and a second press on one taken back asks nothing.
+        model.withdraw("t-3", null, steer = false, engine = "claude"); model.withdraw("t-3", null, steer = false, engine = "claude"); runCurrent()
+        assertEquals("a draft\n\n!npm test", model.state.value.draft.text)
+        assertEquals(3, rig.calls.count { it.method == HttpMethod.DELETE })
+        // The words were kept, as everything the box holds is.
+        model.close(); assertEquals("a draft\n\n!npm test", rig.cold().state.value.draft.text)
+    }
+
+    /** Put back in the composer: a steer that was not delivered gives its words back under whatever the box holds, and nothing is sent.
+     * One known only from the server's receipt is discarded as well — once, however often it is pressed — and gone before the listing
+     * says so. */
+    @Test fun aSteerPutBackComesBackUnderTheDraftAndSendsNothing() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.edit("a draft", 7, 7)
+        model.putBack("then push it to main"); runCurrent()
+        assertEquals("a draft\n\nthen push it to main", model.state.value.draft.text)
+        assertEquals("the cursor after them", "a draft\n\nthen push it to main".length, model.state.value.draft.selectionStart)
+        assertTrue("nothing sent, nothing discarded", rig.calls.none { it.method == HttpMethod.DELETE || it.path.last() in setOf("turns", "resume") })
+        model.putBack("and tag the release", discard = "t-9"); model.putBack("and tag the release", discard = "t-9"); runCurrent()
+        assertEquals("a draft\n\nthen push it to main\n\nand tag the release", model.state.value.draft.text)
+        assertEquals(listOf(listOf("sessions", "s", "turns", "t-9")), rig.calls.filter { it.method == HttpMethod.DELETE }.map { it.path })
+        assertEquals(setOf(io.orbitd.android.navigation.ObjectId.canonical("t-9") ?: "t-9"), model.state.value.withdrawn)
+        assertTrue(model.state.value.withdrawing.isEmpty())
+        assertTrue("still nothing sent", rig.calls.none { it.path.last() in setOf("turns", "resume") })
+        // The words were kept, as everything the box holds is.
+        model.close(); assertEquals("a draft\n\nthen push it to main\n\nand tag the release", rig.cold().state.value.draft.text)
+    }
+
+    /** The tray's Steer: the message goes into the running turn, and is drawn on its way there until the listing says so. */
+    @Test fun aSteeredMessageIsOnItsWayIntoTheTurnUntilTheListingSaysSo() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.steer("t-4"); runCurrent()
+        assertEquals(1, rig.calls.count { it.method == HttpMethod.POST && it.path == listOf("sessions", "s", "turns", "t-4", "steer") })
+        assertEquals(setOf(io.orbitd.android.navigation.ObjectId.canonical("t-4") ?: "t-4"), model.state.value.steered)
+        assertTrue(model.state.value.steering.isEmpty())
     }
 }

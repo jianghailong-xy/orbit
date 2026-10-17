@@ -212,7 +212,7 @@ test('T3 resolution: incompatible pairs are refused, naming the engines the prov
   await assert.rejects(pair(undefined, 'nowhere'), refusal('PROVIDER_ENGINE_INCOMPATIBLE',
     'provider "nowhere" cannot run on any engine'));
   await assert.rejects(pair('gpt', 'glm'), refusal('ENGINE_UNKNOWN',
-    'engine "gpt" is not one of claude, codex, kimi, antigravity, opencode, dsh'));
+    'engine "gpt" is not one of claude, codex, kimi, antigravity, opencode, dsh, cursor'));
 });
 
 test('T3 resolution: an old OpenCode model naming a key is written as that key on OpenCode', async () => {

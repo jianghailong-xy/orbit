@@ -43,7 +43,9 @@ class EngineOrderTest : ComposerShellTest() {
     @Test fun anEngineTheRunnerHasNotReportedIsNotOffered() {
         signIn(); openDraft()
         // The fixture's runner reports Claude Code and Codex only: one older than the rest runs nothing on them, and Antigravity —
-        // with no Google account and no key on this runner — would not be offered either (A07-4).
-        assertEquals(listOf("Claude Code", "Codex"), engineRows())
+        // with no Google account and no key on this runner — would not be offered either (A07-4). OpenCode, which Orbit installs, is
+        // listed all the same, as not installed there, and opens its engine page on the runner (A07-15, iOS 82d7003fc).
+        assertEquals(listOf("Claude Code", "Codex", "OpenCode"), engineRows())
+        assertTrue(has(hasTestTag("engine:opencode") and hasText("Not installed →", substring = true)))
     }
 }

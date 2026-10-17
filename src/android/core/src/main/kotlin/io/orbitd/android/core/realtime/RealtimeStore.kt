@@ -25,8 +25,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,6 +47,8 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
     private val network = MutableStateFlow(Network())
     private val selection = MutableStateFlow(Selection(null, 0))
     private val directoryRevision = MutableStateFlow(0L)
+    /** The revision the last directory read that landed left at: what [rereadDirectory] waits on. */
+    private val directoryLanded = MutableStateFlow(0L)
     private val sessionRevision = MutableStateFlow(0L)
     private val mutableState = MutableStateFlow(RealtimeState())
     val state: StateFlow<RealtimeState> = mutableState.asStateFlow()
@@ -72,6 +76,13 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         }
     }
     fun refreshDirectory() { directoryRevision.update { it + 1 } }
+    /** Reads the directory again and returns once a read that left after this call has landed — one that saw a write the
+     * caller already had answered. A read still on the wire from before is not it: the revision this bumps makes the loop
+     * drop that answer and read again. Offline or in the background it waits for the next connection's read. */
+    suspend fun rereadDirectory() {
+        val asked = directoryRevision.updateAndGet { it + 1 }
+        directoryLanded.first { it >= asked }
+    }
     fun refreshSession() { sessionRevision.update { it + 1 } }
     /** Mutations check the live inputs too: collectors may not yet have withdrawn `fresh`. */
     fun canAct(handle: SessionHandle, sessionId: String): Boolean {
@@ -175,6 +186,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     if (directoryRevision.value != revision) { refresh.trySend(Unit); continue }
                     publish(handle) { it.copy(directory = snapshot, directoryRefreshing = false,
                         directoryFresh = true, directoryError = null) }
+                    directoryLanded.update { maxOf(it, revision) }
                     cache.update { it.copy(directory = snapshot) }
                     writes.trySend(Unit)
                     retry.healthy()
@@ -280,6 +292,28 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         // Standing review deadlines can expire without a push. This refresh exists only while
         // the session is foregrounded; reconnect always performs its own unthrottled read.
         launch { while (isActive) { delay(30_000); refreshSession() } }
+        fun land(page: EventPage) {
+            check()
+            updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.page(page)) }
+            save()
+        }
+        // Close the gap over REST pages before the stream opens. The gateway gzips JSON but never
+        // text/event-stream, and a replay is all-or-nothing: a drop mid-replay re-sends the whole gap.
+        // Each landed page moves the frontier. A failed page is not retried here; the stream attempt
+        // right after it is the retry, from the advanced frontier. Past the server's own budget the
+        // window is re-seeded from the tail, as the server's resync would have ordered.
+        suspend fun catchUp() {
+            var after = state.value.session!!.transcript.resumeSeq
+            repeat(CATCH_UP_PAGES) {
+                val page = try { rest.page(handle, id, after) } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { return }
+                land(page)
+                val next = page.after ?: return
+                if (next <= after) throw Resync()
+                after = next
+            }
+            throw Resync()
+        }
         val policy = ReconnectPolicy()
         var reseed = false
         while (isActive) {
@@ -294,26 +328,21 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.tail(tail)) }
                     save()
                     reseed = false
+                } else {
+                    // Live frames never move the frontier, so a window seeded before this attempt (restored
+                    // from the cache, or carried over a drop or a clean close) is behind by all they carried.
+                    catchUp()
                 }
                 val cursor = state.value.session!!.transcript.resumeSeq
                 auth.stream(handle, ApiRequest(listOf("sessions", id, "events"),
                     query = listOf("sinceSeq" to "$cursor", "maxPayload" to "2048")), onOpen = {
                     check()
                     refreshSession()
-                    // A bounded REST overlap verifies a frontier, while SSE already buffers the
-                    // replay/live seam on the server. Future live events cannot move this frontier.
-                    var after = cursor
-                    var pages = 0
-                    do {
-                        val page = rest.page(handle, id, after)
-                        check()
-                        if (++pages > 2) throw Resync()
-                        updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.page(page)) }
-                        save()
-                        val next = page.after ?: break
-                        if (next <= after) throw Resync()
-                        after = next
-                    } while (true)
+                    // One REST page verifies the frontier where the stream began, while SSE already
+                    // buffers the replay/live seam on the server. Future live events cannot move this
+                    // frontier. Never a loop: the gap was closed before connecting, and the replay
+                    // carries whatever is newer than this page.
+                    land(rest.page(handle, id, cursor))
                     updateSession(handle, focus) { it.copy(connection = ConnectionState.CONNECTED) }
                 }, onFrame = { frame ->
                     check()
@@ -343,6 +372,8 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
     }
 
     companion object {
+        /** Five 200-event pages: the server's SSE_GAP_CAP, past which it answers a cursor with resync. */
+        private const val CATCH_UP_PAGES = 5
         private val SNAPSHOT_EVENTS = setOf("approval_request", "approval_resolved", "queued_turns_changed",
             "background_task", "user", "user_delivery", "turn_end", "status", "result", "interrupt")
     }

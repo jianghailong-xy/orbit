@@ -105,7 +105,8 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(live(.running, false, 1), "Needs you")      // a pending card blocks inside the turn
         XCTAssertEqual(live(.running, false, 0), "Working")
         XCTAssertEqual(live(.awaitingInput, true, 0), "Working")
-        XCTAssertEqual(live(.awaitingInput, false, 0), "Needs you")
+        XCTAssertEqual(live(.awaitingInput, false, 0), "Idle")       // a turn that ended on its own
+        XCTAssertEqual(live(.awaitingInput, false, 1), "Needs you")  // parked, with a question it asked
         XCTAssertEqual(live(.failed, false, 0), "Idle")
         XCTAssertEqual(ProjectPage.coordinatorPill(status(.live, session: .init(
             id: "s", runState: .awaitingInput, lifecycleState: .completed))).label, "Completed")

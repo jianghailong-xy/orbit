@@ -1258,6 +1258,33 @@ export async function releaseUnreadSteerReplies(
 }
 
 /**
+ * Reply steers a Stop overtook before their engine read them (runnerApi.turnComplete, as they are
+ * written off undelivered): what they carry back to this session is held on its request rows for the
+ * asker's next turn, as the Stop holds what a reply turn it takes off the queue carries
+ * (`settleUnrunSessionRequests`). Not let go for the request worker, as a steer the runner merely
+ * failed to write is (`releaseUnreadSteerReplies`): handed back now, it would open the very turn the
+ * person just stopped.
+ *
+ * Under the asker's Session lock, which the completion holds.
+ */
+export async function holdUnreadSteerReplies(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  steerTurnIds: readonly string[],
+): Promise<void> {
+  if (steerTurnIds.length === 0) return;
+  const steers = await tx.conversationTurn.findMany({
+    where: { sessionId, id: { in: [...steerTurnIds] }, clientTurnId: { startsWith: SESSION_REPLY_TURN_PREFIX } },
+    select: { clientTurnId: true },
+  });
+  if (steers.length === 0) return;
+  await tx.sessionRequest.updateMany({
+    where: { fromSessionId: sessionId, replyClientTurnId: { in: steers.map((steer) => steer.clientTurnId) } },
+    data: { replyClientTurnId: null, replyHeldAt: new Date() },
+  });
+}
+
+/**
  * File one outcome onto the reply turn that will deliver it, inside that turn's transaction (the
  * `coalesce` hook of `createTurn`): either both are written or neither is. An outcome already handed
  * back or held throws, which rolls the turn back with it — the compare-and-set that makes a hand-off

@@ -75,6 +75,8 @@ interface TaskIntegrationRow {
   blockingJobKind: string | null;
   blockingTaskTitle: string | null;
   blockingOpenItemId: string | null;
+  /** The generation an OPEN MAIN_SYNC conflict's item is being handled by (H1), while it runs. */
+  syncHandlingGeneration: number | null;
   itemId: string | null;
   itemKind: string | null;
   itemAssignee: string | null;
@@ -119,10 +121,17 @@ function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow
       return 'Not started: a cancel was asked for, so the queue will not run it';
     case 'WAITING_TASK_WORK':
       return 'Waiting to land: the task’s work session is still running, and its branch can still move';
-    case 'WAITING_MAIN_SYNC':
-      return row.blockingTaskTitle
+    case 'WAITING_MAIN_SYNC': {
+      // A conflict the task's own new generation is landing again is still a hold — the claim reads
+      // the item, not that generation (§3.1 M2) — so the reason says so and names the generation
+      // that is resolving it, which is the question this row raises.
+      const resolving = row.syncHandlingGeneration == null
+        ? ''
+        : ` — a new landing (generation ${row.syncHandlingGeneration}) is resolving it`;
+      return (row.blockingTaskTitle
         ? `Waiting for the project line to sync: the landing of “${row.blockingTaskTitle}” could not merge upstream into this branch, and its conflict is still open`
-        : 'Waiting for the project line to sync: an earlier landing could not merge upstream into this branch, and its conflict is still open';
+        : 'Waiting for the project line to sync: an earlier landing could not merge upstream into this branch, and its conflict is still open') + resolving;
+    }
     case 'WAITING_SERIAL_SLOT': {
       const what = row.blockingTaskTitle
         ? `the landing of “${row.blockingTaskTitle}”`
@@ -379,6 +388,7 @@ export async function readTaskIntegrationViews(
                 WHEN running_block."ownerId" = ${ownerId}::uuid THEN running_block."taskTitle"
            END AS "blockingTaskTitle",
            CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."openItemId" END AS "blockingOpenItemId",
+           CASE WHEN sync_block."ownerId" = ${ownerId}::uuid THEN sync_block."handlingGeneration" END AS "syncHandlingGeneration",
            open_item."id" AS "itemId", open_item."kind" AS "itemKind",
            open_item."assignee" AS "itemAssignee", open_item."created_at" AS "itemCreatedAt",
            open_item."handling_job_id" AS "itemHandlingJobId",
@@ -424,25 +434,23 @@ export async function readTaskIntegrationViews(
       -- M2: an OPEN item about another task's failed absorb of upstream into the same target holds
       -- every later landing on it; the conflicted task's own later generations are exempt (§3.1 M3).
       -- Read through the item rather than the failed job, so closing it is what lets the queue move.
+      -- H1 does NOT exempt an item a new generation is handling: claimOne reads this same condition
+      -- and holds those landings too, so the reader says what the claim does with the row
+      -- (WAITING_MAIN_SYNC) and names the generation that is resolving it, rather than reporting a
+      -- queue that would take it on the next heartbeat and will not.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
-               ft."title" AS "taskTitle"
+               ft."title" AS "taskTitle",
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+                    THEN handling."generation" END AS "handlingGeneration"
           FROM "project_open_item" i
           JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
           LEFT JOIN "task" ft ON ft."id" = f."task_id"
+          LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
          WHERE newest_job."state" = 'QUEUED'
            AND f."serial_key" = newest_job."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM newest_job."task_id"
-           -- H1 hands an older conflict to the task's new generation. While that generation is
-           -- queued/running, the old card is being worked and must not hold unrelated landings;
-           -- if it stops again, H3 opens a fresh item and this exemption disappears with it.
-           AND NOT EXISTS (
-             SELECT 1
-               FROM "project_integration_job" handling
-              WHERE handling."id" = i."handling_job_id"
-                AND handling."state" IN ('QUEUED', 'RUNNING')
-           )
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       -- J1: one RUNNING job per repository and target ref.

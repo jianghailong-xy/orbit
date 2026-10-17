@@ -63,6 +63,8 @@ import {
   RECORD_FLASH_MS,
   RECORD_NOT_FOUND,
   RECORD_PARAM,
+  itemAtOf,
+  sessionItemHref,
   recordAtOf,
   recordScrollDelta,
 } from '../lib/transcriptDeepLink';
@@ -249,6 +251,7 @@ import {
   completeSession,
   cancelAutoRetry,
   cancelQueuedTurn,
+  steerQueuedTurn,
   adoptSessionBranch,
   commitSession,
   createMergeRepairSession,
@@ -297,7 +300,8 @@ import {
   type NeverStartedSession,
 } from './RunNeverStartedCard';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnAttachmentRef, type TurnImage, UndeliveredCtx, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
@@ -308,6 +312,7 @@ import {
   REVIEW_CARD_REVEALED,
   revealOpenItemCard,
   revealSettlementCard,
+  revealOwnerItemCard,
   type PendingDecisionRow,
 } from './DecisionRail';
 import {
@@ -334,8 +339,9 @@ import {
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
-import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { landingCard } from './ProjectPanoramaHeader';
 import { LandingJobsSheet } from './LandingJobsSheet';
+import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
@@ -431,6 +437,8 @@ import {
   isAccountEngine,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
+  runtimeTakesMidTurnSteer,
+  STEER_WITHDRAW_ERRORS,
   TRASH_RETENTION_DAYS,
   withEnginePlanUsage,
   type AccountEngine,
@@ -453,7 +461,7 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { deliveryFailureExplanation, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
+import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
 import { streamAnchorAfter } from '../lib/streamAnchor';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
@@ -686,6 +694,7 @@ const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
   claude: 'claude-account-move/v1',
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY,
   kimi: 'kimi-account-move/v1',
+  cursor: 'cursor-account-move/v1',
 };
 /** Where a session, and its workspace, keep the account each engine runs on — and whether a session's
  *  was picked by hand. */
@@ -694,12 +703,14 @@ const ACCOUNT_FIELD = {
   claude: 'claudeAccount',
   antigravity: 'antigravityAccount',
   kimi: 'kimiAccount',
+  cursor: 'cursorAccount',
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_PINNED_FIELD = {
   codex: 'codexAccountPinned',
   claude: 'claudeAccountPinned',
   antigravity: 'antigravityAccountPinned',
   kimi: 'kimiAccountPinned',
+  cursor: 'cursorAccountPinned',
 } as const satisfies Record<AccountEngine, string>;
 /** What the composer sends to put a session back on Automatic (PATCH /sessions/:id/account). */
 const AUTOMATIC_ACCOUNT = 'automatic';
@@ -873,9 +884,6 @@ const SESSION_COL_DEFAULT = 320;
 // Whether the session list's Pinned section is folded to its heading, persisted across reloads.
 const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
 
-// Set by the first double-tap that takes a suggestion on this device: from then on a touch screen's
-// grey line is the guess alone, without "Double-tap to use" after it (prompt-suggestions-design §4.3).
-const SUGGESTION_TAP_LEARNED_KEY = 'orbit.suggestionDoubleTapLearned';
 // Two taps on the composer this close in time and place are one double-tap (the platforms' own
 // double-tap window).
 const DOUBLE_TAP_MS = 300;
@@ -1083,7 +1091,9 @@ const sentLine = (text: string): SessionLine => ({
 // banner and card say these same words, and `OwnerItemCardsTests` holds the two ends to each other.
 const OWNER_ITEM_APPROVE_MERGE = 'Approve merge to main';
 const OWNER_ITEM_COORDINATOR_QUESTION = 'Question from coordinator';
-const OWNER_ITEM_ESCALATED = 'Escalated to you';
+// Keep this literal declaration: native parity tests read the web source directly.
+export const OWNER_ITEM_ESCALATED = 'Escalated to you';
+export const OWNER_ITEM_NEED_SEPARATOR = ' · ';
 const OWNER_ITEM_PAUSED = 'Paused';
 
 /** The kinds this row can name, and the words it says for each. A kind missing here — one this
@@ -1108,7 +1118,9 @@ const ownerItemWords = (main: string): Record<string, string> =>
 const ownerItemWord = (s: any): string | null => {
   let oldest: { word: string; at: number } | null = null;
   for (const item of s.ownerItems ?? []) {
-    const word = ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];
+    const word = item?.kind === 'ESCALATED' && item?.need
+      ? `${OWNER_ITEM_ESCALATED}${OWNER_ITEM_NEED_SEPARATOR}${item.need}`
+      : ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];
     if (!word) continue;
     const at = Date.parse(item?.since ?? '');
     const key = Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at;
@@ -1370,11 +1382,13 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
   );
 }
 
-/** The landing line inside the progress card while a task lands on the project branch (iOS
- *  `SessionProjectPage.landingLine`): the project page's own row, ticking once a second, and a press
- *  that lists every job in flight (`LandingJobsSheet`) — or, from a server that does not list them,
- *  opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
- *  component, so the second hand redraws this line and not the console around it. */
+/** The landing card of a project's sessions page, under the progress card and before the merge card
+ *  (iOS `SessionProjectPage.landingCard`; owner decision 2026-10-11, docs/mocks/project-landing-card):
+ *  the card `landingCard` builds off the project page's own read, ticking once a second while a task
+ *  lands, and a press that lists every job in flight (`LandingJobsSheet`) — or, from a server that
+ *  does not list them, opens the project page. A merge job's is the merge card's
+ *  (`ProjectMergeStrip`). Its own component, so the second hand redraws this card and not the
+ *  console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
   const integration = useQuery(projectIntegrationQuery(projectId));
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
@@ -1388,19 +1402,16 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, [live]);
-  const line = live && view
-    ? landingLine(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
+  const card = live && view
+    ? landingCard(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
   return (
     <>
-      {line ? (
-        <button type="button" className="session-project-page-landing" aria-haspopup={listed ? 'dialog' : undefined}
-          onClick={listed ? () => setJobsOpen(true) : onOpen}>
-          <LandingRow line={line} />
-          <RightOutlined className="session-project-page-landing-chev" aria-hidden />
-        </button>
+      {card ? (
+        <ProjectLandingCard projectId={projectId} card={card} dialog={listed}
+          onPress={listed ? () => setJobsOpen(true) : onOpen} />
       ) : null}
-      {/* Portalled out of the card, and kept while open even if the line goes, so a list being read
+      {/* Portalled out of the card, and kept while open even if the card goes, so a list being read
           does not vanish under the reader when its last job lands. */}
       {listed || jobsOpen ? (
         <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
@@ -1918,6 +1929,30 @@ function StopSquareIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Whether a row of the queue waits in the tray above the composer rather than at the transcript's
+ * tail: the reader's own words (`returnsToComposer`) still on their way — queued for the next turn,
+ * or a steer no runner has taken yet. A message whose delivery settled undelivered has an outcome,
+ * and stays in the conversation with it.
+ */
+export function inPendingTray(turn: QueuedTurn): boolean {
+  return turn.delivery == null && returnsToComposer(turn);
+}
+
+/** What a tray row shows of a message's attachments: this tab's previews, else the pictures' ids. */
+function trayPictures(
+  previews: readonly TurnImage[] | undefined,
+  refs: readonly { id: string; mime?: string }[] | undefined,
+): Pick<PendingTrayRow, 'previews' | 'imageIds' | 'files'> {
+  const all = refs ?? [];
+  const files = all.filter((r) => r.mime && !r.mime.startsWith('image/')).length;
+  if (previews?.length) return { previews: [...previews], imageIds: [], files };
+  return { previews: [], imageIds: all.filter((r) => !r.mime || r.mime.startsWith('image/')).map((r) => r.id), files };
+}
+
+/** How long Send is held before it offers to queue the message instead (a phone has no ⌥Enter). */
+const QUEUE_OFFER_HOLD_MS = 450;
+
 /** What withdrawing a queued wake costs, said when the action asks to confirm. */
 const WAKE_WITHDRAW_CONSEQUENCE =
   "If withdrawn, this session is not woken this time, and the watch won't send it again.";
@@ -1926,11 +1961,11 @@ const WAKE_WITHDRAW_CONSEQUENCE =
  * The line under a message in the queued tail — the one thing that says which of the two kinds
  * the server filed it as, and where the way out of it is offered.
  *
- * A queued message is waiting for its own turn: nothing has read it, so it can still be taken
- * back. A steer is already on its way into the turn in progress, and the engine may be reading it
- * as we ask — the server refuses to withdraw one (409, "being written into the running turn"), so
- * offering Cancel would be offering a button that always fails. `placement` is the server receipt,
- * never a local guess.
+ * The reader's own messages still on their way are not here: the tray above the composer holds
+ * them, with their way back (`inPendingTray`). What this line is under is what Orbit queued — a turn
+ * nobody typed, waiting for its own turn and still cancellable, or one on its way into the running
+ * turn — and a message whose delivery settled. `placement` is the server receipt, never a local
+ * guess.
  *
  * Once delivery has settled undelivered, both of those stop being true. Nothing read the message
  * and nothing will; the row is a durable statement about a boundary that has passed. So it is the
@@ -1963,7 +1998,7 @@ export function QueuedTurnMeta({
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
-      ? 'Delivery could not be confirmed'
+      ? steerDeliveryState('unconfirmed').label
     : placement === 'steer'
       ? steerDeliveryState(undefined).label
       : 'Queued for next turn';
@@ -2051,6 +2086,10 @@ export function WorkspaceView({
   const recordAt = recordAtOf(searchParams);
   const recordAtRef = useRef(recordAt);
   recordAtRef.current = recordAt;
+  // The owner-item card a list/banner deep link should reveal after the open-items read and its
+  // transcript insert have rendered. Kept separate from `at`, because an item is not a transcript
+  // record and must not reseed the transcript window.
+  const itemAt = itemAtOf(searchParams);
   // Inline header-title rename: double-click swaps the title for an input. `editingTitle`
   // gates the editor, `titleDraft` holds the in-progress text, `cancelTitleEdit` lets
   // Escape skip the blur-commit. Switching sessions closes any open editor (effect below).
@@ -2386,6 +2425,7 @@ export function WorkspaceView({
   const [recordTick, setRecordTick] = useState(0);
   // The `?at=` already followed (`<session> <record>`), so one link is followed once, not on every render.
   const followedRecordRef = useRef<string | null>(null);
+  const followedItemRef = useRef<string | null>(null);
   // Set by the session effect, which owns the stream: open a record of the session already open, join
   // the live stream once a detached window reaches the latest event, and trade a detached window for
   // the tail.
@@ -3292,6 +3332,17 @@ export function WorkspaceView({
   const listSearch = openProjectId
     ? `?project=${encodeId(openProjectId)}${effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : folderSearch;
   const sessionPath = useCallback((id: string) => `/sessions/${encodeId(id)}${listSearch}`, [listSearch]);
+  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }) => {
+    const item = [...(session.ownerItems ?? [])]
+      .filter((candidate) => candidate.itemId)
+      .sort((a, b) => {
+        const at = Date.parse(a.since ?? '');
+        const bt = Date.parse(b.since ?? '');
+        return (Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at)
+          - (Number.isNaN(bt) ? Number.MAX_SAFE_INTEGER : bt);
+      })[0];
+    return item?.itemId ? sessionItemHref(session.id, item.itemId) : sessionPath(session.id);
+  }, [sessionPath]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
@@ -3419,7 +3470,7 @@ export function WorkspaceView({
     if (foldersQ.isPending) return;
     const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
     const target = listedSessions.find((s) => s.id === remembered) ?? listedSessions[0];
-    if (target) navigate(sessionPath(target.id), { replace: true });
+    if (target) navigate(sessionItemPath(target), { replace: true });
   }, [
     isMobile,
     openProjectId,
@@ -3431,7 +3482,7 @@ export function WorkspaceView({
     listedSessions,
     scopeWorkspaceId,
     navigate,
-    sessionPath,
+    sessionItemPath,
   ]);
 
   // Step the open session up/down the visible list, for the window-level Up/Down handler
@@ -3449,10 +3500,10 @@ export function WorkspaceView({
         next = cur + dir;
         if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(sessionPath(orderedSessions[next].id));
+      navigate(sessionItemPath(orderedSessions[next]));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionPath],
+    [orderedSessions, selectedId, view, navigate, sessionItemPath],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -4077,10 +4128,21 @@ export function WorkspaceView({
     () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
     [scopedQueuedTurns, transcriptEvents],
   );
-  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be.
+  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be. Only
+  // the rows the tray does not hold (`inPendingTray`): what Orbit queued, and a message whose
+  // delivery settled undelivered, which is part of the conversation's record.
   const queuedTailEvents = useMemo(
-    () => visibleQueuedTurns.map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
+    () =>
+      visibleQueuedTurns
+        .filter((turn) => !inPendingTray(turn))
+        .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
+  );
+  // The reader's steers the engine has not read yet: the transcript leaves them out, and the tray
+  // above the composer holds them (Transcript `UnreadSteer`).
+  const unreadSteers = useMemo(
+    () => unreadSteersOf(transcriptEvents, turnImages),
+    [transcriptEvents, turnImages],
   );
   // The render-time filter above removes duplication in the same frame the SSE event lands. Trim
   // the acknowledged copy afterwards so landed turns do not accumulate in memory.
@@ -5458,11 +5520,26 @@ export function WorkspaceView({
           anchor,
           moment: row.escalatedAt ?? row.waitingSince,
           key: `open-item:${row.itemId}`,
-          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} onChat={chatAboutThis}
-            main={coordinatedMain} />,
+          element: (
+            <ItemAsCard
+              projectId={coordinatedProjectId}
+              row={row}
+              now={Date.now()}
+              currentPromotionId={currentPromotion.data?.promotionId ?? null}
+              onChat={chatAboutThis}
+              main={coordinatedMain} />
+          ),
         }];
       }),
-    [chatAboutThis, coordinatedMain, coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
+    [
+      chatAboutThis,
+      coordinatedMain,
+      coordinatedProjectId,
+      currentPromotion.data?.promotionId,
+      openItems.data,
+      openItems.dataUpdatedAt,
+      transcriptEvents,
+    ],
   );
 
   // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
@@ -5554,6 +5631,23 @@ export function WorkspaceView({
     () => [...decisionReceipts, ...questionRecords, ...blockedPromotionCard, ...exceptionCards],
     [decisionReceipts, questionRecords, blockedPromotionCard, exceptionCards],
   );
+
+  // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
+  // same helper handles pause cards (`fuse-` ids), so list rows and the pinned strip share one jump.
+  useEffect(() => {
+    if (!selectedId || !itemAt) {
+      followedItemRef.current = null;
+      return;
+    }
+    const key = `${selectedId} ${itemAt}`;
+    if (followedItemRef.current === key) return;
+    const frame = requestAnimationFrame(() => {
+      if (revealOwnerItemCard(itemAt, scrollRef.current ?? document)) {
+        followedItemRef.current = key;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, itemAt, transcriptInserts, ownerExceptionIds]);
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
   // delivered and put down are the card's own state, so the strip is told rather than left to work
@@ -6233,7 +6327,11 @@ export function WorkspaceView({
     }
   };
   const control = useMutation({
-    mutationFn: (id: string) => interruptSession(id),
+    // The composer's Stop. It ends the session's background work along with the turn — the dev
+    // server or build the stopped turn left running is what the person pointing at Stop can still
+    // see running — and it is the ONLY caller that asks for that: every other interrupt keeps a
+    // plain interrupt's semantics (nothing killed; the engine and its conversation stay).
+    mutationFn: (id: string) => interruptSession(id, undefined, { stopBackgroundWork: true }),
     onSuccess: () => {
       // Interrupt drops queued follow-ups server-side. Rather than silently lose what the
       // user typed, fold their queued text back into the composer so it can be edited and
@@ -6268,17 +6366,12 @@ export function WorkspaceView({
       // Withdrawing shouldn't silently eat what the user typed (interrupt parity): fold the
       // message back into the composer so it can be edited and resent. Only restored once the
       // DELETE succeeds — a rejected withdraw means the runner already leased it, so it lands
-      // in the transcript and restoring would duplicate it. Unlike Stop (offered only with an
-      // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
-      // read through textRef, since the awaited gap may have outdated this render's `text`.
-      // Nor does a turn nobody typed come back (`returnsToComposer`).
+      // in the transcript and restoring would duplicate it. Withdrawn from the tray it comes back
+      // as a withdrawn steer does (decided 2026-10-16, docs/mocks/steer-tray): an explicit press,
+      // so a draft keeps its place above the words rather than losing them to it. Nor does a turn
+      // nobody typed come back (`returnsToComposer`).
       const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
-      if (body && !textRef.current.trim()) {
-        setText(withdrawn?.shell ? `!${body}` : body);
-        // The files follow the words: restoring them under a draft that kept its place would stage
-        // one message's images against another's text.
-        stageRestored(withdrawn?.attachments);
-      }
+      if (body) restoreUndelivered?.(withdrawn?.shell ? `!${body}` : body, withdrawn?.attachments);
     } catch {
       message.info('This message is already being processed and cannot be withdrawn');
     }
@@ -7344,16 +7437,81 @@ export function WorkspaceView({
       !sameSessionSendBlocked &&
       !selectedMissing &&
       !loadingSession;
-  // The single send button morphs into a Stop while a turn is generating AND the composer
-  // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
+  // The single send button morphs into a Stop while the session has something to stop AND the
+  // composer is empty — interrupting it. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
   // and the reaper recycles an idle/finished session's slot on its own.
+  //
+  // "Something to stop" reads the same two predicates the header draws the session with, off the
+  // same row (`selectedSession ?? selected`), so the glyph and this button cannot disagree:
+  //
+  //   - `isGenerating` — the dispatched turn (RUNNING), or a turn the engine started for itself
+  //     (AWAITING_INPUT + engineTurnActive: a background task reporting in, a scheduled wake-up).
+  //     The latter never reaches /turn-complete, so the status stays parked for its whole
+  //     duration while the engine streams; the runner asks the engine to interrupt
+  //     unconditionally for exactly this case (src/runner-go/session.go), so a predicate reading
+  //     the raw status left it unstoppable — no Stop, and no other way to reach the turn.
+  //   - `outlivingSessionWork` — a sub-agent or background process still running under a parked
+  //     turn. DELIBERATE, and the reason this is not a "generating" predicate: a session parked
+  //     with only that work left also gets a Stop. Making the press stop the background work as
+  //     well is a separate piece of work; until it lands, the stop still reaches the engine and
+  //     what it found is reported in the transcript. Do not narrow this back as though the
+  //     background case were an oversight.
+  //
+  // Only a genuinely idle session — nothing generating, nothing left running — keeps Send.
+  //
+  // This deliberately loosens the review fix in docs/interactive-claude-runner-design.md
+  // ("disable Stop the moment turn_end arrives to close the race"): that kept Stop off a parked
+  // session because a Stop clicked as the turn ended could file a stale interrupt onto it, where
+  // it might land on the NEXT turn. The server holds that race itself now, which is why the
+  // button can stay: `interrupt` drops every queued message/shell/steer turn in the same
+  // transaction that files the interrupt (src/apiserver/src/sessions/sessions.service.ts), so
+  // nothing queued is left to fire behind the stop; the interrupt takes its place in the turn
+  // order, so a message sent after it is delivered after it; and the runner asks the engine and
+  // waits for that request's answer (src/runner-go/session.go), so a stop is never left pending
+  // for whatever turn comes next: what the engine answered — confirmed, or nothing to interrupt —
+  // is written into the transcript.
   const showStop =
     !!selected &&
-    sessionRunStatusOf(selectedSession ?? selected) === 'RUNNING' &&
+    (isGenerating(selectedSession ?? selected, sessionRunStateOf(selectedSession ?? selected)) ||
+      outlivingSessionWork(selectedSession ?? selected) !== null) &&
     !text.trim() &&
     readyImages.length === 0 &&
     !replyTo;
+
+  // Holding Send while a turn runs offers the other way to send the message — queued for the next
+  // turn instead of into this one — which ⌥Enter does from a keyboard (decided 2026-10-16,
+  // docs/mocks/steer-tray). A phone has no ⌥.
+  const queueOffered = defaultSendIntent === 'CURRENT_WORK' && !showStop && runtimeTakesMidTurnSteer(selectedEngine);
+  const [queueOffer, setQueueOffer] = useState(false);
+  const queueOfferRef = useRef<HTMLDivElement>(null);
+  // The press now on Send, and whether it was held long enough to open the offer instead of sending.
+  const sendHold = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
+  const releaseSendHold = () => {
+    const hold = sendHold.current;
+    if (hold && !hold.fired) {
+      clearTimeout(hold.timer);
+      sendHold.current = null;
+    }
+  };
+  useEffect(() => {
+    if (!queueOffer) return undefined;
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !queueOfferRef.current?.contains(event.target as Element | null)) {
+        setQueueOffer(false);
+      }
+    };
+    document.addEventListener('pointerdown', close, true);
+    document.addEventListener('keydown', close, true);
+    return () => {
+      document.removeEventListener('pointerdown', close, true);
+      document.removeEventListener('keydown', close, true);
+    };
+  }, [queueOffer]);
+  // Nothing to send that way any more (sent, emptied, the turn ended): the offer goes too.
+  useEffect(() => {
+    if (!queueOffered) setQueueOffer(false);
+  }, [queueOffered]);
 
   // ── `/` command, skill, and local command autocomplete ─────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
@@ -7363,9 +7521,6 @@ export function WorkspaceView({
   // regex match, so the menu auto-hides).
   const taRef = useRef<HTMLTextAreaElement>(null);
   const suggestionHintId = useId();
-  const [suggestionTapLearned, setSuggestionTapLearned] = useState(
-    () => localStorage.getItem(SUGGESTION_TAP_LEARNED_KEY) === '1',
-  );
   // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
   // timer that hands a held first tap on as the box's focus.
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
@@ -7765,6 +7920,7 @@ export function WorkspaceView({
           claudeAccount?: string | null;
           antigravityAccount?: string | null;
           kimiAccount?: string | null;
+          cursorAccount?: string | null;
         }
       | null
       | undefined,
@@ -8031,6 +8187,153 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing],
   );
+  // Steers asked for back and not yet answered — drawn "Withdrawing…" — and those the server has
+  // confirmed, hidden before the runner's own `withdrawn` delivery reaches the transcript.
+  const [withdrawingSteers, setWithdrawingSteers] = useState<ReadonlySet<string>>(() => new Set());
+  const [withdrawnSteers, setWithdrawnSteers] = useState<ReadonlySet<string>>(() => new Set());
+  // Take back a message sent into the running turn while nothing has read it (lib/steerDelivery).
+  // Only the engine's word that it dropped the message unread removes it, so nothing is hidden or
+  // handed back until the server says so. Then the words and their files go back into the composer
+  // the way "Put back in the composer" puts them: an explicit press, so a draft keeps its place
+  // above them instead of winning over them.
+  const withdrawSteer = async (
+    turnId: string,
+    text: string,
+    attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
+  ): Promise<void> => {
+    const sessionId = selectedId;
+    if (!sessionId || withdrawingSteers.has(turnId)) return;
+    setWithdrawingSteers((s) => new Set(s).add(turnId));
+    try {
+      await cancelQueuedTurn(sessionId, turnId);
+      setWithdrawnSteers((s) => new Set(s).add(turnId));
+      setQueued((q) => q.filter((x) => x.turnId !== turnId));
+      restoreUndelivered?.(text, attachments);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === STEER_WITHDRAW_ERRORS.ALREADY_READ) {
+        // Said in the reader's terms; the server's longer sentence is for the API's own callers.
+        const reader =
+          shownEngine === AgentProvider.CODEX ? 'Codex' : shownEngine === AgentProvider.CLAUDE ? 'Claude' : 'The agent';
+        message.info('Too late to withdraw', `${reader} has already read it.`);
+      } else {
+        message.error("Couldn't withdraw the message", e instanceof Error ? e.message : undefined);
+      }
+    } finally {
+      setWithdrawingSteers((s) => {
+        const next = new Set(s);
+        next.delete(turnId);
+        return next;
+      });
+    }
+  };
+  const withdrawSteerRef = useRef(withdrawSteer);
+  withdrawSteerRef.current = withdrawSteer;
+  // What the transcript's steers offer (SteerWithdrawCtx). Kept stable between the sets' changes, so
+  // a streaming reply does not redraw every bubble; nothing to take back where nothing can be sent.
+  const steerWithdrawal: SteerWithdrawHandle | null = useMemo(
+    () =>
+      selectedTrashed || selectedMissing
+        ? null
+        : {
+            withdraw: (turnId, text, attachments) => void withdrawSteerRef.current(turnId, text, attachments),
+            withdrawing: withdrawingSteers,
+            withdrawn: withdrawnSteers,
+          },
+    [selectedTrashed, selectedMissing, withdrawingSteers, withdrawnSteers],
+  );
+  // Queued messages a Steer is out for: drawn as on their way into the turn until the server answers.
+  const [steeringTurns, setSteeringTurns] = useState<ReadonlySet<string>>(() => new Set());
+  // The tray's Steer: send a message queued for the next turn into the one running now. The server
+  // makes it the steer it would have been (POST …/steer), and the row moves on from there as a steer
+  // does; with no turn left to join it stays queued, and is told so.
+  const steerQueued = async (turnId: string): Promise<void> => {
+    const sessionId = selectedId;
+    if (!sessionId || steeringTurns.has(turnId)) return;
+    setSteeringTurns((s) => new Set(s).add(turnId));
+    try {
+      const res = await steerQueuedTurn(sessionId, turnId);
+      setQueued((current) =>
+        current.map((turn) =>
+          turn.turnId === turnId
+            ? { ...turn, placement: 'steer', ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}) }
+            : turn,
+        ),
+      );
+    } catch (e) {
+      if (isCurrentWorkUnavailable(e)) {
+        const reason = e instanceof ApiError ? e.body?.reason : undefined;
+        message.info(
+          "Couldn't send it into this turn",
+          reason === 'STEER_UNSUPPORTED'
+            ? "This agent can't take a message mid-turn. It stays queued for the next turn."
+            : 'The turn is over or being stopped. It stays queued for the next turn.',
+        );
+      } else {
+        message.error("Couldn't send it into this turn", e instanceof Error ? e.message : undefined);
+      }
+    } finally {
+      setSteeringTurns((s) => {
+        const next = new Set(s);
+        next.delete(turnId);
+        return next;
+      });
+    }
+  };
+  // Steer is offered while a turn runs on an engine that can take a message into one (the server
+  // still asks the runner, and refuses one too old).
+  const steerOffered = !!live && selectedRunStatus === 'RUNNING' && runtimeTakesMidTurnSteer(selectedEngine);
+  // The tray's rows, in the order they were sent: the reader's steers nothing has read (from the
+  // transcript's events) and their messages still on the queue (`inPendingTray`).
+  const pendingTrayRows = ((): PendingTrayRow[] => {
+    if (selectedTrashed || selectedMissing) return [];
+    const steerRow = (steer: UnreadSteer): PendingTrayRow => {
+      // Missed the turn it was aimed at and handed back to run as the next turn: queued now, and
+      // shortly the message that opens that turn.
+      const requeued = steer.delivery === 'requeued';
+      const withdrawing = withdrawingSteers.has(steer.turnId);
+      return {
+        key: steer.turnId,
+        heading: requeued ? 'next' : 'current',
+        text: steer.text,
+        ...trayPictures(steer.images, steer.attachmentRefs),
+        state: withdrawing ? 'Withdrawing…' : requeued ? 'Queued for next turn' : steerDeliveryState(steer.delivery).label,
+        busy: withdrawing,
+        onWithdraw:
+          !requeued && steerWithdrawal && offersSteerWithdraw(steer.delivery, steer.withdrawable)
+            ? () => steerWithdrawal.withdraw(steer.turnId, steer.text, steer.attachmentRefs)
+            : undefined,
+      };
+    };
+    const queuedRow = (turn: QueuedTurn): PendingTrayRow => {
+      const steering = steeringTurns.has(turn.turnId);
+      const intoTurn = turn.placement === 'steer' || steering;
+      const withdrawing = withdrawingSteers.has(turn.turnId);
+      const refs: TurnAttachmentRef[] | undefined = turn.attachments?.map((a) => ({ id: a.id, mime: a.mimeType || undefined }));
+      return {
+        key: turn.turnId,
+        heading: intoTurn ? 'current' : 'next',
+        text: turn.content,
+        shell: turn.shell,
+        ...trayPictures(turnImages[turn.turnId], refs),
+        state: withdrawing ? 'Withdrawing…' : intoTurn ? steerDeliveryState(undefined).label : 'Queued for next turn',
+        busy: withdrawing || steering,
+        // Not handed to a runner yet, either way: the server takes it back alone.
+        onWithdraw: turn.placement === 'steer'
+          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.content, refs) : undefined
+          : () => void cancelQueued(turn.turnId),
+        onSteer: !intoTurn && !turn.shell && steerOffered ? () => void steerQueued(turn.turnId) : undefined,
+      };
+    };
+    return [
+      ...unreadSteers
+        .filter((steer) => !withdrawnSteers.has(steer.turnId))
+        .map((steer) => ({ at: steer.ts, row: steerRow(steer) })),
+      ...visibleQueuedTurns.filter(inPendingTray).map((turn) => ({ at: turn.createdAt, row: queuedRow(turn) })),
+    ]
+      // A row this tab just sent has no receipt time yet: it is the newest.
+      .sort((a, b) => (a.at ?? '\uffff').localeCompare(b.at ?? '\uffff'))
+      .map(({ row }) => row);
+  })();
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -9351,10 +9654,6 @@ export function WorkspaceView({
       lastComposerTap.current = null;
       e.preventDefault();
       acceptSuggestion();
-      if (!suggestionTapLearned) {
-        setSuggestionTapLearned(true);
-        localStorage.setItem(SUGGESTION_TAP_LEARNED_KEY, '1');
-      }
       return;
     }
     const box = e.currentTarget;
@@ -9503,23 +9802,27 @@ export function WorkspaceView({
             <ProjectWhyNotDoneCard project={pageSettledDoc} />
           )}
           {openProjectId && !pageSettledDoc && (
-            <div className="session-project-page-card">
-              <div className="session-project-page-progress">
-                {pageTaskCounts ? (
-                  <>
-                    <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
-                    <span>
-                      {pageNotStarted
-                        ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
-                        : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
-                    </span>
-                  </>
-                ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+            <>
+              <div className="session-project-page-card">
+                <div className="session-project-page-progress">
+                  {pageTaskCounts ? (
+                    <>
+                      <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
+                      <span>
+                        {pageNotStarted
+                          ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
+                          : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
+                      </span>
+                    </>
+                  ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+                </div>
+                {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
               </div>
-              {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
+              {/* The landing left the progress card on 2026-10-11: it is a card of its own under it
+                  (docs/mocks/project-landing-card), ahead of the merge card in the same list. */}
               <SessionProjectLanding projectId={openProjectId}
                 onOpen={() => navigate(`/projects/${encodeId(openProjectId)}`)} />
-            </div>
+            </>
           )}
           {openProjectId && (
             <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
@@ -9609,7 +9912,7 @@ export function WorkspaceView({
                     setMenuOpenId(null);
                     if (s.target.kind === 'project') enterProjectSessions(s.target.id);
                     else navigateWithPaneSlide('push', () =>
-                      navigate(sessionPath(s.target.id), { state: stampFromList() }));
+                      navigate(sessionItemPath(s.target), { state: stampFromList() }));
                   };
                   const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                   const offset = drag?.dx ?? restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null,
@@ -9750,7 +10053,7 @@ export function WorkspaceView({
                       setMenuOpenId(null);
                       if (openable)
                         navigateWithPaneSlide('push', () =>
-                          navigate(sessionPath(s.id), { state: stampFromList() }),
+                          navigate(sessionItemPath(actionSession), { state: stampFromList() }),
                         );
                     }}
                     onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe); }}
@@ -10284,12 +10587,16 @@ export function WorkspaceView({
             }
             // The exception cards the owner presses, with how long each has been theirs and which
             // side of the reader it sits on now: unlike a question, one can be above.
-            exceptions={ownerExceptionRows.map((row) => ({
+            needsYou={ownerExceptionRows.map((row) => ({
               row,
-              ageSeconds: Math.max(
-                0,
-                Math.floor((Date.now() - Date.parse(row.escalatedAt ?? row.waitingSince)) / 1000),
-              ),
+              need: selectedSession?.ownerItems?.find((item: any) => item.itemId === row.itemId)?.need
+                ?? null,
+              ageSeconds: (() => {
+                const at = Date.parse(row.escalatedAt ?? row.waitingSince);
+                return Number.isFinite(at)
+                  ? Math.max(0, Math.floor((Date.now() - at) / 1000))
+                  : null;
+              })(),
               above: openItemsAbove.split(' ').includes(row.itemId),
             }))}
             // The strip states the fact and this takes the reader to the one place it can be
@@ -10417,6 +10724,7 @@ export function WorkspaceView({
                   <AuthErrorCtx.Provider value={authErrorHelp}>
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
+                      <SteerWithdrawCtx.Provider value={steerWithdrawal}>
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
                           <TaskActivityCtx.Provider value={taskActivity}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
@@ -10440,6 +10748,7 @@ export function WorkspaceView({
                           </StreamingDraftsCtx.Provider>
                           </TaskActivityCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
+                      </SteerWithdrawCtx.Provider>
                       </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
                   </AuthErrorCtx.Provider>
@@ -10617,9 +10926,11 @@ export function WorkspaceView({
                 // queue's own is said here, in the slot each card keeps for it: how the turn stands,
                 // and the way out of it.
                 //
-                // A wake a watch queued is withdrawn rather than cancelled, because nothing sends it
-                // again; and only words the reader typed are put back in the composer
-                // (`returnsToComposer`), as Cancel and Stop hand back only those.
+                // The reader's own messages still on their way wait in the tray instead
+                // (`inPendingTray`); what is left here is what Orbit queued and what settled
+                // undelivered. A wake a watch queued is withdrawn rather than cancelled, because
+                // nothing sends it again; and only words the reader typed are put back in the
+                // composer (`returnsToComposer`), as Cancel and Stop hand back only those.
                 const wake = isQueuedWatchWake(q);
                 return (
                   <QueuedUserTurn
@@ -10913,6 +11224,8 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
+        {/* The reader's messages nothing has read yet, tucked behind the composer's top edge. */}
+        <PendingTray rows={pendingTrayRows} />
         <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
               Only shown once the box has hit its auto-grow cap or the user set a manual
@@ -11266,7 +11579,9 @@ export function WorkspaceView({
                 // reader is still composing in (the settlement card's Start the project, the
                 // confirmation card's Confirm done).
                 if (text.trim() || readyImages.length > 0 || replyTo) e.stopPropagation();
-                onSend();
+                // ⌥Enter sends it the other way while a turn runs: queued for the next turn instead
+                // of into this one (decided 2026-10-16, docs/mocks/steer-tray).
+                onSend(e.altKey ? 'NEXT_TURN' : undefined);
               }
             }}
           />
@@ -11277,17 +11592,14 @@ export function WorkspaceView({
                 {offeredSuggestion}
               </span>
               {/* The grey line itself says how to take it, and there is no button to see: Tab with a
-                  keyboard, a double-tap on the box on a touch screen (the hint goes once one has
-                  worked on this device). Which shows is CSS's call. Drawn in
+                  keyboard, a double-tap on the box on a touch screen. Which shows is CSS's call. Drawn in
                   docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
               <kbd className="composer-suggestion-key" aria-hidden="true">
                 Tab
               </kbd>
-              {!suggestionTapLearned && (
-                <span className="composer-suggestion-tap" aria-hidden="true">
-                  Double-tap to use
-                </span>
-              )}
+              <span className="composer-suggestion-tap" aria-hidden="true">
+                Double-tap to use
+              </span>
               {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
                   from the eye there, and gone with a keyboard, which has Tab. */}
               <button
@@ -11567,15 +11879,61 @@ export function WorkspaceView({
                 aria-label="Stop"
               />
             ) : (
-              <Button
-                className="composer-send"
-                variant="primary"
-                icon={<ArrowUpOutlined />}
-                disabled={!canSend}
-                loading={send.isPending}
-                onClick={() => onSend()}
-                aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-              />
+              <span className="composer-send-hold">
+                <Button
+                  className="composer-send"
+                  variant="primary"
+                  icon={<ArrowUpOutlined />}
+                  disabled={!canSend}
+                  loading={send.isPending}
+                  onClick={() => {
+                    // The press that opened the offer is not a send as well.
+                    if (sendHold.current?.fired) {
+                      sendHold.current = null;
+                      return;
+                    }
+                    onSend();
+                  }}
+                  onPointerDown={() => {
+                    sendHold.current = null;
+                    if (!queueOffered || !canSend) return;
+                    const hold = {
+                      fired: false,
+                      timer: setTimeout(() => {
+                        hold.fired = true;
+                        setQueueOffer(true);
+                      }, QUEUE_OFFER_HOLD_MS),
+                    };
+                    sendHold.current = hold;
+                  }}
+                  onPointerUp={releaseSendHold}
+                  onPointerLeave={releaseSendHold}
+                  onPointerCancel={releaseSendHold}
+                  onContextMenu={(e) => {
+                    if (queueOffered) e.preventDefault();
+                  }}
+                  aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+                  title={
+                    queueOffered
+                      ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn`
+                      : undefined
+                  }
+                />
+                {queueOffer && (
+                  <div ref={queueOfferRef} className="composer-queue-offer" role="menu" aria-label="Send">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setQueueOffer(false);
+                        onSend('NEXT_TURN');
+                      }}
+                    >
+                      Queue for next turn
+                    </button>
+                  </div>
+                )}
+              </span>
             )}
           </div>
         </div>

@@ -585,9 +585,10 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// M-T12: an automatic landing — the project's Automatic setting confirmed it, nobody pressed
 	// Merge — is authorized for one combination: this source onto the upstream tip its check ran
 	// against. With the upstream anywhere else there is nothing it may land, and it does not do what
-	// a landing the owner confirmed does (M5), re-check the new tip and merge it: it merges nothing,
-	// reports READY, and the owner is asked. A landing that names no checked tip has nothing to be
-	// held to, and lands nothing either.
+	// a landing the owner confirmed does (M5), re-check the new tip and merge it: it merges nothing
+	// and reports READY. The control plane then checks the candidate again on the new tip and reads
+	// the Automatic rule again over that check — or asks the owner, once main has kept moving. A
+	// landing that names no checked tip has nothing to be held to, and lands nothing either.
 	if landing && cmd.Automatic && (cmd.UpstreamShaChecked == "" || cmd.UpstreamShaChecked != upstreamSha) {
 		result.State, result.Phase = "READY", "MERGE"
 		return result

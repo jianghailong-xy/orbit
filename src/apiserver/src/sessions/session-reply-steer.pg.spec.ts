@@ -640,6 +640,57 @@ test('an outcome handed back to an asker running a turn is written into that tur
     assert.equal(blocksFor((await deliver(asker)).content, request.id), 0);
   });
 
+  await t.test('a Stop overtakes a reply steer the runner took before the engine read it: the outcome is held, and said on the next delivered turn', async () => {
+    // Whichever runner is on the other end: one that hands the unread steer back, and one that reports
+    // it undelivered (owner, 2026-10-16). Neither opens a turn after the Stop to say the outcome.
+    for (const report of ['hands it back', 'reports it undelivered'] as const) {
+      const asker = await session(`Coordinator: stopped while an answer waits to be read (${report})`);
+      const recipient = await session('Worker: answers');
+      const request = await ask(asker, recipient, 'go or no-go?');
+      const running = await busy(asker);
+      await reply(recipient, request.requestId, 'go');
+      const [steer] = await replyTurnsOf(asker);
+      assert.equal(steer.kind, 'steer');
+      assert.equal((await deliverSteer(asker)).turnId, steer.id);
+
+      await sessions.interrupt(ownerId, asker);
+      const stop = await (api as unknown as {
+        dequeueTurn: (
+          sessionId: string, runnerId: string, leaseGeneration: string | null, acceptsSteer: boolean,
+          declaredCapabilities: readonly string[],
+        ) => Promise<Record<string, unknown> | null>;
+      }).dequeueTurn.call(api, asker, runnerId, null, true, ROUTING);
+      assert.equal(stop?.kind, 'interrupt');
+      if (report === 'hands it back') await requeueSteer(asker, steer.id);
+      else await settleSteer(asker, steer.id, false);
+      await say(asker, running, RunEventType.INTERRUPT, { requestId: `stop-${asker}` });
+      await api.turnComplete({ id: runnerId } as never, asker, {
+        turnId: running, status: SharedRunStatus.INTERRUPTED, subtype: 'error_during_execution', numTurns: 1, costUsd: 0,
+      } as never);
+
+      const dropped = await turnRow(steer.id);
+      assert.deepEqual(
+        [dropped.kind, dropped.status, dropped.deliveryStatus, dropped.deliveryFailureCode],
+        ['steer', 'ANSWERED', 'FAILED', 'CURRENT_WORK_INTERRUPTED'],
+      );
+      const held = await requestRow(request.id);
+      assert.equal(held.replyClientTurnId, null);
+      assert.ok(held.replyHeldAt, `the outcome was not held on its request row (${report})`);
+      assert.deepEqual((await worker.drain()).handedOff, [], `the worker queued it again, after a stop (${report})`);
+      assert.equal(await queuedExecutables(asker), 0);
+      assert.equal(await statusOf(asker), RunStatus.AWAITING_INPUT);
+
+      // The asker's next turn — the owner's own message — says it, once.
+      const ownerKey = randomUUID();
+      await sessions.createTurn(ownerId, asker, { clientTurnId: ownerKey, content: 'what did the worker say?' });
+      const next = await deliver(asker);
+      assert.equal(next.clientTurnId, ownerKey);
+      assert.equal(blocksFor(next.content, request.id), 1);
+      assert.ok(!next.content.includes(STEER_HEAD), next.content);
+      assert.equal((await requestRow(request.id)).replyClientTurnId, ownerKey);
+    }
+  });
+
   // ── 32. the auto-retry ─────────────────────────────────────────────────────────────────────────
 
   await t.test('a transient failure of the turn a reply steer joined re-sends that turn, and the re-sent turn says the outcome', async () => {

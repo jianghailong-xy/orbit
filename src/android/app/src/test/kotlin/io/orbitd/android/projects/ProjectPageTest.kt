@@ -66,36 +66,74 @@ class ProjectPageTest {
 
     // MARK: the landing in flight
 
+    /** The row the owner approved, with the runner's own last report under it: a claimed job reports, and the row says how long ago. */
     @Test fun theLandingLineNamesTheTaskAndCountsSecondsWhileTheChecksRun() {
-        val view = j("""{"integratingCount":1,"queuedCount":0,"inFlight":{"taskTitle":"T2 wiki 契约、迁移与共享类型","state":"RUNNING","startedAt":"${iso(80)}","kind":"LAND_TASK","phase":"CHECK"}}""")
-        assertEquals(LandingLine("Landing", "T2 wiki 契约、迁移与共享类型", true, "checking", "1m 20s", "Elapsed", null), ProjectPage.landingLine(view, now, null, false))
+        val view = j("""{"integratingCount":1,"queuedCount":0,"inFlight":{"taskTitle":"T2 wiki 契约、迁移与共享类型","state":"RUNNING","startedAt":"${iso(80)}","kind":"LAND_TASK","phase":"CHECK","heartbeatAt":"${iso(0)}"}}""")
+        assertEquals(LandingLine("Landing", "T2 wiki 契约、迁移与共享类型", true, "checking", "1m 20s", "Elapsed", "Updated just now"), ProjectPage.landingLine(view, now, now, false))
         val queued = j("""{"integratingCount":0,"queuedCount":1,"inFlight":{"taskTitle":"T1","state":"QUEUED","startedAt":"${iso(40)}"}}""")
         assertEquals(LandingLine("Integration", "T1", false, "queued", "0m 40s", "Queued for", null), ProjectPage.landingLine(queued, now, null, false))
-        val several = j("""{"integratingCount":2,"queuedCount":1,"inFlight":{"taskTitle":"T1","state":"RUNNING","startedAt":"${iso(80)}"}}""")
+        val several = j("""{"integratingCount":2,"queuedCount":1,"inFlight":{"taskTitle":"T1","state":"RUNNING","startedAt":"${iso(80)}","heartbeatAt":"${iso(0)}"}}""")
         assertEquals("3 jobs", ProjectPage.landingLine(several, now, null, false)?.what)
         assertNull(ProjectPage.landingLine(j("""{"integratingCount":0,"queuedCount":0,"inFlight":null}"""), now, null, false))
         assertNull(ProjectPage.landingLine(j("{}"), now, null, false))
-        val unreadable = j("""{"integratingCount":1,"queuedCount":0,"inFlight":{"taskTitle":null,"state":"RUNNING","startedAt":"not a date"}}""")
-        assertEquals(LandingLine("Integration", null, true, "running", "0m 0s", "Elapsed", null), ProjectPage.landingLine(unreadable, now, null, false))
+        val unreadable = j("""{"integratingCount":1,"queuedCount":0,"inFlight":{"taskTitle":null,"state":"RUNNING","startedAt":"not a date","heartbeatAt":"${iso(0)}"}}""")
+        assertEquals(LandingLine("Integration", null, true, "running", "0m 0s", "Elapsed", "Updated just now"), ProjectPage.landingLine(unreadable, now, now, false))
     }
 
+    /** "Update unavailable" is only ever this app failing to read the server — its read failed, or is more than 90 s old — and it
+     * freezes the clock at the last word it had (iOS befc9694c). */
     @Test fun aLandingThatStoppedReportingFreezesItsClockAndStopsClaimingActivity() {
-        val view = j("""{"integratingCount":1,"inFlight":{"state":"RUNNING","startedAt":"${iso(80)}","kind":"LAND_TASK","phase":"CHECK"}}""")
+        val view = j("""{"integratingCount":1,"inFlight":{"state":"RUNNING","startedAt":"${iso(80)}","kind":"LAND_TASK","phase":"CHECK","heartbeatAt":"${iso(0)}"}}""")
         val later = now.plusSeconds(60)
         val line = ProjectPage.landingLine(view, later, now, true)!!
         assertEquals("Update unavailable", line.state); assertFalse(line.running); assertEquals("1m 20s", line.clock); assertEquals("Updated 1m ago", line.updated)
         assertEquals(false, ProjectPage.landingLine(view, now.plusSeconds(91), now, false)?.running)
         assertEquals(true, ProjectPage.landingLine(view, later, later, false)?.running)
+        // A runner gone quiet while the read works is a fact about the REPORTS: "No report", its clock frozen at the last one —
+        // never "Update unavailable", and never a timeout, which is the job's own verdict for the server to word.
         val stale = j("""{"integratingCount":1,"inFlight":{"state":"RUNNING","startedAt":"${iso(720)}","kind":"LAND_TASK","phase":"CHECK","heartbeatAt":"${iso(660)}"}}""")
         val beat = ProjectPage.landingLine(stale, now, now, false)!!
-        assertFalse(beat.running); assertEquals("Update unavailable", beat.state); assertEquals("1m 0s", beat.clock); assertEquals("Updated 11m ago", beat.updated)
+        assertFalse(beat.running); assertEquals(ProjectPage.landingNoReport, beat.state); assertEquals("1m 0s", beat.clock); assertEquals("No report for 11m", beat.updated)
+        assertFalse("${beat.state} ${beat.updated}".lowercase().contains("timed out")); assertFalse(beat.timedOut)
         ProjectPage.integrationJobWords.forEach { (kind, word) -> ProjectPage.integrationPhaseWords.forEach { (phase, state) ->
-            val job = ProjectPage.landingLine(j("""{"inFlight":{"state":"RUNNING","startedAt":"${iso(80)}","kind":"$kind","phase":"$phase"}}"""), now, null, false)!!
+            val job = ProjectPage.landingLine(j("""{"inFlight":{"state":"RUNNING","startedAt":"${iso(80)}","kind":"$kind","phase":"$phase","heartbeatAt":"${iso(0)}"}}"""), now, null, false)!!
             assertEquals(word, job.word); assertEquals(state, job.state)
         } }
         val promotion = ProjectPage.landingLine(j("""{"inFlight":{"state":"QUEUED","startedAt":"${iso(80)}","kind":"LAND_PROMOTION","phase":"CHECK"}}"""), now, null, false)!!
         assertEquals("Merge to main", promotion.word); assertEquals("queued", promotion.state); assertFalse(promotion.running)
         assertEquals(listOf("1m 20s", "0m 40s", "0m 0s", "0m 59s", "60m 0s", "0m 0s"), listOf(80.0, 40.0, 0.0, 59.0, 3600.0, -5.0).map(ProjectPage::landingClock))
+    }
+
+    /** A claim whose runner has not reported once says so, rather than counting a silence it cannot measure; its clock stops at the
+     * read, and a runner that reports again is running again. */
+    @Test fun aClaimNobodyHasHeardFromSaysNoReportYet() {
+        val silent = j("""{"integratingCount":1,"inFlight":{"state":"RUNNING","startedAt":"${iso(240)}","kind":"LAND_TASK","phase":"FETCH"}}""")
+        val line = ProjectPage.landingLine(silent, now.plusSeconds(30), now, false)!!
+        assertEquals(LandingLine("Landing", null, false, ProjectPage.landingNoReport, "4m 0s", "Elapsed", ProjectPage.landingNoReportYet), line)
+        assertEquals(LandingHead("4m 0s", true, ProjectPage.landingNoReportYet), line.head)
+        // Within the lease the report is fresh, and the row is the job's own again.
+        val heard = j("""{"integratingCount":1,"inFlight":{"state":"RUNNING","startedAt":"${iso(240)}","kind":"LAND_TASK","phase":"FETCH","heartbeatAt":"${iso(599)}"}}""")
+        assertEquals("fetching", ProjectPage.landingLine(heard, now, now, false)?.state)
+        assertEquals("No report for 10m", ProjectPage.landingNoReportFor(10))
+    }
+
+    /** The other half of "how long is this taking" (`inFlight.waitMs`): a job claimed 2m 23s after it was queued and 4m 41s into its
+     * work is a different story from one working for 7m 4s. A queued job's whole clock IS its wait, which "Queued for" says. */
+    @Test fun theLandingLineSaysWhatTheJobWaitedBeforeItWasClaimed() {
+        val view = j("""{"integratingCount":1,"inFlight":{"taskTitle":"C5","state":"RUNNING","startedAt":"${iso(281)}","kind":"LAND_TASK","phase":"FETCH",
+            "heartbeatAt":"${iso(5)}","waitMs":143637}}""")
+        val line = ProjectPage.landingLine(view, now, now, false)!!
+        assertEquals("4m 41s", line.clock); assertEquals("2m 23s", line.wait)
+        assertEquals(LandingHead("4m 41s", true, "fetching · waited 2m 23s · updated just now"), line.head)
+        val queued = j("""{"integratingCount":0,"queuedCount":1,"inFlight":{"taskTitle":"C5","state":"QUEUED","startedAt":"${iso(126)}","kind":"LAND_TASK","waitMs":126000}}""")
+        assertEquals("Queued for", ProjectPage.landingLine(queued, now, null, false)?.clockLabel); assertNull(ProjectPage.landingLine(queued, now, null, false)?.wait)
+        // A job that never waited, and a server that does not say, say nothing about waiting.
+        assertNull(ProjectPage.landingLine(j("""{"integratingCount":1,"inFlight":{"state":"RUNNING","startedAt":"${iso(80)}","heartbeatAt":"${iso(0)}","waitMs":0}}"""), now, null, false)?.wait)
+        assertNull(ProjectPage.landingLine(j("""{"integratingCount":1,"inFlight":{"state":"RUNNING","startedAt":"${iso(80)}","heartbeatAt":"${iso(0)}"}}"""), now, null, false)?.wait)
+        // The wait rides on a lead the server judged timed out, too: it is the line's, not the clock's.
+        val stuck = integration(1, 0, inFlight("C5", started = 6_630, kind = "LAND_TASK", phase = "CHECK", heartbeat = 6_620).let {
+            JsonObject(it + ("waitMs" to JsonPrimitive(34_000))) }, listOf(job("j", phase = "CHECK", started = 6_630, heartbeat = 6_620, timedOut = true)))
+        assertEquals("0m 34s", ProjectPage.landingLine(stuck, now, now, false)?.wait)
     }
 
     // MARK: the jobs in flight (iOS 3a5c576fc, ProjectPageTests; docs/mocks/landing-jobs-sheet)
@@ -167,10 +205,11 @@ class ProjectPageTest {
         val flight = inFlight("T", started = 720, kind = "LAND_TASK", phase = "CHECK", heartbeat = 660)
         val listed = integration(1, 0, flight, listOf(job("j", phase = "CHECK", started = 720, heartbeat = 660, limit = 4_200)))
         assertEquals(LandingLine("Landing", "T", true, "checking", "12m 0s", "Elapsed", "Updated 11m ago"), ProjectPage.landingLine(listed, now, now, false))
-        // An empty list is still a server that lists them; no list at all is an older server, whose row keeps the guess it always made.
+        // An empty list is still a server that lists them; no list at all is an older server, whose row reads the reports for itself —
+        // for what they are: a runner silent past the claim lease is "No report", never a timeout and never "Update unavailable".
         assertEquals("checking", ProjectPage.landingLine(integration(1, 0, flight, emptyList()), now, now, false)?.state)
         val older = ProjectPage.landingLine(integration(1, 0, flight, null), now, now, false)!!
-        assertEquals("Update unavailable", older.state); assertFalse(older.timedOut)
+        assertEquals(ProjectPage.landingNoReport, older.state); assertEquals("No report for 11m", older.updated); assertFalse(older.timedOut); assertFalse(older.running)
         assertNull("an older server's absence is not none in flight", ProjectPage.inFlightJobs(integration(1, 0, flight, null)))
     }
 
@@ -274,7 +313,8 @@ class ProjectPageTest {
         assertEquals("Needs you", live("RUNNING", false, 1))
         assertEquals("Working", live("RUNNING", false, 0))
         assertEquals("Working", live("AWAITING_INPUT", true, 0))
-        assertEquals("Needs you", live("AWAITING_INPUT", false, 0))
+        assertEquals("Idle", live("AWAITING_INPUT", false, 0))       // a turn that ended on its own
+        assertEquals("Needs you", live("AWAITING_INPUT", false, 1))  // parked, with a question it asked
         assertEquals("Idle", live("FAILED", false, 0))
         assertEquals("Completed", ProjectPage.coordinatorPill(status("LIVE", """{"id":"s","runState":"AWAITING_INPUT","lifecycleState":"COMPLETED"}""")).label)
         assertEquals("Not started", ProjectPage.coordinatorPill(status("NEVER_OPENED")).label)
@@ -298,9 +338,10 @@ class ProjectPageTest {
         assertEquals("Open tasks are coordinated from this conversation.", ProjectPage.dispatchNote(null, false).second)
         assertEquals("No open tasks remain.", ProjectPage.dispatchNote(0, false).second)
         assertEquals("Open work" to "A completed conversation is told nothing new — and 2 open tasks still point at it.", ProjectPage.dispatchNote(2, true))
-        assertEquals("Reply to coordinator", ProjectPage.coordinatorPress(false, true))
-        assertEquals("Open coordinator", ProjectPage.coordinatorPress(false, false))
-        assertEquals("Open coordinator", ProjectPage.coordinatorPress(true, true))
+        assertEquals("Review 1 request", ProjectPage.coordinatorPress(false, 1))
+        assertEquals("Review 2 requests", ProjectPage.coordinatorPress(false, 2))
+        assertEquals("Open coordinator", ProjectPage.coordinatorPress(false, 0))
+        assertEquals("Open coordinator", ProjectPage.coordinatorPress(true, 1))
     }
 
     // MARK: open items

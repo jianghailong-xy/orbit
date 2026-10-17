@@ -969,38 +969,30 @@ struct ProjectDetailView: View {
     // MARK: work overview
 
     /// The card's one moving part, drawn only while the platform is landing work — exactly the
-    /// minutes its counts stand still and the page reads as stopped. The row is the section's own
-    /// first row rather than part of the grid, so the list's separator under it is the hairline the
-    /// cells below are separated by.
+    /// minutes its counts stand still and the page reads as stopped. It is the same card the
+    /// project's sessions page draws (docs/mocks/project-landing-card, owner decision 2026-10-11):
+    /// one read, one shape, one set of words wherever the landing is shown.
     ///
     /// `TimelineView`, not a timer of our own: the clock counts in SECONDS while the read behind it
     /// is as slow as it is, because a number that stepped a whole poll at a time would read as the
-    /// stalled page this row exists to disprove.
+    /// stalled page this card exists to disprove.
     ///
     /// On a server that lists its jobs, a press opens them (docs/mocks/landing-jobs-sheet) — hosted
-    /// by the page's list, not by this row, so the row's clock cannot take the sheet down. An older
-    /// server has no list to show, and the row stays a row.
+    /// by the page's list, not by this card, so the card's clock cannot take the sheet down. On the
+    /// project's own page there is no second door: a server that lists no jobs draws the card as a
+    /// read, and its Retry goes through the page's store, which reads the landing again.
     @ViewBuilder
     private func landingRow(_ store: ProjectDetailModel) -> some View {
         if let integration = store.integration, integration.inFlight != nil {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                if let line = ProjectPage.landingLine(integration, now: context.date,
-                                                     updatedAt: store.integrationReadAt,
-                                                     refreshFailed: store.integrationReadFailed) {
-                    if integration.inFlightJobs != nil {
-                        Button { pageSheet = .landingJobs } label: {
-                            HStack(spacing: 8) {
-                                ProjectLandingRow(line: line)
-                                Image(systemName: "chevron.forward")
-                                    .font(.orbitMeta.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        ProjectLandingRow(line: line)
-                    }
+                if let card = ProjectMergeCard.taskLandingCard(integration, now: context.date,
+                                                               updatedAt: store.integrationReadAt,
+                                                               refreshFailed: store.integrationReadFailed) {
+                    ProjectLandingCardView(
+                        card: card,
+                        onOpenJobs: integration.inFlightJobs == nil ? nil : { pageSheet = .landingJobs },
+                        onOpenProject: nil,
+                        retry: { jobID in try await store.retryIntegrationJob(jobID) })
                 }
             }
         }
@@ -1176,7 +1168,8 @@ struct ProjectDetailView: View {
                             Text(ProjectPage.startNewCoordinatorDetail(finished: finished))
                         }
                     } label: {
-                        Text(ProjectPage.coordinatorPress(finished: finished, needsReply: pill.label == "Needs you"))
+                        Text(ProjectPage.coordinatorPress(finished: finished,
+                                                          waiting: coordination.session?.pendingApprovals ?? 0))
                             .frame(maxWidth: .infinity)
                     } primaryAction: {
                         openCoordinator(store, focus: nil)

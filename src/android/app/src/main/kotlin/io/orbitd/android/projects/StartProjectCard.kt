@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -39,15 +41,19 @@ import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
 // "Start this project?" — the one card the owner starts a project on (ApprovalCards.swift `StartProjectCard`, web's
-// `StartProjectCard`): what done is, how much is delegated and what still comes to the owner, and the plan by level, with
-// Start and the line under it saying what pressing it does. The owner's own Start… draws it over the project page and the
-// coordinator's request draws it in its conversation. Every word is `StartProjectCopy` / `RunSettings`.
+// `StartProjectCard`): what done is, how much is delegated and what still comes to the owner, and the plan — drawn as the task
+// graph when it fits, by level otherwise — with Start and the line under it saying what pressing it does. The owner's own Start…
+// draws it over the project page and the project's sessions page, and the coordinator's request draws it in its conversation and
+// over the sessions page. Every word is `StartProjectCopy` / `RunSettings`.
 
 /** One criterion a press confirms. */
 data class StartCriterion(val ordinal: Int, val text: String)
 
 /** The card itself, drawn from what it is given. A card nobody asked for (`asked` false) quotes nobody and offers no
- * Chat about this; a request that no longer stands is dimmed with Start dead and the reason above it. */
+ * Chat about this; a request that no longer stands is dimmed with Start dead and the reason above it. [graph] is the dependency
+ * graph [plan] was read off, which the Plan draws while the whole of it fits (iOS d91a0dd48). [recorded] draws it as the record a
+ * start from a review made of it: dimmed, the criteria and the plan as they were, the settings [draft] holds as one line, and nothing
+ * that says what pressing Start would do. */
 @Composable
 internal fun StartProjectCard(
     projectId: String, projectTitle: String, asked: Boolean, askedAgo: String?, request: StartProjectCopy.Request,
@@ -55,8 +61,8 @@ internal fun StartProjectCard(
     draft: StartProjectCopy.Draft, onDraft: (StartProjectCopy.Draft) -> Unit, standing: StartProjectCopy.Standing,
     enabled: Boolean, starting: Boolean, error: String?, tag: String, startTag: String,
     onStart: () -> Unit, onViewTasks: () -> Unit, onChatAbout: (() -> Unit)? = null, chatEnabled: Boolean = true,
-    branches: ProjectMainBranch.Branches? = null, lastChoice: ProjectMainBranch.LastChoice? = null,
-    trailing: @Composable () -> Unit = {},
+    branches: ProjectMainBranch.Branches? = null, lastChoice: ProjectMainBranch.LastChoice? = null, graph: DependencyGraph? = null,
+    recorded: Boolean = false, trailing: @Composable () -> Unit = {},
 ) {
     val opensCoordinator = draft.automatic && !hasCoordinator
     // The branch every sentence about where work goes names: the one on the card, or main for a project with no repository.
@@ -64,10 +70,15 @@ internal fun StartProjectCard(
     val editable = enabled && standing == StartProjectCopy.Standing.LIVE && !starting
     var criteriaOpen by remember { mutableStateOf(false) }
     var whyOpen by remember { mutableStateOf(false) }
+    // Whether the clamps hide anything, as each text's own layout says (iOS `ClampedText`): More and Read all are drawn only while
+    // they do, or once opened — a toggle for words already shown in full would open nothing. `didOverflowHeight` is the vertical
+    // half of `hasVisualOverflow`: its width half also flags a line laid out at exactly its own width, which hides nothing.
+    var whyCut by remember(request.why) { mutableStateOf(false) }
+    var cutCriteria by remember(criteria) { mutableStateOf(emptySet<Int>()) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val accent = MaterialTheme.colorScheme.primary
-    Column(Modifier.fillMaxWidth().testTag(tag).alpha(if (StartProjectCopy.isOpen(standing)) 1f else 0.6f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.fillMaxWidth().testTag(tag).alpha(if (StartProjectCopy.isOpen(standing) && !recorded) 1f else 0.6f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (!recorded) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("▶", Modifier.clearAndSetSemantics {}, color = accent, style = MaterialTheme.typography.titleMedium)
             Text(StartProjectCopy.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = accent)
             trailing()
@@ -81,30 +92,37 @@ internal fun StartProjectCard(
         if (asked && request.why.isNotEmpty()) StartCardPanel {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(StartProjectCopy.coordinator, style = MaterialTheme.typography.labelMedium, color = muted)
-                Text(request.why, style = MaterialTheme.typography.bodySmall, maxLines = if (whyOpen) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis)
-                Text(if (whyOpen) StartProjectCopy.less else StartProjectCopy.more, Modifier.clickable(role = Role.Button) { whyOpen = !whyOpen }.testTag("$tag-why"),
-                    style = MaterialTheme.typography.labelMedium, color = accent)
+                Text(request.why, Modifier.testTag("$tag-why-text"), style = MaterialTheme.typography.bodySmall, maxLines = if (whyOpen) Int.MAX_VALUE else 3,
+                    overflow = TextOverflow.Ellipsis, onTextLayout = { whyCut = it.didOverflowHeight })
+                if (whyOpen || whyCut) Text(if (whyOpen) StartProjectCopy.less else StartProjectCopy.more,
+                    Modifier.clickable(role = Role.Button) { whyOpen = !whyOpen }.testTag("$tag-why"), style = MaterialTheme.typography.labelMedium, color = accent)
             }
         }
-        StartProjectCopy.staleExplanation(standing)?.let {
+        if (!recorded) StartProjectCopy.staleExplanation(standing)?.let {
             Text(it, Modifier.fillMaxWidth().background(accent.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp)
                 .testTag("$tag-stale"), style = MaterialTheme.typography.labelMedium, color = muted)
         }
 
-        // What done is: the criteria a press confirms, open, each clamped to two lines until the toggle.
+        // What done is: the criteria a press confirms, open, each clamped to two lines until the toggle — which is there while a clamp
+        // hides anything: a folded list is an invitation to sign unread.
         StartCardHead(StartProjectCopy.doneWhenHead(criteria.size))
-        criteria.forEach { item -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        criteria.forEachIndexed { index, item -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("${item.ordinal}", Modifier.widthIn(min = 14.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelMedium, color = muted,
                 textAlign = TextAlign.End)
-            Text(item.text, maxLines = if (criteriaOpen) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
+            Text(item.text, Modifier.weight(1f).testTag("$tag-criterion:$index"), maxLines = if (criteriaOpen) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis,
+                onTextLayout = { layout -> cutCriteria = if (layout.didOverflowHeight) cutCriteria + index else cutCriteria - index })
         } }
-        if (criteria.isNotEmpty()) Text(if (criteriaOpen) StartProjectCopy.showLess else StartProjectCopy.readAll(criteria.size),
+        if (criteriaOpen || cutCriteria.isNotEmpty()) Text(if (criteriaOpen) StartProjectCopy.showLess else StartProjectCopy.readAll(criteria.size),
             Modifier.clickable(role = Role.Button) { criteriaOpen = !criteriaOpen }.testTag("$tag-criteria"), style = MaterialTheme.typography.labelMedium, color = accent)
-        Text(StartProjectCopy.explanation(criteria.size), style = MaterialTheme.typography.labelMedium, color = muted)
+        if (!recorded) Text(StartProjectCopy.explanation(criteria.size), style = MaterialTheme.typography.labelMedium, color = muted)
 
-        // How much is delegated: Automatic first, with what it leaves the owner, then the three settings that can change later.
+        // How much is delegated: Automatic first, with what it leaves the owner, then the three settings that can change later. A
+        // record says what it started with, in one line.
         StartCardHead(StartProjectCopy.howItRuns)
-        StartCardPanel {
+        if (recorded) StartCardPanel {
+            Text(StartProjectCopy.settingsLine(draft, StartProjectCopy.branch(request.settings.projectBranchName, projectId)),
+                Modifier.padding(12.dp).testTag("$tag-settings"), style = MaterialTheme.typography.bodySmall, color = muted)
+        } else StartCardPanel {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(RunSettings.automatic, Modifier.weight(1f))
@@ -136,40 +154,66 @@ internal fun StartProjectCard(
                 Stepper(draft.maxConcurrentTasks, 1..StartProjectCopy.maxConcurrentTasks, editable, "$tag-at-most") { onDraft(draft.copy(maxConcurrentTasks = it)) }
             }
         }
-        Text(StartProjectCopy.howItRunsNote(asked, asked && !request.settings.automatic), Modifier.testTag("$tag-note"),
+        if (!recorded) Text(StartProjectCopy.howItRunsNote(asked, asked && !request.settings.automatic), Modifier.testTag("$tag-note"),
             style = MaterialTheme.typography.labelMedium, color = muted)
 
-        // The plan by level — what starts now, what runs side by side, what needs the owner; the tasks one press away.
-        StartCardHead(StartProjectCopy.planHead(plan.count, plan.levels?.size ?: 1))
+        // The plan: the project page's task graph while the whole of it fits the card at `planGraphMinFit` or better — what waits on
+        // what, task by task, its head counting tasks only — and otherwise by level (what starts now, what runs side by side, what
+        // needs the owner) with the graph a press away (iOS d91a0dd48, docs/mocks/start-card-web-width board 02).
+        var planWidth by remember { mutableFloatStateOf(0f) }
+        var graphOpen by remember { mutableStateOf(false) }
+        val density = LocalDensity.current
+        val drawn = remember(graph, planWidth) { StartProjectCopy.planGraph(graph, planWidth.toDouble()) }
+        StartCardHead(StartProjectCopy.planHead(plan.count, if (drawn == null) plan.levels?.size ?: 1 else 1))
         StartCardPanel {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                plan.levels?.forEachIndexed { at, level -> PlanLevel(at + 1, level, tag) }
-                // Not while the start is out: leaving then would lose the server's answer to it.
-                Text(StartProjectCopy.viewTasks, Modifier.clickable(enabled = !starting, role = Role.Button, onClick = onViewTasks).testTag("$tag-view-tasks"),
-                    style = MaterialTheme.typography.bodySmall, color = accent)
+            Column(Modifier.fillMaxWidth().padding(12.dp).onSizeChanged { planWidth = with(density) { it.width.toDp().value } },
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // A task in the picture opens the way View tasks opens the plan's tasks.
+                if (drawn != null) PlanGraphCanvas(drawn.layout, drawn.edges, drawn.scale.toFloat(), Modifier.align(Alignment.CenterHorizontally)
+                    .testTag("$tag-plan-graph")) { mark -> if (mark.kind == MarkKind.TASK && !starting) onViewTasks() }
+                else plan.levels?.forEachIndexed { at, level -> PlanLevel(at + 1, level, tag) }
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    // Not while the start is out: leaving then would lose the server's answer to it.
+                    Text(StartProjectCopy.viewTasks, Modifier.clickable(enabled = !starting, role = Role.Button, onClick = onViewTasks).testTag("$tag-view-tasks"),
+                        style = MaterialTheme.typography.bodySmall, color = accent)
+                    if (graph != null && drawn == null) Text(StartProjectCopy.taskGraph, Modifier.clickable(role = Role.Button) { graphOpen = true }
+                        .testTag("$tag-task-graph"), style = MaterialTheme.typography.bodySmall, color = accent)
+                }
             }
         }
-        error?.let { Text(it, Modifier.testTag("$tag-error"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }
-
-        // One press, one write; the line under it says what pressing it does.
-        Button(onClick = onStart, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(startTag),
-            enabled = enabled && !starting && standing == StartProjectCopy.Standing.LIVE && draft.complete) { Text(StartProjectCopy.action) }
-        onChatAbout?.let { chat ->
-            OutlinedButton(onClick = chat, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-chat"), enabled = chatEnabled && criteria.isNotEmpty()) {
-                Text(CardVerb.CHAT.label) }
+        if (graphOpen && graph != null) {
+            var expanded by remember { mutableStateOf(emptySet<String>()) }
+            val (marks, edges) = remember(graph, expanded) { ProjectGraphLayout.prepare(graph, expanded) }
+            TaskGraphFullScreen(marks, edges, close = { graphOpen = false }) { mark ->
+                if (mark.kind == MarkKind.TASK) { if (!starting) { graphOpen = false; onViewTasks() } }
+                else if (ProjectGraphLayout.canOpen(mark)) expanded = expanded + mark.id
+            }
         }
-        Text(StartProjectCopy.barCaption(opensCoordinator, plan.startsNow, criteria.size, StartProjectCopy.shortSeal(request.criteriaDigest)),
-            Modifier.fillMaxWidth().testTag("$tag-caption"), style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Center)
+        // A record's press is made: no Start, no Chat about this, nothing about what pressing would do.
+        if (!recorded) {
+            error?.let { Text(it, Modifier.testTag("$tag-error"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }
+
+            // One press, one write; the line under it says what pressing it does.
+            Button(onClick = onStart, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(startTag),
+                enabled = enabled && !starting && standing == StartProjectCopy.Standing.LIVE && draft.complete) { Text(StartProjectCopy.action) }
+            onChatAbout?.let { chat ->
+                OutlinedButton(onClick = chat, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-chat"), enabled = chatEnabled && criteria.isNotEmpty()) {
+                    Text(CardVerb.CHAT.label) }
+            }
+            Text(StartProjectCopy.barCaption(opensCoordinator, plan.startsNow, criteria.size, StartProjectCopy.shortSeal(request.criteriaDigest)),
+                Modifier.fillMaxWidth().testTag("$tag-caption"), style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Center)
+        }
     }
 }
 
 /** The coordinator's request in its conversation (ApprovalCards.swift `StartProjectCardView`): the same card, drawn from the
  * open `START_REQUEST` the session read carries, its standing re-derived from that read on every render, and pressed at the
  * start door through the card actions (`CardVerb.START`, the request named). A press in flight or taken holds it live while
- * the read catches up, as `RequestedStartProjectSheet` does; a refusal stays on the card in the door's words. */
+ * the read catches up, as `RequestedStartProjectSheet` does; a refusal stays on the card in the door's words. [recorded] — what
+ * the review's Start was pressed with — draws it as the record that start made of it, with the settings it was pressed with. */
 @Composable
 fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>, fresh: Boolean, result: CardActionState,
-    open: (String) -> Unit, discuss: ((String) -> Unit)?, submit: (CardVerb, CardInput) -> Unit) {
+    open: (String) -> Unit, discuss: ((String) -> Unit)?, recorded: CardInput? = null, submit: (CardVerb, CardInput) -> Unit) {
     val doc = card.context
     val request = StartProjectCopy.request(card.source)
     // The project's repository, the branches its main branch can be chosen from and this account's last choice there: the session
@@ -179,7 +223,9 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
     // The owner's edits, kept across recreation like the other cards' drafts; until there are any, the request's settings with
     // Automatic on, as the reads resolve them.
     var edited by rememberSaveable(card.key, card.binding, stateSaver = draftSaver) { mutableStateOf<StartProjectCopy.Draft?>(null) }
-    val draft = edited ?: request?.let { StartProjectCopy.Draft.of(it.settings, integration) } ?: StartProjectCopy.Draft("PROJECT_BRANCH", true, 1)
+    val draft = recorded?.settings?.let { pressed -> StartProjectCopy.Draft(pressed.line, pressed.automatic, pressed.maxConcurrentTasks,
+        pressed.mergeCheckCommand.orEmpty(), pressed.upstreamRef?.let(RunSettings::mainBranchName)) }
+        ?: edited ?: request?.let { StartProjectCopy.Draft.of(it.settings, integration) } ?: StartProjectCopy.Draft("PROJECT_BRANCH", true, 1)
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (request == null) {
@@ -212,8 +258,9 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
                     // The tasks the plan names, on the project's page (the browser's link when there is no list to open).
                     onViewTasks = { card.projectId?.let { open("orbit-project:$it") } },
                     onChatAbout = chat, chatEnabled = fresh && !result.busy,
-                    branches = ProjectMainBranch.branches(integration), lastChoice = ProjectMainBranch.lastChoice(integration))
-                if (pressed) message?.let { Text(it, Modifier.testTag("card-result"), style = MaterialTheme.typography.labelMedium,
+                    branches = ProjectMainBranch.branches(integration), lastChoice = ProjectMainBranch.lastChoice(integration), graph = graph,
+                    recorded = recorded != null)
+                if (pressed && recorded == null) message?.let { Text(it, Modifier.testTag("card-result"), style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
