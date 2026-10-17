@@ -19,6 +19,8 @@ two small backend additions (`exit` on an observed instance; Docker's `VOLUME_IN
 | 3. A wake while another container refers to the volume fails at once (`DOCKER_CHANNEL_REFUSED`, `VOLUME_IN_USE`) | No instance is created on a held volume: STARTING waits (`VOLUME_IN_USE`), nothing spent, no startup deadline, and goes on by itself once it is free. |
 | 4. `PVC_MISSING` has no way back | The manager looks for the recorded volume each pass; restored as recorded it becomes `PVC_RESTORED`, retryable, and the retry starts the runner on it. |
 
+After the send-back, a start refused at D8's cap on containers waits as well ([below](#after-the-send-back-d8s-merge-and-the-container-cap)).
+
 ## Where it ran
 
 - **`d7-dind`**, an isolated Docker host ([kit/dind-up.sh](kit/dind-up.sh)), as D5 ran one: a `docker:29.8.2-dind`
@@ -118,16 +120,73 @@ The runtime code of the final tip differs from the build most drills ran on (fb9
 spec case: `git diff --stat fb93b9403 23595f817 -- src/` lists `managed-runner-manager.ts` and
 `managed-runner-recovery.pg.spec.ts` alone.
 
+## After the send-back: D8's merge and the container cap
+
+The coordinator sent revision 1 back for its merge order alone. D8 (task 34hXCWEWAgHqtrxZsMBOh, tip b972c381d) had
+landed on the project line first, as 7a82e65ed, and both tasks had changed the same two documents.
+
+- **The merge.** 737f18416 merges 7a82e65ed. The two documents conflicted only where both tasks added a section in
+  the same place, and both sections are kept whole. In the design record D7's "failure recovery and visibility" comes
+  first, then D8's "channel and template hardening". In the runbook D7's "After `PVC_MISSING`" comes first, then D8's
+  "Delete a runner's volume". `git show --remerge-diff 737f18416` shows only those two places. The code
+  (`docker-backend.ts`, its spec and integration test, `fake-docker-channel.ts`) merged by itself.
+- **D8's `429 CONTAINER_LIMIT` in D7's state machine.** D8's channel counts every container of its instance, in any
+  state, and refuses a create past `limits.maxContainers`. The pool's budget holds its pods to the cap that `/v1/info`
+  reports, and a runner gives its compute back only once its container is gone. So the manager meets the refusal only
+  in two cases: the cap was lowered under running runners before the apiserver measured its pool again, or a container
+  of the instance that no runner records holds a place. Until now the Docker backend took the 429 for a transient
+  failure, and each one spent an attempt from the count D7's restarts spend too: a runner restarting after a crash
+  was FAILED `RETRY_EXHAUSTED` after two refusals. Now it waits, as for a held volume:
+  - the backend reads the refusal as `ManagedInstanceLimit`;
+  - STARTING waits with `CONTAINER_LIMIT`, with no attempt spent and no startup deadline running;
+  - the apiserver logs one warning when the wait begins, and the manager looks again every `capacityRetrySeconds`;
+  - the startup deadline is set afresh once the instance is made.
+
+  The design record's table describes it, and the runbook's "Runners wait though the host has room" section gives
+  the operator's side. The fake channel now keeps D8's cap as the real one does, and the shared fixture gains the
+  waiting state (33 in all).
+- **Tests.**
+  - The Docker backend's unit spec runs two runners at a cap of one. An exited container still counts, the refusal
+    is a `ManagedInstanceLimit` in the channel's words, and nothing is made. Once that container is removed, the same
+    create goes through.
+  - `managed-runner-recovery.pg.spec.ts` case (7) runs on Docker alone, since the cap is the channel's. Two runners
+    are READY, the cap is lowered to one, and one of them crashes. Its restart waits with `CONTAINER_LIMIT` at
+    attempt 1, generation 2, through nine more passes past the attempt budget and the startup deadline. The wait is
+    logged once, and the runner keeps its compute. When the other runner sleeps it starts by itself, its startup
+    deadline counted from then, and is READY on the same runner and volume.
+  - With the backend's reading of the refusal switched off ([kit/cap-control.sh](kit/cap-control.sh)), case (7)
+    fails `BACKOFF → BACKOFF → FAILED` and the other 12 pass
+    ([pg-spec-control/cap-wait-switched-off.txt](pg-spec-control/cap-wait-switched-off.txt)).
+- **The isolated host's drills were not repeated.** They ran before D8's merge, on fb93b9403 and, for the last
+  restore and restart, on e51574350, as recorded above. The runtime code that has changed since is D8's channel,
+  template and budget, which came in with the merge, and the cap's wait.
+
 ## Checks
 
-The branch ends in `git merge --no-ff origin/main` (991f9493c), the commit after this README's. `git merge --no-ff
-origin/project/34ZteKCnYMpKY46f63Leb` answered "Already up to date": the project line is still 1f5bc9cec, this branch's
-base, and origin/main 991f9493c is main's merge of that tip with the same tree, so merging it changes no file and
-`git merge-tree --write-tree` against either tip answers the branch's own tree, no conflict.
+### Revision 2
 
-These checks ran on 23595f817, an earlier such merge of exactly this code (it lacks only this directory's last
-records, the README's last sections and three doc paragraphs) ([checks/summary.txt](checks/summary.txt)); the evidence
-submission cites the same checks run again on the final merge.
+The branch ends in the merge of the project line with D8 (737f18416) and the cap's wait on top of it. If origin/main
+has moved by then, a `git merge --no-ff` of it follows. The evidence submission names the final tip and its
+`git merge-tree --write-tree` results against origin/main and the project line, and cites these checks run on that
+tip:
+
+- the project merge check;
+- the managed-runner Python tests;
+- every managed runner pg spec with `tenant-isolation-runner`;
+- OrbitKit's `swift test`, for the fixture's new state;
+- D2's real-Docker integration test (`scripts/managed-runner/docker-backend-it.py --build-image`), whose removal and
+  `/tmp` expectations D8 changed.
+
+### Revision 1
+
+Revision 1's branch ended in `git merge --no-ff origin/main` (991f9493c, as 78672ac6b). `git merge --no-ff
+origin/project/34ZteKCnYMpKY46f63Leb` answered "Already up to date": the project line was still 1f5bc9cec, this
+branch's base, and origin/main 991f9493c is main's merge of that tip with the same tree, so merging it changed no file
+and `git merge-tree --write-tree` against either tip answered the branch's own tree, no conflict.
+
+These checks ran on 23595f817, an earlier such merge of exactly that code (it lacked only this directory's last
+records of revision 1, the README's last sections and three doc paragraphs) ([checks/summary.txt](checks/summary.txt));
+revision 1's submission cited the same checks run again on 78672ac6b.
 
 | Check | Result on 23595f817 |
 | --- | --- |
@@ -154,7 +213,11 @@ submission cites the same checks run again on the final merge.
 - **An administrator's retry for another account**, D5's other proposal, was not added: a restart needs no retry now,
   and a spent budget or a restored volume is still the owner's Retry.
 - D5's other findings (5–8: the storage budget's disk in Compose, the host's services, the channel's caps, `/tmp`
-  `noexec`) are not this task's.
+  `noexec`) are not this task's. D8 took up 5, 7 and 8, and its work is merged here; 6 waits for the owner.
+- **The container cap on real Docker.** No runner met the real channel's cap, either in the integration test or in
+  the isolated host. The wait is shown against the fake channel, which now counts containers as the real one does.
+- **A Kubernetes quota.** A namespace quota on Pods below the budget still fails the runner (`KUBERNETES_FORBIDDEN`),
+  as before: Kubernetes has no counterpart of the channel's cap in this backend.
 - `d7-dind` is stopped, with its data in `/mnt/data/tmp/34hXCW6iauoWaquGQj7DO`; it is to be deleted once this evidence
   is judged. The real-Docker IT's resources and image were removed. Nothing of an existing deployment and no other
   container was touched, and the HPC host and its Docker daemon were never restarted.

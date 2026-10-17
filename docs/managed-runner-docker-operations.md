@@ -48,7 +48,7 @@ The apiserver logs every stop of a runner's container, one warning each, with it
 memory, and what the manager does next:
 
 ```bash
-docker compose logs apiserver | grep -E 'POD_TERMINATED|VOLUME_IN_USE|PVC_MISSING|PVC_RESTORED'
+docker compose logs apiserver | grep -E 'POD_TERMINATED|VOLUME_IN_USE|CONTAINER_LIMIT|PVC_MISSING|PVC_RESTORED'
 ```
 
 ```text
@@ -190,8 +190,9 @@ runner again, and in this order:
 6. **Turn removal off again.** Remove the line, check the file and recreate `docker-channel` as in step 4.
 
 The account stays disabled. Its runner's record still names the volume, so a wake would fail it with `PVC_MISSING`,
-from which nothing moves it on today (as under the restore above). `docker volume rm` deletes a volume too, but it
-checks neither the labels nor the UID: the channel's removal cannot take another volume of the same name.
+and only a restore of that volume from a backup makes it retryable again (After `PVC_MISSING`, above).
+`docker volume rm` deletes a volume too, but it checks neither the labels nor the UID: the channel's removal cannot
+take another volume of the same name.
 
 ## When something goes wrong
 
@@ -254,6 +255,14 @@ docker compose up -d --force-recreate apiserver
 
 Whoever else holds the channel's token meets the same cap: a create past it is refused (`429 CONTAINER_LIMIT`) before
 anything is made, and the containers already there go on as they were.
+
+A runner can still meet the cap, when it was lowered while runners ran and the apiserver has not measured its pool
+since, or when a container of this instance that no runner records holds a place. Its start then waits rather than
+fails. Its owner sees `CONTAINER_LIMIT` ("The Docker host has as many runner containers as it allows, so this runner
+is not started yet."), the apiserver logs `CONTAINER_LIMIT` once when the wait begins, and the manager asks again
+every `lifecycle.capacityRetrySeconds`. The wait spends no attempt, so a runner that was being started again after a
+stop keeps its count. It starts by itself once a container of this instance is removed, as when another runner
+sleeps.
 
 ### The host's disk is full
 

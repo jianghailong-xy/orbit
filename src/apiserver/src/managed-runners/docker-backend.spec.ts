@@ -15,7 +15,7 @@ import { tripwireKubeClientFactory } from '../test-support/fake-kube-client';
 import { DOCKER_DEFAULT_RESERVE, DockerBackend, dockerCapacityBudget, dockerComputeShare } from './docker-backend';
 import { DockerChannelClient, DockerChannelError, DockerChannelUnreachable, dockerChannelFromProfile, type ChannelHost } from './docker-channel-client';
 import { ManagedRunnerAdmissionGuard } from './managed-runner-admission.controller';
-import { ManagedRunnerConflict, ManagedVolumeHeld } from './managed-runner-backend';
+import { ManagedInstanceLimit, ManagedRunnerConflict, ManagedVolumeHeld } from './managed-runner-backend';
 import type { ManagedRunnerPredecessor } from './managed-runner-fencing';
 import { parseManagedRunnerProfile, type DockerRunnerProfile } from './managed-runner-profile';
 import { managedPodName, managedPvcName, managedSecretName } from './managed-runner-resources';
@@ -300,6 +300,31 @@ test('a container the channel refuses because another container refers to the vo
   assert.equal(channel.containers.size, 0);
   channel.foreignHolders.delete(managedPvcName(RUNNER));
   assert.equal((await backend.createInstance(recorded)).running, true, 'once it is free, the same create goes through');
+});
+
+test('a container the channel refuses at its cap on containers is a wait for room, and nothing is made', async () => {
+  const { backend, channel } = world();
+  const OTHER = '0195c0de-0000-7000-8000-0000000000a2';
+  const ready = async (runnerId: string) => {
+    const volume = await backend.createVolume(mapping({ runnerId, pvcName: managedPvcName(runnerId) }));
+    const recorded = mapping({ runnerId, pvcName: managedPvcName(runnerId), pvcUid: volume.uid });
+    await backend.issueCredential(recorded, 'the-credential-0123456789');
+    return recorded;
+  };
+  const first = await ready(RUNNER);
+  const second = await ready(OTHER);
+  channel.limits = { maxContainers: 1 };
+  const made = await backend.createInstance(first);
+  channel.exit(RUNNER, 0);
+  await assert.rejects(
+    backend.createInstance(second),
+    (e: unknown) => e instanceof ManagedInstanceLimit
+      && e.detail === 'containers of this instance: 1, at its limit (limits.maxContainers 1); another is made only once one of them is removed',
+    'an exited container still counts; the channel\'s words, for the operator',
+  );
+  assert.deepEqual([...channel.containers.keys()], [managedPodName(RUNNER)], 'nothing made');
+  await backend.removeInstance({ ...first, podUid: made.uid });
+  assert.equal((await backend.createInstance(second)).running, true, 'once one is removed, the same create goes through');
 });
 
 test('the guard probe is proof only when the guard itself refuses it', async () => {

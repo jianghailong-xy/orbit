@@ -27,7 +27,11 @@
  *   (6) a volume lost while asleep fails the wake (PVC_MISSING), not retryable while it is missing,
  *       another volume is under its name, or the restored one is still held (by the restore's own
  *       container); restored as recorded and free it becomes retryable (PVC_RESTORED), and the retry
- *       starts the runner on it.
+ *       starts the runner on it;
+ *   (7) Docker only, since the cap is the channel's: a start refused at the channel's cap on
+ *       containers (CONTAINER_LIMIT, the cap lowered under running runners) waits for room as for a
+ *       held volume — nothing created or spent, no startup deadline running, said once — and starts
+ *       by itself once another runner's container is removed.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -96,6 +100,8 @@ interface Rig {
   release(mapping: ManagedRunner): void;
   /** Docker: the channel refuses the next create VOLUME_IN_USE (a holder that came after the manager looked). */
   raceHolder?(): void;
+  /** Docker: the channel's cap on containers (`limits.maxContainers`), set after the pool was measured. */
+  capContainers?(max: number): void;
   /** The volume deleted; the function puts it back as it was, identity and all. */
   loseVolume(mapping: ManagedRunner): () => void;
   /** Another volume under the mapping's volume name; the function removes it again. */
@@ -250,6 +256,7 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
       hold: (mapping) => void channel.foreignHolders.set(mapping.pvcName, 1),
       release: (mapping) => void channel.foreignHolders.delete(mapping.pvcName),
       raceHolder: () => channel.failNext('createContainer', { kind: 'refused', status: 409, code: 'VOLUME_IN_USE' }),
+      capContainers: (max) => void (channel.limits = { maxContainers: max }),
       loseVolume: (mapping) => {
         const volume = channel.volumes.get(mapping.pvcName)!;
         channel.volumes.delete(mapping.pvcName);
@@ -582,5 +589,63 @@ test('managed runner recovery: restarts, visibility, a held volume and a restore
     assert.deepEqual({ runnerId: back.runnerId, pvcUid: back.pvcUid, volumeHandle: back.volumeHandle, generation: back.generation },
       { runnerId: asleep.runnerId, pvcUid: asleep.pvcUid, volumeHandle: asleep.volumeHandle, generation: asleep.generation });
     assert.equal(r.volumesCreated(), 1, 'never an empty volume in its place');
+  });
+
+  const capped = docker();
+  await t.test(`(7) a start at the channel's cap on containers waits for room, and starts by itself once a container is removed [${capped.backend}]`, async () => {
+    const r = capped;
+    const a = await r.readyRunner('cap-a');
+    const b = await r.readyRunner('cap-b');
+    assert.equal(await r.computeReserved(), 2);
+    // The operator lowers the cap to one under both; the pool, measured before, still holds two.
+    r.capContainers!(1);
+
+    // b's runner crashes. It is started again by itself, and its create meets the cap: a's container counts.
+    r.stop(b.mapping.runnerId, 1);
+    const outcomes = await drive(r, b.ownerId, ['WAITING']);
+    assert.equal(outcomes.at(-1), 'WAITING', outcomes.join(' → '));
+    const waiting = await r.mappingOf(b.ownerId);
+    assert.deepEqual(
+      {
+        state: waiting.managementState, code: codeOf(waiting), attempt: waiting.attempt, generation: waiting.generation,
+        podUid: waiting.podUid, operation: waiting.resourceOperationState, deadline: waiting.startupDeadlineAt,
+      },
+      { state: 'STARTING', code: 'CONTAINER_LIMIT', attempt: 1, generation: 2, podUid: null, operation: 'COMPLETED', deadline: null },
+    );
+    assert.equal(waiting.nextAttemptAt?.getTime(), r.now().getTime() + r.lifecycle.capacityRetrySeconds * 1000, 'asked again after capacityRetrySeconds');
+    assert.equal(r.instance(b.mapping.runnerId), null, 'nothing made');
+    assert.equal(r.instance(a.mapping.runnerId)?.uid, a.mapping.podUid, "a's container untouched");
+    const display = managedRunnerDisplay(await r.service.status(b.ownerId))!;
+    assert.deepEqual([display.kind, display.retry, display.acceptsWork], ['waking', false, true]);
+    assert.equal(display.detail, 'The Docker host has as many runner containers as it allows, so this runner is not started yet. It starts by itself once one of them is removed, as when another runner goes to sleep.');
+
+    // Asked again and again, past the attempt budget and the startup deadline: still waiting, nothing spent, said once.
+    for (let i = 0; i < r.lifecycle.maxAttempts * 3; i += 1) {
+      r.skipTo((await r.mappingOf(b.ownerId)).nextAttemptAt!);
+      assert.equal(await r.manager.reconcile(waiting.id), 'WAITING');
+    }
+    r.advance((r.lifecycle.startupDeadlineSeconds + 60) * 1000);
+    assert.equal(await r.manager.reconcile(waiting.id), 'WAITING');
+    const still = await r.mappingOf(b.ownerId);
+    assert.deepEqual([still.managementState, codeOf(still), still.attempt, still.podUid], ['STARTING', 'CONTAINER_LIMIT', 1, null]);
+    assert.equal(r.logs.filter((line) => line.includes('CONTAINER_LIMIT')).length, 1, 'said once');
+    assert.equal(await r.computeReserved(), 2, 'b keeps its share while it waits');
+
+    // a goes to sleep and its container is removed: there is room, and b starts by itself, its startup deadline from then.
+    await r.putToSleep(a.ownerId);
+    const room = r.now();
+    const awake = await drive(r, b.ownerId, ['READY'], async (m) => {
+      assert.ok(r.onVolume(m) <= 1);
+      if (m.managementState === 'STARTING' && m.podUid) {
+        assert.ok(m.startupDeadlineAt && m.startupDeadlineAt.getTime() >= room.getTime() + r.lifecycle.startupDeadlineSeconds * 1000);
+      }
+    });
+    assert.equal(awake.at(-1), 'READY', awake.join(' → '));
+    const ready = await r.mappingOf(b.ownerId);
+    assert.deepEqual(
+      { generation: ready.generation, runnerId: ready.runnerId, pvcUid: ready.pvcUid, attempt: ready.attempt, lastError: ready.lastError, nextAttemptAt: ready.nextAttemptAt },
+      { generation: 2, runnerId: b.mapping.runnerId, pvcUid: b.mapping.pvcUid, attempt: 1, lastError: null, nextAttemptAt: null },
+      'the same runner and volume; the restart counted once, the wait not at all',
+    );
   });
 });

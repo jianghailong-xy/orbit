@@ -10,6 +10,7 @@ import {
   type DockerChannel,
 } from './docker-channel-client';
 import {
+  ManagedInstanceLimit,
   ManagedRunnerConflict,
   ManagedVolumeHeld,
   type ManagedCredential,
@@ -286,7 +287,10 @@ export class DockerBackend implements ManagedRunnerBackend {
     throw new ManagedRunnerConflict('CONTAINER_GUARD_UNVERIFIED', `the guard probe was refused, but not by the guard: ${answer.status} ${answer.code ?? ''} ${answer.message ?? ''}`.trim());
   }
 
-  /** The channel refuses it, VOLUME_IN_USE, while any other container refers to the volume: the manager then waits. */
+  /**
+   * The channel refuses it, VOLUME_IN_USE, while any other container refers to the volume, and
+   * CONTAINER_LIMIT (429) while this instance has `maxContainers` containers: the manager then waits.
+   */
   async createInstance(mapping: ManagedRunner): Promise<DockerInstance> {
     const name = managedPodName(mapping.runnerId);
     try {
@@ -294,6 +298,7 @@ export class DockerBackend implements ManagedRunnerBackend {
       return instanceOf(view);
     } catch (error) {
       if (error instanceof DockerChannelError && error.code === 'VOLUME_IN_USE') throw new ManagedVolumeHeld(error.message);
+      if (error instanceof DockerChannelError && error.code === 'CONTAINER_LIMIT') throw new ManagedInstanceLimit(error.message);
       throw error;
     }
   }

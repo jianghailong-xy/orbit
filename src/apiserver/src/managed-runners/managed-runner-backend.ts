@@ -58,7 +58,8 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *   - Capacity. The backend names its pool (`location`, which is also where a new mapping's volume
  *     lives) and where its budget comes from (`capacityBudget`): configuration, never usage the
  *     infrastructure reports. A runner's share (`computeShare`, `storageShare`) is what one instance
- *     and one volume reserve.
+ *     and one volume reserve. A host that caps its instances says so in that budget, and answers an
+ *     instance past the cap with ManagedInstanceLimit.
  *
  * An observation goes back only to the backend that made it, which may read its own fields of it.
  */
@@ -177,6 +178,20 @@ export class ManagedVolumeHeld extends Error {
   constructor(readonly detail: string) {
     super(detail);
     this.name = 'ManagedVolumeHeld';
+  }
+}
+
+/**
+ * The host refused an instance because it makes no more until one of its others is removed (Docker:
+ * the channel's `limits.maxContainers`, which counts every container of the instance in any state),
+ * and made none. Not a failure: the budget keeps the pool below that cap, so only a container the
+ * pool does not count or a cap lowered under running runners gets here, and the manager waits for
+ * room as it waits for a held volume.
+ */
+export class ManagedInstanceLimit extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'ManagedInstanceLimit';
   }
 }
 

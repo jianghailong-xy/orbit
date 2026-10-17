@@ -1027,6 +1027,65 @@
       }
     },
     {
+      "name": "waking: the host at its cap on runner containers",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "STARTING",
+          "desiredState": "RUNNING",
+          "revision": 26,
+          "generation": 3,
+          "initialProvider": "claude",
+          "lastErrorCode": "CONTAINER_LIMIT",
+          "nextAttemptAt": "2026-10-09T08:01:00.000Z"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T07:55:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "waking",
+        "title": "Waking your managed runner",
+        "detail": "The Docker host has as many runner containers as it allows, so this runner is not started yet. It starts by itself once one of them is removed, as when another runner goes to sleep.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": true,
+        "startsNewSession": true,
+        "moving": true
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 26,
+        "managementState": "STARTING",
+        "desiredState": "RUNNING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "CONTAINER_LIMIT",
+          "message": "The Docker host has as many runner containers as it allows, so this runner is not started yet. It starts by itself once one of them is removed, as when another runner goes to sleep.",
+          "retryable": false
+        },
+        "retryAfter": "2026-10-09T08:01:00.000Z",
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
       "name": "waiting for capacity to wake",
       "server": {
         "enabled": true,

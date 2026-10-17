@@ -17,8 +17,9 @@ import {
  * The restricted Docker channel (deploy/managed-runner/docker-channel/channel.py) in memory, keeping
  * the rules the backend relies on: create once under fixed names, the single-container guard (only
  * `mr-<runner>` may use a runner's volume, and not while anything else refers to it), the container
- * of a generation only with that generation's credential, removal by UID and only once stopped, and
- * Docker's exit report. The channel's own tests (scripts/managed-runner/docker_channel_test.py) and
+ * of a generation only with that generation's credential, removal by UID and only once stopped, the
+ * cap on containers (`limits.maxContainers`, counting every container in any state), and Docker's
+ * exit report. The channel's own tests (scripts/managed-runner/docker_channel_test.py) and
  * the real-Docker run are where the channel itself is proven; this is what DockerBackend is unit
  * tested against.
  *
@@ -161,6 +162,10 @@ export class FakeDockerChannel implements DockerChannel {
       const credential = this.credentials.get(request.runnerId);
       if (!credential || credential.generation !== request.generation) throw new DockerChannelError(409, 'CREDENTIAL_MISSING', 'no credential of this generation');
       if (volume.limitBytes !== null && (volume.usageBytes ?? 0) > volume.limitBytes) throw new DockerChannelError(409, 'VOLUME_OVER_LIMIT', 'over its limit');
+      const cap = this.limits.maxContainers;
+      if (cap !== undefined && this.containers.size >= cap) {
+        throw new DockerChannelError(429, 'CONTAINER_LIMIT', `containers of this instance: ${this.containers.size}, at its limit (limits.maxContainers ${cap}); another is made only once one of them is removed`);
+      }
       const container: StoredContainer = {
         name: request.name, uid: randomUUID(), ownerId: request.ownerId, runnerId: request.runnerId, generation: request.generation,
         volumeUid: request.volume.uid, volume: request.volume.name, node: this.host.name, status: 'running', running: true,
