@@ -1019,10 +1019,14 @@ func cursorConfigureFailure(err error) string {
 
 func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	p.setTurn("")
-	// Cursor reports no usage at all (§3.2, §4.1): no turn of it claims a measured $0.
+	// Cursor reports no usage at all (§3.2, §4.1): no turn of it claims a measured $0. What a turn says of
+	// its account's quota — the usage limit met, or a turn the account ran — is kept for that account's
+	// plan usage (noteCursorTurn).
 	completeTurn := p.completeTurn
+	account := cursorSessionAccount(p.job)
 	p.completeTurn = func(req TurnCompleteRequest, providerContexts ...context.Context) error {
 		req.UsageUnknown = true
+		noteCursorTurn(account, req)
 		return completeTurn(req, providerContexts...)
 	}
 	fail := func(message string) (string, bool, bool) {

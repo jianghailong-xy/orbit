@@ -615,7 +615,7 @@ func TestCursorAccountRemovalRefusedWhileASessionUsesIt(t *testing.T) {
 		t.Fatalf("accounts in use = %v, want only Work", live)
 	}
 
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, work.ID, live); err == nil || !strings.Contains(err.Error(), "in use") {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, live); err == nil || !strings.Contains(err.Error(), "in use") {
 		t.Fatalf("removing Work under a running session = %v, want it refused", err)
 	}
 	if _, err := cursorStoredLogin(work.Dir); err != nil {
@@ -626,7 +626,7 @@ func TestCursorAccountRemovalRefusedWhileASessionUsesIt(t *testing.T) {
 	}
 
 	// That session over, Work goes: its directory and its record, nothing else.
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, work.ID, cursorAccountKind.liveDirs([]string{onDefault, onKey})); err != nil {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, cursorAccountKind.liveDirs([]string{onDefault, onKey})); err != nil {
 		t.Fatalf("removing Work: %v", err)
 	}
 	for _, path := range []string{work.Dir, filepath.Join(home, ".orbit", "cursor-accounts", work.ID+".json")} {
@@ -637,10 +637,10 @@ func TestCursorAccountRemovalRefusedWhileASessionUsesIt(t *testing.T) {
 	if added := addedCursorSlots(t); len(added) != 1 || added[0].ID != team.ID || cursorTreeDigest(t, team.Dir) != teamDigest {
 		t.Fatalf("removing Work changed the other accounts: %v", added)
 	}
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, work.ID, nil); err != nil {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, nil); err != nil {
 		t.Fatalf("a redelivered removal: %v", err)
 	}
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, accountSlotDefaultID, nil); err == nil {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, accountSlotDefaultID, nil); err == nil {
 		t.Fatal("Default was removable")
 	}
 	if cursorTreeDigest(t, cursorDefaultAccountDir()) != defaultDigest {
@@ -962,7 +962,7 @@ func TestCursorDefaultAccountDirectoryIsUnchanged(t *testing.T) {
 	ask(1, "initialize")
 	ask(2, "session/new")
 	stop()
-	if err := removeAccount(cursorAccountKind, nil, nil, nil, work.ID, nil); err != nil {
+	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if after := cursorTreeDigest(t, cursorDefaultAccountDir()); after != before {
