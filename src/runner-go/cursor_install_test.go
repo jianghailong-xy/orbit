@@ -802,7 +802,7 @@ func TestCursorNeverUpdatesItself(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.Executable != exe || strings.Join(spec.Args, " ") != "acp --disable-auto-update --disable-indexing" {
+	if spec.Executable != exe || strings.Join(spec.Args, " ") != "acp --disable-auto-update --disable-indexing --disable-project-configs" {
 		t.Fatalf("launch = %s %v, want the pinned build's acp with auto-update disabled", spec.Executable, spec.Args)
 	}
 	var config map[string]interface{}

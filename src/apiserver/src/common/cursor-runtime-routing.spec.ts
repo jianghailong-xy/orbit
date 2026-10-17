@@ -92,24 +92,24 @@ test('P1 Cursor CLI effort values are opaque and the live catalogue decides them
 });
 
 test('P1 the server admits exactly the Cursor CLI modes the picker calls kept, and defaults to Accept Edits', () => {
-  for (const mode of [PermissionMode.ACCEPT_EDITS, PermissionMode.PLAN, PermissionMode.DONT_ASK, PermissionMode.BYPASS]) {
+  // Auto is the runner's own review of each request Cursor CLI asks about (P5c), on any model.
+  for (const mode of [PermissionMode.ACCEPT_EDITS, PermissionMode.PLAN, PermissionMode.AUTO, PermissionMode.DONT_ASK, PermissionMode.BYPASS]) {
     // Root is no concern of Cursor CLI's: `--force` runs as root, so Bypass is not swapped for Don't Ask.
     for (const runsAsRoot of [undefined, false, true]) {
       assert.equal(normalizeBuiltinPermissionMode(AgentProvider.CURSOR, MODEL, mode, false, runsAsRoot), mode);
     }
   }
-  for (const mode of [PermissionMode.DEFAULT, PermissionMode.AUTO, 'unknown-mode']) {
+  for (const mode of [PermissionMode.DEFAULT, 'unknown-mode']) {
     assert.throws(
       () => normalizeBuiltinPermissionMode(AgentProvider.CURSOR, MODEL, mode as PermissionMode, true, false),
-      /Cursor CLI cannot enforce permission mode ".+"; use Accept Edits, Plan, Don't Ask or Bypass/,
+      /Cursor CLI cannot enforce permission mode ".+"; use Accept Edits, Plan, Auto, Don't Ask or Bypass/,
     );
   }
   // A session nobody named a mode for: the account default when Cursor CLI keeps it, else Accept Edits.
   assert.equal(cursorDefaultPermissionMode(undefined), PermissionMode.ACCEPT_EDITS);
   assert.equal(cursorDefaultPermissionMode(null), PermissionMode.ACCEPT_EDITS);
   assert.equal(cursorDefaultPermissionMode(PermissionMode.DEFAULT), PermissionMode.ACCEPT_EDITS);
-  assert.equal(cursorDefaultPermissionMode(PermissionMode.AUTO), PermissionMode.ACCEPT_EDITS);
-  for (const kept of [PermissionMode.PLAN, PermissionMode.DONT_ASK, PermissionMode.BYPASS, PermissionMode.ACCEPT_EDITS]) {
+  for (const kept of [PermissionMode.PLAN, PermissionMode.AUTO, PermissionMode.DONT_ASK, PermissionMode.BYPASS, PermissionMode.ACCEPT_EDITS]) {
     assert.equal(cursorDefaultPermissionMode(kept), kept);
   }
   // Nothing moves for the others: Claude Code's root fallback and Auto still apply to Claude.

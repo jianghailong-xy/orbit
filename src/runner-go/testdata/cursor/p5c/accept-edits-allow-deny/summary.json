@@ -1,0 +1,241 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "command": "touch cmd-allowed.txt"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+      "withdrawn": false
+    },
+    {
+      "input": {
+        "command": "touch cmd-denied.txt"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_4>-1\nfc_<UUID_5>_0",
+      "withdrawn": false
+    },
+    {
+      "input": {
+        "content": "allowed\n",
+        "file_path": "<OUTSIDE>/edit-allowed.txt"
+      },
+      "toolName": "Write",
+      "toolUseId": "call-<UUID_6>-2\nfc_<UUID_7>_0",
+      "withdrawn": false
+    },
+    {
+      "input": {
+        "content": "denied\n",
+        "file_path": "<OUTSIDE>/edit-denied.txt"
+      },
+      "toolName": "Write",
+      "toolUseId": "call-<UUID_8>-3\nfc_<UUID_9>_0",
+      "withdrawn": false
+    }
+  ],
+  "checks": [
+    {
+      "name": "command-allowed-ran",
+      "pass": true,
+      "detail": "cmd-allowed.txt exists"
+    },
+    {
+      "name": "command-denied-did-not-run",
+      "pass": true,
+      "detail": "cmd-denied.txt absent"
+    },
+    {
+      "name": "outside-edit-allowed-written",
+      "pass": true,
+      "detail": "edit-allowed.txt exists"
+    },
+    {
+      "name": "outside-edit-denied-not-written",
+      "pass": true,
+      "detail": "edit-denied.txt absent"
+    },
+    {
+      "name": "outside-edits-asked",
+      "pass": true,
+      "detail": "edit cards [\"Write <OUTSIDE>/edit-allowed.txt\" \"Write <OUTSIDE>/edit-denied.txt\"]"
+    },
+    {
+      "name": "each-request-answered-once",
+      "pass": true,
+      "detail": "0 request(s) not answered exactly once"
+    },
+    {
+      "name": "allow-always-never-chosen",
+      "pass": true,
+      "detail": "no answer selected allow-always"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "I'll run the four steps in order, one tool call each, and then report which ones succeeded. Starting with the first shell command.\n\nSteps 1 and 3 succeeded. Steps 2 and 4 were rejected.\n\n1. **Succeeded.** `touch cmd-allowed.txt` completed.\n2. **Rejected.** `touch cmd-denied.txt` was refused.\n3. **Succeeded.** Created `<OUTSIDE>/edit-allowed.txt` with the word allowed.\n4. **Rejected.** Creating `<OUTSIDE>/edit-denied.txt` was refused.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "touch cmd-allowed.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-1\nfc_<UUID_5>_0",
+        "input": {
+          "command": "touch cmd-denied.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-1\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_6>-2\nfc_<UUID_7>_0",
+        "input": {
+          "content": "allowed",
+          "file_path": "<OUTSIDE>/edit-allowed.txt"
+        },
+        "name": "Write"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_6>-2\nfc_<UUID_7>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_8>-3\nfc_<UUID_9>_0",
+        "input": {
+          "file_path": "<OUTSIDE>/edit-denied.txt"
+        },
+        "name": "Edit"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_8>-3\nfc_<UUID_9>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "cards": [
+      "Bash {\"command\":\"touch cmd-allowed.txt\"}",
+      "Bash {\"command\":\"touch cmd-denied.txt\"}",
+      "Write {\"content\":\"allowed\\n\",\"file_path\":\"<OUTSIDE>/edit-allowed.txt\"}",
+      "Write {\"content\":\"denied\\n\",\"file_path\":\"<OUTSIDE>/edit-denied.txt\"}"
+    ],
+    "requests": [
+      [
+        "`touch cmd-allowed.txt`",
+        "allow-once"
+      ],
+      [
+        "`touch cmd-denied.txt`",
+        "reject-once"
+      ],
+      [
+        "Write <OUTSIDE>/edit-allowed.txt",
+        "allow-once"
+      ],
+      [
+        "Write <OUTSIDE>/edit-denied.txt",
+        "reject-once"
+      ]
+    ]
+  },
+  "mode": "acceptEdits",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<CLI>/rg --files --follow --max-depth 16 --no-messages",
+    "<CLI>/rg --files --hidden --no-require-git --no-config --color=never --threads 2 --follow --iglob */**/.cursor/** --iglob */**/.agents/** --iglob */**/AGENTS.md --iglob */**/.claude/** --iglob */**/.codex/** --iglob */**/.grok/** --iglob */**/CLAUDE.md --iglob */**/CLAUDE.local.md --iglob !**/node_modules/** --iglob !**/.git/** --iglob !**/.turbo/** --iglob !**/.next/** --iglob !**/.cache/** --iglob !**/.pnpm/** --iglob !**/.yarn/** --iglob !**/dist/** --iglob !**/build/** --iglob !**/out/** --iglob !**/target/** --iglob !**/.vscode/** --iglob !**/.idea/** --iglob !**/venv/** --iglob !**/__pycache__/** --iglob !**/logs/** --iglob !**/tmp/** --iglob !**/temp/**",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server"
+  ],
+  "prompts": [
+    11
+  ],
+  "scenario": "accept-edits-allow-deny",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}
