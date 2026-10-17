@@ -1089,10 +1089,12 @@ capped, outside the runner's cgroup; [evidence](evidence/managed-runner-image-up
   first with c16d115b3's own `/upgrade` and then with D6's: the same Docker calls in the same order, the same
   containers recreated, `.env` byte for byte as installed, no file added under `data/`, and no channel, network,
   managed runner image, container or volume.
-- Both repeated at the final code tip 6fcdaa8d6: the new deployment switched to `sha256:8a3c127f2568…` the same way,
-  and after the next sleep its runner woke as generation 3 on that image, the same runner and volume, never two
-  containers on the volume; the deployment without managed runners made the baseline's calls again, and nothing
-  under `.env` or `data/` was written but by Postgres.
+- Both repeated at 6fcdaa8d6 and again at d431d1021, after D5's merge: each time the new deployment switched the
+  same way (`sha256:8a3c127f2568…`, then `sha256:8284db3f7c45…`) and after the next sleep its runner woke on the new
+  image as the next generation, the same runner and volume, never two containers on the volume; the deployment
+  without managed runners made the baseline's calls again, and nothing under `.env` or `data/` was written but by
+  Postgres. (Between the two, a restart of the test host left the runner `FAILED` until its owner's retry, as D5
+  recorded for any host restart.)
 
 Left to later work, or not shown here:
 

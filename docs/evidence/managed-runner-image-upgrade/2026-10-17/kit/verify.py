@@ -297,6 +297,21 @@ def wake(env):
     check(env, "after the wake")
 
 
+def retry(env):
+    """The owner's retry of a FAILED runner, as after a restart of its host: the next generation on the same volume."""
+    token = env.login("admin")
+    current = env.status(token)
+    status, body = env.api("POST", "/api/managed-runner/retry", {"idempotencyKey": f"d6-retry-{int(time.time())}",
+                                                                  "revision": current["revision"]}, token=token)
+    env.record({"step": "the owner retries it (POST /api/managed-runner/retry)", "from": summarize(current), "status": status,
+                "answer": summarize(body or {}) if status < 300 else body})
+    assert status in (200, 202), (status, body)
+    final = poll(env, token, "retry", lambda s: (s.get("managementState") == "READY" and s.get("usable"))
+                 or s.get("managementState") == "FAILED" and s.get("revision") != current["revision"], limit=900)
+    env.record({"step": "retried", **summarize(final), "mapping": env.mapping()})
+    check(env, "after the retry")
+
+
 def main():
     env = Env(sys.argv[1])
     step = sys.argv[2]
@@ -316,6 +331,8 @@ def main():
         sleep(env)
     elif step == "wake":
         wake(env)
+    elif step == "retry":
+        retry(env)
     else:
         raise SystemExit(f"unknown step {step}")
 
