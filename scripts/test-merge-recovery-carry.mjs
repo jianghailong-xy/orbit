@@ -2,6 +2,12 @@
 // the repair while the local or remote target only moved on — it merges their new tips into the repair branch, so only
 // what they changed can conflict — and starts over only when the source changed or a target was rewritten. A repair
 // checkout left unfinished is reported as REPAIR_IN_PROGRESS with its unresolved files, and no other checkout is made.
+//
+// And for R3: a repair checkout no check comes back to is reclaimed with its branch kept — the previous check's when a
+// check starts over or answers ALREADY_LANDED, the applied recovery's once it is DONE — and the worktree sweep reclaims
+// one left clean and untouched for two weeks. A checkout that is not clean, not its repair branch's, or not a repair
+// checkout in the worktrees root is kept, and session checkouts keep the sweep's own rules. A check that stops early —
+// FETCH_FAILED and the like — answers with the previous repair as it stands, so the next check carries it on.
 // Run from the repository root:
 //
 //   node scripts/test-merge-recovery-carry.mjs
@@ -88,6 +94,60 @@ export const goCases = {
     'TestMergeLandedRecoveryCheckReplaysOnlyTheRest',
     'TestMergeLandedRealConflictStillConflicts',
   ],
+  // R3's scenarios, in real git repositories.
+  'merge_recovery_reclaim_test.go': [
+    // Starting over: the previous checkout is reclaimed, its branch kept at the repair.
+    'TestMergeRecoveryReclaimStartingOverRemovesThePreviousCheckout',
+    // Applied: the checkout is reclaimed once DONE — at the apply, or at sync-local after LOCAL_SYNC_PENDING.
+    'TestMergeRecoveryReclaimAppliedCheckout',
+    'TestMergeRecoveryReclaimAppliedCheckout/applied',
+    'TestMergeRecoveryReclaimAppliedCheckout/synced_after_LOCAL_SYNC_PENDING',
+    // ALREADY_LANDED: the previous checkout is reclaimed, its branch kept.
+    'TestMergeRecoveryReclaimAlreadyLandedRemovesThePreviousCheckout',
+    // A previous checkout that is not clean stays as it is: an untracked file when starting over, an unfinished repair
+    // at ALREADY_LANDED, an edit made after the review at DONE.
+    'TestMergeRecoveryReclaimKeepsAnUncleanCheckout',
+    'TestMergeRecoveryReclaimKeepsAnUncleanCheckout/untracked_file_when_starting_over',
+    'TestMergeRecoveryReclaimKeepsAnUncleanCheckout/unfinished_repair_when_already_landed',
+    'TestMergeRecoveryReclaimKeepsAnUncleanCheckout/edited_after_review_when_applied',
+    // Not the repair branch's checkout, or not a repair checkout in the worktrees root: kept.
+    'TestMergeRecoveryReclaimKeepsACheckoutThatIsNotTheRepairs',
+    'TestMergeRecoveryReclaimKeepsACheckoutThatIsNotTheRepairs/another_branch',
+    'TestMergeRecoveryReclaimKeepsACheckoutThatIsNotTheRepairs/outside_the_worktrees_root',
+    'TestMergeRecoveryReclaimKeepsACheckoutThatIsNotTheRepairs/without_the_recovery_prefix',
+    // gcWorktrees: a clean repair checkout untouched for 15 days is reclaimed, its branch kept; dirty ones (an edit, an
+    // untracked file), one on another branch and a 1-day-old one stay; a session checkout as old stays.
+    'TestMergeRecoveryReclaimSweepRemovesOldCleanRepairCheckouts',
+    // FETCH_FAILED and the other early errors keep the previous repair and its tips; once the cause is gone the next
+    // check carries the repair on in the same checkout, no new one made.
+    'TestMergeRecoveryEarlyErrorKeepsTheRepair',
+    'TestMergeRecoveryEarlyErrorKeepsTheRepair/FETCH_FAILED',
+    'TestMergeRecoveryEarlyErrorKeepsTheRepair/SOURCE_UNAVAILABLE',
+    'TestMergeRecoveryEarlyErrorKeepsTheRepair/TARGET_UNAVAILABLE',
+    'TestMergeRecoveryEarlyErrorKeepsTheRepair/BRANCH_TIP_MISMATCH',
+    'TestMergeRecoveryEarlyErrorKeepsTheRepair/UNRELATED_HISTORY',
+    'TestMergeRecoveryEarlyErrorKeepsTheRepair/PREVIEW_TOO_LARGE',
+  ],
+  // Every existing worktree-sweep scenario: the session-checkout rules R3 leaves as they were.
+  'worktree_gc_test.go': [
+    'TestSweepKeepsAnEligibleCheckoutWhileTheDiskIsRoomy',
+    'TestSweepReclaimsAnEligibleCheckoutUnderPressureAndLeavesItsBranchRebuildable',
+    'TestSweepNeverReclaimsAResumableCheckoutHoweverTightTheDisk',
+    'TestSweepNeverReclaimsAResumableCheckoutHoweverTightTheDisk/idle-park',
+    'TestSweepNeverReclaimsAResumableCheckoutHoweverTightTheDisk/user-end',
+    'TestSweepNeverReclaimsAResumableCheckoutHoweverTightTheDisk/cancel',
+    'TestSweepRemovesNothingWhenItCannotConfirmRemovable',
+    'TestSweepRemovesNothingWhenFreeSpaceCannotBeMeasured',
+    'TestPressureMirrorsTheControlPlanesDiskFloor',
+    'TestSweepReclaimsTheSurplusPastTheRetentionCapEvenOnARoomyDisk',
+    'TestSweepNeverTouchesTheRebaseScratchWorktree',
+    'TestSweepNeverReclaimsMergeRecoveryCheckout',
+    'TestSweepNeverTouchesALiveSessionsCheckout',
+    'TestACheckoutStrandedByLeaseLossIsReclaimedByALaterSweep',
+    'TestTheSweepRecursWhileTheRunnerRunsAndOnlyOnceArmed',
+    'TestTerminalFinalizeCommitsToTheBranchAndLeavesTheCheckoutStanding',
+    'TestGcWorktreesIsTheOnlyDeleterAndTheRunLoopKeepsCallingIt',
+  ],
 };
 
 function goEvents(names) {
@@ -123,8 +183,8 @@ export function checkGuards(scratch) {
   refused('no Go output', () => assertGoResults('', goNames));
   const selector = new RegExp(goTestPattern(goNames));
   assert.ok(goNames.every((name) => selector.test(name.split('/')[0])), 'the -run pattern misses a named scenario');
-  assert.ok(!selector.test(`${goNames[0]}Extra`) && !selector.test('TestMergeRecoveryCarry') && !selector.test('TestMergeRecovery'),
-    'the -run pattern matches more than the named scenarios');
+  assert.ok(!selector.test(`${goNames[0]}Extra`) && !selector.test('TestMergeRecoveryCarry') && !selector.test('TestMergeRecovery') &&
+    !selector.test('TestMergeRecoveryReclaim') && !selector.test('TestSweep'), 'the -run pattern matches more than the named scenarios');
 
   const log = path.join(scratch, 'guard.log');
   assert.throws(() => runLogged(path.join(scratch, 'no-such-executable'), [], log), /startup or execution failed/);
@@ -155,7 +215,7 @@ function runAcceptance() {
     assertGoResults(goOutput, goNames);
     for (const name of goNames) process.stdout.write(`PASS ${name}\n`);
 
-    process.stdout.write(`R2 acceptance passed: ${goNames.length} named scenarios, none missing, unmatched, skipped or failing.\n`);
+    process.stdout.write(`R2 and R3 acceptance passed: ${goNames.length} named scenarios, none missing, unmatched, skipped or failing.\n`);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

@@ -11,7 +11,9 @@ import (
 	"time"
 )
 
-// Retained repair checkouts are not disposable session checkouts, including under disk pressure.
+// Retained repair checkouts are not disposable session checkouts, including under disk pressure. They
+// go when their recovery is done with them (reclaimRecoveryCheckout) or after two weeks untouched
+// (gcRecoveryCheckouts), clean and with their branch kept.
 const mergeRecoveryWorktreePrefix = "recovery-"
 
 // Preview artifacts are real branches/worktrees. They survive a failed push or a conflict so
@@ -111,32 +113,33 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 	if req.RecoveryAction != "preview" {
 		return recoveryError(r, "INVALID_ACTION", "unsupported recovery action")
 	}
+	prior := req.Recovery
 	r.SourceSha, err = git(root, "rev-parse", "--verify", "refs/heads/"+req.Branch)
 	if err != nil {
-		return recoveryError(r, "SOURCE_UNAVAILABLE", "source branch is unavailable")
+		return stoppedEarly(r, prior, "SOURCE_UNAVAILABLE", "source branch is unavailable")
 	}
 	if req.RequiredSourceSha != "" && req.RequiredSourceSha != r.SourceSha {
-		return recoveryError(r, "BRANCH_TIP_MISMATCH", "source has moved beyond its verified checkpoint")
+		return stoppedEarly(r, prior, "BRANCH_TIP_MISMATCH", "source has moved beyond its verified checkpoint")
 	}
 	r.LocalSha, err = git(root, "rev-parse", "--verify", "refs/heads/"+target)
 	if err != nil {
-		return recoveryError(r, "TARGET_UNAVAILABLE", "local target is unavailable")
+		return stoppedEarly(r, prior, "TARGET_UNAVAILABLE", "local target is unavailable")
 	}
 	r.RemoteSha, err = recoveryRemoteTip(root, target)
 	if err != nil {
-		return recoveryError(r, "FETCH_FAILED", "could not check origin/"+target+": "+gitStderr(err))
+		return stoppedEarly(r, prior, "FETCH_FAILED", "could not check origin/"+target+": "+gitStderr(err))
 	}
 	if _, err := git(root, "merge-base", r.LocalSha, r.RemoteSha); err != nil {
-		return recoveryError(r, "UNRELATED_HISTORY", "the target histories have no verified common ancestor")
+		return stoppedEarly(r, prior, "UNRELATED_HISTORY", "the target histories have no verified common ancestor")
 	}
 	r.CheckedAt = time.Now().UTC().Format(time.RFC3339)
 	r.LocalCommits, err = recoveryCommits(root, r.RemoteSha, r.LocalSha)
 	if err != nil {
-		return recoveryError(r, "PREVIEW_TOO_LARGE", err.Error())
+		return stoppedEarly(r, prior, "PREVIEW_TOO_LARGE", err.Error())
 	}
 	r.RemoteCommits, err = recoveryCommits(root, r.LocalSha, r.RemoteSha)
 	if err != nil {
-		return recoveryError(r, "PREVIEW_TOO_LARGE", err.Error())
+		return stoppedEarly(r, prior, "PREVIEW_TOO_LARGE", err.Error())
 	}
 	// Asked against origin as just fetched, before any repair checkout exists: a session whose
 	// every commit origin already carries has no candidate to build, and the local target's own
@@ -147,6 +150,8 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 	if !targetContainsSource(root, r.SourceSha, r.RemoteSha) {
 		landing := landedCommits(root, anchor, r.SourceSha, r.RemoteSha)
 		if landing.All {
+			// Nothing is left to repair. A repair checkout left unfinished is kept, as anything unclean is.
+			reclaimPriorRepair(root, prior, "every commit of this session is already on origin/"+target)
 			return alreadyLandedOutcome(root, r, landing.Landed)
 		}
 		landed = landing.Skip
@@ -164,7 +169,6 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 	// targets move on meanwhile — origin does many times a day. The saved checkout must really
 	// belong to our recovery branch. Unfinished there, the repair is reported as it stands; finished,
 	// it is carried to the tips just read when carriesRepair allows. Anything else starts over.
-	prior := req.Recovery
 	carried := false
 	if repairCheckout(root, target, prior) {
 		if inspectRepoRoot(prior.RepairWorktree).State != repoStateClean {
@@ -191,6 +195,8 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		if canonical, err := filepath.EvalSymlinks(r.RepairWorktree); err == nil {
 			r.RepairWorktree = canonical
 		}
+		// This checkout supersedes the previous check's, which no check comes back to.
+		reclaimPriorRepair(root, prior, "superseded by "+r.RepairWorktree)
 		if ff == "only" && r.AddsMergeCommit {
 			return recoveryError(r, "LINEAR_HISTORY_REQUIRED", "merge.ff=only disallows this target-history merge; prepare a separate PR candidate")
 		}
@@ -330,11 +336,110 @@ func repairCheckout(root, target string, prior *MergeRecovery) bool {
 // it is being synchronized with, which the next check carries it from once it is finished — with
 // what is left to resolve there.
 func unfinishedRepair(r, prior *MergeRecovery) mergeOutcome {
-	return recoveryError(&MergeRecovery{TargetBranch: r.TargetBranch, RepoRoot: r.RepoRoot, PreviewID: r.PreviewID, CheckedAt: r.CheckedAt,
+	held := heldRepair(r, prior)
+	held.Conflicts = unresolvedPaths(prior.RepairWorktree)
+	return recoveryError(held, "REPAIR_IN_PROGRESS", "finish and commit the repair before checking again")
+}
+
+// heldRepair is the previous check's repair as that check left it — branch, checkout, phase, and the
+// source and target tips it is being synchronized with, with their histories — answered as this check.
+func heldRepair(r, prior *MergeRecovery) *MergeRecovery {
+	return &MergeRecovery{TargetBranch: r.TargetBranch, RepoRoot: r.RepoRoot, PreviewID: r.PreviewID, CheckedAt: r.CheckedAt,
 		SourceSha: prior.SourceSha, LocalSha: prior.LocalSha, RemoteSha: prior.RemoteSha, RebaseBaseSha: prior.RebaseBaseSha,
 		LocalCommits: prior.LocalCommits, RemoteCommits: prior.RemoteCommits, AddsMergeCommit: prior.AddsMergeCommit,
-		RepairBranch: prior.RepairBranch, RepairWorktree: prior.RepairWorktree, Phase: prior.Phase,
-		Conflicts: unresolvedPaths(prior.RepairWorktree)}, "REPAIR_IN_PROGRESS", "finish and commit the repair before checking again")
+		RepairBranch: prior.RepairBranch, RepairWorktree: prior.RepairWorktree, Phase: prior.Phase}
+}
+
+// stoppedEarly answers a check that stopped before it reached the previous check's repair: a source or
+// local target it could not read, a source past its checkpoint, a failed fetch, target histories it
+// could not join or list. That repair is still the one the next check carries or replaces, so the
+// answer keeps it as unfinishedRepair does. An answer naming no repair would have the next check start
+// over — a passing fetch failure costing a finished repair — and leave its checkout to nobody.
+func stoppedEarly(r, prior *MergeRecovery, code, message string) mergeOutcome {
+	if prior != nil && prior.RepoRoot == r.RepoRoot && prior.TargetBranch == r.TargetBranch && prior.RepairBranch != "" && prior.RepairWorktree != "" {
+		r = heldRepair(r, prior)
+	}
+	return recoveryError(r, code, message)
+}
+
+// reclaimPriorRepair reclaims the previous check's repair checkout once this check has no use for it.
+func reclaimPriorRepair(root string, prior *MergeRecovery, why string) {
+	if prior == nil || prior.RepoRoot != root {
+		return
+	}
+	if kept := reclaimRecoveryCheckout(root, prior.RepairBranch, prior.RepairWorktree, why); kept != "" {
+		logln("merge recovery: kept repair checkout", prior.RepairWorktree+":", kept)
+	}
+}
+
+// reclaimRecoveryCheckout removes a repair checkout no check will come back to, keeping its branch, so
+// the repair can always be checked out again: `git worktree remove` without --force, then a prune. Only
+// a checkout that is plainly a recovery's and holds nothing its branch lacks goes — directly in the
+// worktrees root under the recovery- prefix, the checkout of branch, with no operation in progress and
+// no changed or untracked file. It answers why it kept one that is there, "" once it is gone; whatever
+// it answers, a check goes on as before.
+func reclaimRecoveryCheckout(root, branch, dir, why string) (kept string) {
+	if dir == "" {
+		return ""
+	}
+	path := filepath.Clean(dir)
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "" // already gone
+	}
+	if home, err := filepath.EvalSymlinks(worktreesDir()); err != nil || resolved != path || filepath.Dir(path) != home ||
+		!strings.HasPrefix(filepath.Base(path), mergeRecoveryWorktreePrefix) {
+		return "it is not a repair checkout in " + worktreesDir()
+	}
+	if !strings.HasPrefix(branch, "orbit/recovery/") || branchWorktree(root, branch) != path {
+		return "it is not the checkout of " + branch
+	}
+	if status, err := git(path, "status", "--porcelain"); err != nil || status != "" || inspectRepoRoot(path).State != repoStateClean {
+		return "it holds changes that are not committed"
+	}
+	if _, err := git(root, "worktree", "remove", path); err != nil {
+		return "git worktree remove: " + gitStderr(err)
+	}
+	_, _ = git(root, "worktree", "prune")
+	logln("merge recovery: reclaimed repair checkout", path, "—", why+"; branch", branch, "kept")
+	return ""
+}
+
+// recoveryCheckoutRetention is how long gcWorktrees leaves a clean repair checkout nobody touches: one
+// no check came back to reclaim, its recovery dropped or its runner too old to reclaim it.
+const recoveryCheckoutRetention = 14 * 24 * time.Hour
+
+// gcRecoveryCheckouts reclaims the repair checkouts among entries, the worktrees root's, whose directory
+// has not changed for recoveryCheckoutRetention, by reclaimRecoveryCheckout's rules: recovery-<id> is
+// the checkout of orbit/recovery/<id>, and with anything else checked out, or anything uncommitted in
+// it, it stays. Left for the next sweep while a merge holds mergeLock, as a check may be at work in one.
+func gcRecoveryCheckouts(root string, entries []os.DirEntry) {
+	if !mergeLock.TryLock() {
+		return
+	}
+	defer mergeLock.Unlock()
+	home, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		id, ok := strings.CutPrefix(e.Name(), mergeRecoveryWorktreePrefix)
+		if !ok || !e.IsDir() {
+			continue
+		}
+		if info, err := e.Info(); err != nil || time.Since(info.ModTime()) < recoveryCheckoutRetention {
+			continue
+		}
+		path := filepath.Join(home, e.Name())
+		common, err := git(path, "rev-parse", "--git-common-dir")
+		if err != nil || common == "" {
+			continue
+		}
+		if !filepath.IsAbs(common) {
+			common = filepath.Join(path, common)
+		}
+		reclaimRecoveryCheckout(filepath.Dir(common), "orbit/recovery/"+id, path, "untouched for two weeks")
+	}
 }
 
 // unresolvedPaths is what keeps a repair checkout from being checked: its unmerged files, or, with
@@ -505,6 +610,11 @@ func applyMergeRecovery(root string, req MergeCommand) mergeOutcome {
 		r.Code = "LOCAL_SYNC_PENDING"
 		out.Recovery = r
 		out.Message = "landed on origin/" + r.TargetBranch + "; local checkout still needs sync: " + err.Error()
+		return out
+	}
+	// Landed, and the local target synced: the recovery is over, and its repair checkout with it.
+	if kept := reclaimRecoveryCheckout(root, r.RepairBranch, r.RepairWorktree, "its candidate landed on origin/"+r.TargetBranch); kept != "" {
+		logln("merge recovery: kept repair checkout", r.RepairWorktree+":", kept)
 	}
 	return out
 }
