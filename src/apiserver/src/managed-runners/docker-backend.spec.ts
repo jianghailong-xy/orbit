@@ -140,6 +140,26 @@ test('the budget is derived from the host less its reserve, and every stated dim
   assert.deepEqual([dockerCapacityBudget({ ...host, disk: null }, profile).storageUsableBytes, dockerCapacityBudget({ ...host, disk: null }, profile).storageHeadroomBytes], [0, 0]);
 });
 
+test('the budget holds no more runners than the channel makes containers', () => {
+  const host: ChannelHost = {
+    name: 'h', cpus: 24, memoryBytes: 16 * GiB, serverVersion: '29',
+    disk: { path: '/var/lib/orbit-docker-volumes', totalBytes: 1000 * GiB, freeBytes: 300 * GiB }, managedVolumeBytes: 0,
+  };
+  const profile = testDockerRunnerProfile();
+  // Memory fits six; a channel capped at four makes four, and the pool admits four.
+  const capped = dockerCapacityBudget(host, profile, 4);
+  assert.deepEqual([capped.pods, capped.attachments, capped.activeUsers], [4, 4, 4]);
+  assert.equal(capped.cpuMillis, 18_000, 'compute and storage are as derived');
+  // A cap above what the host fits changes nothing; neither does a channel that reports none, or nonsense.
+  for (const cap of [6, 15, undefined, 0, -1, 2.5, Number.NaN]) {
+    assert.deepEqual(dockerCapacityBudget(host, profile, cap), dockerCapacityBudget(host, profile), `cap ${cap}`);
+  }
+  // A stated pod count is held to the channel's cap too: the channel would refuse the rest.
+  const stated = testDockerRunnerProfile({ capacity: { compute: { pods: 50 } } });
+  assert.equal(dockerCapacityBudget(host, stated, 4).pods, 4);
+  assert.equal(dockerCapacityBudget(host, stated).pods, 50);
+});
+
 test('a Docker profile runs on DockerBackend over the channel it names, and nothing is built for Kubernetes', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'orbit-docker-runtime-'));
   try {
@@ -187,6 +207,8 @@ test('DockerBackend names, pools, terms and budgets as its profile and host say'
   assert.deepEqual(backend.terms, { volume: 'volume', backing: 'volume', credential: 'credential', instance: 'container', stopReport: "Docker's report" });
   assert.deepEqual(backend.storageShare(), { durableBytes: 10 * GiB });
   assert.deepEqual(await backend.capacityBudget(), dockerCapacityBudget(channel.host, profile));
+  channel.limits = { maxContainers: 2 };
+  assert.equal((await backend.capacityBudget()).pods, 2, 'the cap the channel reports in /v1/info');
   const mismatched = new DockerBackend(new FakeDockerChannel('another-instance', profile.runner.image), profile);
   await assert.rejects(mismatched.capacityBudget(), (e: unknown) => e instanceof ManagedRunnerConflict && e.code === 'DOCKER_CHANNEL_MISMATCH');
   const otherImage = new DockerBackend(new FakeDockerChannel(profile.docker.instanceId, `sha256:${'e'.repeat(64)}`), profile);

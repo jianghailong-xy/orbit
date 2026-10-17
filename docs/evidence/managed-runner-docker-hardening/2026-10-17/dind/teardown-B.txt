@@ -1,0 +1,25 @@
++ docker compose down -v --remove-orphans
++ tail -3
+ Volume orbit_pg-socket Removing 
+ Volume orbit_pg-socket Removed 
+ Network orbit_default Removed 
++ docker ps -aq --filter 'label=orbit.managed-runner.instance'
++ xargs -r docker rm -f
+890fe146ec70
++ docker volume ls -q --filter 'label=orbit.managed-runner.instance'
++ xargs -r docker volume rm
+mr-boot-01a14ad6-8147-771c-97e9-70138a14683a-g1
+mr-data-01a14ad6-8147-771c-97e9-70138a14683a
++ docker network rm orbit-managed-runners
+orbit-managed-runners
++ docker volume ls -q
++ docker ps -aq
++ docker network ls --format '{{.Name}}'
+bridge
+host
+none
++ cd /
++ rm -rf /work/orbit
++ df -h /work
++ tail -1
+tmpfs                     3.0G         0      3.0G   0% /work
