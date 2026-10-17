@@ -1009,7 +1009,9 @@ node scripts/cursor-p0/reproduce.mjs --only repo-config-baseline,repo-config-wit
 ### 18.5 登录（对照 §9）【实测 `login-link-and-logout` + 完整计时】
 
 - `NO_OPEN_BROWSER=1 agent login` 立刻打印与 Linux 相同形状的 `loginDeepControl` 链接（challenge/uuid 换新）【实测两次，file 与 default 存储各一】。
-- 无人完成时约 27 分钟超时——macOS 完整计时见 [`evidence/…/macos-2026.10.14-941492e/`](evidence/cursor-cli/macos-2026.10.14-941492e/) 的 `login-timing/` 记录（Linux 参考值 1,632 s / 1,636 s）。期间不写任何凭据【实测】。
+- 无人完成时约 27 分钟超时。macOS 完整计时（file 存储，隔离 HOME）：**1,532 s（约 25.5 分钟）**后打印
+  `Login failed or timed out. Please try again.`，exit 1（Linux 参考值 1,632 s / 1,636 s）；
+  记录见 [`evidence/…/macos-2026.10.14-941492e/login-timing/`](evidence/cursor-cli/macos-2026.10.14-941492e/login-timing/)。期间不写任何凭据【实测】。
 - 远程设备完成登录【待验】——与 Linux 相同，所有者没有操作。P4b 的登录中继在 macOS 上**必须**用 `AGENT_CLI_CREDENTIAL_STORE=file`（否则登录完成的 token 会按 default 写 Keychain：headless 挂 30 s，GUI 弹框，见 §18.4），
   并给登录进程设账号自己的 HOME，token 落在 `<账号 home>/.cursor/auth.json`。
 
