@@ -1,0 +1,32 @@
++ docker compose down -v --remove-orphans
++ tail -2
+ Volume orbit_pg-socket Removed 
+ Network orbit_default Removed 
++ docker ps -aq --filter 'label=orbit.managed-runner.instance'
++ xargs -r docker rm -f
+f5b4d16fbd3d
+197be8004309
++ docker volume ls -q --filter 'label=orbit.managed-runner.instance'
++ xargs -r docker volume rm
+mr-boot-01a14aea-881f-71ea-ac19-0bcb23607ce2-g1
+mr-boot-01a14aec-5404-7642-a53f-dd4be57ecc1b-g1
+mr-data-01a14aea-881f-71ea-ac19-0bcb23607ce2
+mr-data-01a14aec-5404-7642-a53f-dd4be57ecc1b
++ docker network rm orbit-managed-runners
+orbit-managed-runners
++ docker volume ls -q
+c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179
++ docker ps -aq
++ docker network ls --format '{{.Name}}'
+bridge
+host
+none
++ cd /
++ rm -rf /work/orbit /work/backups
++ df -h /work
++ tail -1
+tmpfs                     3.0G         0      3.0G   0% /work
+left after down -v: c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179 labels={"com.docker.volume.anonymous":""}
+files: 0
+c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179
+volumes now: []

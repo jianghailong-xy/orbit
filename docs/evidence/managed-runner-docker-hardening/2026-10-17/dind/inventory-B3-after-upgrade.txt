@@ -1,0 +1,24 @@
+== inventory B3-after-upgrade at 2026-10-17T17:27:24Z, checkout 2d16d5f1e60df0d51763af9374940a52aa978a5c
+-- managed runner containers
+mr-01a14ad6-8147-771c-97e9-70138a14683a	running	Up 27 seconds	generation=1	uid=5405e173-5b92-43a5-82f9-fbee87bd6796
+-- managed runner volumes
+mr-boot-01a14ad6-8147-771c-97e9-70138a14683a-g1	kind=bootstrap	uid=
+mr-data-01a14ad6-8147-771c-97e9-70138a14683a	kind=data	uid=52754b08-c83a-426c-9f09-8bcb3b841659
+-- every volume
+4cbcdebf017dc6bc743317871b0b4c06174921cce33236627050bfbd476fab7c	local	anonymous=
+16610399d2fc12bb62485316aece5d246359ca99c2503cffe0f6cac83427969c	local	anonymous=
+mr-boot-01a14ad6-8147-771c-97e9-70138a14683a-g1	local	anonymous=
+mr-data-01a14ad6-8147-771c-97e9-70138a14683a	local	anonymous=
+orbit_pg-socket	local	anonymous=
+-- stack
+orbit-docker-channel	running	Up 29 seconds (healthy)
+orbit-wiki-worker	running	Up 36 seconds
+orbit-web	running	Up 36 seconds (healthy)
+orbit-apiserver	running	Up 42 seconds (healthy)
+orbit-gateway	running	Up 18 minutes (healthy)
+orbit-pgbackup	running	Up 19 minutes
+orbit-postgres	running	Up 19 minutes (healthy)
+-- managed_runner rows
+a@d8-drill.test | STARTING | RUNNING | 1 | mr-data-01a14ad6-8147-771c-97e9-70138a14683a | mr-01a14ad6-8147-771c-97e9-70138a14683a | 
+-- capacity pool
+pods=2 | pods_reserved=1 | cpu_millis=18000 | memory_bytes=12077248512 | storage_usable_bytes=15284347346944 | storage_headroom_bytes=1587363344794 | durable_bytes_reserved=21474836480

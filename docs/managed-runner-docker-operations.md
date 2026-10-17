@@ -9,7 +9,10 @@ checkouts, sessions, uploads and engine sign-ins, and nothing else keeps a copy 
 Run the commands as root, from the deployment's checkout (the directory with `docker-compose.yml` and `.env`). The
 paths are those the install writes. Every procedure and number here was checked on 2026-10-17 on a default
 deployment in an isolated Docker host, and on the HPC host's own Docker
-([evidence](evidence/managed-runner-docker-security/2026-10-17/README.md)).
+([evidence](evidence/managed-runner-docker-security/2026-10-17/README.md)). The container cap, volume removal, the
+disk the storage budget measures and the executable `/tmp` were checked later the same day, in an isolated Docker host
+whose checkout and Docker data root are on different filesystems
+([evidence](evidence/managed-runner-docker-hardening/2026-10-17/README.md)).
 
 ## What there is to keep
 
@@ -19,6 +22,7 @@ deployment in an isolated Docker host, and on the HPC host's own Docker
 | Which account has which runner, volume and generation, and in which state | Postgres table `managed_runner` | The [Postgres backups](postgres-backup-restore.md) |
 | The Docker channel's token, `channel.json`, the apiserver's `profile.json`, and the channel's state directory (a credential until its container starts, the disk-limit records, fencing receipts) | `data/managed-runners` (mode 0700) | Copy it with the Postgres backups. It holds a secret: the channel's token. |
 | A generation's bootstrap volume `mr-boot-<runner uuid>-g<generation>` | Docker volume | Nothing to keep: each generation gets a new one, removed with its container. |
+| The channel's disk probe: an empty anonymous volume, mounted read-only in `docker-channel` at `/var/lib/orbit-docker-volumes` | Docker volume | Nothing to keep: Compose makes it with the channel's container and keeps it when it recreates the channel. Once the channel has been recreated, `docker compose down -v` leaves it behind, empty: `docker volume rm` it. |
 | The managed runner image | Local image, named by its ID in `channel.json` and `profile.json` | Rebuild it from the commit (`docker build -f deploy/managed-runner/image/Dockerfile …`), or keep a `docker save` of it. |
 
 A data volume backup holds what the account signed in with (engine credentials) and the runner's credential. Treat
@@ -120,6 +124,42 @@ runner then woke on it as its next generation. Every file had the checksum it ha
 files and two repositories were `ok`, the rows and the dump digest were the same, and so were the repository's HEAD
 and the runner's identity.
 
+## Delete a runner's volume
+
+Deleting a data volume deletes the account's checkouts, sessions, uploads and engine sign-ins for good, unless a
+backup holds them. Nothing in Orbit does it: the manager never removes a data volume, and the channel refuses to
+(`403 REMOVAL_REFUSED`) unless an operator turns removal on. Delete one only for an account that will not use its
+runner again, and in this order:
+
+1. **Hold the runner asleep.** Disable the account (**Admin → Users → Disable**), as for a restore.
+2. **Check that it sleeps** and that nothing refers to the volume: the query above shows `SLEEPING`, and
+   `docker ps -a --filter volume=$V` prints nothing. Note its `volume_uid`.
+3. **Back it up** (above), unless the data is meant to go.
+4. **Turn removal on.** Add `"allowVolumeRemoval": true` to `data/managed-runners/channel.json`, check the file, and
+   start the channel on it:
+
+   ```bash
+   docker compose run --rm docker-channel check-config --config /var/lib/orbit-managed-runners/channel.json
+   docker compose up -d --force-recreate docker-channel
+   ```
+
+5. **Remove the volume through the channel, by its UID.** The channel removes only this instance's data volume of
+   that name and that UID, and only while no container refers to it.
+
+   ```bash
+   printf 'header = "Authorization: Bearer %s"\n' "$(cat data/managed-runners/token)" |
+     curl -s -X DELETE -w 'HTTP %{http_code}\n' --config - --unix-socket data/managed-runners/channel.sock \
+       "http://channel/v1/volumes/$V?uid=<volume_uid>"
+   ```
+
+   `HTTP 204` is done. `VOLUME_IN_USE`, `UID_MISMATCH` or `NOT_FOUND` mean that this is not the volume, or not yet:
+   look again before anything else.
+6. **Turn removal off again.** Remove the line, check the file and recreate `docker-channel` as in step 4.
+
+The account stays disabled. Its runner's record still names the volume, so a wake would fail it with `PVC_MISSING`,
+from which nothing moves it on today (as under the restore above). `docker volume rm` deletes a volume too, but it
+checks neither the labels nor the UID: the channel's removal cannot take another volume of the same name.
+
 ## When something goes wrong
 
 ### A runner's volume is over its limit
@@ -160,6 +200,26 @@ To change how often it measures, set `diskCheckSeconds` (10 to 86400) in `channe
 `docker-channel`. To change the limit of new volumes, change `storage.capacity` in `profile.json` and recreate the
 apiserver.
 
+### Runners wait though the host has room
+
+The channel makes no more than `limits.maxContainers` containers in all, in any state. Unless `channel.json` sets it,
+that is one per CPU and per GiB of this host's memory, whichever is fewer; `/v1/info` reports the number it applies
+(`limits.maxContainers`). The manager plans for no more runners than that, so past it an account waits for its
+runner as it does for any capacity, until another runner sleeps. With the default profile (2 CPUs and 4 GiB a
+runner, a quarter of the host kept back) the budget runs out first: the cap binds only where runners are given less
+than a CPU or less than 1 GiB each.
+
+To change it, set `maxContainers` in `limits` in `channel.json`, then recreate the channel and, after it, the
+apiserver, which reads the cap when it measures its pool:
+
+```bash
+docker compose up -d --force-recreate docker-channel
+docker compose up -d --force-recreate apiserver
+```
+
+Whoever else holds the channel's token meets the same cap: a create past it is refused (`429 CONTAINER_LIMIT`) before
+anything is made, and the containers already there go on as they were.
+
 ### The host's disk is full
 
 What happens:
@@ -180,15 +240,18 @@ What to do:
    runner then fails with `PVC_MISSING` at its next wake, and only a restore of the volume (above) can bring the data
    back.
 3. Restart the apiserver (`docker compose restart apiserver`). The manager measures the storage it may hand out once,
-   when it starts, so new accounts keep waiting until it measures again. The measurement is of the disk under
-   `data/managed-runners`, not of Docker's data root (`/var/lib/docker`): keep the checkout on the same filesystem as
-   Docker's data root, or state `capacity.storage` in `profile.json`.
+   when it starts, so new accounts keep waiting until it measures again. It measures the disk Docker's volumes live
+   on, wherever the checkout is: the channel reads it on its probe volume, which Docker keeps beside the data volumes
+   (`host.disk` in `/v1/info`, path `/var/lib/orbit-docker-volumes`). Its log says so at start-up if it ever measures
+   another disk.
 4. Retry the runners that failed (their owners press Retry).
 
 ### A container is over its memory limit
 
 The limit (`runner.resources.memory` in `profile.json`, 4 GiB by default, and no swap beyond it) covers the
-container's processes and its `/tmp`, a tmpfs counted in memory. At the limit, the kernel kills the container's
+container's processes and its `/tmp`, a tmpfs counted in memory. `/tmp` is executable, so builds and `go test` run
+what they write there; Docker keeps it `nosuid` and `nodev`, and an engine older than Docker 27 keeps it `noexec`
+(the channel's log says so at start-up). At the limit, the kernel kills the container's
 largest process, which is usually an engine or a build, and Docker marks the container `OOMKilled`. Measured on the
 HPC host with a 512 MiB limit: the allocating process was killed at the limit (`memory.peak` = 536,870,912 bytes, one
 `oom_kill` in `memory.events`), and the runner process went on.
@@ -364,6 +427,8 @@ Orbit does not change the host's firewall.
 | --- | --- | --- |
 | Each runner's CPU, memory (with `/tmp`), processes, `/tmp` size | `profile.json` `runner.resources`, `runner.tmpSizeLimit` | `docker compose up -d --force-recreate apiserver`, at each runner's next start |
 | The most any runner may be given | `channel.json` `limits` | `docker compose up -d --force-recreate docker-channel` |
+| The most containers there may be | `channel.json` `limits.maxContainers` (by default one per CPU and per GiB of memory, whichever is fewer) | `docker-channel` recreated, then the apiserver |
+| Whether the channel removes data volumes | `channel.json` `allowVolumeRemoval` (`false` unless set) | `docker-channel` recreated |
 | A new volume's limit and storage share | `profile.json` `storage.capacity` | apiserver recreated; existing volumes keep theirs (use `volumeLimitOverrides`) |
 | One volume's limit | `channel.json` `volumeLimitOverrides` | `docker-channel` recreated |
 | How often volumes are measured | `channel.json` `diskCheckSeconds` | `docker-channel` recreated |

@@ -477,7 +477,7 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     await expect('limits above the ceiling', 'POST', '/v1/containers', request({ resources: { cpuMillis: 64_000, memoryBytes: 512 * MiB, pids: 512, tmpBytes: 64 * MiB } }), 403, 'LIMIT_REFUSED');
     await expect('a volume without this instance\'s label: read', 'GET', `/v1/volumes/${foreign}`, undefined, 404, 'NOT_FOUND');
     await expect('a volume without this instance\'s label: adopted', 'PUT', `/v1/volumes/${foreign}`, { ownerId, runnerId: foreign.slice('mr-data-'.length), limitBytes: MiB }, 409, 'NOT_MANAGED');
-    await expect('a volume without this instance\'s label: removed', 'DELETE', `/v1/volumes/${foreign}?uid=${randomUUID()}`, undefined, 404, 'NOT_FOUND');
+    await expect('a volume removal, off unless an operator turns it on', 'DELETE', `/v1/volumes/${foreign}?uid=${randomUUID()}`, undefined, 403, 'REMOVAL_REFUSED');
     await expect('another instance\'s volume: read', 'GET', `/v1/volumes/${otherInstance}`, undefined, 404, 'NOT_FOUND');
     await expect('a container on a volume without the label', 'POST', '/v1/containers', request({
       name: `mr-${foreign.slice('mr-data-'.length)}`, runnerId: foreign.slice('mr-data-'.length), volume: { name: foreign, uid: randomUUID() },
@@ -524,6 +524,8 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     assert.ok(host.SecurityOpt.includes('no-new-privileges:true'));
     assert.deepEqual(inspected.Mounts.map((m: { Type: string; Name?: string; Destination: string }) => `${m.Type}:${m.Destination}`).sort(),
       ['tmpfs:/tmp', 'volume:/run/orbit-bootstrap', 'volume:/var/lib/orbit']);
+    const tmp = host.Mounts.find((m: { Type: string; Target: string }) => m.Type === 'tmpfs' && m.Target === '/tmp');
+    assert.deepEqual(tmp?.TmpfsOptions, { SizeBytes: 64 * MiB, Mode: 0o1777, Options: [['exec']] }, '/tmp executable, sized, nosuid and nodev by Docker');
     assert.ok(!JSON.stringify(inspected).includes('docker.sock'), 'no Docker socket anywhere in it');
     const env: string[] = inspected.Config.Env;
     assert.ok(!env.some((e) => /GENERATION|POD_UID|TOKEN=/.test(e)), `no credential or generation in its environment: ${env.join(' ')}`);
