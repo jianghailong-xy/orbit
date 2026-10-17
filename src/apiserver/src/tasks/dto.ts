@@ -537,7 +537,10 @@ export class CreateTaskDto {
   // the same epoch, so old plans keep working, but it reads as being about one particular run
   // when what the author meant was the work.
   @IsOptional() @IsArray() @IsPublicId({ each: true }) dependsOnTaskIds?: string[];
-  // Auto-run once all prerequisites are DONE (default true). Ignored without deps.
+  // Start without a manual start once ready (default true): once all prerequisites are DONE, and —
+  // for a task in a project — once the project has started, even with no prerequisites at all. A
+  // task in no project that has no prerequisites is never started by this flag, however ready it
+  // looks: start it with task_start, or give it a runAt.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
   // Free-text grouping labels, orthogonal to listId (see Task.labels). Stored trimmed and
   // deduplicated, case as given, since filtering matches exactly.
@@ -747,7 +750,8 @@ export class UpdateTaskDto {
   @IsArray()
   @IsPublicId({ each: true })
   dependsOnTaskIds?: string[];
-  // Auto-run once all prerequisites are DONE.
+  // Auto-run once all prerequisites are DONE. A task in no project that has no prerequisites is
+  // never started by this flag, however ready it looks: start it with task_start, or give it a runAt.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
   // Which of its list's ready tasks takes the list's next free slot: higher first, equal priorities
   // in the order they already had (see Task.priority). Omit to keep it; null returns it to the
