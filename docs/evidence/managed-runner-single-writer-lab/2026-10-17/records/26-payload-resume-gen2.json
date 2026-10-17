@@ -1,0 +1,29 @@
+{
+  "at": "2026-10-17T19:59:25.158+00:00",
+  "committedRows": 606,
+  "generation": 2,
+  "pod": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+  "podUid": "c99d2b99-30b5-4b90-af52-00d2bd3a23fa",
+  "resumedExistingData": true,
+  "runId": "t02a-1",
+  "runnerVolume": {
+    "config": {
+      "maxConcurrent": 2,
+      "name": "orbit-managed",
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "serverUrl": "https://10.0.2.2:13711",
+      "workDir": "/var/lib/orbit/home/orbit-repos/default"
+    },
+    "containerIdentity": {
+      "layoutVersion": 1,
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "serverUrl": "https://10.0.2.2:13711",
+      "workDir": "/var/lib/orbit/home/orbit-repos/default"
+    },
+    "managedInstance": {
+      "generation": 2,
+      "podUid": "c99d2b99-30b5-4b90-af52-00d2bd3a23fa",
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799"
+    }
+  }
+}

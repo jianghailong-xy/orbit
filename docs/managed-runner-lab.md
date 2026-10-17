@@ -169,7 +169,9 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `status.sh` | Host boundary (kernel modules, listening sockets), unit memory, guest memory through the balloon, Ceph health, k3s node, Ceph-CSI workloads, StorageClass and namespace; exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
 | `smoke.sh run` / `smoke.sh verify RUN_ID` | The storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
 | `destroy.sh --yes-destroy-lab` | Shuts down and deletes the disks (all Ceph and PVC data), seed, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). |
-| `test-server.sh start\|stop\|status` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`. |
+| `test-server.sh start [--managed]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote; `secrets` only makes the secrets and the lab CA. |
+| `single-writer.py` | The manager's own Pods in the lab ([below](#single-writer-protection-t02a)): the manager's ServiceAccount and least-privilege RBAC, the admission webhook (k3s's AdmissionConfiguration with the webhook's bearer token, and the repository's webhook template), the image import under its digest, the manager profile, and the checks: second Pods, outages, the probe payload inside the runner container, storage records, credential replay at the runner door, stopping the runner, a force delete and an incomplete fencing receipt. |
+| `lab-ca-image.Dockerfile` | One layer on the product image: the lab CA in the system trust store, for the manager's Pod, which mounts no CA bundle. |
 | `runner-image.py` | Runs the optional runner image in the lab: imports an image archive into the guest's containerd, enrolls once, starts, stops and recreates the runner Pod on one PVC, drives sessions and a landing on the test server, and hashes the persistent state; see [Runner image](#runner-image-t03). |
 | `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. |
 
@@ -256,6 +258,42 @@ lab CA comes from a ConfigMap through `SSL_CERT_DIR`, which Go reads besides the
 | Least privilege | In the runner: UID/GID 10001, every capability set empty, `NoNewPrivs`, seccomp filter, read-only root; no service account token, Docker socket, kubeconfig or credential variable; tini is PID 1 and `orbit run` gets only the fixed paths and update switches. |
 | Real engine session | Pending: the owner's DeepSeek key file does not exist yet. |
 
+## Single-writer protection (T02a)
+
+Recorded 2026-10-17 by task T02a: the same-node part of criterion 2 with the manager's own Pods,
+C2b's admission guard and generation-bound credentials, and D7's recovery rule. The records are in
+[the evidence](evidence/managed-runner-single-writer-lab/2026-10-17/README.md). No model was used:
+the runners stayed STARTING with `MODEL_UNAVAILABLE`, which the gate and the guard do not depend on.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t02a   # T03's database untouched
+W=scripts/managed-runner/lab/single-writer.py
+sudo scripts/managed-runner/lab/test-server.sh secrets                     # the lab CA the image trusts
+docker buildx build ... --output type=oci,dest=product.oci.tar ...          # deploy/managed-runner/image, as for T03
+docker buildx build --build-context base=oci-layout://DIR@sha256:... \
+  --file scripts/managed-runner/lab/lab-ca-image.Dockerfile ...             # one layer: the lab CA
+python3 $W import lab.tar && python3 $W identity && python3 $W profile --image REF
+sudo scripts/managed-runner/lab/test-server.sh start --managed
+python3 $W owner                              # sign-in provisions; without the guard: ADMISSION_GUARD_MISSING
+python3 $W admission install && python3 $W retry
+python3 $W contenders                         # ... payload, credential, signal, force-delete, receipt
+python3 $W admission remove                   # before the test server stops
+```
+
+| Part | As set up |
+| --- | --- |
+| Manager | The test server's own manager, `ORBIT_MANAGED_RUNNERS_ENABLED=true` and a profile naming a separate JSON kubeconfig: ServiceAccount `orbit-mr-manager` in `orbit-mr-test` with `get`/`create`/`delete` on Pods and Secrets, `get`/`create` on PVCs, `get` on ConfigMaps, `get` on PVs and `list` on VolumeAttachments, nothing else (`auth can-i` checks in the record). Its username is the profile's `admission.managerUsername`. |
+| Admission | k3s's API server runs with `--admission-control-config-file`, from a drop-in in `/etc/rancher/k3s/config.yaml.d` (`config.yaml`, which `provision.sh` rewrites, is untouched): its WebhookAdmissionConfiguration names a kubeconfig whose user `10.0.2.2:13711` holds the webhook's bearer token (0600 in the guest, only its hash in the profile). The ValidatingWebhookConfiguration is the repository template with the namespace, `https://10.0.2.2:13711/api/managed-runner/admission` and the lab CA; the API server reaches the test server's TLS front through the QEMU user network. |
+| Image | The product image from deploy/managed-runner/image at the project tip, plus one layer adding the lab CA to the system trust store: the manager's Pod mounts only its claim, emptyDirs and its bootstrap Secret, and the guard refuses anything else, so the CA cannot come as a ConfigMap. `ctr images import --digests --base-name` names a digest reference, which the profile pins and the kubelet finds locally (no pull policy is set, so a digest reference is `IfNotPresent`); that digest is the archive's index, which holds the one built manifest. |
+
+| Check | Result |
+| --- | --- |
+| Without the guard | The sign-in provisioned the PVC, its PV and generation 1's Secret, then the manager's dry-run probe was admitted and it stopped: `FAILED ADMISSION_GUARD_MISSING`, retryable, no Pod. After `admission install` the owner's retry started generation 1's Pod; the probe was refused by the guard. |
+| Second Pod, same node, same claim | Refused, while the authorized Pod kept running (same UID, its writer committing rows, one VolumeAttachment, one RBD mount): an unlabelled Pod by the cluster admin (`NOT_THE_MANAGER`), the same by the manager's identity and a full copy of the authorized Pod under another name (`NOT_THE_FIXED_NAME`), the fixed name again (`NOT_RESERVED`), the fixed name for the next generation (`NOT_THE_RESERVED_GENERATION`), a Job's Pod (`FailedCreate`, `NOT_THE_MANAGER`), an ephemeral container mounting the volume (`EPHEMERAL_CONTAINER`). With the TLS front down every Pod create in the namespace was refused (`failed calling webhook`); with only PostgreSQL down, a Pod on the claim was refused and one with no claim admitted (its decision reads no row). |
+| Generations | A SIGTERM to the runner (what the kubelet sends) ended the Pod `Succeeded`; the manager recorded the kubelet's report, deleted the Pod by UID, waited for the detach and started generation 2 on the same PVC in 11 s. After the VM restart the kubelet reported generation 2's runner stopped (exit 0) and generation 3 followed. Each older generation's credential was then refused 401 at heartbeat, claim and `GET /runner/me`; the current credential naming an older instance 403 `MANAGED_RUNNER_INSTANCE_SUPERSEDED`. |
+| No stop proof | An operator's graceful `kubectl delete pod` and a force delete each left the mapping `FENCING` (`PREDECESSOR_STOP_UNPROVEN`) with its generation, recorded Pod, Secret, PVC and compute reservation kept and no new Pod, for 14 and 6 minutes until the end of the window; the credential was replaced (401), the owner's retry refused (409), an incomplete fencing receipt rejected field by field (`FENCING_RECEIPT_INVALID`), and the manager identity's fixed-name Pods refused (`NOT_RESERVED`). The graceful delete fenced because the kubelet's terminal report was in the API for about a second and the manager polls every 5 s. |
+| Data | Ordinary file, Git commit (fsck clean), a 32 MiB random file and SQLite rows in WAL mode (`synchronous=FULL`) written inside the runner container: the same after the Pod's recreation as generation 2, and after the VM restart (written until the shutdown) every acknowledged row present, `integrity_check` `ok`, the earlier rows hashing as before. |
+
 ## Known limits
 
 - **One physical machine, one node, one failure domain.** The multi-node parts of criterion 2
@@ -263,8 +301,10 @@ lab CA comes from a ConfigMap through `SSL_CERT_DIR`, which Go reads besides the
   stops or is fenced) and criterion 8's cross-node migration cannot be verified here; they wait for
   a multi-machine cluster or another decision by the owner. Single-machine evidence must not be
   presented as covering them. Criteria 3–7 and the single-node parts of 2 and 8 can be tested here.
-- No admission guard, fencing procedure, Rook or CSI snapshots are installed; T02 and C2b's
-  admission work brings the guard. `ceph-rbd-verify.py`'s live phases need two nodes.
+- The admission guard is installed only for a test window (`single-writer.py admission install`)
+  and removed after it (`admission remove`): with no test server answering, `failurePolicy: Fail`
+  refuses every Pod create in `orbit-mr-test`. No fencing procedure, Rook or CSI snapshots are
+  installed. `ceph-rbd-verify.py`'s live phases need two nodes.
 - The three replicas share one VM and one HDD: no durability against hardware failure, and I/O is
   bound by that disk.
 - Kernel RBD and OSDs share one kernel. Shutdown ordering is handled; severe memory pressure inside
@@ -272,6 +312,7 @@ lab CA comes from a ConfigMap through `SSL_CERT_DIR`, which Go reads besides the
 - The host can swap guest memory when the host itself runs short (it did during the first
   provisioning); the VM then slows down. `OOMScoreAdjust=1000` makes the VM, not the runner, the
   host OOM killer's first choice.
-- The kubeconfig is k3s's cluster-admin. Later tasks create least-privilege identities (the manager
-  ServiceAccount, the admission webhook's caller) themselves.
+- The kubeconfig is k3s's cluster-admin. The manager's own identity is the ServiceAccount
+  `orbit-mr-manager` (`single-writer.py identity`), with only the verbs the Kubernetes backend calls;
+  the webhook's caller is k3s's API server, which presents a bearer token from its AdmissionConfiguration.
 - Recreating the lab gives a new FSID and new keys; read `state/facts.json` after `create.sh`.
