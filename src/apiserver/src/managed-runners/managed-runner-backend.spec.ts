@@ -21,15 +21,16 @@ import { managedAdmissionProbeName, managedPodName, managedPvcName, managedSecre
 import { createManagedRunnerRuntime } from './managed-runner-runtime';
 import { ManagedRunnerService } from './managed-runner.service';
 
-// The run backend boundary (managed-runner-backend.ts): which backend a profile chooses, Docker
-// refused by name with nothing built for Kubernetes in its place, KubernetesBackend making exactly
-// the Kubernetes calls the manager made itself, and the manager making none of its own. The manager
-// driving a mapping on a backend with no Kubernetes in it is managed-runner-backend.pg.spec.ts.
+// The run backend boundary (managed-runner-backend.ts): which backend a profile chooses, a Docker
+// profile never read as a Kubernetes one nor building anything for Kubernetes, KubernetesBackend
+// making exactly the Kubernetes calls the manager made itself, and the manager making none of its
+// own. The manager driving a mapping on a backend with no Kubernetes in it is
+// managed-runner-backend.pg.spec.ts; the Docker backend itself is docker-backend.spec.ts.
 
 const quiet = { warn: () => undefined, error: () => undefined, log: () => undefined };
 const RUNNER = '0195c0de-0000-7000-8000-0000000000a1';
 const OWNER = '0195c0de-0000-7000-8000-0000000000b1';
-const DOCKER_REFUSED = /^backend is "docker", which this server does not implement yet; it does not run managed runners on Kubernetes instead$/;
+const KUBERNETES_SECTION = /^kubernetes belongs to the kubernetes backend; a docker profile does not name it$/;
 
 function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
   return {
@@ -44,7 +45,7 @@ function profileFile(profile: unknown): string {
   return file;
 }
 
-test('a profile chooses its backend: absent or "kubernetes" is Kubernetes, "docker" is refused by name, anything else is refused', () => {
+test('a profile chooses its backend: absent or "kubernetes" is Kubernetes, "docker" is read as Docker alone, anything else is refused', () => {
   assert.deepEqual(MANAGED_RUNNER_BACKENDS, ['kubernetes', 'docker']);
   const absent = parseManagedRunnerProfile(structuredClone(testManagedRunnerProfile()));
   assert.ok(absent.ok);
@@ -54,13 +55,15 @@ test('a profile chooses its backend: absent or "kubernetes" is Kubernetes, "dock
   assert.ok(stated.ok);
   assert.equal(stated.profile.backend, 'kubernetes');
 
-  // Docker is refused with that one reason — whatever else the file says, and with no Kubernetes
-  // section asked of it — so nothing reads it as a Kubernetes profile.
-  for (const docker of [{ ...testManagedRunnerProfile(), backend: 'docker' }, { backend: 'docker' }, { schemaVersion: 2, backend: 'docker' }]) {
+  // A Kubernetes profile relabelled docker is read as a Docker one, which it is not: refused, its
+  // Kubernetes section named — so nothing reads it as a Kubernetes profile either.
+  const relabelled = parseManagedRunnerProfile({ ...testManagedRunnerProfile(), backend: 'docker' });
+  assert.equal(relabelled.ok, false);
+  assert.ok(!relabelled.ok && relabelled.problems.some((p) => KUBERNETES_SECTION.test(p)), JSON.stringify(!relabelled.ok && relabelled.problems));
+  for (const docker of [{ backend: 'docker' }, { schemaVersion: 2, backend: 'docker' }]) {
     const refused = parseManagedRunnerProfile(docker);
     assert.equal(refused.ok, false);
-    assert.equal(!refused.ok && refused.problems.length, 1, JSON.stringify(!refused.ok && refused.problems));
-    assert.match(!refused.ok ? refused.problems[0] : '', DOCKER_REFUSED);
+    assert.ok(!refused.ok && refused.problems.some((p) => /^docker\.channel must name exactly one/.test(p)), JSON.stringify(!refused.ok && refused.problems));
   }
   for (const other of ['Kubernetes', 'podman', '', 1, null]) {
     const refused = parseManagedRunnerProfile({ ...testManagedRunnerProfile(), backend: other });
@@ -68,20 +71,20 @@ test('a profile chooses its backend: absent or "kubernetes" is Kubernetes, "dock
   }
 });
 
-test('a docker profile leaves the enabled feature unavailable, and nothing is built for Kubernetes instead', async () => {
+test('an invalid docker profile leaves the enabled feature unavailable, and nothing is built for Kubernetes instead', async () => {
   const constructed: string[] = [];
   const logged: string[] = [];
   const runtime = createManagedRunnerRuntime({
     profilePath: profileFile({ ...testManagedRunnerProfile(), backend: 'docker' }),
     prisma: {} as PrismaService,
     kubeClient: tripwireKubeClientFactory(constructed),
+    dockerChannel: () => assert.fail('no channel client for a profile that is refused'),
     log: { error: (line: string) => void logged.push(line), log: (line: string) => void logged.push(line) },
   });
   assert.equal(runtime.available, false);
-  assert.match(!runtime.available ? runtime.problems.join('\n') : '', DOCKER_REFUSED);
+  assert.match(!runtime.available ? runtime.problems.join('\n') : '', /kubernetes belongs to the kubernetes backend/);
   assert.deepEqual(constructed, [], 'no Kubernetes client was constructed');
-  assert.equal(logged.length, 1);
-  assert.match(logged[0], /^managed runners are enabled but unavailable: backend is "docker"/);
+  assert.ok(logged.length > 0 && logged.every((line) => line.startsWith('managed runners are enabled but unavailable: ')));
 
   // What an owner is told: unavailable, never a Kubernetes runner instead.
   const reads = { managedRunner: { findUnique: async () => null }, user: { findUnique: async () => ({ disabledAt: null }) } };

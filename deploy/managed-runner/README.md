@@ -176,9 +176,11 @@ sleep, how often an intent waiting for capacity looks again, and how long a stop
 before the delay is reported. The test owner supplies every value. Without a valid
 profile the feature reports itself unavailable and nothing is reconciled. Only the authorized isolated
 test apiserver may set these variables; no default entry point does. The optional `backend` field
-names the run backend: absent or `kubernetes` is this Kubernetes environment; `docker` is refused by
-this version, which does not implement it yet, so the feature is unavailable rather than run on
-Kubernetes instead.
+names the run backend: absent or `kubernetes` is this Kubernetes environment; `docker` is one host's
+Docker, reached only through the restricted Docker channel — its profile shape is
+[docker-channel/manager-profile.example.json](docker-channel/manager-profile.example.json), and the
+channel, its rules and the disk limit are described in [docker-channel/README.md](docker-channel/README.md).
+A Docker profile builds nothing for Kubernetes, and a Kubernetes one nothing for Docker.
 
 The manager creates the PVC above from `storage/pvc.template.json` and the Pod above, by the fixed
 names `mr-data-<runner-uuid>` and `mr-<runner-uuid>`, with the runner credential of the Pod's

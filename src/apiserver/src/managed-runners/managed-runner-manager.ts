@@ -53,9 +53,11 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  * resumes from what is recorded and what is observed, never from memory.
  *
  * Every infrastructure call goes through the run backend (managed-runner-backend.ts):
- * KubernetesBackend (a Ceph RBD PVC, a bootstrap Secret, a bare Pod) is the one implemented. What
- * is decided here — the states, admission, the single-writer gate, wake, sleep and a disabled
- * owner's runner — is the same for every backend.
+ * KubernetesBackend (a Ceph RBD PVC, a bootstrap Secret, a bare Pod) or DockerBackend (a local
+ * volume, a credential file and a container, through the restricted Docker channel). What is decided
+ * here — the states, admission, the single-writer gate, wake, sleep and a disabled owner's runner —
+ * is the same for every backend, and a manager drives only the mappings its own backend made
+ * (`managed_runner.backend`): another backend's are left as they are, as the switch off leaves them.
  *
  * This version provisions: REQUESTED → PROVISIONING (data volume, the storage it is bound to and its
  * handle, the bootstrap credential of the generation and the runner credential it carries) →
@@ -189,6 +191,28 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
     message: 'The runner accepted going to sleep but has not stopped yet. It is not forced: it stops once its own drain finishes, and new work wakes it again afterwards.',
     retryable: false,
   },
+  SLEEP_STOP_FORCED: {
+    message: 'The runner accepted going to sleep but did not stop within its drain time, so it is being stopped. New work wakes it again afterwards.',
+    retryable: false,
+  },
+  DOCKER_CHANNEL_FORBIDDEN: { message: 'The Docker channel refused the manager. An operator has to check its token; then it can be retried.', retryable: true },
+  DOCKER_CHANNEL_REFUSED: { message: 'The Docker channel refused a managed runner request. An operator has to check the environment; then it can be retried.', retryable: true },
+  DOCKER_CHANNEL_MISMATCH: {
+    message: 'The Docker channel serves another deployment, image or limits than this server expects. An operator has to align them; then it can be retried.',
+    retryable: true,
+  },
+  CONTAINER_GUARD_MISSING: {
+    message: "The Docker channel admitted a second container for a runner's volume, so no instance is started. An operator has to check the channel; then it can be retried.",
+    retryable: true,
+  },
+  CONTAINER_GUARD_UNVERIFIED: {
+    message: "Whether the Docker channel's single-container guard is in force could not be established, so no instance is started. An operator has to check it; then it can be retried.",
+    retryable: true,
+  },
+  VOLUME_OVER_LIMIT: {
+    message: "This runner's data volume is over its disk limit, so no instance is started on it. An operator has to free space on it or raise its limit; then it can be retried.",
+    retryable: true,
+  },
 };
 
 export function managedRunnerReason(code: string): ManagedRunnerReason {
@@ -205,6 +229,13 @@ const ACTIVE_STATES = ['REQUESTED', 'PROVISIONING', 'STARTING', 'READY', 'FENCIN
 const DRIVEN_WHILE_DISABLED: ReadonlySet<ManagedRunner['managementState']> = new Set([
   'REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING', 'READY', 'DRAINING', 'SLEEPING', 'FENCING',
 ]);
+/**
+ * The states in which a pass only looks at what runs (and, draining, asks the host to stop or remove
+ * what has stopped). A backend that does not answer there says nothing about the runner: no attempt
+ * of the provisioning budget is spent and nothing is failed — the next pass looks again. A restart
+ * of the Docker channel, or a Kubernetes API blip, leaves an up or draining runner as it was.
+ */
+const OBSERVING_STATES: ReadonlySet<ManagedRunner['managementState']> = new Set(['READY', 'DRAINING', 'FENCING']);
 /** A pass takes at most this many steps; the worker's next pass continues. */
 const MAX_STEPS_PER_PASS = 12;
 /** Sleeping mappings the demand sweep wakes per pass. */
@@ -252,8 +283,10 @@ export class ManagedRunnerManager {
     const now = this.now();
     const due = { OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] };
     const pool = await this.capacityPool();
+    const backend = this.backend.name;
     const disabled = await this.prisma.managedRunner.findMany({
       where: {
+        backend,
         owner: { disabledAt: { not: null } },
         desiredState: { not: 'DELETED' },
         OR: [
@@ -267,6 +300,7 @@ export class ManagedRunnerManager {
     });
     const waiting = await this.prisma.managedRunner.findMany({
       where: {
+        backend,
         managementState: 'WAITING_CAPACITY',
         desiredState: 'RUNNING',
         OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }, { capacityRevision: null }, { capacityRevision: { lt: pool.revision } }],
@@ -277,6 +311,7 @@ export class ManagedRunnerManager {
     });
     const moving = await this.prisma.managedRunner.findMany({
       where: {
+        backend,
         OR: [
           { desiredState: 'RUNNING', managementState: { in: ['REQUESTED', 'PROVISIONING', 'STARTING', 'FENCING'] }, ...due },
           // Demand cannot come for a disabled owner's fenced mapping: its proof is looked for anyway.
@@ -291,7 +326,7 @@ export class ManagedRunnerManager {
       select: { id: true },
     });
     const watched = await this.prisma.managedRunner.findMany({
-      where: { desiredState: 'RUNNING', managementState: 'READY', ...due },
+      where: { backend, desiredState: 'RUNNING', managementState: 'READY', ...due },
       orderBy: { updatedAt: 'asc' },
       take: limit,
       select: { id: true },
@@ -314,12 +349,13 @@ export class ManagedRunnerManager {
     return runners.length;
   }
 
-  /** One pass over one mapping, under this replica's lease. */
+  /** One pass over one mapping, under this replica's lease. Another backend's mapping is not driven, nor leased. */
   async reconcile(mappingId: string): Promise<ReconcileOutcome> {
     const leased = await this.acquireLease(mappingId);
     if (!leased) {
-      const exists = await this.prisma.managedRunner.count({ where: { id: mappingId } });
-      return exists ? 'LEASED_ELSEWHERE' : 'NOT_FOUND';
+      const found = await this.prisma.managedRunner.findUnique({ where: { id: mappingId }, select: { backend: true } });
+      if (!found) return 'NOT_FOUND';
+      return found.backend === this.backend.name ? 'LEASED_ELSEWHERE' : 'IDLE';
     }
     try {
       let mapping = leased;
@@ -402,7 +438,7 @@ export class ManagedRunnerManager {
         return this.fail(current, error.code, error.detail);
       }
       const failure = this.backend.failure(error);
-      if (failure?.retryable) return this.backoff(current, error);
+      if (failure?.retryable) return OBSERVING_STATES.has(current.managementState) ? this.unanswered(current, error) : this.backoff(current, error);
       if (failure) {
         this.log.warn(`managed runner ${mapping.id}: ${failure.log}`);
         return this.fail(current, failure.code, failure.detail);
@@ -428,15 +464,19 @@ export class ManagedRunnerManager {
 
   /**
    * The pool as it stands now: the backend's, keyed by its location. Its row is created, or brought
-   * to the backend's totals, on this process's first use; after that only its id is kept, and its
-   * figures and revision are read afresh each time — they move with every admission and release, by
-   * any replica.
+   * to the backend's totals (which a backend may have to ask its host for), on this process's first
+   * use; after that only its id is kept, and its figures and revision are read afresh each time —
+   * they move with every admission and release, by any replica.
    */
   private async capacityPool(): Promise<CapacityPool> {
-    this.pool ??= syncCapacityPool(this.prisma, this.backend.location, this.backend.capacityBudget()).then((pool) => pool.id).catch((error: Error) => {
-      this.pool = undefined;
-      throw error;
-    });
+    this.pool ??= Promise.resolve()
+      .then(() => this.backend.capacityBudget())
+      .then((budget) => syncCapacityPool(this.prisma, this.backend.location, budget))
+      .then((pool) => pool.id)
+      .catch((error: Error) => {
+        this.pool = undefined;
+        throw error;
+      });
     const pool = await readCapacityPool(this.prisma, await this.pool);
     if (!pool) {
       this.pool = undefined;
@@ -691,7 +731,8 @@ export class ManagedRunnerManager {
    * DRAINING. Until the instance accepts, the drain is called off — back to READY, claims open
    * again — by demand, by work in the records, by the instance reporting work or no longer reporting,
    * or by the drain budget running out unaccepted; never while the owner's account is disabled. Once
-   * it accepts it exits on its own; nothing here stops it. Its stop then goes through the
+   * it accepts it exits on its own; nothing here stops it, unless it overruns the drain time on a
+   * backend whose host reports every stop it makes (`stopOverdue`). Its stop then goes through the
    * single-writer gate's own rules: its host's report of every process stopped is recorded as the
    * stop proof, the instance object is released by UID, and the mapping sleeps only once the object
    * is gone and the volume released. An instance that vanished or was replaced unobserved, or was
@@ -729,16 +770,35 @@ export class ManagedRunnerManager {
     const now = this.now();
     if (!mapping.stopAcknowledgedAt) {
       // A disabled owner's drain is never called off: its runner, refused at every door, can neither
-      // accept nor be kept, and stops on its own.
-      const abort = ownerDisabled ? null : await this.drainAbort(mapping, now);
+      // accept nor be kept, and stops on its own — or, past the drain time, is stopped (`stopOverdue`).
+      if (ownerDisabled) {
+        await this.stopOverdue(mapping, mapping.stopRequestedAt ?? mapping.stateEnteredAt, now);
+        return { done: 'DRAINING' };
+      }
+      const abort = await this.drainAbort(mapping, now);
       return abort ? this.abortDrain(mapping, abort) : { done: 'DRAINING' };
     }
-    // Accepted: it stops by itself. Overdue is said, never forced.
+    // Accepted: it stops by itself. Overdue is said, and forced only where the backend can (`stopOverdue`).
     const overdue = now.getTime() - mapping.stopAcknowledgedAt.getTime() > this.profile.lifecycle.drainSeconds * 1000;
-    if (overdue && (mapping.lastError as { code?: unknown } | null)?.code !== 'SLEEP_STOP_OVERDUE') {
-      await this.commit(mapping, { lastError: { ...managedRunnerReason('SLEEP_STOP_OVERDUE'), detail: `accepted at ${mapping.stopAcknowledgedAt.toISOString()}` } });
+    const said = this.backend.stopInstance ? 'SLEEP_STOP_FORCED' : 'SLEEP_STOP_OVERDUE';
+    if (overdue && (mapping.lastError as { code?: unknown } | null)?.code !== said) {
+      await this.commit(mapping, { lastError: { ...managedRunnerReason(said), detail: `accepted at ${mapping.stopAcknowledgedAt.toISOString()}` } });
     }
+    await this.stopOverdue(mapping, mapping.stopAcknowledgedAt, now);
     return { done: 'DRAINING' };
+  }
+
+  /**
+   * A drain that is past its drain time since `since` — accepted and not yet stopped, or a disabled
+   * owner's runner that has not stopped by itself — is stopped, where the backend's host reports
+   * every stop it makes (`stopInstance`: Docker; Kubernetes has none and nothing is forced). Asking
+   * is never the proof: the gate still waits for the host's report of the exit, then removes the
+   * instance by UID, as for a runner that stopped on its own.
+   */
+  private async stopOverdue(mapping: ManagedRunner, since: Date, now: Date): Promise<void> {
+    if (!this.backend.stopInstance || now.getTime() - since.getTime() <= this.profile.lifecycle.drainSeconds * 1000) return;
+    this.log.warn(`managed runner ${mapping.id}: draining past its drain time; asking ${this.backend.terms.instance} ${mapping.podUid} to stop`);
+    await this.backend.stopInstance(mapping);
   }
 
   /** Why an unaccepted drain is called off now, or null to keep waiting for the instance. */
@@ -1232,11 +1292,11 @@ export class ManagedRunnerManager {
     return new Date(now.getTime() + this.profile.lifecycle.leaseSeconds * 1000);
   }
 
-  /** Take (or keep) the lease: free, expired, or already this replica's. */
+  /** Take (or keep) the lease of one of this backend's mappings: free, expired, or already this replica's. */
   private async acquireLease(id: string): Promise<ManagedRunner | null> {
     const now = this.now();
     const { count } = await this.prisma.managedRunner.updateMany({
-      where: { id, OR: [{ leaseHolder: null }, { leaseHolder: this.holder }, { leaseExpiresAt: { lte: now } }] },
+      where: { id, backend: this.backend.name, OR: [{ leaseHolder: null }, { leaseHolder: this.holder }, { leaseExpiresAt: { lte: now } }] },
       data: { leaseHolder: this.holder, leaseExpiresAt: this.leaseUntil(now) },
     });
     return count === 0 ? null : this.reread(id);
@@ -1350,6 +1410,12 @@ export class ManagedRunnerManager {
       },
       loggedRetry(this.log, 'managedRunners.releaseIdleCompute'),
     );
+  }
+
+  /** A transient failure while only looking (OBSERVING_STATES): said in the log, nothing spent or written. */
+  private unanswered(mapping: ManagedRunner, error: unknown): Step {
+    this.log.warn(`managed runner ${mapping.id}: ${mapping.managementState}, and the ${this.backend.name} backend did not answer: ${(error as Error).message}; looking again next pass`);
+    return { done: 'BACKOFF' };
   }
 
   /** A transient failure spends one attempt; the last one leaves the mapping FAILED, retryable. */

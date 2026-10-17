@@ -857,3 +857,80 @@ operation and smoke results; the scripts are in `scripts/managed-runner/lab/`.
 | Profile | StorageClass `runner-data` rendered from `deploy/managed-runner/storage/storageclass.template.json` by `ceph_rbd.render`, with the storage profile fields required above; `clusterID` is the FSID, which also names the operator's ClientProfile. The CSI identity has exactly the documented pool-scoped caps; its key is `aes256k`, the only cipher a fresh 20.2.4 cluster allows, which the 7.0 kernel maps without a downgraded key. |
 | Observed | Pod recreation and a VM stop/start kept file, Git and SQLite data (`integrity_check` ok, row hashes equal). A second, differently named Pod on the same node ran on the RWO claim and wrote to it, so RWO is not single-Pod protection here either; a ReadWriteOncePod claim's second Pod stayed Pending. |
 | Not covered | The multi-node parts of criteria 2 and 8; no admission guard, fencing, Rook or CSI snapshots are installed. `ceph-rbd-verify.py`'s live phases need two nodes and were not run. |
+
+## Implementation record: Docker backend
+
+Recorded 2026-10-17 for the second phase's Docker backend task (D2). It was verified with the
+channel's own tests (an in-memory Docker Engine behind its real HTTP server), DockerBackend over an
+in-memory channel that keeps the real one's rules, the manager on DockerBackend over disposable
+PostgreSQL databases, and on the HPC host's real Docker (29.8.2): the whole apiserver in one process
+with the switch on and a Docker profile, the real channel, the managed runner image built locally
+from T03's branch (08375121e) with the entrypoint change below, its real runner in every container,
+and a disposable PostgreSQL
+(`scripts/managed-runner/docker-backend-it.py`). No model credential was used: Codex was signed in
+with a placeholder key on an internal network with no route to any model, so nothing here is evidence
+of a real engine session (D4) or of a new deployment's wiring (D3).
+
+| Area | As implemented |
+| --- | --- |
+| Channel | `deploy/managed-runner/docker-channel/channel.py`, Python 3 standard library, a process of its own and the only one holding `docker.sock`. JSON over HTTP on a unix socket (or loopback), bearer token from a file only its owner reads. It creates, reads and removes data volumes; keeps the runner credential of a generation; creates one container from its own template and starts it, reads its state and exit, stops it and removes it once stopped; reports what holds a volume, the host's size and this instance's resources. Everything it creates carries `orbit.managed-runner.instance=<instanceId>`; nothing without that label is read, returned, adopted or removed. A request names identities and amounts only: `privileged`, capabilities, binds and mounts, host network/PID/IPC/UTS, devices, security options, a user, an environment or labels are refused by name, a volume that is not `mr-data-<runner uuid>` (a host path, the Docker socket) is refused, another image is refused, amounts above its ceilings are refused. The spec is checked against its rules before it is sent and the created container is inspected and checked again before it starts. Its README gives the API, the rules and the reasons. |
+| Template | Image by local ID (built here, never pushed), user 10001:10001, every capability dropped, `no-new-privileges`, read-only root, private IPC and cgroup namespaces, `NanoCpus`, memory with no swap beyond it, PID limit, `/tmp` a sized tmpfs (counted in memory), restart policy `no`, bounded json-file logs, the one configured network, and three mounts: the data volume at `/var/lib/orbit` (Docker copies the image's 10001-owned `/var/lib/orbit` into an empty volume, so no root init step is needed), the bootstrap volume at `/run/orbit-bootstrap`, `/tmp`. |
+| Credential and identity | The runner credential of the container's generation is written, before it starts, into its bootstrap volume as root-owned mode-0444 files beside `generation` and `instance.json` (runner, generation, instance UID). The container's environment names the files (`ORBIT_RUNNER_CREDENTIAL_FILE`, `ORBIT_MANAGED_RUNNER_INSTANCE_FILE`), never the credential or the generation. The image's entrypoint reads both from the files and, as on Kubernetes, hands the generation and UID to `orbit run`, which no longer prints them in its log. That entrypoint change is commit 198f6d6cc (branch `d2/entrypoint-instance-file`), handed to the image task (T03): this task changes nothing under `deploy/managed-runner/image`. The instance UID is a canonical UUID the channel gives each container: the runner door authorizes it as it authorizes a Pod UID. |
+| Network | One dedicated bridge network the deployment creates, inter-container traffic off; the runner reaches the apiserver at an address of the host's container network. For a Docker container (identity from its instance file) the Docker profile, and the entrypoint in 198f6d6cc, accept plain HTTP to a private, loopback or link-local address or a single-label host; anything else must be HTTPS, and a Pod's rule is unchanged. |
+| Backend | `DockerBackend` implements the run backend interface over the channel: fixed names from the runner UUID, create once with read-back after a lost answer, identity checks (owner, runner, generation, volume UID), the volume as its own storage (handle `docker:<instance>/<volume>/<uid>`), holders of every label, the guard probe (a dry run under another name must come back `SINGLE_CONTAINER_GUARD`), removal by instance UID, Docker's exit report as the stop proof. A channel that cannot be reached, or answers 5xx/429, is transient; its refusals are `DOCKER_CHANNEL_FORBIDDEN`, `DOCKER_CHANNEL_MISMATCH`, `DOCKER_CHANNEL_REFUSED`, `VOLUME_OVER_LIMIT`, `CONTAINER_GUARD_MISSING` or `CONTAINER_GUARD_UNVERIFIED`, each with a sentence in the manager's table. |
+| Stop proof and stopping | Docker's state — `exited` with exit code and `FinishedAt`, `dead`, or never started — is the host's report, recorded as `OBSERVED_STOP` with the exit code and time; the container is then removed by UID, and only once it is gone and nothing refers to the volume does the generation advance or compute go back. The interface gains `stopInstance`, for a backend whose host reports every stop it makes: the manager asks it only when an accepted sleep overruns `drainSeconds` (`SLEEP_STOP_FORCED`) or a disabled owner's runner has not stopped by then; asking is never the proof. Kubernetes has no `stopInstance` and is unchanged. A container gone without Docker's report fences, and only an operator's `HOST_PROCESS_CHECK` receipt (in the channel's state directory) moves it on. |
+| Disk | Measured, not quota'd: a local volume has no size limit without host filesystem quotas, which this backend may not require. The volume carries its limit (`storage.capacity`, also its storage share); every `diskCheckSeconds` the channel reads Docker's own volume sizes and stops the container of a volume over its limit, keeping the reason; no container is created for a volume over its limit (`VOLUME_OVER_LIMIT`) until an operator frees space or raises it. Data is never deleted to enforce it; overshoot is bounded by the check interval. |
+| Capacity | `capacityBudget` may now be asynchronous. The Docker profile states each runner's limits (its compute share) and may state any dimension of the pool; the rest is derived from the host the channel reports: CPU and memory less a reserve (a quarter each by default), `/tmp` within the memory budget, as many runners as CPU and memory both fit, and storage from the free space of the disk Docker's volumes live on plus what this instance's volumes already hold, keeping a tenth of that disk free. The pool, admission, waiting and release are the existing ones. |
+| Mapping | Migration 0430 adds `managed_runner.backend` (`kubernetes` by default for every existing row, or `docker`, held by a CHECK). The service records the runtime's backend on a new mapping; a manager lists, leases and drives only its own backend's mappings and leaves another's as they are. On Docker the mapping's namespace is the channel's instance. |
+| Admission webhook | On a Docker server `POST /api/managed-runner/admission` answers 404 `MANAGED_RUNNER_ADMISSION_NOT_APPLICABLE` before any token is read: there is no Kubernetes profile and no Pod to admit. |
+| Recovery | A pass in READY, DRAINING or FENCING that the backend does not answer spends no attempt of the provisioning budget and fails nothing: it is logged, and the next pass looks again (a channel restart, or a Kubernetes API blip, used to count towards `maxAttempts` and could turn an up runner FAILED). This is the shared state machine's, so it holds for Kubernetes too. The channel finishes, at start-up, any container create a previous run left unstarted. An abnormal exit fails the runner retryable with Docker's report as the proof; the owner's retry replaces it on the same volume. |
+
+Measured on the real Docker run of 2026-10-17, 14 of 14
+(`docs/evidence/managed-runner-docker/2026-10-17-1017083206f4/`, with Docker's own events of every
+container and volume):
+
+- The channel refused 24 requests outside its rules (no or a wrong token, each forbidden parameter by
+  name, a host path or the Docker socket as the volume, another image, another runner's volume, a
+  second container for a volume, amounts above its ceilings, resources without its label), and Docker
+  was left unchanged. The apiserver process never connected to a Docker socket.
+- The container Docker made matched the template field by field, and neither the credential nor the
+  generation was in its environment or its log.
+- A message, a task's Run Now and a due session wakeup each woke the sleeping runner: a new generation
+  on the same volume, which claimed the work. After the idle sleep and the wakes, the file checksums,
+  `PRAGMA integrity_check` and the rows matched what was written before.
+- Compute stayed reserved while the exited container still existed: the drained container exited at
+  08:37:03.33, Docker removed it at 08:37:03.68, and the mapping slept at 08:37:03.69, releasing its
+  compute in the same commit.
+- Eight concurrent wakes, raced by a second manager, made one container. Sampled every 250 ms, no
+  volume ever had two.
+- Each of these recovered to one container on the same volume, with the database intact and its
+  committed rows kept: a container killed with SIGKILL (exit 137); the manager, the channel and the
+  container killed together while a SQLite writer ran; the manager stopped mid-wake; the channel down
+  mid-wake.
+- With room for two runners, a third waited with nothing made for it, and its container was created
+  once one of the two slept.
+- A volume written past its 256 MiB limit (346105301 bytes) was stopped within one disk check, and no
+  container was started on it again.
+- On this host (24 CPUs, 15 GiB, Docker's disk 914.8 GiB with 12.4 GiB free) the default budget for
+  1-CPU, 2-GiB runners is 18000m of CPU, 11.25 GiB and five runners. Storage stays closed (12.4 GiB
+  usable against 91.5 GiB headroom) until the profile states it.
+
+Left to later work, or not shown here:
+
+- A real engine session, and its continuation across a sleep and a wake, in a Docker container (D4).
+  The owner's DeepSeek key file was not there, and the test network reaches no model; the turns the
+  woken runners claimed could not be answered. A deployment's network must also let the runner reach
+  its model's endpoint; this run's network reached only the apiserver.
+- The deployment's wiring (D3): the channel as a service, its network and token, the Docker profile.
+  No default deployment entry changed here.
+- Backup, restore and the failure handbook for local volumes (D5).
+- The entrypoint change lands with T03. An image without it stops at start in a Docker container: it
+  asks for a generation and Pod UID from the Downward API.
+- No real host reboot or Docker daemon restart on this shared host. After one, Docker marks each
+  container whose process is gone as exited with code 255 and `FinishedAt` at its restart (moby
+  docker-v29.8.2, `daemon/daemon.go` line 517 and `daemon/container/state.go` lines 284–285). That is
+  the same kind of report as the SIGKILL above, and it is handled the same way.
+- The disk limit is a measurement, so a volume can overshoot it by what is written in one check
+  interval (`diskCheckSeconds`, at least 10 s).
+- The Recovery row's change is in the shared state machine, so it holds for Kubernetes too. Only the
+  Docker pg spec tests it (its case 10); no Kubernetes spec or lab (L0) run does yet.
