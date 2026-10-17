@@ -97,7 +97,7 @@ const button = (within: ParentNode | null | undefined, label: string) =>
   [...(within?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent?.trim() === label);
 const userRows = () =>
   [...container!.querySelectorAll<HTMLTableRowElement>('tbody tr')].filter((row) => row.cells.length > 1);
-const rowOf = (email: string) => userRows().find((row) => row.querySelector('td')?.textContent === email);
+const rowOf = (email: string) => userRows().find((row) => row.querySelector('.admin-users-email')?.textContent === email);
 /** The View as dialog, while it is open. */
 const dialog = () =>
   [...document.body.querySelectorAll<HTMLElement>('.orbit-overlay')].find((overlay) =>

@@ -243,7 +243,9 @@ open it:
   personal access tokens and runners work as before. You cannot disable your own account or the last
   administrator. Disable rather than delete: deleting an account still fails while it owns runners, workspaces or
   tasks.
-- **Admin → Users** shows how each account signs in and when it was created, so unexpected sign-ups stand out.
+- **Admin → Users** shows how each account signs in, when it was created and when it last used Orbit (in one of
+  the apps or with an access token), so unexpected sign-ups and accounts nobody uses any more stand out. Search
+  finds an account by name or email.
 
 ### Testing and publishing the Google app
 
