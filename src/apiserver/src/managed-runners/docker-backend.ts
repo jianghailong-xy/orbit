@@ -11,6 +11,7 @@ import {
 } from './docker-channel-client';
 import {
   ManagedRunnerConflict,
+  ManagedVolumeHeld,
   type ManagedCredential,
   type ManagedFencingReceipt,
   type ManagedInstance,
@@ -146,6 +147,9 @@ function instanceOf(view: ChannelContainer): DockerInstance {
     // Docker's own report: an exit it recorded (when and how), or no start at all.
     stopConfirmed: (ended && !!view.finishedAt) || neverRan,
     removing: view.status === 'removing',
+    // Docker marks a container OOM-killed when any process in it was; the runner ran out of memory
+    // itself only if it ended killed (137) as well.
+    exit: ended ? { code: view.exitCode, outOfMemory: view.oomKilled && view.exitCode === 137 } : null,
     view,
   };
 }
@@ -272,10 +276,16 @@ export class DockerBackend implements ManagedRunnerBackend {
     throw new ManagedRunnerConflict('CONTAINER_GUARD_UNVERIFIED', `the guard probe was refused, but not by the guard: ${answer.status} ${answer.code ?? ''} ${answer.message ?? ''}`.trim());
   }
 
+  /** The channel refuses it, VOLUME_IN_USE, while any other container refers to the volume: the manager then waits. */
   async createInstance(mapping: ManagedRunner): Promise<DockerInstance> {
     const name = managedPodName(mapping.runnerId);
-    const view = await this.orReadBack(() => this.channel.createContainer(this.containerRequest(mapping)), () => this.channel.readContainer(name));
-    return instanceOf(view);
+    try {
+      const view = await this.orReadBack(() => this.channel.createContainer(this.containerRequest(mapping)), () => this.channel.readContainer(name));
+      return instanceOf(view);
+    } catch (error) {
+      if (error instanceof DockerChannelError && error.code === 'VOLUME_IN_USE') throw new ManagedVolumeHeld(error.message);
+      throw error;
+    }
   }
 
   instanceProblem(instance: DockerInstance, mapping: ManagedRunner): string | null {

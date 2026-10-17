@@ -43,7 +43,8 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *     owner's account was disabled and the runner door refuses it (docs/managed-runner-design.md,
  *     "Implementation record: capacity, wake and sleep"). The backend reports that stop:
  *     `ManagedInstance.terminated`, and `stopConfirmed` when the host itself vouches every process
- *     ended, which is half a stop proof. Only a backend whose host reports every stop it makes may
+ *     ended, which is half a stop proof; `exit` says how it ended (exit code, out of memory), for
+ *     the log and the owner's reason. Only a backend whose host reports every stop it makes may
  *     also stop an instance (`stopInstance`, Docker), and the manager asks it only for a drain that
  *     overran its drain time. A stop asked for is never a proof: the same report and removal are
  *     waited for. Kubernetes has no such call — a deleted Pod on an unreachable node proves nothing.
@@ -52,7 +53,8 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *     proven (the manager's gate).
  *   - Release. A volume is released when nothing holds it any more (`volumeHolders` is empty —
  *     Kubernetes: no VolumeAttachment names its PV). The gate needs that before the next generation
- *     starts or compute goes back to the pool.
+ *     starts or compute goes back to the pool, and no instance is created on a volume something
+ *     still holds: a host that refuses an instance for that is answered with ManagedVolumeHeld.
  *   - Capacity. The backend names its pool (`location`, which is also where a new mapping's volume
  *     lives) and where its budget comes from (`capacityBudget`): configuration, never usage the
  *     infrastructure reports. A runner's share (`computeShare`, `storageShare`) is what one instance
@@ -133,6 +135,9 @@ export interface ManagedInstance {
   readonly stopConfirmed: boolean;
   /** Its removal was asked and it is not gone yet. */
   readonly removing: boolean;
+  /** How it ended, by its host's report: its runner's exit code (null when the host gives none) and
+   *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
+  readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
 }
 
 /** A fencing receipt left for an instance, and what reading it concluded. */
@@ -160,6 +165,18 @@ export class ManagedRunnerConflict extends Error {
   ) {
     super(detail);
     this.name = 'ManagedRunnerConflict';
+  }
+}
+
+/**
+ * The host refused an instance because something else still refers to its volume (Docker: another
+ * container, such as a backup's helper). Not a failure: the manager waits until the volume is free,
+ * as it waits for a predecessor's volume to be released, and creates the instance then.
+ */
+export class ManagedVolumeHeld extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'ManagedVolumeHeld';
   }
 }
 

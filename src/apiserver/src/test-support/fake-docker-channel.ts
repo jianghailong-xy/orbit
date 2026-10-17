@@ -65,10 +65,10 @@ export class FakeDockerChannel implements DockerChannel {
     this.failures.push({ call, failure });
   }
 
-  /** The runner exited by itself (or was killed): Docker's report, with its exit code and when. */
-  exit(runnerId: string, exitCode = 0): void {
+  /** The runner exited by itself (or was killed): Docker's report, with its exit code and when, and whether it marked an OOM kill. */
+  exit(runnerId: string, exitCode = 0, oomKilled = false): void {
     const container = this.containers.get(`mr-${runnerId}`)!;
-    Object.assign(container, { status: 'exited', running: false, exitCode, finishedAt: new Date().toISOString() });
+    Object.assign(container, { status: 'exited', running: false, exitCode, oomKilled, finishedAt: new Date().toISOString() });
   }
 
   /** Removed by hand, outside the channel: gone with no report of how. */

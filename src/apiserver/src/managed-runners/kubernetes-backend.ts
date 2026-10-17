@@ -7,6 +7,7 @@ import {
   type PersistentVolume,
   type PersistentVolumeClaim,
   type Pod,
+  type PodContainerStatus,
   type Secret,
 } from './kube-client';
 import { MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
@@ -101,6 +102,20 @@ function credentialOf(secret: Secret): KubeCredential {
   };
 }
 
+/**
+ * How a terminal Pod ended, by the kubelet's container states: the runner's exit code, and whether a
+ * container ended killed (137) with the runtime's OOMKilled reason — which, like Docker's flag, is
+ * also given for a container in which only a child process was killed.
+ */
+function exitOf(pod: Pod): ManagedInstance['exit'] {
+  if (!podTerminated(pod)) return null;
+  const ended = (statuses: PodContainerStatus[] | undefined) => (statuses ?? []).flatMap((c) => (c.state?.terminated ? [c.state.terminated] : []));
+  const runner = ended(pod.status?.containerStatuses);
+  const all = [...ended(pod.status?.initContainerStatuses), ...runner];
+  if (all.length === 0) return null;
+  return { code: (runner[0] ?? all[0]).exitCode ?? null, outOfMemory: all.some((t) => t.reason === 'OOMKilled' && t.exitCode === 137) };
+}
+
 function instanceOf(pod: Pod): KubeInstance {
   return {
     name: pod.metadata.name,
@@ -111,6 +126,7 @@ function instanceOf(pod: Pod): KubeInstance {
     terminated: podTerminated(pod),
     stopConfirmed: podStopConfirmed(pod),
     removing: !!pod.metadata.deletionTimestamp,
+    exit: exitOf(pod),
     pod,
   };
 }
