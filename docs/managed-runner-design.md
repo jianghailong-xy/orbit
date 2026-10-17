@@ -1045,11 +1045,12 @@ Left to later work (in the task's comment for the coordinator):
 - **`PVC_MISSING` has no way back.** A runner woken while its volume was missing stays `PVC_MISSING` even after
   the volume is restored.
 - **The storage budget measures the wrong disk.** In Compose it is measured on the disk under
-  `data/managed-runners`, not on Docker's data root.
+  `data/managed-runners`, not on Docker's data root. Taken up by D8 (Implementation record: channel and template
+  hardening).
 - **The host's own services are reachable.** Runners reach every service the host listens to on another address,
   and the LAN; the default deployment adds no firewall rule.
 - **Two defence-in-depth gaps in the channel.** It caps each container but not their number, and it offers volume
-  deletion to the token's holder although the manager never asks for it.
+  deletion to the token's holder although the manager never asks for it. Taken up by D8 (same record).
 
 ## Implementation record: image upgrades
 
@@ -1106,3 +1107,18 @@ Left to later work, or not shown here:
   `chown` steps in `deploy/managed-runner/image/Dockerfile` (T03's) would keep those cached.
 - The by-hand upgrade steps (self-hosting's "Upgrading") rebuild no managed runner image; they now list the commands
   that do.
+
+## Implementation record: channel and template hardening
+
+Recorded 2026-10-17 for the second phase's task D8, which takes up three of D5's findings (record above): the storage
+budget measured the wrong disk, the channel bounded each container but not their number and served volume removal
+to the token's holder, and a runner's `/tmp` was `noexec`. The fourth that D5 left to the owner, what a runner may
+reach on the host and its LAN, is not part of it. The operator's side is in
+[the operations runbook](managed-runner-docker-operations.md) and [self-hosting](self-hosting.md#managed-runners).
+
+| Area | As implemented, and why |
+| --- | --- |
+| The disk the budget measures | Root Compose mounts an empty, anonymous volume into `docker-channel`, read-only, at `/var/lib/orbit-docker-volumes`, and names it with `--disk-probe-path` in the service's `command`. Docker keeps that volume beside every data volume, so `statvfs` on it is their filesystem, wherever `data-root` points and whatever filesystem the checkout is on. The two ways the task suggested were weighed and not taken. Binding Docker's data root into the channel, even read-only, would show it every container's files and every account's volume, which it needs none of. Its path also differs by host, so Compose would need a variable in `.env` that `/upgrade` may not write, and a recursive bind would copy running containers' overlay mounts into the channel's namespace. An install-time `capacity.storage` would be a number that goes stale as the disk fills with anything else, and that `/upgrade` would have to add to an operator's `profile.json` on existing deployments. The channel gains no write access, and no file in `data/managed-runners` changes. A fresh install, `/upgrade` (which recreates `docker-channel` from the new Compose file) and the by-hand `docker compose up -d --build` all get the fix. The order of precedence is `diskProbePath` in `channel.json`, then `--disk-probe-path`, then Docker's data root where the channel can see it, then the state directory. The last comes with a warning at start-up, and a probe path that is not a directory stops the channel before it serves. |
+| A cap on containers | `limits.maxContainers` in `channel.json`, optional. The channel counts every container of its instance, in any state (each one holds its volume until it is removed), and refuses a create past the cap with `429 CONTAINER_LIMIT` before anything is made. The count and the create are one step under one lock, and the containers already there are not touched. The default is one container per CPU and per GiB of the host's memory, whichever is fewer (Docker's `NCPU` and `MemTotal` at start-up). That holds every runner of any profile giving each at least one CPU and 1 GiB, which is more than the budget (the host less a quarter) can start. `/v1/info` reports the cap it applies, and `dockerCapacityBudget` holds the pool's pods, and the slots derived with them, to it. So the manager never admits a runner the channel would refuse, and a cap set below what the host fits makes runners wait for capacity rather than fail. 429 is also what the Docker backend already retries, should anything else have filled the cap. |
+| Volume removal | `allowVolumeRemoval` in `channel.json`, `false` unless set. Off, `DELETE /v1/volumes/…` is refused (`403 REMOVAL_REFUSED`) before anything is looked up. The manager never asked for it. The runbook's deletion procedure turns it on for one removal, by UID, and off again. |
+| An executable `/tmp` | The template's `/tmp` tmpfs asks for `exec` (`TmpfsOptions.Options [["exec"]]`). The task offered a second way, `TMPDIR` and `GOTMPDIR` on the data volume. It would leave a program in `/tmp` itself unable to run, and put scratch files on the account's volume, where they count against its disk limit and outlive the container. Docker keeps every tmpfs `nosuid` and `nodev` and accepts only `exec` and `noexec` as options there: in the probe of 2026-10-17 it refused `suid`, `dev`, `size` and `nr_inodes`. The size limit (`runner.tmpSizeLimit`) and its place in the memory limit are unchanged. Nothing is gained that the runner lacked: the data volume was writable and executable already. The template's rules accept that option or none, and nothing else. `TmpfsOptions.Options` came with Docker Engine 27 (API 1.46). An older engine ignores it, so `/tmp` stays `noexec` there, and the channel says so in its log at start-up. Nothing under `deploy/managed-runner/image` changed. |

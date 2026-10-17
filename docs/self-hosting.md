@@ -380,8 +380,11 @@ COMPOSE_PROFILES=managed-runners-docker
   (`channel.json`) and the apiserver's managed runner profile (`profile.json`, `"backend": "docker"`). The profile
   gives each runner 2 CPUs, 4 GiB of memory with its `/tmp` counted in it, 4096 processes and a 20 GiB volume, and
   the channel refuses anything above its own ceilings. The pool is what this host has, less a quarter of its CPU
-  and memory and a tenth of its disk; a runner that does not fit waits until another one sleeps. To change these,
-  edit both files and run `docker compose up -d --force-recreate docker-channel apiserver`.
+  and memory and a tenth of the disk Docker's volumes live on, whichever filesystem the checkout is on; a runner
+  that does not fit waits until another one sleeps. The channel also makes no more containers than one per CPU and
+  per GiB of this host's memory, whichever is fewer, and deletes no volume unless an operator turns that on. To
+  change these, edit both files and run `docker compose up -d --force-recreate docker-channel apiserver`
+  ([where each setting lives](managed-runner-docker-operations.md#where-each-setting-lives)).
 - **The image.** The script builds the managed runner image from
   [deploy/managed-runner/image](../deploy/managed-runner/image/Dockerfile) on this host, as
   `orbit-managed-runner:local`, and pushes it nowhere. Both files name it by its local image ID. To use an image
@@ -411,7 +414,9 @@ with its volume kept.
 Read this before opening sign-up on a deployment with managed runners. A managed runner is a container, and every
 container shares this host's kernel: with every other managed runner and with the Orbit stack itself. The channel
 makes each one from the same template: an unprivileged user, every capability dropped, no privilege escalation, a
-read-only root filesystem, limits on CPU, memory, processes and disk, no host directory and no Docker socket.
+read-only root filesystem, limits on CPU, memory, processes and disk, no host directory and no Docker socket. Its
+`/tmp` is executable, as builds and `go test` need, and `nosuid` and `nodev`; on Docker older than 27 it stays
+`noexec`.
 Managed runners cannot reach one another on their network. That keeps honest users apart and contains their
 mistakes. It is not a strong boundary against a malicious user: a flaw in the kernel or the container runtime lets
 code in one container reach the host, other people's runners and data, and this deployment's secrets. Where anyone

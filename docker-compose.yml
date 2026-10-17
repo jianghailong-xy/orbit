@@ -342,9 +342,16 @@ services:
     restart: unless-stopped
     logging: *logging
     network_mode: none
+    # The disk the storage budget is measured on: an empty volume of the channel's own, read-only, which Docker keeps
+    # beside every runner's data volume whatever filesystem its data root is on. This container sees neither the data
+    # root nor what is in it.
+    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"
+      - type: volume
+        target: /var/lib/orbit-docker-volumes
+        read_only: true
     healthcheck:
       # Serving: its socket takes a connection. Every request on it still needs the token.
       test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-managed-runners/channel.sock')"]
