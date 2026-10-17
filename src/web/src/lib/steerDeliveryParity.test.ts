@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { steerDeliveryState } from './steerDelivery';
+import { deliveryFailureExplanation, steerDeliveryState } from './steerDelivery';
 
 /**
  * The words a steer's progress is reported in, checked against OrbitKit's copy of the same table.
@@ -62,6 +62,31 @@ describe('steer delivery labels, web vs OrbitKit', () => {
     ]) {
       expect(web.includes(words), `web has no "${words}"`).toBe(true);
       expect(native.includes(words), `the native clients have no "${words}"`).toBe(true);
+    }
+  });
+
+  it('says the same words about a message that did not land', () => {
+    // The owner's iOS boards, 2026-10-17: how a message's words come back to the composer, and why
+    // it did not land, in the words every client uses.
+    const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
+    const web = read('../components/Transcript.tsx') + read('../components/WorkspaceView.tsx');
+    const native =
+      read('../../../macos/OrbitApp/Sources/OrbitApp/Views/Console/MessageBubbles.swift')
+      + read('../../../macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift');
+    for (const words of ['Put back in the composer', "Couldn't discard the message"]) {
+      expect(web.includes(words), `web has no "${words}"`).toBe(true);
+      expect(native.includes(`"${words}"`), `OrbitApp has no "${words}"`).toBe(true);
+    }
+    for (const code of [
+      'CURRENT_WORK_TARGET_COMPLETED',
+      'CURRENT_WORK_INTERRUPTED',
+      'CURRENT_WORK_SESSION_ENDED',
+      'CURRENT_WORK_SESSION_FINALIZED',
+      'CURRENT_WORK_SESSION_REAPED',
+      'CURRENT_WORK_RUNTIME_REJECTED',
+    ]) {
+      const words = deliveryFailureExplanation(code);
+      expect(SWIFT.includes(`return "${words}"`), `OrbitKit says otherwise than "${words}" for ${code}`).toBe(true);
     }
   });
 

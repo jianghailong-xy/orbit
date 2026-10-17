@@ -1056,6 +1056,13 @@ struct TranscriptView: View {
         }
     }
 
+    /// The words of a message at the tail that never reached the engine, back in the composer
+    /// (`ConsoleModel.putBack`): the row goes, and a receipt is discarded with it.
+    private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
+        guard SteerDelivery.offersPutBack(bubble) else { return nil }
+        return { Task { await console.putBack(bubble) } }
+    }
+
     @ViewBuilder
     private func transcriptRow(_ row: TranscriptRow) -> some View {
         switch row {
@@ -1100,7 +1107,7 @@ struct TranscriptView: View {
                 Task { await console.cancelQueued(bubble) }
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
-            })
+            }, putBack: putBack(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
             // at its tail has nothing in the fade. In the row's content, not its insets: every follow and
@@ -1809,7 +1816,7 @@ struct TranscriptItemView: View {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b, steer: steerControls(b))
+            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
@@ -1861,5 +1868,12 @@ struct TranscriptItemView: View {
         return SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
             Task { await console.withdrawSteer(bubble) }
         }
+    }
+
+    /// The words of a message in the conversation that never reached the engine, back in the
+    /// composer (`ConsoleModel.putBack`); the bubble itself stays.
+    private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
+        guard let console, SteerDelivery.offersPutBack(bubble) else { return nil }
+        return { Task { await console.putBack(bubble) } }
     }
 }
