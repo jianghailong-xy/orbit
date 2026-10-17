@@ -1,0 +1,129 @@
+{
+ "name": "network-drop-mid-turn",
+ "runId": "2026-10-17T02-02-50-268Z",
+ "startedAt": "2026-10-17T02:02:50.272Z",
+ "finishedAt": "2026-10-17T02:04:54.299Z",
+ "passed": true,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 4,
+   "at": "2026-10-17T02:02:57.565Z",
+   "note": "network cut after the first text chunk"
+  }
+ ],
+ "protocol": "protocol/network-drop-mid-turn.ndjson",
+ "protocolLines": 127,
+ "fixtures": [
+  "network-drop-mid-turn/netdrop"
+ ],
+ "checks": [
+  {
+   "name": "a network loss mid-stream ends the prompt within 120 s or the turn resumes once the network is back (no endless hang)",
+   "ok": true,
+   "detail": {
+    "phaseA": {
+     "answered": true,
+     "ms": 6,
+     "updates": {
+      "agent_message_chunk": 23
+     },
+     "deniedTunnels": 0
+    },
+    "phaseB": {
+     "ms": 0,
+     "updates": {}
+    },
+    "resp": {
+     "jsonrpc": "2.0",
+     "id": 3,
+     "result": {
+      "stopReason": "end_turn"
+     }
+    }
+   }
+  },
+  {
+   "name": "the process survives and answers again once the network is back",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "network drop": {
+   "streamingBeforeCut": true,
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+     "stopReason": "end_turn"
+    }
+   },
+   "phaseA": {
+    "answered": true,
+    "ms": 6,
+    "updates": {
+     "agent_message_chunk": 23
+    },
+    "deniedTunnels": 0
+   },
+   "phaseB": {
+    "ms": 0,
+    "updates": {}
+   },
+   "kinds": {
+    "session_info_update": 1,
+    "available_commands_update": 1,
+    "agent_thought_chunk": 89,
+    "agent_message_chunk": 24
+   },
+   "tail": "The lighthouse had no name the charts would print, only a number and a warning about the reef. Mara had kept\n\nError: RetriableError: [canceled] http/2 stream closed with error code CANCEL (0x8)",
+   "chunksAfterCut": [
+    " lighthouse",
+    " had",
+    " no",
+    " name",
+    " the",
+    " charts",
+    " would",
+    " print",
+    ",",
+    " only",
+    " a",
+    " number",
+    " and",
+    " a",
+    " warning",
+    " about",
+    " the",
+    " reef",
+    ".",
+    " Mara",
+    " had",
+    " kept",
+    "\n\nError: RetriableError: [canceled] http/2 stream closed with error code CANCEL (0x8)"
+   ],
+   "lastChunk": "\n\nError: RetriableError: [canceled] http/2 stream closed with error code CANCEL (0x8)",
+   "stderrTail": ""
+  },
+  "CLI debug log lines about the failure (first 40 and last 40)": {
+   "lines": 46,
+   "matching": 9,
+   "excerpt": [
+    "{\"event\":\"debug-session-start\",\"directory\":\"<RUN>/tmp/cursor-agent-logs-0\",\"logFile\":\"<RUN>/tmp/cursor-agent-logs-0/session-2026-10-17T02-02-50-588Z-2655058-1.log\",\"pid\":2655058,\"startTime\":\"2026-10-17T02:02:50.589Z\"}",
+    "[2026-10-17T02:02:50.798Z] atFileSuggestions.index.start {\"cwd\":\"<RUN>/work\",\"maxFiles\":20000,\"maxDepth\":16,\"includeHidden\":false,\"timeoutMs\":8000}",
+    "[2026-10-17T02:02:50.874Z] node.warning {\"name\":\"DeprecationWarning\",\"message\":\"`url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\",\"stack\":\"DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHA",
+    "[2026-10-17T02:02:51.677Z] privacy.refresh.error ConnectError: [unauthenticated] Error https://api2.cursor.sh",
+    "[2026-10-17T02:02:57.571Z] logger {\"message\":\"[nal_agent_retries] Initial request\",\"metadata\":{\"attempt\":0,\"actionCase\":\"userMessageAction\",\"requestId\":\"<UUID_1>\"}}",
+    "[2026-10-17T02:02:59.346Z] Sending available commands: {\"sessionUpdate\":\"available_commands_update\",\"availableCommands\":[{\"name\":\"copy-request-id\",\"description\":\"Copy the last request ID to clipboard\"},{\"name\":\"multi-model-review\",\"description\":\"Pick models (structured question or inline), then parallel Task reviewers (global)\"},{\"name\":\"simplify\",\"description\":\"Find low-info comments, one-off hel",
+    "[2026-10-17T02:04:39.274Z] logger {\"message\":\"Stream ended without turnEnded — connection likely dropped mid-stream; caught non-retriable stream error, rethrowing as-is\",\"metadata\":{\"caughtError\":\"ConnectError: [canceled] http/2 stream closed with error code CANCEL (0x8)\"}}",
+    "[2026-10-17T02:04:39.275Z] logger {\"message\":\"[AGENT_ERROR_DIAGNOSTICS] requestId=<UUID_1> originalRequestId=<UUID_1> decision=THROW RetriableError\",\"metadata\":{\"decision\":\"THROW RetriableError\",\"willRetry\":false,\"enableAgentRetries\":false,\"endlessRetries\":false,\"isRunningInTest\":false,\"serverErrorRetries\":0,\"transportErrorRetries\":0,\"attempt",
+    "[2026-10-17T02:04:39.275Z] logger {\"message\":\"[nal_agent_retries] Error not retryable\",\"metadata\":{\"transportFailureKind\":\"socket_reset\",\"loop\":\"nal\",\"stallAborted\":false,\"abortOrigin\":\"none\",\"errorName\":\"RetriableError\",\"abortSources\":[],\"underlyingConnectError\":{\"code\":1,\"codeName\":\"Canceled\"},\"connectCode\":\"Canceled\",\"attempt\":0,\"actionCase\":\"userMessageAction\",\"requestId\":\"c8354b67-d260-479a-8"
+   ]
+  },
+  "error surface: JSON-RPC error vs stopReason + text": "end_turn"
+ }
+}
