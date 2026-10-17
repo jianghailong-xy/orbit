@@ -1,0 +1,351 @@
+{
+ "source": "CLI debug log /tmp/cursor-agent-logs-0/session-2026-10-16T17-52-14-683Z-331755-1.log (process of scenario background-shell-and-commit, run 2026-10-16T17-45-59-200Z); only the lines about the failed request",
+ "lines": [
+  {
+   "t": "2026-10-16T17:52:24.154Z",
+   "kind": "analytics.track",
+   "record": {
+    "eventName": "cli.request.create",
+    "props": {
+     "length": 382,
+     "model": "default",
+     "mode": "default",
+     "conversationId": "2fbb2bb4-fbdd-4d5b-b1f1-d519b7072fb6"
+    }
+   }
+  },
+  {
+   "t": "2026-10-16T17:52:24.155Z",
+   "kind": "logger",
+   "record": {
+    "message": "[nal_agent_retries] Initial request",
+    "metadata": {
+     "attempt": 0,
+     "actionCase": "userMessageAction",
+     "requestId": "12aa4847-dde7-42f5-bee1-505dd72a38c5"
+    }
+   }
+  },
+  {
+   "t": "2026-10-16T17:52:24.728Z",
+   "kind": "logger",
+   "record": {
+    "message": "Stream ended without turnEnded \u2014 connection likely dropped mid-stream; caught non-retriable stream error, rethrowing as-is",
+    "metadata": {
+     "caughtError": "ConnectError: [resource_exhausted] Error"
+    }
+   }
+  },
+  {
+   "t": "2026-10-16T17:52:24.730Z",
+   "kind": "logger",
+   "record": {
+    "message": "[AGENT_ERROR_DIAGNOSTICS] requestId=12aa4847-dde7-42f5-bee1-505dd72a38c5 originalRequestId=12aa4847-dde7-42f5-bee1-505dd72a38c5 decision=THROW ActionRequiredError",
+    "metadata": {
+     "decision": "THROW ActionRequiredError",
+     "willRetry": false,
+     "enableAgentRetries": false,
+     "endlessRetries": false,
+     "isRunningInTest": false,
+     "serverErrorRetries": 0,
+     "transportErrorRetries": 0,
+     "attempt": 0,
+     "requestId": "12aa4847-dde7-42f5-bee1-505dd72a38c5",
+     "originalRequestId": "12aa4847-dde7-42f5-bee1-505dd72a38c5",
+     "transportFailureKind": "other",
+     "loop": "nal",
+     "stallAborted": false,
+     "abortOrigin": "none",
+     "errorName": "ConnectError",
+     "abortSources": [],
+     "underlyingConnectError": {
+      "code": 8,
+      "codeName": "ResourceExhausted"
+     },
+     "connectCode": "ResourceExhausted"
+    }
+   }
+  },
+  {
+   "t": "2026-10-16T17:52:24.730Z",
+   "kind": "logger",
+   "record": {
+    "message": "[nal_agent_retries] Error not retryable",
+    "metadata": {
+     "transportFailureKind": "other",
+     "loop": "nal",
+     "stallAborted": false,
+     "abortOrigin": "none",
+     "errorName": "ActionRequiredError",
+     "abortSources": [],
+     "underlyingConnectError": {
+      "code": 8,
+      "codeName": "ResourceExhausted"
+     },
+     "connectCode": "ResourceExhausted",
+     "attempt": 0,
+     "actionCase": "userMessageAction",
+     "requestId": "12aa4847-dde7-42f5-bee1-505dd72a38c5",
+     "originalRequestId": "12aa4847-dde7-42f5-bee1-505dd72a38c5",
+     "error": {
+      "cause": {
+       "name": "ConnectError",
+       "rawMessage": "Error",
+       "code": 8,
+       "metadata": {},
+       "details": [
+        {
+         "type": "aiserver.v1.ErrorDetails",
+         "value": "<bytes decoded below>",
+         "debug": {
+          "error": "ERROR_RATE_LIMITED_CHANGEABLE",
+          "details": {
+           "title": "You've hit your usage limit",
+           "detail": "Get Cursor Pro for more Agent usage, unlimited Tab, and more.",
+           "isRetryable": false,
+           "showRequestId": false,
+           "additionalInfo": {
+            "fallbackModel": "",
+            "spendLimitHit": "false",
+            "limitType": "included_usage",
+            "chatMessage": "*You've hit your free requests limit. [Upgrade to Pro](https://www.cursor.com/api/auth/checkoutDeepControl?tier=pro) for more usage, frontier models, Cloud Agents, and more. Your usage limits will reset when your monthly cycle ends on 10/24/2026.*",
+            "spendLimits": "[50,100,200]"
+           },
+           "buttons": [
+            {
+             "label": "View Usage",
+             "url": {
+              "url": "https://www.cursor.com/dashboard?tab=usage"
+             }
+            },
+            {
+             "label": "View Pricing",
+             "url": {
+              "url": "https://www.cursor.com/pricing"
+             }
+            },
+            {
+             "label": "Upgrade to Pro",
+             "upgrade": {
+              "membershipToUpgradeTo": "pro",
+              "allowTrial": false
+             }
+            }
+           ],
+           "analyticsMetadata": {
+            "actionRequired": "upgrade"
+           }
+          },
+          "isExpected": true
+         }
+        }
+       ]
+      },
+      "requestId": "12aa4847-dde7-42f5-bee1-505dd72a38c5",
+      "displayInfo": {
+       "title": "You've hit your usage limit",
+       "detail": "Get Cursor Pro for more Agent usage, unlimited Tab, and more.",
+       "isRetryable": false,
+       "connectCode": 8,
+       "errorCode": 51,
+       "errorDetails": {
+        "error": "ERROR_RATE_LIMITED_CHANGEABLE",
+        "details": {
+         "title": "You've hit your usage limit",
+         "detail": "Get Cursor Pro for more Agent usage, unlimited Tab, and more.",
+         "isRetryable": false,
+         "showRequestId": false,
+         "additionalInfo": {
+          "fallbackModel": "",
+          "spendLimitHit": "false",
+          "limitType": "included_usage",
+          "chatMessage": "*You've hit your free requests limit. [Upgrade to Pro](https://www.cursor.com/api/auth/checkoutDeepControl?tier=pro) for more usage, frontier models, Cloud Agents, and more. Your usage limits will reset when your monthly cycle ends on 10/24/2026.*",
+          "spendLimits": "[50,100,200]"
+         },
+         "buttons": [
+          {
+           "label": "View Usage",
+           "url": {
+            "url": "https://www.cursor.com/dashboard?tab=usage"
+           }
+          },
+          {
+           "label": "View Pricing",
+           "url": {
+            "url": "https://www.cursor.com/pricing"
+           }
+          },
+          {
+           "label": "Upgrade to Pro",
+           "upgrade": {
+            "membershipToUpgradeTo": "pro",
+            "allowTrial": false
+           }
+          }
+         ],
+         "planChoices": [],
+         "analyticsMetadata": {
+          "actionRequired": "upgrade"
+         }
+        },
+        "isExpected": true
+       }
+      },
+      "action": "upgrade"
+     },
+     "serverErrorRetries": 0,
+     "transportErrorRetries": 0
+    }
+   }
+  }
+ ],
+ "errorDetailsDecoded": [
+  {
+   "field": 1,
+   "varint": 51
+  },
+  {
+   "field": 2,
+   "message": [
+    {
+     "field": 1,
+     "string": "You've hit your usage limit"
+    },
+    {
+     "field": 2,
+     "string": "Get Cursor Pro for more Agent usage, unlimited Tab, and more."
+    },
+    {
+     "field": 4,
+     "varint": 0
+    },
+    {
+     "field": 5,
+     "varint": 0
+    },
+    {
+     "field": 7,
+     "message": [
+      {
+       "field": 1,
+       "string": "fallbackModel"
+      },
+      {
+       "field": 2,
+       "message": []
+      }
+     ]
+    },
+    {
+     "field": 7,
+     "message": [
+      {
+       "field": 1,
+       "string": "spendLimitHit"
+      },
+      {
+       "field": 2,
+       "string": "false"
+      }
+     ]
+    },
+    {
+     "field": 7,
+     "message": [
+      {
+       "field": 1,
+       "string": "limitType"
+      },
+      {
+       "field": 2,
+       "string": "included_usage"
+      }
+     ]
+    },
+    {
+     "field": 7,
+     "message": [
+      {
+       "field": 1,
+       "string": "chatMessage"
+      },
+      {
+       "field": 2,
+       "string": "*You've hit your free requests limit. [Upgrade to Pro](https://www.cursor.com/api/auth/checkoutDeepControl?tier=pro) for more usage, frontier models, Cloud Agents, and more. Your usage limits will reset when your monthly cycle ends on 10/24/2026.*"
+      }
+     ]
+    },
+    {
+     "field": 7,
+     "message": [
+      {
+       "field": 1,
+       "string": "spendLimits"
+      },
+      {
+       "field": 2,
+       "string": "[50,100,200]"
+      }
+     ]
+    },
+    {
+     "field": 8,
+     "string": "\n\nView Usage*,\n*https://www.cursor.com/dashboard?tab=usage"
+    },
+    {
+     "field": 8,
+     "message": [
+      {
+       "field": 1,
+       "string": "View Pricing"
+      },
+      {
+       "field": 5,
+       "message": [
+        {
+         "field": 1,
+         "string": "https://www.cursor.com/pricing"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "field": 8,
+     "message": [
+      {
+       "field": 1,
+       "string": "Upgrade to Pro"
+      },
+      {
+       "field": 2,
+       "message": [
+        {
+         "field": 1,
+         "string": "pro"
+        },
+        {
+         "field": 3,
+         "varint": 0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "field": 10,
+     "message": [
+      {
+       "field": 1,
+       "string": "upgrade"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "field": 3,
+   "varint": 1
+  }
+ ]
+}

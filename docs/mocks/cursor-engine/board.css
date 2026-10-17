@@ -1,0 +1,151 @@
+/* Cursor engine boards (T0). Board chrome on top of ../provider-engine-decoupling/board.css (which sits on
+   ../project-progress/mock.css and the shipped src/web/src/index.css tokens, light and dark). Web frames
+   here are real captures (shots/); iOS phones are drawn on ../antigravity-accounts/kit.css. */
+
+.m-sheet { width: 1980px; }
+
+/* a real capture, with dashed marks laid over it */
+figure.shot { position: relative; margin: 0; flex: none; }
+figure.shot img { display: block; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .10), 0 1px 4px rgba(15, 23, 42, .08); }
+:root[data-theme='dark'] figure.shot img { box-shadow: 0 0 0 1px rgba(255, 255, 255, .10); }
+.shot-ring { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 8px; pointer-events: none; }
+.shot-ring.now { border-color: #8b93a1; }
+.shot-ring > .m-n { position: absolute; top: -11px; right: -11px; margin: 0; box-shadow: 0 0 0 2px var(--bg-base); }
+.shot-ring.now > .m-n, .m-n.now { background: #6b7280; }
+.shot-lab { position: absolute; left: -2px; bottom: calc(100% + 6px); white-space: nowrap; font: 600 11.5px/1.5 -apple-system, Inter, sans-serif;
+  color: #fff; background: var(--warning-solid); border-radius: 4px; padding: 0 6px; }
+.shot-missing, .shot-miss { color: var(--error); font: 12px ui-monospace, monospace; }
+
+/* layouts */
+.frames { display: flex; flex-wrap: wrap; gap: 26px 34px; align-items: flex-start; }
+.frame { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.frame .lbl { margin: 0; }
+.frame .m-cap { max-width: 900px; margin: 4px 2px 0; }
+.arrow { align-self: center; font-size: 22px; color: var(--text-4); flex: none; }
+.states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 34px; align-items: start; }
+.st-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 2px; }
+
+/* phones in a row */
+.phones { display: flex; flex-wrap: wrap; gap: 22px 18px; align-items: flex-start; }
+.ph-wrap .lbl { margin-bottom: 2px; }
+.ph-cap { width: 413px; font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 2px 4px 0; }
+.ph-cap b { color: var(--text-1); }
+
+/* tables on the overview board */
+.t-rules { width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.65; }
+.t-rules th, .t-rules td { border: 1px solid var(--border-subtle); padding: 7px 11px; text-align: left; vertical-align: top; }
+.t-rules th { background: var(--fill-muted); font-weight: 600; color: var(--text-1); white-space: nowrap; }
+.t-rules td { color: var(--text-2); }
+.t-rules td:first-child { font-weight: 600; color: var(--text-1); }
+.t-rules td b { color: var(--text-1); }
+.t-rules .ui { font-family: -apple-system, Inter, sans-serif; color: var(--text-1); background: var(--fill-muted); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+.t-rules .new { color: var(--warning); font-weight: 700; }
+.t-rules .same { color: var(--text-3); }
+.t-rules code, .files code { font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0 4px; border-radius: 4px; background: var(--fill-muted); color: var(--text-1); }
+.files { margin: 0; padding: 12px 16px; list-style: none; background: var(--fill-muted); border-radius: 8px; font-size: 12.5px; line-height: 1.75; color: var(--text-2); }
+.files li + li { margin-top: 6px; }
+.files b { color: var(--text-1); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+
+/* decisions */
+.ask { font-size: 13px; }
+.ask .ab { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 6px; }
+.ask .ab.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ab-opt { background: var(--bg-raised); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+.ab-opt.rec { border-color: var(--success-border); box-shadow: 0 0 0 1px var(--success-border) inset; }
+.ab-opt h5 { margin: 0 0 4px; font-size: 13px; color: var(--text-1); display: flex; align-items: center; gap: 6px; }
+.ab-opt h5 .ab-k { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 5px;
+  background: var(--fill-muted); color: var(--text-1); font: 700 12px/1 -apple-system, Inter, sans-serif; }
+.ab-opt.rec h5 .ab-k { background: var(--brand); color: #fff; }
+.ab-opt.rec h5::after { content: '建议'; margin-left: auto; font-size: 11px; font-weight: 700; color: var(--success); background: var(--success-bg); border-radius: 4px; padding: 1px 6px; }
+.ab-sub { font-size: 12.5px; line-height: 1.7; color: var(--text-2); }
+.ab-sub b { color: var(--text-1); }
+.tbd { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 4px; background: var(--warning-solid); color: #fff; }
+.tbd.coord { background: #6b7280; }
+.facts { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.75; color: var(--text-2); }
+.facts b { color: var(--text-1); }
+
+/* the brand tile candidates */
+.tiles { display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; margin-top: 8px; }
+.tiles .tc { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+
+/* iOS: Cursor's mark on the kit's tiles */
+.mk.cursor { background: linear-gradient(160deg, #2b2b2b, #000); box-shadow: inset 0 0 0 .75px rgba(255, 255, 255, .14); }
+.dark .mk.cursor { box-shadow: 0 0 0 .75px #4a4a4e; }
+.mk.dsh { background: linear-gradient(160deg, #5b7cff, #3a57e8); }
+
+/* ── iOS pieces shared by the ios-* boards (after ../provider-engine-decoupling/ios-1-infrastructure.html) ── */
+.ph-wrap { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.nr { display: flex; align-items: center; gap: 12px; }
+.nr-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #ff9500; }
+.nr-t { flex: 1; min-width: 0; font-size: 17px; line-height: 22px; }
+.nr-t b { font-weight: 600; }
+.nr-s { font-size: 15px; line-height: 20px; color: #8a8a8e; }
+.ov { display: flex; align-items: flex-start; gap: 12px; }
+.ov-m { flex: 1; min-width: 0; }
+.ov-n { display: flex; align-items: center; gap: 8px; font-size: 17px; line-height: 22px; font-weight: 600; }
+.ov-chip { font-size: 11px; line-height: 16px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: rgba(120, 120, 128, .14); color: #8a8a8e; }
+.ov-chip.ready { background: rgba(52, 199, 89, .16); color: #248a3d; }
+.ov-l { font-size: 15px; line-height: 20px; color: #8a8a8e; margin-top: 3px; }
+.ov-l b { font-weight: 600; color: #6c6c70; }
+.ov-l .mdl { color: rgba(138, 138, 142, .75); }
+.ph.dark .ov-l b { color: #b4b4ba; }
+.ph.dark .ov-chip.ready { background: rgba(48, 209, 88, .2); color: #5fcf65; }
+.ph.dark .ov-n, .ph.dark .nr-t { color: #fff; }
+.ph.dark .nr-s, .ph.dark .ov-l { color: #9e9ea5; }
+.e-s .warn, .a-st.warn { color: #b35a00; }
+.ph.dark .e-s .warn { color: #ff9f0a; }
+.e-s .ok { color: #248a3d; }
+.ph.dark .e-s .ok { color: #5fcf65; }
+.r.btn.red { color: #ff3b30; }
+.a-na { font-size: 13px; line-height: 17px; color: #8a8a8e; }
+.a-na b { color: #6c6c70; font-weight: 600; }
+.ph.dark .a-na b { color: #b4b4ba; }
+.a-note.bad { color: #ff3b30; }
+.chip-next { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: rgba(120, 120, 128, .14); color: #8a8a8e; font-size: 11px; font-weight: 600; vertical-align: 2px; }
+/* the sign-in card inside an account card (RunnerSignInView) */
+.si { display: flex; flex-direction: column; gap: 9px; }
+.si-h { font-size: 13px; line-height: 18px; color: #8a8a8e; }
+.si-h b { color: #3c3c43; font-weight: 600; }
+.ph.dark .si-h b { color: #e5e5ea; }
+.si-row { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 18px; }
+.si-warn { font-size: 13px; line-height: 18px; color: #b35a00; }
+.ph.dark .si-warn { color: #ff9f0a; }
+.si-links { display: flex; gap: 16px; font-size: 13px; line-height: 18px; color: #3e69f6; }
+.ph.dark .si-links { color: #5b84ff; }
+.ph.dark .fld { background: #1c1c1e; border-color: #48484a; color: #fff; }
+/* iOS context / plan sheet */
+.i-sheet .kv { display: flex; align-items: baseline; padding: 12px 16px; font-size: 17px; }
+.i-sheet .kv span:last-child { margin-left: auto; color: #8a8a8e; }
+.i-sheet .kv.strong span:last-child { color: inherit; font-weight: 600; }
+/* iOS tray above the composer (PendingTrayView) */
+.i-tray { margin: 0 14px -18px; padding: 4px 0 20px; border-radius: 18px 18px 0 0; background: #fff; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .13); }
+.i-tray .tr { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; font-size: 15px; }
+.i-tray .tr .tx { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.i-tray .tr .st { flex: none; font-size: 12px; color: #8a8a8e; }
+.i-tray .tr svg { flex: none; width: 15px; height: 15px; color: #8a8a8e; }
+.i-tray .note { padding: 4px 12px 2px 37px; font-size: 12px; line-height: 16px; color: #8a8a8e; border-top: .5px dashed #d9d9de; }
+.ph.dark .i-tray { background: #1c1c1e; box-shadow: 0 0 0 .5px rgba(255, 255, 255, .14); }
+.ph.dark .i-tray .tr { color: #fff; }
+.ph.dark .i-tray .note { border-top-color: #404042; color: #9e9ea5; }
+.i-ring { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1.5px dashed #aeaeb2; margin-left: 10px; vertical-align: -2px; }
+/* the quota card in an iOS transcript (AutoRetryCard) */
+.i-quota { border-radius: 16px; background: #fff4e5; border: .5px solid #f5c98a; padding: 12px 14px; font-size: 15px; line-height: 21px; }
+.i-quota b { display: block; font-size: 16px; margin-bottom: 3px; }
+.i-quota .q2 { margin-top: 6px; font-size: 14px; line-height: 19px; color: #6c6c70; }
+.i-quota .lnk { color: #3e69f6; }
+.ph.dark .i-quota { background: #3a2a14; border-color: #7a5a2a; color: #fff; }
+.ph.dark .i-quota .q2 { color: #c7c7cc; }
+.ph.dark .i-quota .lnk { color: #5b84ff; }
+.i-mi.dis .t { color: #b4b4b9; }
+.i-mi .t small.note { font-size: 13px; line-height: 17px; }
+.ph.dark .i-mi.dis .t { color: #636366; }
+.ph.dark .i-chat { color: #fff; }
+/* one row cut out of a phone (an edge state) */
+.ph.cutbox { width: 393px; height: auto; border-radius: 22px; margin: 0; padding: 10px 0; background: #f2f2f6;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, .12); }
+.ph.cutbox.dark { background: #1c1c1e; box-shadow: 0 0 0 1px #3a3a3c; }
+.ph.cutbox .i-sec { margin: 0 10px; }
+.ph.cutbox .s-card { margin: 0 10px; }
+.cuts { display: flex; flex-direction: column; gap: 10px; }
+.cut-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 6px 0 -4px 4px; }

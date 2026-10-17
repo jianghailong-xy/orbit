@@ -7,6 +7,9 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.reader.SteerDelivery
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastTone
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -127,8 +130,10 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         launch { persist(); auth.writeData(handle, DataKind.DRAFT, "$key:attachment:$id", ByteArray(0)) }
     }
 
-    /** [seedModel]: for a new session that names no model, the one it starts on — the last picked for its engine and credential. */
-    fun send(seedModel: String? = null) {
+    /** [seedModel]: for a new session that names no model, the one it starts on — the last picked for its engine and credential.
+     * [queueForNextTurn]: Send's other way while a turn runs (decided 2026-10-16, docs/mocks/steer-tray) — queued for the next turn
+     * (`intent: NEXT_TURN`) instead of into this one. Otherwise no intent goes out and the server places the message as it always has. */
+    fun send(seedModel: String? = null, queueForNextTurn: Boolean = false) {
         if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(waiting = true, error = null, notice = null) }
         launch {
@@ -172,6 +177,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     } else {
                         if (endpoint == "resume") draft.resumeConfig["account"]?.let { put("account", it) }
                         put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
+                        if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
                     }
                     putJsonArray("attachmentIds") { draft.attachments.forEach { add(it.remoteId!!) } }
                 }
@@ -278,6 +284,92 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             } finally { mutable.update { it.copy(busy = false) } }
         }
     }
+
+    /**
+     * The tray's Withdraw (DELETE …/turns/:turnId; web `withdrawSteer` and `cancelQueued`, iOS `ConsoleModel`'s): a message queued for
+     * the next turn, or a [steer] nothing has read yet — the server deletes one no runner has taken, and asks the runner holding one to
+     * have its engine drop it. Taken back, its [words] return to the box under any draft: an explicit press, so a draft keeps its place
+     * above them. Its pictures and files are not staged again: the box holds only what this device staged. Too late is an answer, not a
+     * failure — the agent on [engine] read it first, and it is part of the turn.
+     */
+    fun withdraw(turnId: String, words: String?, steer: Boolean, engine: String) {
+        val id = ObjectId.canonical(turnId) ?: turnId
+        if (id in state.value.withdrawing || id in state.value.withdrawn) return
+        mutable.update { it.copy(withdrawing = it.withdrawing + id) }
+        launch {
+            try {
+                try { api.mutation("turns/$turnId", method = HttpMethod.DELETE) }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (e: Exception) {
+                    when {
+                        e is ApiError && e.code == "STEER_ALREADY_READ" ->
+                            OrbitToasts.show(PendingTray.TOO_LATE, detail = PendingTray.alreadyRead(engine), tone = ToastTone.INFO)
+                        !steer -> OrbitToasts.show(PendingTray.ALREADY_PROCESSING, tone = ToastTone.INFO)
+                        else -> OrbitToasts.show(PendingTray.COULDNT_WITHDRAW, detail = failure(e), tone = ToastTone.ERROR)
+                    }
+                    return@launch
+                }
+                val restores = !words.isNullOrBlank() && state.value.loaded
+                mutable.update { it.copy(withdrawn = it.withdrawn + id, draft = if (restores) it.draft.under(words!!) else it.draft) }
+                if (restores) persist()
+                refresh()
+            } finally { mutable.update { it.copy(withdrawing = it.withdrawing - id) } }
+        }
+    }
+
+    /** The tray's Steer (POST …/turns/:turnId/steer; web and iOS `steerQueued`): a message queued for the next turn sent into the one
+     * running now, as the steer it would have been. With no turn left to join, or an engine or runner that cannot take one, it stays
+     * queued, and the reader is told so in their terms. */
+    fun steer(turnId: String) {
+        val id = ObjectId.canonical(turnId) ?: turnId
+        if (id in state.value.steering) return
+        mutable.update { it.copy(steering = it.steering + id) }
+        launch {
+            try {
+                try { api.mutation("turns/$turnId/steer") }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (e: Exception) {
+                    if (e is ApiError && e.code == "CURRENT_WORK_UNAVAILABLE") OrbitToasts.show(PendingTray.STEER_REFUSED,
+                        detail = PendingTray.steerRefusal((e.body as? JsonObject)?.text("reason")), tone = ToastTone.INFO)
+                    else OrbitToasts.show(PendingTray.STEER_REFUSED, detail = failure(e), tone = ToastTone.ERROR)
+                    return@launch
+                }
+                mutable.update { it.copy(steered = it.steered + id) }
+                refresh()
+            } finally { mutable.update { it.copy(steering = it.steering - id) } }
+        }
+    }
+    /**
+     * Put back in the composer (web `restoreUndelivered`, and `takeBackUndelivered` for a receipt): the words of a steer that was not
+     * delivered, back in the box under any draft as Withdraw returns them — an explicit press, so a draft keeps its place above them.
+     * Nothing is sent. A steer known only from the server's receipt names its turn ([discard]), which is then discarded (DELETE
+     * …/turns/:turnId) and its row gone from the tail; one the server keeps is said, and the words stay in the box.
+     */
+    fun putBack(words: String, discard: String? = null) {
+        if (!state.value.loaded || (words.isBlank() && discard == null)) return
+        val id = discard?.let { ObjectId.canonical(it) ?: it }
+        if (id != null && (id in state.value.withdrawing || id in state.value.withdrawn)) return
+        mutable.update { it.copy(draft = if (words.isBlank()) it.draft else it.draft.under(words.trim()),
+            withdrawing = if (id == null) it.withdrawing else it.withdrawing + id) }
+        launch {
+            try {
+                if (words.isNotBlank()) persist()
+                if (discard == null) return@launch
+                try { api.mutation("turns/$discard", method = HttpMethod.DELETE) }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (e: Exception) { OrbitToasts.show(SteerDelivery.COULDNT_DISCARD, detail = failure(e), tone = ToastTone.ERROR); return@launch }
+                mutable.update { it.copy(withdrawn = it.withdrawn + id!!) }
+                refresh()
+            } finally { if (id != null) mutable.update { it.copy(withdrawing = it.withdrawing - id) } }
+        }
+    }
+    private fun failure(e: Exception) = if (e is ApiError) e.messages.firstOrNull() ?: directoryError(e) else directoryError(e)
+    /** [words] back in the box under what it holds, the cursor after them. */
+    private fun ComposerDraft.under(words: String): ComposerDraft {
+        val next = if (text.isBlank()) words else "$text\n\n$words"
+        return copy(text = next, selectionStart = next.length, selectionEnd = next.length)
+    }
+
     fun loadCatalog() {
         if (state.value.catalogLoading) return
         mutable.update { it.copy(catalogLoading = true, catalogError = null, catalog = null) }

@@ -1,0 +1,89 @@
+{
+ "name": "cancel-mid-tool",
+ "runId": "2026-10-16T17-30-18-093Z",
+ "startedAt": "2026-10-16T17:30:18.094Z",
+ "finishedAt": "2026-10-16T17:30:54.990Z",
+ "passed": true,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 6,
+   "at": "2026-10-16T17:30:28.548Z",
+   "note": "cancel while sleep 47 runs"
+  }
+ ],
+ "protocol": "protocol/cancel-mid-tool.ndjson",
+ "protocolLines": 22,
+ "fixtures": [
+  "cancel-mid-tool/cancel"
+ ],
+ "checks": [
+  {
+   "name": "the sleep ran (permission granted) before the cancel",
+   "ok": true
+  },
+  {
+   "name": "session/cancel answers the prompt with stopReason cancelled",
+   "ok": true,
+   "detail": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+     "stopReason": "cancelled"
+    }
+   }
+  },
+  {
+   "name": "…within 5 s",
+   "ok": true,
+   "detail": 4
+  },
+  {
+   "name": "the cancelled shell command is killed (no sleep left behind, slept.txt never written)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "cancel": {
+   "permissionAnswered": true,
+   "sleepPidsBeforeCancel": 1,
+   "sleepPidsAfterCancel": 0,
+   "msToResult": 4,
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+     "stopReason": "cancelled"
+    }
+   },
+   "tool": {
+    "toolCallId": "call-<UUID_1>-0\nfc_p5V65cF-3LYxF7-95870d84-aws_ue1_0",
+    "statuses": [
+     "pending",
+     "in_progress"
+    ],
+    "title": "`sleep 47 && echo finished > slept.txt`",
+    "kind": "execute",
+    "rawInput": {
+     "command": "sleep 47 && echo finished > slept.txt"
+    }
+   },
+   "updatesAfterCancel": {
+    "session_info_update": 1,
+    "agent_thought_chunk": 4,
+    "agent_message_chunk": 1,
+    "tool_call": 1,
+    "tool_call_update": 1,
+    "available_commands_update": 1
+   }
+  },
+  "the cancelled tool card never reaches a failed status (ACP has no failed status here)": [
+   "pending",
+   "in_progress"
+  ]
+ }
+}

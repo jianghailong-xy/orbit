@@ -556,9 +556,10 @@ public enum SessionProviderChoices {
     /// lands on. An engine with nothing to run on here is left out — except DeepSeek Harness on a runner
     /// that could run it: with no DeepSeek key yet it offers the connection instead (a turned-off key
     /// does not count, since GET /providers lists none), so "where is DeepSeek Harness?" has an answer
-    /// in the picker itself. Mirrors web's `engineChoices`.
+    /// in the picker itself. One these apps don't draw yet (`ProviderEngines.appleShowsEngine`) is
+    /// never listed. Mirrors web's `engineChoices`.
     public static func engines(sources: ChoiceSources, preferred: [EnginePick] = []) -> [EngineChoice] {
-        ProviderEngines.all.compactMap { engine -> EngineChoice? in
+        ProviderEngines.all.filter(ProviderEngines.appleShowsEngine).compactMap { engine -> EngineChoice? in
             let providers = providers(for: engine, sources: sources)
             if !providers.isEmpty {
                 return landing(engine, providers: providers,

@@ -368,6 +368,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /providers/mine/:id/key': { request: (of) => ({ params: { id: of.providerId } }) },
   'GET /providers/mine/:id/balance': { request: (of) => ({ params: { id: of.providerId } }) },
   'GET /providers/mine/:id/usage': { request: (of) => ({ params: { id: of.providerId } }) },
+  // The account's own key is no Cursor key: it is answered that, which no key of anybody else's is.
+  'POST /providers/mine/:id/key-check': { request: (of) => ({ params: { id: of.providerId } }) },
   'PATCH /providers/mine/:id': { request: (of) => ({ params: { id: of.providerId }, body: { label: 'renamed by the census' } }) },
   'DELETE /providers/mine/:id': { request: (of) => ({ params: { id: of.spare.providerId } }) },
   'GET /providers/pools/:id': { request: (of) => ({ params: { id: of.poolId } }) },

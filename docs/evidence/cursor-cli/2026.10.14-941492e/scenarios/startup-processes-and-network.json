@@ -1,0 +1,941 @@
+{
+ "name": "startup-processes-and-network",
+ "runId": "2026-10-16T18-25-59-777Z",
+ "startedAt": "2026-10-16T18:25:59.778Z",
+ "finishedAt": "2026-10-16T18:30:53.526Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/startup-processes-and-network.ndjson",
+ "protocolLines": 45,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "fresh data dir: the worker starts but exits at once (no worker.log, no LSP), because <data>/projects/<slug>/ is missing",
+   "ok": true
+  },
+  {
+   "name": "with NODE_USE_ENV_PROXY=1 and HTTPS_PROXY, no connection bypasses the proxy",
+   "ok": true,
+   "detail": {
+    "fresh data dir": [],
+    "project data dir exists": [],
+    "--disable-indexing": [],
+    "--disable-codebase-ref": [],
+    "TMPDIR set": []
+   }
+  },
+  {
+   "name": "session/new starts the worker-server child",
+   "ok": true
+  },
+  {
+   "name": "once <data>/projects/<slug>/ exists the worker runs `npx -y typescript-language-server --stdio` at startup, unapproved",
+   "ok": true
+  },
+  {
+   "name": "…which downloads from registry.npmjs.org",
+   "ok": true
+  },
+  {
+   "name": "the worker skips codebase sync for this account's privacy mode (no repo42 traffic)",
+   "ok": true
+  },
+  {
+   "name": "no update check on the ACP path (no GetCliDownloadUrl / download hosts)",
+   "ok": true
+  },
+  {
+   "name": "the worker socket goes to <tmpdir>/.cursor/<slug>-<hash>/worker.sock when the data-dir path is too long",
+   "ok": true,
+   "detail": [
+    "/tmp/.cursor/mnt-data-cursor-p0-runs-2026-10-16T18-25-59-777Z-startup-processes-and--f4194b5/worker.sock"
+   ]
+  },
+  {
+   "name": "with TMPDIR set the worker socket still falls back to /tmp/.cursor/<slug>-<hash>/",
+   "ok": true,
+   "detail": [
+    "/tmp/.cursor/mnt-data-cursor-p0-runs-2026-10-16T18-25-59-777Z-startup-processes-and--f4194b5/worker.sock"
+   ]
+  },
+  {
+   "name": "--disable-indexing keeps the worker and its LSP, and says so in worker.log",
+   "ok": true
+  },
+  {
+   "name": "--disable-codebase-ref keeps the worker from starting",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "per variant": {
+   "fresh data dir": {
+    "newOk": true,
+    "newMs": 8315,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 19,
+      "up": 47234,
+      "down": 492392,
+      "denied": 0,
+      "firstMs": 446
+     }
+    },
+    "directConnects": [],
+    "programs": [
+     "cursor-agent acp",
+     "bash <P0_ROOT>/cli/2026.10. acp",
+     "basename <P0_ROOT>/cli/2026.10.",
+     "realpath <P0_ROOT>/cli/2026.10.",
+     "dirname <P0_ROOT>/cli/2026.10.",
+     "node --use-system-ca --version",
+     "node --use-system-ca <P0_ROOT>/cli/2026.10. acp",
+     "git rev-parse --show-toplevel",
+     "rg --files --follow --max-depth",
+     "git rev-parse --is-inside-work-tree",
+     "git rev-parse --show-prefix",
+     "git check-ignore -z --stdin",
+     "git ls-files -co --exclude-standard",
+     "rg --files --hidden --no-require-git",
+     "git config --get remote.origin.url",
+     "node <P0_ROOT>/cli/2026.10. worker-server"
+    ],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 4
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "unixSocket": "/getRepositoryInfo",
+      "times": 6
+     },
+     {
+      "phase": "session/new",
+      "process": "index.js worker-server"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": null,
+    "unixSockets": [],
+    "attemptedButNotFound": [
+     "direnv"
+    ]
+   },
+   "project data dir exists": {
+    "newOk": true,
+    "newMs": 8128,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 21,
+      "up": 53651,
+      "down": 639443,
+      "denied": 0,
+      "firstMs": 449
+     },
+     "registry.npmjs.org:443": {
+      "tunnels": 3,
+      "up": 7332,
+      "down": 1038350,
+      "denied": 0,
+      "firstMs": 6398
+     }
+    },
+    "directConnects": [],
+    "programs": [
+     "cursor-agent acp",
+     "bash <P0_ROOT>/cli/2026.10. acp",
+     "basename <P0_ROOT>/cli/2026.10.",
+     "realpath <P0_ROOT>/cli/2026.10.",
+     "dirname <P0_ROOT>/cli/2026.10.",
+     "node --use-system-ca --version",
+     "node --use-system-ca <P0_ROOT>/cli/2026.10. acp",
+     "git rev-parse --show-toplevel",
+     "rg --files --follow --max-depth",
+     "git rev-parse --is-inside-work-tree",
+     "git rev-parse --show-prefix",
+     "git check-ignore -z --stdin",
+     "git ls-files -co --exclude-standard",
+     "rg --files --hidden --no-require-git",
+     "git config --get remote.origin.url",
+     "node <P0_ROOT>/cli/2026.10. worker-server",
+     "npx -y typescript-language-server --stdio",
+     "node /usr/local/bin/npx -y typescript-language-server",
+     "sh -c 'typescript-language-server' --s",
+     "typescript-language-server --stdio",
+     "node <P0_ROOT>/runs/2026-10 --stdio"
+    ],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "unixSocket": "/getRepositoryInfo",
+      "times": 5
+     },
+     {
+      "phase": "session/new",
+      "process": "index.js worker-server"
+     },
+     {
+      "phase": "session/new",
+      "process": "npx -y"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/npm"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/typescript-language-server",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "POST",
+      "path": "/-/npm/v1/security/advisories/bulk"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/typescript-language-server/-/typescript-language-server-6.0.2.tgz"
+     },
+     {
+      "phase": "session/new",
+      "process": "typescript-language-server --stdio"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": "[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-2026-10-16T18-25-59-777Z-startup-processes-and--f4194b5/worker.sock\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\n[debug] Child Typescript LSP process spawned with PID: 356645\n[debug] Sending LSP initialize request\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \"typescript\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\n[info] Skipping codebase telemetry sync\n",
+    "unixSockets": [
+     "/tmp/.cursor/mnt-data-cursor-p0-runs-2026-10-16T18-25-59-777Z-startup-processes-and--f4194b5/worker.sock"
+    ],
+    "attemptedButNotFound": [
+     "direnv"
+    ]
+   },
+   "--disable-indexing": {
+    "newOk": true,
+    "newMs": 7959,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 21,
+      "up": 53133,
+      "down": 637925,
+      "denied": 0,
+      "firstMs": 484
+     },
+     "registry.npmjs.org:443": {
+      "tunnels": 2,
+      "up": 5644,
+      "down": 1033395,
+      "denied": 0,
+      "firstMs": 6369
+     }
+    },
+    "directConnects": [],
+    "programs": [
+     "cursor-agent acp --disable-indexing",
+     "bash <P0_ROOT>/cli/2026.10. acp --disable-indexing",
+     "basename <P0_ROOT>/cli/2026.10.",
+     "realpath <P0_ROOT>/cli/2026.10.",
+     "dirname <P0_ROOT>/cli/2026.10.",
+     "node --use-system-ca --version",
+     "node --use-system-ca <P0_ROOT>/cli/2026.10. acp",
+     "git rev-parse --show-toplevel",
+     "rg --files --follow --max-depth",
+     "git rev-parse --is-inside-work-tree",
+     "git rev-parse --show-prefix",
+     "git check-ignore -z --stdin",
+     "git ls-files -co --exclude-standard",
+     "rg --files --hidden --no-require-git",
+     "git config --get remote.origin.url",
+     "node <P0_ROOT>/cli/2026.10. worker-server",
+     "npx -y typescript-language-server --stdio",
+     "node /usr/local/bin/npx -y typescript-language-server",
+     "sh -c 'typescript-language-server' --s",
+     "typescript-language-server --stdio",
+     "node <P0_ROOT>/runs/2026-10 --stdio"
+    ],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "unixSocket": "/getRepositoryInfo",
+      "times": 5
+     },
+     {
+      "phase": "session/new",
+      "process": "index.js worker-server"
+     },
+     {
+      "phase": "session/new",
+      "process": "npx -y"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/npm"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/typescript-language-server",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "POST",
+      "path": "/-/npm/v1/security/advisories/bulk"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/typescript-language-server/-/typescript-language-server-6.0.2.tgz"
+     },
+     {
+      "phase": "session/new",
+      "process": "typescript-language-server --stdio"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": "[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-2026-10-16T18-25-59-777Z-startup-processes-and--f4194b5/worker.sock\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\n[debug] Child Typescript LSP process spawned with PID: 357134\n[debug] Sending LSP initialize request\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \"typescript\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\n",
+    "unixSockets": [
+     "/tmp/.cursor/mnt-data-cursor-p0-runs-2026-10-16T18-25-59-777Z-startup-processes-and--f4194b5/worker.sock"
+    ],
+    "attemptedButNotFound": [
+     "direnv"
+    ]
+   },
+   "--disable-codebase-ref": {
+    "newOk": true,
+    "newMs": 8588,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 17,
+      "up": 44828,
+      "down": 487609,
+      "denied": 0,
+      "firstMs": 493
+     }
+    },
+    "directConnects": [],
+    "programs": [
+     "cursor-agent acp --disable-codebase-ref",
+     "bash <P0_ROOT>/cli/2026.10. acp --disable-codebase-ref",
+     "basename <P0_ROOT>/cli/2026.10.",
+     "realpath <P0_ROOT>/cli/2026.10.",
+     "dirname <P0_ROOT>/cli/2026.10.",
+     "node --use-system-ca --version",
+     "node --use-system-ca <P0_ROOT>/cli/2026.10. acp",
+     "git rev-parse --show-toplevel",
+     "rg --files --follow --max-depth",
+     "git rev-parse --is-inside-work-tree",
+     "git rev-parse --show-prefix",
+     "git check-ignore -z --stdin",
+     "git ls-files -co --exclude-standard",
+     "rg --files --hidden --no-require-git",
+     "git config --get remote.origin.url"
+    ],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": null,
+    "unixSockets": [],
+    "attemptedButNotFound": [
+     "direnv"
+    ]
+   },
+   "TMPDIR set": {
+    "newOk": true,
+    "newMs": 8269,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 23,
+      "up": 58460,
+      "down": 648668,
+      "denied": 0,
+      "firstMs": 503
+     },
+     "registry.npmjs.org:443": {
+      "tunnels": 2,
+      "up": 5644,
+      "down": 1033630,
+      "denied": 0,
+      "firstMs": 6310
+     }
+    },
+    "directConnects": [],
+    "programs": [
+     "cursor-agent acp",
+     "bash <P0_ROOT>/cli/2026.10. acp",
+     "basename <P0_ROOT>/cli/2026.10.",
+     "realpath <P0_ROOT>/cli/2026.10.",
+     "dirname <P0_ROOT>/cli/2026.10.",
+     "node --use-system-ca --version",
+     "node --use-system-ca <P0_ROOT>/cli/2026.10. acp",
+     "git rev-parse --show-toplevel",
+     "rg --files --follow --max-depth",
+     "git rev-parse --is-inside-work-tree",
+     "git rev-parse --show-prefix",
+     "git check-ignore -z --stdin",
+     "git ls-files -co --exclude-standard",
+     "rg --files --hidden --no-require-git",
+     "git config --get remote.origin.url",
+     "node <P0_ROOT>/cli/2026.10. worker-server",
+     "npx -y typescript-language-server --stdio",
+     "node /usr/local/bin/npx -y typescript-language-server",
+     "sh -c 'typescript-language-server' --s",
+     "typescript-language-server --stdio",
+     "node <P0_ROOT>/runs/2026-10 --stdio"
+    ],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 5
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "unixSocket": "/getRepositoryInfo",
+      "times": 5
+     },
+     {
+      "phase": "session/new",
+      "process": "index.js worker-server"
+     },
+     {
+      "phase": "session/new",
+      "process": "npx -y"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/npm"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/typescript-language-server",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "POST",
+      "path": "/-/npm/v1/security/advisories/bulk"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "registry.npmjs.org",
+      "method": "GET",
+      "path": "/typescript-language-server/-/typescript-language-server-6.0.2.tgz"
+     },
+     {
+      "phase": "session/new",
+      "process": "typescript-language-server --stdio"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": "[info] runServer socketPath=/tmp/.cursor/mnt-data-cursor-p0-runs-2026-10-16T18-25-59-777Z-startup-processes-and--f4194b5/worker.sock\n[debug] Starting typescript-language-server npxPath=/usr/local/bin/npx\n[debug] Child Typescript LSP process spawned with PID: 358357\n[debug] Sending LSP initialize request\n[debug] did not initialize LSP provider error=Request initialize failed with message: Could not find a valid TypeScript installation. Please ensure that the \"typescript\" dependency is installed in the workspace or that a valid `tsserver.path` is specified. Exiting.\n[info] Skipping codebase telemetry sync\n",
+    "unixSockets": [
+     "/tmp/.cursor/mnt-data-cursor-p0-runs-2026-10-16T18-25-59-777Z-startup-processes-and--f4194b5/worker.sock"
+    ],
+    "attemptedButNotFound": [
+     "direnv"
+    ]
+   }
+  },
+  "programs the CLI tried to run that are not installed here (e.g. direnv for .envrc)": {
+   "fresh data dir": [
+    "direnv"
+   ],
+   "project data dir exists": [
+    "direnv"
+   ],
+   "--disable-indexing": [
+    "direnv"
+   ],
+   "--disable-codebase-ref": [
+    "direnv"
+   ],
+   "TMPDIR set": [
+    "direnv"
+   ]
+  }
+ }
+}

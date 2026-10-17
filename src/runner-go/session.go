@@ -233,6 +233,7 @@ const (
 	providerKimi        = "kimi"
 	providerOpenCode    = "opencode"
 	providerAntigravity = "antigravity"
+	providerCursor      = "cursor"
 )
 
 // runInteractiveSession drives a long-lived `claude` process for an interactive
@@ -278,7 +279,7 @@ func runtimeProvider(job *ClaimedSession) string {
 		p = strings.ToLower(strings.TrimSpace(job.Agent.Provider))
 	}
 	switch p {
-	case providerCodex, providerKimi, providerOpenCode, providerAntigravity, providerDsh:
+	case providerCodex, providerKimi, providerOpenCode, providerAntigravity, providerDsh, providerCursor:
 		return p
 	}
 	return providerClaude
@@ -1600,6 +1601,18 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		return stFailed, true, false
 	}
 	provider := runtimeProvider(job)
+	// An engine this runner knows but has no session driver for gets no engine either: nothing is
+	// installed or started for a session it cannot run. The control plane hands a Cursor CLI session
+	// only to a runner that declares it (cursorDeclared), so this is the two of them disagreeing, and it
+	// is said rather than run as some other engine.
+	if providerRuntimeFor(provider).run == nil {
+		name := provider
+		if spec, ok := specFor(provider); ok {
+			name = spec.name
+		}
+		emit(evError, map[string]interface{}{"message": name + " sessions cannot run on this Orbit runner yet: it has no session driver for them. Update the runner, then try again."})
+		return stFailed, true, false
+	}
 	// The dsh preparer owns fixed-version installation and credential preflight.
 	// Its ACP handshake alone cannot validate an API key.
 	if provider == providerDsh {

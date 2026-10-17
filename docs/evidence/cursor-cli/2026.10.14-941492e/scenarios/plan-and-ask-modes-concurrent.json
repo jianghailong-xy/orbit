@@ -1,0 +1,282 @@
+{
+ "name": "plan-and-ask-modes-concurrent",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "startedAt": "2026-10-16T17:48:10.412Z",
+ "finishedAt": "2026-10-16T17:48:52.506Z",
+ "passed": false,
+ "realPromptsDeclared": 2,
+ "realPrompts": [
+  {
+   "n": 17,
+   "at": "2026-10-16T17:48:26.401Z",
+   "note": "plan mode (concurrent with ask)"
+  },
+  {
+   "n": 18,
+   "at": "2026-10-16T17:48:26.401Z",
+   "note": "ask mode (concurrent with plan)"
+  }
+ ],
+ "protocol": "protocol/plan-and-ask-modes-concurrent.ndjson",
+ "protocolLines": 240,
+ "fixtures": [
+  "plan-and-ask-modes-concurrent/modes"
+ ],
+ "checks": [
+  {
+   "name": "session/set_mode emits current_mode_update",
+   "ok": true,
+   "detail": [
+    "current_mode_update",
+    "available_commands_update"
+   ]
+  },
+  {
+   "name": "two sessions of one process ran prompts concurrently, each to end_turn",
+   "ok": true
+  },
+  {
+   "name": "plan and ask mode: no file was created and no shell command ran",
+   "ok": false
+  },
+  {
+   "name": "plan and ask mode: the MCP record tool did not run",
+   "ok": false
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "mode switch replies": {
+   "setMode": {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "result": {}
+   },
+   "setConfigOption": [
+    "mode=ask",
+    "model=default[]"
+   ]
+  },
+  "plan session": {
+   "stopReason": "end_turn",
+   "tools": [
+    {
+     "title": "Edit `<RUN>/work/plan-write.txt`",
+     "kind": "edit",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "`touch plan-shell.txt`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawOutput": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "title": "p0probe: record",
+     "kind": "other",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawOutput": {
+      "success": true
+     }
+    },
+    {
+     "title": "Create Plan: Add CONTRIBUTING md",
+     "kind": "other",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "in_progress",
+      "in_progress",
+      "completed"
+     ]
+    }
+   ],
+   "kinds": {
+    "session_info_update": 1,
+    "agent_thought_chunk": 33,
+    "agent_message_chunk": 4,
+    "tool_call": 4,
+    "tool_call_update": 14,
+    "plan": 1
+   },
+   "answer": "I'll attempt all three actions now and note which ones are allowed, then draft the two-line CONTRIBUTING.md plan.Shell and MCP succeeded; file write was blocked. Creating the two-line CONTRIBUTING.md plan next.",
+   "createPlan": [
+    {
+     "toolCallId": "call-<UUID_1>-4\nfc_p5VBdQu-3LYxF7-3a81d85d-aws_ue1_0",
+     "name": "Add CONTRIBUTING md",
+     "overview": "Add a short CONTRIBUTING.md that explains how to contribute to this repository.",
+     "plan": "# Add CONTRIBUTING.md\n\n1. Create `[CONTRIBUTING.md](CONTRIBUTING.md)` at the repo root with brief guidance on setup, branching, and pull requests.\n2. Keep it to a few sections so new contributors can get productive quickly without duplicating the README.\n",
+     "todos": [],
+     "isProject": false,
+     "phases": []
+    }
+   ]
+  },
+  "ask session": {
+   "stopReason": "end_turn",
+   "tools": [
+    {
+     "title": "Edit `<RUN>/work/ask-write.txt`",
+     "kind": "edit",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ]
+    },
+    {
+     "title": "`touch ask-shell.txt`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawOutput": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "title": "Read README.md",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawOutput": {
+      "content": "# probe repo\nThe secret word in this README is TANGERINE.\n"
+     }
+    },
+    {
+     "title": "p0probe: record",
+     "kind": "other",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawOutput": {
+      "success": true
+     }
+    }
+   ],
+   "kinds": {
+    "available_commands_update": 1,
+    "session_info_update": 1,
+    "agent_thought_chunk": 28,
+    "agent_message_chunk": 108,
+    "tool_call": 4,
+    "tool_call_update": 10
+   },
+   "answer": "I'll attempt all three actions and read README.md so we can report what was allowed.File write and shell both appeared to succeed; calling the MCP `record` tool next.1) **Allowed** — created `ask-write.txt` with `x`.  \n2) **Allowed** — `touch ask-shell.txt` ran successfully.  \n3) **Allowed** — `p0probe.record` recorded marker `\"ask-mode\"`.  \n\nREADME.md says this is a probe repo whose secret word is TANGERINE."
+  },
+  "permission requests in plan/ask": [
+   {
+    "sessionId": "<UUID_2>",
+    "title": "`touch plan-shell.txt`",
+    "kind": "execute",
+    "toolCallId": "call-<UUID_3>-2\nfc_p5VBbwz-3LYxF7-3dc26001-aws_ue1_2",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ],
+    "content": [
+     {
+      "type": "content",
+      "content": {
+       "type": "text",
+       "text": "Not in allowlist: touch"
+      }
+     }
+    ],
+    "answer": "allow-once"
+   },
+   {
+    "sessionId": "<UUID_2>",
+    "title": "p0probe-record: record",
+    "kind": "other",
+    "toolCallId": "call-<UUID_4>-3\nfc_p5VBd3Y-3LYxF7-4285d872-aws_ue1_0",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ],
+    "content": [
+     {
+      "type": "content",
+      "content": {
+       "type": "text",
+       "text": "```json\n{\n  \"marker\": \"plan-mode\"\n}\n```"
+      }
+     }
+    ],
+    "answer": "allow-once"
+   },
+   {
+    "sessionId": "<UUID_5>",
+    "title": "`touch ask-shell.txt`",
+    "kind": "execute",
+    "toolCallId": "call-<UUID_6>-1\nfc_<UUID_7>_1",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ],
+    "content": [
+     {
+      "type": "content",
+      "content": {
+       "type": "text",
+       "text": "Not in allowlist: touch"
+      }
+     }
+    ],
+    "answer": "allow-once"
+   },
+   {
+    "sessionId": "<UUID_5>",
+    "title": "p0probe-record: record",
+    "kind": "other",
+    "toolCallId": "call-<UUID_8>-4\nfc_<UUID_9>_0",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ],
+    "content": [
+     {
+      "type": "content",
+      "content": {
+       "type": "text",
+       "text": "```json\n{\n  \"marker\": \"ask-mode\"\n}\n```"
+      }
+     }
+    ],
+    "answer": "allow-once"
+   }
+  ]
+ }
+}

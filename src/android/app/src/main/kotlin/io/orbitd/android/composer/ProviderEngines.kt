@@ -21,13 +21,22 @@ object ProviderEngines {
     const val ANTIGRAVITY = "antigravity"
     const val OPENCODE = "opencode"
     const val DSH = "dsh"
+    const val CURSOR = "cursor"
 
     /** Every engine a session can run on, in the order a picker lists them. */
-    val ALL_ENGINES = listOf(CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH)
+    val ALL_ENGINES = listOf(CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH, CURSOR)
 
     /** Each engine's CLI by its own product name: what every engine list, title and pin says. */
     val ENGINE_CLI_NAMES = mapOf(CLAUDE to "Claude Code", CODEX to "Codex", KIMI to "Kimi Code", ANTIGRAVITY to "Antigravity CLI",
-        OPENCODE to "OpenCode", DSH to "DeepSeek Harness")
+        OPENCODE to "OpenCode", DSH to "DeepSeek Harness", CURSOR to "Cursor CLI")
+
+    /**
+     * Whether this app draws [engine] in a list of engines: every engine but Cursor CLI, which the server knows (project P1) and which
+     * has no screens here until P7c builds the owner's design board — web `webShowsEngine`, OrbitKit `appleShowsEngine`. The New
+     * Session's engines, a task's engine pin, Infrastructure's engine cards and a runner's Engines rows leave it out, a runner's report
+     * of it included, so they read as they did before it was registered. Opening Cursor CLI here is changing this one function.
+     */
+    fun androidShowsEngine(engine: String?) = engine != CURSOR
 
     /** The engines whose own sign-in on the runner is a credential: the provider slug is the engine's name. */
     val LOGIN_ENGINES = listOf(CLAUDE, CODEX, KIMI, ANTIGRAVITY)

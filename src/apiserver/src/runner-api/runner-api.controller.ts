@@ -105,6 +105,7 @@ import {
   InstallCommand,
   InstallResult,
   KIMI_LOGIN_REGION_V1,
+  LOGIN_FAILURE_REASONS,
   LoginCommand,
   LoginEngine,
   LoginResult,
@@ -304,6 +305,7 @@ import {
   withConfirmationReviewRequest,
   withControlPlaneNote,
   withOpenItemDelivery,
+  withOwnerAnswer,
   withProjectStarted,
   withSessionMessage,
   withSessionReplies,
@@ -367,6 +369,7 @@ import {
 import {
   ADMIN_ONLY_PROVIDER_ERROR,
   ADVERTISED_RUNTIMES,
+  CURSOR_RUNNER_UPGRADE_ERROR,
   DSH_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
@@ -383,6 +386,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { CURSOR_KEY_CHECK_V1, cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import {
   recordedEngine,
   SESSION_ENGINE_UNKNOWN_MESSAGE,
@@ -402,6 +406,17 @@ import {
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
 export const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
+
+// Cursor CLI's `agent login` waits on the one link it prints for about 27 minutes (1,632 s and 1,636 s
+// measured, docs/cursor-runtime-contract.md §9) and then gives up by itself, which is what tells the
+// runner the link expired. Its sign-in is not swept before that: this must stay >= the runner's own
+// wait for it.
+export const CURSOR_LOGIN_RELAY_TIMEOUT_MS = 30 * 60_000;
+
+/** How long a sign-in of `engine` may stay in flight before it is swept as timed out. */
+export function loginRelayTimeoutMs(engine: string | null | undefined): number {
+  return engine === 'cursor' ? CURSOR_LOGIN_RELAY_TIMEOUT_MS : LOGIN_RELAY_TIMEOUT_MS;
+}
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
@@ -526,7 +541,24 @@ export const ANTIGRAVITY_ACCOUNT_REMOVE_V1 = 'antigravity-account-remove/v1';
  *  machine's one Kimi login. */
 export const KIMI_ACCOUNT_LOGIN_V1 = 'kimi-account-login/v1';
 export const KIMI_ACCOUNT_REMOVE_V1 = 'kimi-account-remove/v1';
-export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+/** Cursor CLI's, the same two again (docs/cursor-runtime-contract.md §16.1): a runner that declares them
+ *  signs in, and removes, a Cursor CLI account named by the control plane — its own directory, signed in
+ *  with `agent login` and the link it prints. Unlike any other engine's, Cursor CLI's sign-in goes only
+ *  to a runner that declares cursor-account-login/v1, Default's included: an older one signs Claude Code
+ *  in for an engine it does not know (src/runner-go/login.go). */
+export const CURSOR_ACCOUNT_LOGIN_V1 = 'cursor-account-login/v1';
+export const CURSOR_ACCOUNT_REMOVE_V1 = 'cursor-account-remove/v1';
+export {
+  CLAUDE_ACCOUNT_MOVE_V1,
+  CODEX_ACCOUNT_MOVE_V1,
+  CURSOR_ACCOUNT_MOVE_V1,
+  KIMI_ACCOUNT_MOVE_V1,
+} from '../providers/account-move-capability';
+
+/** The refusal of a sign-in of Cursor CLI's own account, Default, to a runner that does not declare
+ *  cursor-account-login/v1 — from the start (RunnersService.startLogin) and from the heartbeat alike.
+ *  A named account's is the one every engine's is (accountLoginTooOld). */
+export const CURSOR_LOGIN_TOO_OLD = 'This runner is too old to sign in to Cursor CLI — update it, then try again.';
 
 /** What a runner declares before it is handed a sign-in, or a removal, of a named account of each
  *  engine that keeps accounts — and what that engine is called when it is too old to. */
@@ -535,19 +567,28 @@ const ACCOUNT_LOGIN_CAPABILITY = {
   claude: CLAUDE_ACCOUNT_LOGIN_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_V1,
   kimi: KIMI_ACCOUNT_LOGIN_V1,
+  cursor: CURSOR_ACCOUNT_LOGIN_V1,
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_REMOVE_CAPABILITY = {
   codex: CODEX_ACCOUNT_REMOVE_V1,
   claude: CLAUDE_ACCOUNT_REMOVE_V1,
   antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
   kimi: KIMI_ACCOUNT_REMOVE_V1,
+  cursor: CURSOR_ACCOUNT_REMOVE_V1,
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_ENGINE_LABEL = {
   codex: 'Codex',
   claude: 'Claude',
   antigravity: 'Antigravity',
   kimi: 'Kimi',
+  cursor: 'Cursor',
 } as const satisfies Record<AccountEngine, string>;
+
+/** What a runner too old to sign in a named account of `engine` is told, from the start and the
+ *  heartbeat alike. */
+export function accountLoginTooOld(engine: AccountEngine): string {
+  return `This runner is too old to sign in another ${ACCOUNT_ENGINE_LABEL[engine]} account — update it, then try again.`;
+}
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -633,18 +674,24 @@ async function acceptanceBudgetSeconds(
   return task?.acceptanceTimeoutSeconds ?? null;
 }
 
-async function persistedDshSupport(db: Prisma.TransactionClient, runnerId: string): Promise<boolean> {
+/** Whether the runner's persisted heartbeat declares `provider`, which DeepSeek Harness (migration 0377)
+ *  and Cursor CLI (0426) need beside the request's own declaration. */
+async function persistedProviderSupport(
+  db: Prisma.TransactionClient,
+  runnerId: string,
+  provider: AgentProvider,
+): Promise<boolean> {
   const snapshot = await db.runner.findUnique({
     where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true },
   });
-  return !!snapshot?.capabilitiesReportedAt && snapshot.capabilities.includes('provider:dsh');
+  return !!snapshot?.capabilitiesReportedAt && snapshot.capabilities.includes(`provider:${provider}`);
 }
 
 /**
  * What a claim from a runner whose request names dsh must withhold dsh sessions for: the upgrade
  * notice when its persisted heartbeat does not declare dsh (P1b), else the install state its engine
  * report gives (dshRuntimeUnavailable), null when it can start one. Reclaim and lease takeover ask
- * only persistedDshSupport: they hand back sessions this runner already runs.
+ * only persistedProviderSupport: they hand back sessions this runner already runs.
  */
 async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: string): Promise<string | null> {
   const snapshot = await db.runner.findUnique({
@@ -655,27 +702,38 @@ async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: strin
 }
 
 /**
- * Whether the session runs on DeepSeek Harness — by its recorded engine, whatever key it spends —
- * which a runner may only lease when both its request and its persisted heartbeat declare Harness
- * (migration 0377); that declaration is made here for the lease write to come.
+ * Whether the session runs on DeepSeek Harness or Cursor CLI — by its recorded engine, whatever
+ * credential it spends — which a runner may only lease when both its request and its persisted
+ * heartbeat declare that engine (migrations 0377 and 0426); that declaration is made here for the lease
+ * write to come. Answers the notice a lease write on it that still does not land is refused with, and
+ * null for a session on any other engine.
  */
-async function assertDshLeaseSupport(
+async function assertDeclaredLeaseSupport(
   tx: Prisma.TransactionClient,
   runnerId: string,
   session: SessionEngineFacts,
   providerHeader?: string,
-): Promise<boolean> {
-  if (!session.provider || (await sessionEngine(tx, session)) !== AgentProvider.DSH) return false;
-  if (!runnerAdvertisesProvider(providerHeader, AgentProvider.DSH) || !await persistedDshSupport(tx, runnerId)) {
-    throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+): Promise<string | null> {
+  if (!session.provider) return null;
+  const engine = await sessionEngine(tx, session);
+  const upgradeError = engine === AgentProvider.DSH
+    ? DSH_RUNNER_UPGRADE_ERROR
+    : engine === AgentProvider.CURSOR ? CURSOR_RUNNER_UPGRADE_ERROR : null;
+  if (!engine || !upgradeError) return null;
+  if (!runnerAdvertisesProvider(providerHeader, engine) || !await persistedProviderSupport(tx, runnerId, engine)) {
+    throw new ConflictException(upgradeError);
   }
-  await tx.$executeRaw`SELECT set_config('orbit.runner_supports_dsh', '1', true)`;
-  return true;
+  if (engine === AgentProvider.DSH) {
+    await tx.$executeRaw`SELECT set_config('orbit.runner_supports_dsh', '1', true)`;
+  } else {
+    await tx.$executeRaw`SELECT set_config('orbit.runner_supports_cursor', '1', true)`;
+  }
+  return upgradeError;
 }
 
-/** A lease write that did not land on a session that is not Harness's. The row is locked and the
- *  transaction declared what the database asks of it, so only a guard refusing it gets here; the
- *  runner retries as it does every refused takeover. */
+/** A lease write that did not land on a session that is neither Harness's nor Cursor CLI's. The row is
+ *  locked and the transaction declared what the database asks of it, so only a guard refusing it gets
+ *  here; the runner retries as it does every refused takeover. */
 const LEASE_WRITE_REFUSED = 'the inbox lease was not written; retry';
 
 export function runnerSupportsCapability(
@@ -1604,6 +1662,11 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // Cursor API keys somebody is waiting on a check of (cursor-key-check-relay.ts), held in this process
+    // alone: handed only to a process that declares cursor-key-check/v1, each once.
+    const cursorKeyChecks = runnerSupportsCapability(capabilities, CURSOR_KEY_CHECK_V1)
+      ? cursorKeyCheckRelay.take(runner.id)
+      : [];
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
@@ -1635,6 +1698,8 @@ export class RunnerApiController {
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
+      // Present only when this beat hands a key over, for the same reason.
+      ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
     };
   }
 
@@ -2138,7 +2203,7 @@ export class RunnerApiController {
       return count > 0 ? { action: 'cancel', engine: r.loginEngine as LoginEngine, attempt } : undefined;
     }
     const started = r.loginAt?.getTime() ?? 0;
-    if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
+    if (started && Date.now() - started > loginRelayTimeoutMs(r.loginEngine)) {
       loginCodeRelay.drop(runnerId);
       if (r.loginStatus === 'pending' || r.loginStatus === 'awaiting_code' || r.loginStatus === 'awaiting_approval') {
         await this.prisma.runner.update({
@@ -2168,18 +2233,20 @@ export class RunnerApiController {
       const signsInAccounts = runnerSupportsCapability(capabilities, ACCOUNT_LOGIN_CAPABILITY[accountEngine]);
       // Antigravity's Google sign-in is judged again on the process polling now — the relay it
       // declares and the OS it names — which the start (RunnersService.startLogin) could only
-      // check against the last heartbeat's.
+      // check against the last heartbeat's. So is Cursor CLI's, Default's included: a process that
+      // does not declare it signs Claude Code in for an engine it does not know.
       // A process that does not declare the site choice would ignore it and run a bare `kimi login`,
       // which goes wherever the CLI decides — perhaps the very site the user just turned away from.
       const refusal =
         !signsInAccounts && (accountName || (account && account !== 'default'))
-          ? `This runner is too old to sign in another ${ACCOUNT_ENGINE_LABEL[accountEngine]} account — ` +
-            'update it, then try again.'
+          ? accountLoginTooOld(accountEngine)
           : region && !runnerSupportsCapability(capabilities, KIMI_LOGIN_REGION_V1)
             ? 'This runner is too old to choose a Kimi site — update it, then try again.'
             : engine === 'antigravity'
               ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
-              : null;
+              : engine === 'cursor' && !signsInAccounts
+                ? CURSOR_LOGIN_TOO_OLD
+                : null;
       if (refusal) {
         await this.prisma.runner.update({
           where: { id: runnerId },
@@ -2401,6 +2468,11 @@ export class RunnerApiController {
       throw new BadRequestException('attempt must be the start this reports on');
     }
     const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
+    // When the link stops working, and why a sign-in failed: only what each can be is kept — a real
+    // instant, and a reason this control plane knows — and nothing else rides on them. A runner newer
+    // than this has its report taken all the same, without them.
+    const expiresAt = typeof body.expiresAt === 'string' ? new Date(body.expiresAt) : null;
+    const reason = LOGIN_FAILURE_REASONS.find((known) => known === body.reason) ?? null;
     const { count } = await this.prisma.runner.updateMany({
       where: { id: runner.id, ...(attempt ? { loginAt: attempt, loginStatus: { not: 'cancelling' } } : {}) },
       data: {
@@ -2412,6 +2484,9 @@ export class RunnerApiController {
         loginUserCode: status === 'awaiting_approval' ? (body.userCode ?? null) : null,
         loginCode: null,
         loginMessage: body.message ?? null,
+        // How long the link at loginUrl lasts, kept while it waits and dropped with it.
+        loginExpiresAt: waiting && expiresAt && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null,
+        loginReason: status === 'failed' ? reason : null,
         // Which account is signing in. For a new one this is the first the control plane hears of
         // the slot the runner added for it.
         ...(body.account ? { loginAccount: body.account } : {}),
@@ -2548,6 +2623,13 @@ export class RunnerApiController {
     if (dshRefusal === DSH_RUNNER_UPGRADE_ERROR) {
       supportedProviders.splice(supportedProviders.indexOf(AgentProvider.DSH), 1);
     }
+    // Cursor CLI likewise only on a runner whose persisted heartbeat declares it too (migration 0426).
+    if (
+      supportedProviders.includes(AgentProvider.CURSOR) &&
+      !(await persistedProviderSupport(this.prisma, runner.id, AgentProvider.CURSOR))
+    ) {
+      supportedProviders.splice(supportedProviders.indexOf(AgentProvider.CURSOR), 1);
+    }
     // Declared but not startable on this machine (not installed, or a platform or version the
     // runner rejects). The declaration stays as sent; the queue holds the dsh rows instead, and
     // they wait with that notice until a heartbeat reports the CLI ready, rather than failing.
@@ -2670,14 +2752,20 @@ export class RunnerApiController {
       },
     });
     const supportsDsh = runnerAdvertisesProvider(providerHeader, AgentProvider.DSH)
-      && await persistedDshSupport(this.prisma, runner.id);
+      && await persistedProviderSupport(this.prisma, runner.id, AgentProvider.DSH);
+    const supportsCursor = runnerAdvertisesProvider(providerHeader, AgentProvider.CURSOR)
+      && await persistedProviderSupport(this.prisma, runner.id, AgentProvider.CURSOR);
     // The engine each session runs on: its own, else — for a row an older replica wrote — the old
     // rules'. Everything below that asks which CLI rebuilds a session asks this, never its slug.
     const engines = new Map<string, AgentProvider | null>();
     for (const session of sessions) engines.set(session.id, await sessionEngine(this.prisma, session));
     const undrivable = new Set<string>();
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
-      if (provider === AgentProvider.DSH ? supportsDsh : runnerAdvertisesProvider(providerHeader, provider)) continue;
+      if (
+        provider === AgentProvider.DSH ? supportsDsh
+          : provider === AgentProvider.CURSOR ? supportsCursor
+            : runnerAdvertisesProvider(providerHeader, provider)
+      ) continue;
       // Every session on the runtime, whatever credential it spends: this runner would rebuild a
       // Gemini key's session — or a DeepSeek key's Harness one — as Claude just the same.
       const onProvider = sessions.filter((session) => engines.get(session.id) === provider);
@@ -2807,6 +2895,7 @@ export class RunnerApiController {
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
           kimiAccount: s.kimiAccount ?? workspace?.kimiAccount,
+          cursorAccount: s.cursorAccount ?? workspace?.cursorAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec: ReturnType<typeof resolveExec>;
@@ -3096,7 +3185,7 @@ export class RunnerApiController {
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
       }
-      const onDsh = await assertDshLeaseSupport(tx, runner.id, owned[0], providerHeader);
+      const declared = await assertDeclaredLeaseSupport(tx, runner.id, owned[0], providerHeader);
       if (!OPEN.includes(owned[0].status)) {
         throw new ConflictException('session is no longer open');
       }
@@ -3173,7 +3262,7 @@ export class RunnerApiController {
       // Checked on every engine, not only Harness: a refused write that this transaction then
       // committed around — the generation retired, the in-flight turn expired, the approvals reaped —
       // would leave the session naming the previous owner, and its runner letting go of it.
-      if (acquired !== 1) throw new ConflictException(onDsh ? DSH_RUNNER_UPGRADE_ERROR : LEASE_WRITE_REFUSED);
+      if (acquired !== 1) throw new ConflictException(declared ?? LEASE_WRITE_REFUSED);
       await tx.$executeRaw`
         UPDATE "conversation_turn"
         SET "lease_deadline_at" = now() - interval '1 second'
@@ -3236,6 +3325,7 @@ export class RunnerApiController {
     if (
       preflight &&
       preflightEngine !== AgentProvider.DSH &&
+      preflightEngine !== AgentProvider.CURSOR &&
       OPEN.includes(preflight.status) &&
       preflight.inboxLeaseOwner === leaseOwner &&
       preflight.inboxLeaseGeneration === generation
@@ -3271,7 +3361,7 @@ export class RunnerApiController {
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
       }
-      const onDsh = await assertDshLeaseSupport(tx, runner.id, owned[0], providerHeader);
+      const declared = await assertDeclaredLeaseSupport(tx, runner.id, owned[0], providerHeader);
       if (!OPEN.includes(owned[0].status)) {
         throw new ConflictException('session is no longer open');
       }
@@ -3330,7 +3420,7 @@ export class RunnerApiController {
       // A legacy NULL poll or a predecessor may have leased after reclaim but before this
       // activation acquired the Session lock. Make every non-current executable turn visible
       // now, rather than letting it block the new engine for the normal five-minute deadline.
-      if (acquired !== 1) throw new ConflictException(onDsh ? DSH_RUNNER_UPGRADE_ERROR : LEASE_WRITE_REFUSED);
+      if (acquired !== 1) throw new ConflictException(declared ?? LEASE_WRITE_REFUSED);
       await tx.$executeRaw`
         UPDATE "conversation_turn"
         SET "lease_deadline_at" = now() - interval '1 second'
@@ -3757,7 +3847,11 @@ export class RunnerApiController {
           const session = await tx.session.findUniqueOrThrow({
             where: { id: sessionId },
             include: {
-              workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+              workspace: {
+                select: {
+                  env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+                },
+              },
               assignedRunner: { select: { engines: true, accountPauses: true } },
             },
           });
@@ -4221,7 +4315,13 @@ export class RunnerApiController {
         claudeAccount: true,
         antigravityAccount: true,
         kimiAccount: true,
-        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+        cursorAccount: true,
+        workspace: {
+          select: {
+            model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
+            cursorAccount: true,
+          },
+        },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
@@ -4263,6 +4363,7 @@ export class RunnerApiController {
       claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
       kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
+      cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -6091,8 +6192,9 @@ export class RunnerApiController {
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
       // The cards those turns are drawn as rather than as the owner's own message — an exception
-      // item's delivery, a task run's brief, a project's start, a confirmation review or its return,
-      // another session's message, the outcomes of this session's requests — read by the function
+      // item's delivery, the owner's answer handed to the coordinator, a task run's brief, a project's
+      // start, a confirmation review or its return, another session's message, the outcomes of this
+      // session's requests — read by the function
       // the queue reads them with (sessions/turn-cards.ts), so a card a queued turn was drawn as is
       // the card its echo is stored with. A batch of ordinary messages costs one indexed read.
       const turnCards = await readTurnCards(
@@ -6108,6 +6210,7 @@ export class RunnerApiController {
         );
         const cards = e.turnId ? turnCards.get(e.turnId) : undefined;
         e.payload = withOpenItemDelivery(e.payload, cards?.openItemDelivery ?? null);
+        e.payload = withOwnerAnswer(e.payload, cards?.ownerAnswer ?? null);
         e.payload = withTaskStart(e.payload, cards?.taskStart ?? null);
         e.payload = withProjectStarted(e.payload, cards?.projectStarted ?? null);
         e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);

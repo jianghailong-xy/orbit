@@ -914,6 +914,19 @@ test.describe('P4.2 approving orbit register', () => {
 
 /** A user's row in the Users table, by email. */
 const userRow = (page, email) => page.locator('tr').filter({ has: page.getByText(email, { exact: true }) });
+/** A row's menu of every other action (docs/mocks/admin-users-redesign). */
+const rowMenu = (row) => row.getByRole('button', { name: /^More actions for / });
+/** A row's own action — View as, or Enable on a disabled account: in sight, or on a phone first in its menu. */
+async function ownAction(page, testInfo, row, name) {
+  if (!phone(testInfo)) return button(row, name);
+  await rowMenu(row).click();
+  return item(page, name);
+}
+/** That the row offers `name` as its own action; a menu opened to see it is closed again. */
+async function offersOwn(page, testInfo, row, name) {
+  await expect(await ownAction(page, testInfo, row, name)).toBeVisible();
+  if (phone(testInfo)) await page.keyboard.press('Escape');
+}
 
 test.describe('P4.2 users', () => {
   test('the table: loading, reset password, a one-time password and delete', async ({ evidence }, testInfo) => {
@@ -936,13 +949,14 @@ test.describe('P4.2 users', () => {
     trace.push({ ...(await observe(page, fixtures, 'users')), rows: await page.locator('tbody tr').allInnerTexts() });
     await capture('p42-users', { table: page.locator(TABLE), row: dev });
 
-    await button(dev, 'Reset password').click();
+    await rowMenu(dev).click();
+    await item(page, 'Reset password').click();
     const reset = question(page, 'Reset dev@example.test\'s password?');
     await expect(reset).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'reset asked'));
     await capture('p42-users-reset', { question: reset });
-    await button(reset, 'OK').click();
+    await button(reset, 'Reset password').click();
     const issued = question(page, 'Password reset for dev@example.test');
     await expect(issued.getByText(ONE_TIME_PASSWORD, { exact: true })).toBeVisible();
     await frames(page);
@@ -952,20 +966,22 @@ test.describe('P4.2 users', () => {
     await expect(issued).toHaveCount(0);
     trace.push(await observe(page, fixtures, 'password dismissed'));
 
-    await button(dev, 'Make admin').click();
+    await rowMenu(dev).click();
+    await item(page, 'Make admin').click();
     const updated = notifications(page).getByText('Role updated', { exact: true });
     await expect(updated).toBeVisible();
     trace.push(await observe(page, fixtures, 'role updated'));
     await expect(updated).toHaveCount(0);
 
     const ops = userRow(page, 'ops@example.test');
-    await button(ops, 'Delete').click();
+    await rowMenu(ops).click();
+    await item(page, 'Delete').click();
     const remove = question(page, 'Delete ops@example.test?');
     await expect(remove).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'delete asked'));
     await capture('p42-users-delete', { question: remove });
-    await button(remove, 'OK').click();
+    await button(remove, 'Delete').click();
     await expect(notifications(page).getByText('User deleted', { exact: true })).toBeVisible();
     trace.push(await observe(page, fixtures, 'deleted'));
 
@@ -1024,14 +1040,18 @@ test.describe('P4.2 users', () => {
     await page.goto(P42_PATHS.admin);
     const dev = userRow(page, 'dev@example.test');
     await expect(dev).toBeVisible();
-    // The signed-in administrator's own row offers neither; a disabled account offers Enable.
-    await expect(button(userRow(page, 'reviewer@example.test'), 'Disable')).toHaveCount(0);
-    await expect(button(userRow(page, 'former@example.test'), 'Enable')).toBeVisible();
+    // The signed-in administrator's own menu offers no Disable; a disabled account offers Enable.
+    await rowMenu(userRow(page, 'reviewer@example.test')).click();
+    await expect(openMenu(page)).toBeVisible();
+    await expect(item(page, 'Disable')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await offersOwn(page, testInfo, userRow(page, 'former@example.test'), 'Enable');
     trace.push({ ...(await observe(page, fixtures, 'status')), rows: await page.locator('tbody tr').allInnerTexts() });
 
     // A refusal (the account was deleted meanwhile) is said in the question itself, and nothing changes.
     fixtures.state.disableRefusals = { [P42_IDS.ops]: 'user not found' };
-    await button(userRow(page, 'ops@example.test'), 'Disable').click();
+    await rowMenu(userRow(page, 'ops@example.test')).click();
+    await item(page, 'Disable').click();
     const askOps = question(page, 'Disable ops@example.test?');
     await expect(askOps).toBeVisible();
     await button(askOps, 'Disable').click();
@@ -1043,7 +1063,8 @@ test.describe('P4.2 users', () => {
     await expect(askOps).toHaveCount(0);
 
     // Disable asks first and says what stops working; then the row reads Disabled and offers Enable.
-    await button(dev, 'Disable').click();
+    await rowMenu(dev).click();
+    await item(page, 'Disable').click();
     const ask = question(page, 'Disable dev@example.test?');
     await expect(ask).toBeVisible();
     await frames(page);
@@ -1051,16 +1072,18 @@ test.describe('P4.2 users', () => {
     await capture('p42-users-disable', { question: ask });
     await button(ask, 'Disable').click();
     await expect(notifications(page).getByText('Account disabled', { exact: true })).toBeVisible();
-    await expect(button(dev, 'Enable')).toBeVisible();
+    await offersOwn(page, testInfo, dev, 'Enable');
     await expect(ask).toHaveCount(0);
     await frames(page);
     trace.push(await observe(page, fixtures, 'disabled'));
     await capture('p42-users-disabled', { row: dev });
 
-    // Enable lets the account back in at once, without asking.
-    await button(dev, 'Enable').click();
+    // Enable lets the account back in at once, without asking; Disable is back in its menu.
+    await (await ownAction(page, testInfo, dev, 'Enable')).click();
     await expect(notifications(page).getByText('Account enabled', { exact: true })).toBeVisible();
-    await expect(button(dev, 'Disable')).toBeVisible();
+    await rowMenu(dev).click();
+    await expect(item(page, 'Disable')).toBeVisible();
+    await page.keyboard.press('Escape');
     trace.push(await observe(page, fixtures, 'enabled'));
     await attachTrace(testInfo, trace);
   });

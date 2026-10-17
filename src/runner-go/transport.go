@@ -102,6 +102,7 @@ func init() {
 		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
+		cursorKeyCheckCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -243,6 +244,7 @@ func isLeaseOwnershipError(err error) bool {
 // request, so the heartbeat persists it as the provider:<name> capabilities the dsh gate also reads.
 // It states protocol support only: whether dsh is installed on this machine is its health report's
 // (dsh_health.go), and a session started without it fails with that report's repair, not as Claude.
+// Cursor CLI is added to it only while this runner can run its sessions (supportedProvidersHeader).
 const runnerSupportedProviders = "claude,codex,opencode,antigravity,dsh"
 
 func NewTransport(baseURL, token string) *Transport {
@@ -298,7 +300,7 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
 	req.Header.Set(runnerOSHeader, runtime.GOOS)
-	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
+	req.Header.Set("X-Orbit-Supported-Providers", supportedProvidersHeader())
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
 	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))
 	req.Header.Set(runnerWriteContractDigestHeader, runnerWriteContractDigest)
@@ -736,6 +738,19 @@ func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*Impo
 // the caller's to log, and the session keeps the title it has.
 func (t *Transport) sessionNaming(sessionID string, b SessionNamingRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/naming", b, nil, 15*time.Second)
+}
+
+// cursorKeyCheck reports what `agent models` answered when asked with the Cursor API key a session was
+// dispatched with (cursor_launch.go checkCursorSessionKey), which the control plane keeps on the key. The
+// key goes by its fingerprint only.
+func (t *Transport) cursorKeyCheck(sessionID string, b CursorKeyCheckReport) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/cursor-key-check", b, nil, 15*time.Second)
+}
+
+// cursorKeyCheckResult answers a heartbeat-delivered CursorKeyCheckCommand: what Cursor said of the key,
+// by the check it answers and the key's fingerprint.
+func (t *Transport) cursorKeyCheckResult(b CursorKeyCheckResult) error {
+	return t.do(nil, "POST", "/runner/cursor-key-check-result", b, nil, 15*time.Second)
 }
 
 // claudeHistoryResult answers a heartbeat-delivered ClaudeHistoryCommand: what Claude Code

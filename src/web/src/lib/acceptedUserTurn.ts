@@ -23,6 +23,7 @@ export interface AcceptedUserTurn extends TurnCards {
  *  left off the placeholder or the queued row, which carry what `turnCardsOf` picks. */
 export const TURN_CARD_FIELDS = {
   openItemDelivery: true,
+  ownerAnswer: true,
   taskStart: true,
   projectStarted: true,
   confirmationReviewRequest: true,

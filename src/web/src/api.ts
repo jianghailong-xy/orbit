@@ -5,6 +5,7 @@ import type {
   ConfirmationReviewRequestCard,
   ConversationTurnKind,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
   SessionMessageCard,
@@ -717,6 +718,9 @@ export interface TurnCards {
   /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
    *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The owner's answer handed to the coordinator (`OwnerAnswerCard`): which item, and when this
+   *  conversation was told. Its words are written for the agent. Absent on every turn a person typed. */
+  ownerAnswer?: OwnerAnswerCard;
   /** The same for the turn that hands a task's run its brief (`TaskStartCard`): a resumed run's — a
    *  run's opening turn is never listed here. */
   taskStart?: TaskStartCard;
@@ -1777,6 +1781,10 @@ export interface SessionDetail {
   kimiAccount?: string | null;
   /** See codexAccountPinned. */
   kimiAccountPinned?: boolean;
+  /** The Cursor CLI account picked or chosen for this session; null follows the workspace's. */
+  cursorAccount?: string | null;
+  /** See codexAccountPinned. */
+  cursorAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1800,6 +1808,8 @@ export interface SessionDetail {
     antigravityAccount?: string | null;
     /** The Kimi Code account this workspace's sessions run on; null is Default. */
     kimiAccount?: string | null;
+    /** The Cursor CLI account this workspace's sessions run on; null is Default. */
+    cursorAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;

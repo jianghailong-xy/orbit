@@ -3,13 +3,19 @@ import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionMessageCard,
   SessionReplyCard,
   TaskStartCard,
 } from '@orbit/shared';
 
-import { openItemIdOfTurn, readOpenItemDeliveryCard } from '../projects/project-open-item';
+import {
+  openItemIdOfTurn,
+  ownerAnswerCardOfTurn,
+  readOpenItemDeliveryCard,
+  readOwnerAnswerCard,
+} from '../projects/project-open-item';
 import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import {
   readConfirmationReturnCard,
@@ -25,9 +31,10 @@ import { readSessionReplyCards, readTurnRequestIds } from './session-request';
  * absent — not empty — on every turn that is not that card.
  *
  * A turn the control plane opened is drawn as a card rather than as the owner's own message: an
- * exception item's delivery, a task run's brief, a project's start, a confirmation request handed to
- * its reviewer and a reviewer's return handed to the run, another Orbit session's message, and the
- * outcomes of this session's own requests handed back to it. It is drawn twice — while it waits
+ * exception item's delivery, the owner's answer handed to the coordinator, a task run's brief, a
+ * project's start, a confirmation request handed to its reviewer and a reviewer's return handed to
+ * the run, another Orbit session's message, and the outcomes of this session's own requests handed
+ * back to it. It is drawn twice — while it waits
  * (`SessionsService.listQueuedTurns`, both views) and once the runner echoes it (the event ingest,
  * runner-api.controller.ts) — and both read it here, so a card cannot be on one and missing from the
  * other. Each new kind of card used to be added to the echo first and to the queue later, and a
@@ -36,6 +43,7 @@ import { readSessionReplyCards, readTurnRequestIds } from './session-request';
  */
 export interface TurnCards {
   openItemDelivery?: OpenItemDeliveryCard;
+  ownerAnswer?: OwnerAnswerCard;
   taskStart?: TaskStartCard;
   projectStarted?: ProjectStartedCard;
   confirmationReviewRequest?: ConfirmationReviewRequestCard;
@@ -72,6 +80,16 @@ export async function readTurnCards(
     if (!itemId) continue;
     const openItemDelivery = await readOpenItemDeliveryCard(db, itemId, session.ownerId);
     if (openItemDelivery) add(turn.id, { openItemDelivery });
+  }
+  // The turns telling a coordinator what the owner answered — a question it asked, or its request to
+  // record the project done — by the same kind of key (`owner-answer:v1:`, project-open-item.ts
+  // `ownerAnswerTurnId`). The key names the conversation the answer was told to, which has to be this
+  // one, and the card is read off that conversation's own delivery row (`readOwnerAnswerCard`).
+  for (const turn of turns) {
+    const answer = ownerAnswerCardOfTurn(turn.clientTurnId);
+    if (!answer || answer.sessionId !== session.id) continue;
+    const ownerAnswer = await readOwnerAnswerCard(db, answer.itemId, session.id);
+    if (ownerAnswer) add(turn.id, { ownerAnswer });
   }
   // The turn that hands a task's run its brief, and the task it was built from (tasks/task-start-card.ts).
   // Read only for a task run's opening or resume turn.

@@ -1,0 +1,38 @@
+{
+ "scenario": "background-shell-and-commit",
+ "runId": "2026-10-16T17-45-59-200Z",
+ "recordedAt": "2026-10-16T17:53:19.772Z",
+ "reason": "The prompt hit the Free plan's request limit, so no commit and no background shell happened. Recorded instead: the exact shape of an exhausted quota.",
+ "basis": "committed protocol recording (seq numbers below) plus files the recorded turn left in its run directory",
+ "checks": [
+  {
+   "name": "quota exhausted: the prompt answers end_turn",
+   "ok": true,
+   "detail": [
+    {
+     "seq": 8,
+     "id": 3,
+     "stopReason": "end_turn"
+    }
+   ]
+  },
+  {
+   "name": "…carrying only the text \"Upgrade your plan to continue\" as agent_message_chunk",
+   "ok": true,
+   "detail": "\n\nUpgrade your plan to continue"
+  },
+  {
+   "name": "…with no JSON-RPC error and no tool call",
+   "ok": true
+  }
+ ],
+ "facts": {
+  "text": "\n\nUpgrade your plan to continue",
+  "updateKinds": {
+   "agent_message_chunk": 1,
+   "session_info_update": 1,
+   "available_commands_update": 1
+  },
+  "serverError": "see incidents/quota-exhausted/README.md (decoded from the CLI debug log)"
+ }
+}

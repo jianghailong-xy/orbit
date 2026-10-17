@@ -348,14 +348,15 @@ Withdraw(排队列表里还 PENDING 的 steer 也给);撤回成功后气泡消�
 排的(唤醒、任务简报、别的会话的消息、回复卡)不进托盘,照旧画在对话末尾或回显落下的地方。web 的判断在
 `Transcript.tsx`(`UnreadSteer`/`readersOwnWords`)与 `WorkspaceView.tsx`(`inPendingTray`),原生在
 `TranscriptState.unreadSteers`、`SteerDelivery.isReadersOwn` 与 `PendingTray`;原生翻历史分页时分页里的 steer
-画在发出的位置(分页看不到后面的结算)。
+画在发出的位置(分页看不到后面的结算)。Android 在 `reader/SteerDelivery.kt`(`place`)与 `composer/PendingTray.kt`,
+读窗口没到实时尾部时同样画在发出的位置。
 
 托盘里排着的 message 可以 **Steer**:`POST /sessions/:id/turns/:turnId/steer`(`SessionsService.steerQueuedTurn`)
 在会话行锁里把这一行**原地**改成指向正在跑的那一轮的 CURRENT_WORK steer(同一行、同 seq、同附件),问的问题与
 `createTurn` 的 CURRENT_WORK 一样;不行就 409 `CURRENT_WORK_UNAVAILABLE`(`NO_CURRENT_WORK` / `STEER_UNSUPPORTED` /
 `TARGET_LEASE_EXPIRED`),行原样排着。inbox 里 steer 排在普通消息前面,所以它马上交给 runner,前面排着的消息
 照旧等这一轮的结果。反方向:回合进行中 web 的 ⌥Enter 或长按发送键、原生发送键的上下文菜单(Mac 右键、iPhone
-长按;Mac 上 ⌥Return 是系统的换行)发 `intent: NEXT_TURN`;原生平时的 `POST /turns` 仍不带 intent。客户端只在
+与 Android 长按;Mac 上 ⌥Return 是系统的换行)发 `intent: NEXT_TURN`;原生平时的 `POST /turns` 仍不带 intent。客户端只在
 Claude/Codex 会话上给 Steer(`runtimeTakesMidTurnSteer`),runner 太旧由服务端拒绝。垃圾桶就是上面的 Withdraw /
 Cancel,文字一律回到输入框、接在草稿下面。
 

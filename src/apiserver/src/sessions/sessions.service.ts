@@ -123,6 +123,7 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { cursorDefaultPermissionMode } from '../common/permission-semantics';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -234,7 +235,11 @@ import {
   type ManagedRunnerDemandAnswer,
 } from '../managed-runners/managed-runner-demand';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
-import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
+import {
+  CURSOR_RUNNER_UPGRADE_ERROR,
+  DSH_RUNNER_UPGRADE_ERROR,
+  dshRuntimeUnavailable,
+} from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -682,6 +687,8 @@ interface AccountSwitchWrite {
   antigravityAccountPinned?: boolean;
   kimiAccount?: string;
   kimiAccountPinned?: boolean;
+  cursorAccount?: string;
+  cursorAccountPinned?: boolean;
 }
 
 @Injectable()
@@ -901,6 +908,12 @@ export class SessionsService {
     ) {
       throw new BadRequestException('kimiAccount must be "default" or the id of one of the runner\'s accounts');
     }
+    if (
+      dto.cursorAccount != null &&
+      (typeof dto.cursorAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.cursorAccount))
+    ) {
+      throw new BadRequestException('cursorAccount must be "default" or the id of one of the runner\'s accounts');
+    }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -961,6 +974,7 @@ export class SessionsService {
           claudeAccount: true,
           antigravityAccount: true,
           kimiAccount: true,
+          cursorAccount: true,
           managedRunnerDefault: { select: { runnerId: true } },
         },
       });
@@ -983,7 +997,7 @@ export class SessionsService {
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
         select: {
           enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
-          kimiAccount: true,
+          kimiAccount: true, cursorAccount: true,
           managedRunnerDefault: { select: { runnerId: true } },
         },
       });
@@ -1050,9 +1064,16 @@ export class SessionsService {
     //                           and must not make every session on one runner unstartable.
     //
     // The lookup sits behind the mode test, so no caller that named a runnable mode pays for it.
+    // DeepSeek Harness and Cursor CLI are not Claude Code: dsh keeps its own sandbox, and Cursor CLI's
+    // `--force` runs as root (docs/cursor-runtime-contract.md §5).
     let rootRefusedFallback: PermissionMode | undefined;
     const requestedMode = dto.permissionMode ?? accountPermissionMode;
-    if (runtime !== AgentProvider.DSH && requestedMode && ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)) {
+    if (
+      runtime !== AgentProvider.DSH &&
+      runtime !== AgentProvider.CURSOR &&
+      requestedMode &&
+      ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)
+    ) {
       const target = await this.prisma.runner.findUnique({
         where: { id: assignedRunnerId },
         select: { name: true, runsAsRoot: true },
@@ -1154,13 +1175,24 @@ export class SessionsService {
       const unavailable = dshRuntimeUnavailable(targetRunner.engines);
       if (unavailable) throw new ConflictException(unavailable);
     }
-    // The Codex, Claude, Antigravity or Kimi account this session runs on: the one picked for it —
-    // which pins it there — else, when its workspace leaves the account to Orbit, the runner's account
-    // whose quota resets soonest (automaticAccount), which Orbit may move it off when that account's
-    // usage limit stops it. Stored here; a Codex, Claude or Kimi conversation lives in that account's
-    // directory. Null runs on the workspace's. An engine's account is the runner's sign-in to it, so it
-    // is read only for a session that runs on that sign-in: a key or a pool brings its own credential,
-    // and an account named beside one is not kept (docs/provider-engine-contract.md §8.2 4).
+    // Cursor CLI likewise only on a runner whose heartbeat declares it (migration 0426), refused here
+    // rather than left waiting for one. A mode the caller named has to be one it keeps; a session nobody
+    // named one for starts in one it does (cursorDefaultPermissionMode, below).
+    if (runtime === AgentProvider.CURSOR) {
+      if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:cursor')) {
+        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+      }
+      if (dto.permissionMode) normalizeBuiltinPermissionMode(runtime, model ?? '', dto.permissionMode as PermissionMode);
+    }
+    // The Codex, Claude, Antigravity, Kimi or Cursor CLI account this session runs on: the one picked
+    // for it — which pins it there — else, when its workspace leaves the account to Orbit, the runner's
+    // account whose quota resets soonest (automaticAccount), which Orbit may move it off when that
+    // account's usage limit stops it. Cursor CLI reports no quota yet, so Automatic starts it on Default,
+    // or on the first account signed in when Default is not (accountToStartOn). Stored here; a Codex,
+    // Claude or Kimi conversation lives in that account's directory. Null runs on the workspace's. An
+    // engine's account is the runner's sign-in to it, so it is read only for a session that runs on that
+    // sign-in: a key or a pool brings its own credential, and an account named beside one is not kept
+    // (docs/provider-engine-contract.md §8.2 4).
     const signedInOn = (engine: AccountEngine) =>
       resolved.credential.kind === 'login' && resolved.credential.engine === engine;
     const automatic = (engine: AccountEngine) =>
@@ -1180,10 +1212,12 @@ export class SessionsService {
     const pickedClaudeAccount = picked(AgentProvider.CLAUDE, dto.claudeAccount);
     const pickedAntigravityAccount = picked(AgentProvider.ANTIGRAVITY, dto.antigravityAccount);
     const pickedKimiAccount = picked(AgentProvider.KIMI, dto.kimiAccount);
+    const pickedCursorAccount = picked(AgentProvider.CURSOR, dto.cursorAccount);
     const codexAccount = pickedCodexAccount ?? automatic(AgentProvider.CODEX);
     const claudeAccount = pickedClaudeAccount ?? automatic(AgentProvider.CLAUDE);
     const antigravityAccount = pickedAntigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
     const kimiAccount = pickedKimiAccount ?? automatic(AgentProvider.KIMI);
+    const cursorAccount = pickedCursorAccount ?? automatic(AgentProvider.CURSOR);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
@@ -1197,6 +1231,7 @@ export class SessionsService {
           ...(claudeAccount ? { claudeAccount } : {}),
           ...(antigravityAccount ? { antigravityAccount } : {}),
           ...(kimiAccount ? { kimiAccount } : {}),
+          ...(cursorAccount ? { cursorAccount } : {}),
         },
         runner: targetRunner,
       });
@@ -1248,7 +1283,9 @@ export class SessionsService {
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
         // distinguish their legacy null-model inheritance from new Runtime-default semantics.
         usesRuntimeDefaultModel: true,
-        permissionMode: rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode,
+        permissionMode: runtime === AgentProvider.CURSOR
+          ? (dto.permissionMode ?? cursorDefaultPermissionMode(accountPermissionMode))
+          : (rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode),
         effort: normalizeEffortForProvider(runtime, dto.effort ?? accountEffort),
         // Stored as asked rather than clamped here, unlike effort above: whether this session
         // has a fast lane depends on the MODEL it ends up running (and for Codex on that model's
@@ -1268,6 +1305,8 @@ export class SessionsService {
         antigravityAccountPinned: pickedAntigravityAccount != null,
         kimiAccount,
         kimiAccountPinned: pickedKimiAccount != null,
+        cursorAccount,
+        cursorAccountPinned: pickedCursorAccount != null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -5057,7 +5096,9 @@ export class SessionsService {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
+          select: {
+            env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+          },
         })
       : null;
     const move = accountBeforeDispatch(
@@ -7894,6 +7935,16 @@ export class SessionsService {
       });
       // The engine it revives on is its own, whichever credential it now takes.
       const resumeRuntime = next.engine;
+      if (resumeRuntime === AgentProvider.CURSOR) {
+        if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:cursor')) {
+          throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+        }
+        normalizeBuiltinPermissionMode(
+          resumeRuntime,
+          next.model ?? current.model ?? '',
+          resolvePermissionMode(dto.permissionMode ?? current.permissionMode, null),
+        );
+      }
       if (resumeRuntime === AgentProvider.DSH) {
         if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:dsh')) {
           throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
@@ -8243,7 +8294,7 @@ export class SessionsService {
       next.changed && next.providerBuiltin && isAccountEngine(next.provider) ? next.provider : null;
     if (account !== undefined && !engine) {
       throw new BadRequestException(
-        "an account goes with a switch onto the built-in Codex, Claude, Antigravity or Kimi engine — a session already there moves with PATCH /sessions/:id/account",
+        "an account goes with a switch onto the built-in Codex, Claude, Antigravity, Kimi or Cursor CLI engine — a session already there moves with PATCH /sessions/:id/account",
       );
     }
     if (!engine) return {};
@@ -8258,7 +8309,12 @@ export class SessionsService {
         claudeAccountPinned: true,
         antigravityAccountPinned: true,
         kimiAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+        cursorAccountPinned: true,
+        workspace: {
+          select: {
+            env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+          },
+        },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
@@ -8426,11 +8482,16 @@ export class SessionsService {
         antigravityAccount:
           accounts.antigravityAccount ?? session.antigravityAccount ?? session.workspace?.antigravityAccount,
         kimiAccount: accounts.kimiAccount ?? session.kimiAccount ?? session.workspace?.kimiAccount,
+        cursorAccount: accounts.cursorAccount ?? session.cursorAccount ?? session.workspace?.cursorAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
         !session.assignedRunner.capabilities?.includes('provider:dsh'))) {
         throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      }
+      if (exec.provider === AgentProvider.CURSOR && (!session.assignedRunner?.capabilitiesReportedAt ||
+        !session.assignedRunner.capabilities?.includes('provider:cursor'))) {
+        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
       }
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
@@ -8649,7 +8710,13 @@ export class SessionsService {
           antigravityAccountPinned: true,
           kimiAccount: true,
           kimiAccountPinned: true,
-          workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+          cursorAccount: true,
+          cursorAccountPinned: true,
+          workspace: {
+            select: {
+              env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+            },
+          },
           assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
         },
       });
@@ -8663,7 +8730,7 @@ export class SessionsService {
         !session.assignedRunner
       ) {
         throw new BadRequestException(
-          "only a session on the built-in Codex, Claude, Antigravity or Kimi engine runs on one of its runner's accounts",
+          "only a session on the built-in Codex, Claude, Antigravity, Kimi or Cursor CLI engine runs on one of its runner's accounts",
         );
       }
       const runner = session.assignedRunner;

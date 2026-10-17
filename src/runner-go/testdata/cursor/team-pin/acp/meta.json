@@ -1,0 +1,62 @@
+{
+ "scenario": "team-pin",
+ "process": "acp",
+ "version": "2026.10.14-941492e",
+ "exit": {
+  "code": 0,
+  "signal": null
+ },
+ "actions": [
+  {
+   "t": 8,
+   "channel": "spawn",
+   "value": {
+    "args": [
+     "acp"
+    ],
+    "cwd": "<RUN>/work",
+    "envKeys": [
+     "AGENT_CLI_CREDENTIAL_STORE",
+     "CURSOR_API_KEY",
+     "CURSOR_CONFIG_DIR",
+     "CURSOR_DATA_DIR",
+     "HOME",
+     "LANG",
+     "NO_OPEN_BROWSER",
+     "ORBIT_P0_CANARY",
+     "PATH",
+     "TERM",
+     "XDG_CACHE_HOME",
+     "XDG_CONFIG_HOME",
+     "XDG_DATA_HOME"
+    ]
+   }
+  },
+  {
+   "t": 8,
+   "channel": "client->agent",
+   "id": 1,
+   "method": "initialize"
+  },
+  {
+   "t": 415,
+   "channel": "client->agent",
+   "id": 2,
+   "method": "session/new"
+  },
+  {
+   "t": 9950,
+   "channel": "client->agent",
+   "id": 3,
+   "method": "session/new"
+  },
+  {
+   "t": 9979,
+   "channel": "exit",
+   "value": {
+    "code": 0,
+    "signal": null
+   }
+  }
+ ]
+}

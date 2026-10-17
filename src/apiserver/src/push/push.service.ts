@@ -4,7 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus, type DeviceToken } from '@prisma/client';
-import type { LoginEngine } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
 import { openItemsNoLongerOwed } from '../projects/project-open-item';
@@ -31,6 +31,7 @@ const ENGINE_LABELS: Record<LoginEngine, string> = {
   codex: 'Codex',
   kimi: 'Kimi Code',
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
 
 /** What became of an agent's own `notify` call — the answer handed straight back to the agent. */

@@ -1,0 +1,92 @@
+{
+ "scenario": "permission-force",
+ "runId": "2026-10-16T17-45-08-331Z",
+ "recordedAt": "2026-10-16T17:47:22.185Z",
+ "reason": "The scenario read the session store without its -wal file, found no tables and threw before its checks ran (fixed in lib/harness.mjs). The prompt itself completed and is fully recorded.",
+ "basis": "committed protocol recording (seq numbers below) plus files the recorded turn left in its run directory",
+ "checks": [
+  {
+   "name": "--force: no session/request_permission at all",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "name": "--force: the workspace write and the `touch` both happened",
+   "ok": true,
+   "detail": [
+    "force-write.txt",
+    "force-shell.txt"
+   ]
+  },
+  {
+   "name": "--force: the MCP record tool ran once",
+   "ok": true,
+   "detail": 1
+  },
+  {
+   "name": "--force: the fetch tool card completed",
+   "ok": true
+  },
+  {
+   "name": "the session store records isRunEverything: true",
+   "ok": true,
+   "detail": {
+    "isRunEverything": true,
+    "mode": "default"
+   }
+  }
+ ],
+ "facts": {
+  "permissionRequests": [],
+  "toolCards": [
+   {
+    "title": "Edit `<RUN>/work/force-write.txt`",
+    "kind": "edit",
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ]
+   },
+   {
+    "title": "`touch force-shell.txt`",
+    "kind": "execute",
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ]
+   },
+   {
+    "title": "p0probe: record",
+    "kind": "other",
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ]
+   },
+   {
+    "title": "Web Fetch: https://example.com/",
+    "kind": "fetch",
+    "statuses": [
+     "pending",
+     "in_progress",
+     "completed"
+    ]
+   }
+  ],
+  "files": [
+   "force-write.txt",
+   "force-shell.txt"
+  ],
+  "mcpEffects": 1,
+  "stopReasons": [
+   {
+    "seq": 136,
+    "id": 3,
+    "stopReason": "end_turn"
+   }
+  ]
+ }
+}
