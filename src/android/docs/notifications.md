@@ -226,6 +226,13 @@ configuration. A debug package value cannot initialize the release package
 because of the runtime equality check. The A14 integration must still inspect
 the combined release artifact and retain its existing fixture/signing isolation.
 
+A tagged release reads the values from the `android-internal` environment
+variables of the same names, which `release.yml`'s signing step passes to
+`build-release.sh` (see `release.md`). The Firebase project registers only
+`io.orbitd.android`, so a debug build (`io.orbitd.android.debug`) keeps push
+disabled even when the values are supplied; the real-Firebase emulator check below
+builds the release package instead.
+
 The deployment separately needs A09's `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`,
 base64 PEM `FCM_PRIVATE_KEY`, and exact `FCM_ANDROID_PACKAGE`. These must belong to
 the same isolated project/package as the client. Backend registration success
@@ -256,7 +263,7 @@ env JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/opt/android-sdk A
   bash src/android/gradlew -p src/android --no-daemon --max-workers=2 test lintDebug assembleDebug
 ```
 
-It runs the 33 notification unit cases in both app variants: registration and
+It runs the 38 notification unit cases in both app variants: registration and
 binding generations, installation identity, the once-per-installation permission
 claim, payload parsing against the shared fixture, authority reads for every
 alert kind, sync/clear semantics, worker expiry, channels, content intents and
@@ -301,6 +308,21 @@ host load the emulator stalled system-wide once (an `onStopJob` ANR during the
 worker case, with system_server itself delayed by tens of seconds); such a run is
 repeated rather than counted.
 
+The A02 AVDs use Google APIs system images, which carry Google Play services but
+no Play Store; FCM needs only the former. `push-fcm-emulator.sh` (export the five
+`ORBIT_ANDROID_FIREBASE_*` values first) builds the release package with a
+throwaway key and runs `FcmTokenDeviceTest` with the default runner, so the
+production `FirebaseTokenSource` asks Google for the token. Sign-in registers
+Google's token with the fixture, which keeps only a hash prefix, length and shape.
+Deleting and requesting the token again at Google delivers a new one to
+`onNewToken`, which registers again under a new binding. A new process restores
+that binding, and sign-out unregisters it. Between the two test methods the script
+hands the stopped app one FCM-shaped data message through Firebase's own receiver,
+as root in place of Google Play services, and checks the tray entry and the
+`OrbitPush` receipt line. No message travels through FCM in this check: sending
+needs the backend's service account, which only production holds, and the
+emulator cannot sign in to production as the account owner.
+
 Any emulator operation must hold `flock /var/lib/orbit/android/ui.lock`
 exclusively for the whole device flow and name `emulator-5554` (or the API
 29–35 AVD the script starts) explicitly; a physical phone on the same adb server
@@ -309,10 +331,12 @@ never an FCM receipt.
 
 ## Remaining real-device evidence and platform limits
 
-Current resources do not include the target physical phones, matching live FCM
-client/server credentials, deployment role accounts, or an installed iOS build
-identity. On 2026-10-07 the account owner asked for emulator testing with
-screenshots first and deferred the physical phone, which the coordinator
+Since 2026-10-17 the Firebase client configuration for `io.orbitd.android` exists
+on the build host and in `android-internal`, and the coordinator reports the
+production FCM credentials configured on 2026-10-10. The target physical phones,
+deployment role accounts and an installed iOS build identity are still not
+available to this task. On 2026-10-07 the account owner asked for emulator testing
+with screenshots first and deferred the physical phone, which the coordinator
 schedules. The following steps remain even if every local check succeeds:
 
 1. Integrate the exact A10 client commit with the fixed backend/shared inputs and
@@ -330,6 +354,12 @@ schedules. The following steps remain even if every local check succeeds:
    P95 ≤10 seconds, and tap-to-actionable P95 ≤3 seconds. Record provider acceptance,
    device receipt, visible result, and tap/action timestamps separately with clock
    uncertainty. A foreground-suppressed system banner needs actual in-app evidence.
+   Device sources: the `OrbitPush` receipt line (`adb logcat -v epoch -s OrbitPush`:
+   eventId, the server's `sentAt`, FCM's `sentTime`, priorities), the system event
+   log (`adb logcat -b events`: `notification_enqueue`, `notification_cancel`,
+   `notification_clicked`, `wm_on_resume_called`) and a frame-timestamped screen
+   recording (`screenrecord --bugreport`), mapped to one collector time line with
+   the offset bounds of a01-errata-v2 §6.
 5. Resolve an approval on another actual client; after sync and independently after
    foreground recovery, record notification removal and refreshed in-app pending
    state within the required ≤3 seconds. Exercise token refresh, account/server
