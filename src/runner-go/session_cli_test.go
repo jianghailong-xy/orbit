@@ -827,6 +827,7 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 }
 
 func TestSessionCLIValidatesArgumentsAndRejectsArbitraryFiles(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
 	t.Setenv(envOrchestrationToken, "session-token")
@@ -858,6 +859,7 @@ func TestSessionCLIValidatesArgumentsAndRejectsArbitraryFiles(t *testing.T) {
 }
 
 func TestSessionCLIPathIDsCannotEscapeSessionRoute(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
 	t.Setenv(envOrchestrationToken, "session-token")

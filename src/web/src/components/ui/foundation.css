@@ -55,6 +55,7 @@
   --orbit-badge-purple-bg: #f9f0ff;
   --orbit-control-on-primary: #ffffff;
   --orbit-control-hover-bg: rgba(0, 0, 0, 0.04);
+  --orbit-dialog-close-hover-bg: rgba(0, 0, 0, 0.06);
   --orbit-fill-alter: rgba(0, 0, 0, 0.02);
   --orbit-control-disabled-text: rgba(0, 0, 0, 0.25);
   --orbit-control-disabled-bg: rgba(0, 0, 0, 0.04);
@@ -126,6 +127,7 @@
   --orbit-badge-purple: #854eca;
   --orbit-badge-purple-bg: #1a1325;
   --orbit-control-hover-bg: rgba(255, 255, 255, 0.08);
+  --orbit-dialog-close-hover-bg: rgba(255, 255, 255, 0.12);
   --orbit-fill-alter: rgba(255, 255, 255, 0.04);
   --orbit-control-disabled-text: rgba(255, 255, 255, 0.25);
   --orbit-control-disabled-bg: rgba(255, 255, 255, 0.08);

@@ -419,7 +419,7 @@ describe('one number in four places, over two spaces whose plans wait', () => {
     expect(wikiPlanPending(ORBIT_PLAN, null) + wikiPlanPending(WIKOVA_PLAN, null)).toBe(3);
 
     expect(side).toContain(`title="${waiting} waiting on you" aria-label="${waiting} waiting on you">${waiting}</span>`);
-    const badge = page.match(/class="ant-btn[^"]*wk-activity-btn[^"]*"[\s\S]*?class="tp-rail-badge needs-you" title="(\d+) waiting on you" aria-label="\d+ waiting on you">(\d+)</);
+    const badge = page.match(/class="orbit-button[^"]*wk-activity-btn[^"]*"[\s\S]*?class="tp-rail-badge needs-you" title="(\d+) waiting on you" aria-label="\d+ waiting on you">(\d+)</);
     expect(badge?.[1]).toBe(String(waiting));
     expect(badge?.[2]).toBe(String(waiting));
 
@@ -490,7 +490,7 @@ describe('a desktop over two spaces: what waits elsewhere is on it too', () => {
     expect(review).toContain('Secret redaction lets ENV_VAR=value secrets through');
     expect(review).not.toContain('A wikova pitfall');
     // Its button is Review over every space, the first banner's door.
-    expect(review).toMatch(/<button[^>]*class="ant-btn[^"]*ant-btn-primary[^"]*"[^>]*><span>Review<\/span><\/button>/);
+    expect(review).toMatch(/<button[^>]*class="orbit-button orbit-button-primary[^"]*"[^>]*><span>Review<\/span><\/button>/);
   });
 
   it('draws the other spaces’ plan banners, and only theirs, over the cards', () => {
@@ -550,8 +550,8 @@ describe('the head’s Activity button', () => {
     const home = wiki('/wiki/orbit');
     const order = ['wk-contents-btn', 'wk-activity-btn', 'aria-label="Settings"', 'aria-label="New entry"'].map((needle) => at(home, needle));
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    expect(home).toMatch(/<button aria-label="Activity" aria-describedby="[^"]+" type="button" class="[^"]*wk-activity-btn">/);
+    expect(home).toMatch(/<button(?=[^>]*aria-label="Activity")(?=[^>]*aria-describedby="[^"]+")[^>]*class="[^"]*wk-activity-btn">/);
     const activity = wiki('/wiki/orbit/activity');
-    expect(activity).toMatch(/<button aria-label="Activity" aria-current="page" aria-describedby="[^"]+" type="button" class="[^"]*wk-activity-btn on">/);
+    expect(activity).toMatch(/<button(?=[^>]*aria-label="Activity")(?=[^>]*aria-current="page")(?=[^>]*aria-describedby="[^"]+")[^>]*class="[^"]*wk-activity-btn on">/);
   });
 });

@@ -21,6 +21,7 @@ import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.attachments.clearAttachmentHandoffs
 import io.orbitd.android.attachments.clearAttachmentImports
+import io.orbitd.android.directory.TrashingSessions
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.toast.OrbitToasts
 
@@ -31,6 +32,8 @@ open class OrbitApplication : Application() {
     val googleSignIn = GoogleSignIn()
     internal val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val realtime: RealtimeStore by lazy { RealtimeStore(session, processScope).also { RealtimeLifecycle(this, it) } }
+    /** The sessions on their way to Trash from this device, kept out of every list until their move has settled (A05-9). */
+    internal val trashing = TrashingSessions()
     val push: io.orbitd.android.push.PushController by lazy { createPush() }
     val updates: io.orbitd.android.update.AppUpdater by lazy { createUpdates() }
     private var composerHandle: SessionHandle? = null
@@ -64,7 +67,7 @@ open class OrbitApplication : Application() {
     }
     protected open fun createSession() = AuthSession(
         OkHttpTransport(), AndroidCredentialStore(this), AndroidInstanceStore(this),
-        AndroidSessionDataStore(this), BuildConfig.VERSION_NAME, allowLoopbackHttp = BuildConfig.DEBUG,
+        AndroidSessionDataStore(this), BuildConfig.VERSION_NAME,
         emails = AndroidEmailStore(this), log = { Log.i("OrbitAuth", it) },
     )
     protected open fun createPush() = io.orbitd.android.push.PushController(this, session, realtime, processScope)

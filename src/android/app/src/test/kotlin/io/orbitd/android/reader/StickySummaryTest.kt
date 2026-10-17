@@ -35,8 +35,16 @@ class StickySummaryTest {
             put("text", "x"); putJsonObject("projectStarted") { put("projectId", "p"); put("projectTitle", "Android"); put("by", "SWITCH") } })))
         assertEquals("↑ Project started", StickySummary.of(user(4, buildJsonObject {
             put("text", "x"); putJsonObject("projectStarted") { put("projectId", "p"); put("projectTitle", "Android"); put("by", "CONFIRMATION") } })).first)
-        assertEquals("↑ Watch triggered" to "2 of 3 done", StickySummary.of(user(5, text(watch))))
-        assertTrue(StickySummary.isAnchor(user(5, text(watch))))
+    }
+
+    /** A08-14: a watch's wake is a line inside the answer, like a background job's news — the bar keeps naming the question. */
+    @Test fun aWatchsWakeIsNoAnchor() {
+        assertFalse(StickySummary.isAnchor(user(5, text(watch))))
+        val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")), user(3, text(watch)),
+            RunEvent("assistant", 4, text("A1 cont."))))
+        val questions = StickyQuestions(rows)
+        assertEquals("a watch's wake does not take the bar", "event:1", questions.above("event:4")?.key)
+        assertEquals("event:1", questions.last?.key)
     }
 
     @Test fun aBackgroundWakeIsALineInsideAnAnswerUnlessSomebodyTypedOnIt() {
@@ -44,6 +52,21 @@ class StickySummaryTest {
         val typed = user(7, buildJsonObject { put("text", "And also this$wake"); put("controlPlaneNote", wake) })
         assertTrue(StickySummary.isAnchor(typed))
         assertEquals("↑ Your question" to "And also this", StickySummary.of(typed))
+    }
+
+    /** The owner's answer handed to the coordinator is a line inside the coordinator's work: the bar keeps the question above it. */
+    @Test fun theOwnersAnswerIsALineAndNeverTakesTheBar() {
+        val answer = user(3, buildJsonObject {
+            put("text", "From Orbit · owner answer: you asked \"Merge now?\". The owner answered: Wait (2026-10-09T00:29:36.828Z).")
+            putJsonObject("ownerAnswer") {
+                put("itemId", "01a0d6a9-d763-70e1-b4cf-8793e971b511"); put("kind", "COORDINATOR_QUESTION")
+                put("sessionId", "01a0d6a9-d763-70e1-b4cf-8793e971b512"); put("deliveredAt", "2026-10-09T00:29:37.104Z")
+            }
+        })
+        assertFalse(StickySummary.isAnchor(answer))
+        val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")), answer, RunEvent("assistant", 4, text("A1 cont."))))
+        assertEquals("the answer does not take the bar", "event:1", StickyQuestions(rows).above("event:4")?.key)
+        assertTrue("with no card it is the reader's message, as before", StickySummary.isAnchor(user(5, text("From Orbit · owner answer: …"))))
     }
 
     @Test fun theIndexStepsBackThroughQuestionsAndSkipsWakes() {
@@ -56,8 +79,5 @@ class StickySummaryTest {
         assertEquals("a wake does not take the bar", "event:1", questions.above("event:5")?.key)
         assertEquals("event:5", questions.above("event:6")?.key)
         assertEquals("event:5", questions.last?.key)
-        assertEquals("2 of 3 done", StickySummary.describeReason("ALL TASK_DONE 2/3"))
-        assertEquals("1 of 2 finished their turn · 1 of 1 failed", StickySummary.describeReason("ALL SESSION_TURN_SETTLED 1/2 AND ANY TASK_FAILED 1/1"))
-        assertEquals("ALL SOMETHING_NEW 1/2", StickySummary.describeReason("ALL SOMETHING_NEW 1/2"))
     }
 }

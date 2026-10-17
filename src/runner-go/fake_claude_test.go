@@ -35,9 +35,19 @@ const fakeClaudeTimeout = 10 * time.Second
 // TestMain doubles as the fake CLI's entry point. The shim sets fakeClaudeDirEnv, so the
 // dispatch happens before the testing flags are parsed — claude's own argv (`-p`,
 // `--input-format`…) never reaches the test framework. fakeCodexDirEnv does the same for the
-// fake `codex app-server` in codex_rate_limit_reset_read_test.go, and fakeCodexResetProviderEnv for
-// the programmable one in codex_rate_limit_reset_consume_test.go.
+// fake `codex app-server` in codex_rate_limit_reset_read_test.go, fakeCodexResetProviderEnv for
+// the programmable one in codex_rate_limit_reset_consume_test.go, and fakeKimiACPDirEnv for the
+// scripted `kimi acp` in fake_kimi_acp_test.go.
 func TestMain(m *testing.M) {
+	// This binary as a session process's keeper, which the runner starts as /proc/self/exe
+	// (session_scope_linux.go) — under test, this binary — ahead of the fakes the process may be.
+	if len(os.Args) > 1 && os.Args[1] == sessionScopeCommand {
+		os.Exit(runSessionScope(os.Args[2:]))
+	}
+	// What the scripted Cursor CLI's commands leave running (fake_cursor_acp_test.go).
+	if mode := os.Getenv(fakeCursorScopeProcessEnv); mode != "" {
+		os.Exit(runFakeCursorScopeProcess(mode))
+	}
 	if dir := os.Getenv(fakeClaudeDirEnv); dir != "" {
 		os.Exit(runFakeClaude(dir))
 	}
@@ -46,6 +56,18 @@ func TestMain(m *testing.M) {
 	}
 	if dir := os.Getenv(fakeCodexResetProviderEnv); dir != "" {
 		os.Exit(runFakeCodexResetProvider(dir))
+	}
+	// The scripted `kimi acp` (fake_kimi_acp_test.go).
+	if dir := os.Getenv(fakeKimiACPDirEnv); dir != "" {
+		os.Exit(runFakeKimiACP(dir))
+	}
+	// The scripted Cursor CLI, in the version directory of a fake release (cursor_install_test.go).
+	if dir := os.Getenv(fakeCursorAgentEnv); dir != "" {
+		os.Exit(runFakeCursorAgent(dir))
+	}
+	// A Cursor CLI `agent acp` replaying a P0 recording (fake_cursor_acp_test.go).
+	if dir := os.Getenv(fakeCursorACPDirEnv); dir != "" {
+		os.Exit(runFakeCursorACP(dir))
 	}
 	// The one-shot `claude -p` that `orbit wiki verify` runs (wiki_verify_test.go).
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {

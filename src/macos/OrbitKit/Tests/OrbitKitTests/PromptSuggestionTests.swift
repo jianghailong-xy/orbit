@@ -156,14 +156,13 @@ final class PromptSuggestionTests: XCTestCase {
 
     /// A touch screen has no Use (design §4.1, §9 补充二): a double-tap on the field takes the guess,
     /// the field's own taps wait to see whether a second one follows (the keyboard a first tap raised
-    /// would lift the field out from under the second), and "Double-tap to use" follows the words until
-    /// the first double-tap on the device. VoiceOver, whose double-tap is "activate", gets an action.
+    /// would lift the field out from under the second), and "Double-tap to use" always follows the words.
+    /// VoiceOver, whose double-tap is "activate", gets an action.
     func testATouchScreenTakesItWithADoubleTapOnTheField() throws {
         let composer = try composerSource()
-        XCTAssertTrue(composer.contains("PromptSuggestionLine(text: suggestion, showsDoubleTapHint: !suggestionDoubleTapLearned)"),
-                      "the iPhone line has no Use, and the hint until it has been learned")
-        XCTAssertTrue(composer.contains("@AppStorage(\"composer.suggestionDoubleTapLearned\") private var suggestionDoubleTapLearned = false"),
-                      "learned once per device")
+        XCTAssertTrue(composer.contains("PromptSuggestionLine(text: suggestion)"),
+                      "the iPhone line has no Use, and the hint stays")
+        XCTAssertFalse(composer.contains("suggestionDoubleTapLearned"), "no learned flag: the hint stays")
         XCTAssertTrue(composer.contains("suggestion: offeredSuggestion, useSuggestion: useSuggestionByTouch)"),
                       "the field takes the double-tap only while a guess is on offer")
 
@@ -171,7 +170,6 @@ final class PromptSuggestionTests: XCTestCase {
         let touchBody = String(composer[byTouch.upperBound...].prefix(220))
         XCTAssertTrue(touchBody.contains("PlatformHaptics.tap()"), "a light tap says it landed")
         XCTAssertTrue(touchBody.contains("acceptSuggestion()"), "the same fill as Use and Tab")
-        XCTAssertTrue(touchBody.contains("suggestionDoubleTapLearned = true"), "and the hint has done its job")
         XCTAssertFalse(touchBody.contains("send("), "a double-tap never sends")
 
         let editor = try XCTUnwrap(composer.range(of: "private struct GrowingTextEditor: UIViewRepresentable {"))

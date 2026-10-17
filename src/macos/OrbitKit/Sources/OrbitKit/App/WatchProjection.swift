@@ -163,9 +163,10 @@ public enum WatchProjection {
 
     /// The noun a set of targets counts in, the way the browser's `targetNoun` counts it: the one
     /// kind every target shares ("tasks", "sessions"), and "targets" whenever a watch covers more
-    /// than one. The strip's middle says the same noun the card's rows do.
+    /// than one. A task's run session is that task here (`WatchTarget.waitedOn`). The strip's
+    /// middle says the same noun the card's rows do.
     public static func targetNoun(_ watches: [Watch], count: Int) -> String {
-        let kinds = Set(watches.flatMap { $0.targets.map(\.targetKind) })
+        let kinds = Set(watches.flatMap { $0.targets.map(\.waitedOn.targetKind) })
         let noun = kinds.count != 1 ? "target" : (kinds.contains(.task) ? "task" : "session")
         return count == 1 ? noun : "\(noun)s"
     }
@@ -556,11 +557,12 @@ public enum WatchProjection {
         return SessionStatusGlyph.make(runState: SessionRunState(rawValue: standing.status) ?? .unknown)
     }
 
-    /// The targets an opened strip lists for one watch: the live ones, what the condition has
-    /// already met first — a stable split, so the watch's own order holds within each group. The
-    /// browser's `StripWatch`.
+    /// The targets an opened strip lists for one watch: the live ones, each once and a task's run
+    /// session as that task (`WatchTarget.waitedOn`), what the condition has already met first — a
+    /// stable split, so the watch's own order holds within each group. The browser's `StripWatch`.
     public static func stripTargets(of watch: Watch) -> [WatchTarget] {
-        let live = watch.targets.filter { $0.state != .gone }
+        var seen = Set<String>()
+        let live = watch.targets.filter { $0.state != .gone }.map(\.waitedOn).filter { seen.insert($0.waitedKey).inserted }
         return live.filter { $0.state == .satisfied } + live.filter { $0.state != .satisfied }
     }
 
@@ -661,12 +663,14 @@ public struct WatchSessionSummary: Equatable, Sendable {
     private var active: [Watch] { watches.filter { $0.state == .active } }
 
     /// "Watching 7 targets" — the targets still in the set, each counted once across the ACTIVE
-    /// watches — or "Watch paused" when every one of them is paused.
+    /// watches and a task's run session as that task (`WatchTarget.waitedOn`), as the server's own
+    /// tally counts them (`LinkPreviewSession.watching`) — or "Watch paused" when every one of them
+    /// is paused.
     public var word: String {
         guard !active.isEmpty else { return watches.count == 1 ? "Watch paused" : "\(watches.count) watches paused" }
         var seen = Set<String>()
         for target in active.flatMap(\.targets) where target.state != .gone {
-            seen.insert("\(target.targetKind.rawValue):\(PublicID.storageKey(target.targetResourceId))")
+            seen.insert(target.waitedKey)
         }
         return WatchProjection.watchingLabel(targets: seen.count)
     }
@@ -676,11 +680,12 @@ public struct WatchSessionSummary: Equatable, Sendable {
         watches.count == 1 ? WatchProjection.progress(for: watches[0]) : "\(watches.count) watches"
     }
 
-    /// The strip line's middle: the one target a lone watch over one target that still exists
-    /// names, nil when the line counts instead — the web's `SessionWatchStrip` reads the same two
-    /// shapes, so the parity test holds them together.
+    /// The strip line's middle: the one target left that still exists, named however many watches
+    /// wait on it — a task its run session stands for (`WatchTarget.waitedOn`) — nil when the line
+    /// counts instead. The web's `SessionWatchStrip` reads the same two shapes, so the parity test
+    /// holds them together.
     public var lineTarget: WatchTarget? {
-        watches.count == 1 && lineTargets.count == 1 ? lineTargets[0] : nil
+        lineTargets.count == 1 ? lineTargets[0].waitedOn : nil
     }
 
     /// The distinct targets still in the set, each counted once across every watch — the line's
@@ -698,22 +703,23 @@ public struct WatchSessionSummary: Equatable, Sendable {
         return WatchProjection.thresholdLabel(watches[0].predicate, targets: lineTargets, watches: watches)
     }
 
+    /// Each live target once — a task and its run session once (`WatchTarget.waitedOn`) — the way
+    /// its watch names it, which is what a condition's own count reads.
     private var lineTargets: [WatchTarget] {
         var seen = Set<String>()
         var targets: [WatchTarget] = []
         for target in watches.flatMap(\.targets) where target.state != .gone {
-            let key = "\(target.targetKind.rawValue):\(PublicID.storageKey(target.targetResourceId))"
-            if seen.insert(key).inserted { targets.append(target) }
+            if seen.insert(target.waitedKey).inserted { targets.append(target) }
         }
         return targets
     }
 
     /// The line's sentence when it names no one target: Tasks created here's (`2 running · 1 failed ·
-    /// 4/8 done`), over the distinct live targets, each counted from where it itself stands
-    /// (`WatchProjection.stripCounts`). The deadline is not on the line — almost every wait ends long
-    /// before it — but in each watch's sentence, opened.
+    /// 4/8 done`), over the distinct live targets, each counted from where it itself stands — a run
+    /// session where its task does (`WatchProjection.stripCounts`). The deadline is not on the line —
+    /// almost every wait ends long before it — but in each watch's sentence, opened.
     public var lineParts: [SessionCreatedTasksCopy.CountPart] {
-        let counts = WatchProjection.stripCounts(lineTargets)
+        let counts = WatchProjection.stripCounts(lineTargets.map(\.waitedOn))
         return SessionCreatedTasksCopy.countParts(running: counts.running, failed: counts.failed,
                                                   done: counts.done, total: counts.total)
     }
@@ -747,6 +753,26 @@ public struct WatchSessionSummary: Equatable, Sendable {
 
     private func lookedAt(_ watch: Watch) -> Date {
         watch.lastEvaluatedAt.flatMap(RelativeTime.parse) ?? .distantPast
+    }
+}
+
+extension WatchTarget {
+    /// The target as the cards above the composer and the session's watching words count it: a
+    /// session that runs a task (`targetTask`) is a target on that task — its id, its title, where it
+    /// stands — so a task and its run session are one target, drawn on the task's row. Any other
+    /// target is itself, and so is every target from a server older than the field. The Following
+    /// page, a watch's detail and its condition say the watch as it was made, and read targets as they
+    /// are. The browser's `waitedOn`.
+    public var waitedOn: WatchTarget {
+        guard let task = targetTask else { return self }
+        return WatchTarget(targetKind: .task, targetResourceId: task.id, state: state, targetEpoch: targetEpoch,
+                           lastEvaluatedAt: lastEvaluatedAt, targetTitle: task.title, targetStatus: task.status)
+    }
+
+    /// One key per target as it is waited on (`waitedOn`), whichever way its id is spelled.
+    var waitedKey: String {
+        let waited = waitedOn
+        return "\(waited.targetKind.rawValue):\(PublicID.storageKey(waited.targetResourceId))"
     }
 }
 

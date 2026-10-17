@@ -218,6 +218,14 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 		}
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
 	}
+	if spec.bin == providerCursor {
+		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
+		defer cancel()
+		if err := installCursor(ctx, proxyVars); err != nil {
+			return InstallResultRequest{Status: installFailed, Command: spec.installCmd, Message: err.Error()}
+		}
+		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
+	}
 	// Whoever got here first may have already installed it — but "there" is not "working", and a
 	// binary that is present and cannot run is the one case this button exists to fix. Answering
 	// "done" for it is how a damaged engine stays damaged: nothing else in Orbit runs an installer
@@ -292,6 +300,9 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	if bin == providerDsh {
 		return ensureDsh(ctx, notify)
+	}
+	if bin == providerCursor {
+		return ensureCursor(ctx, notify)
 	}
 	if engineRunnable(bin) {
 		return ""
@@ -402,6 +413,20 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 	if bin == providerOpenCode {
 		return ""
 	}
+	// Cursor CLI runs on the credential its launch chooses (cursorLaunchCredential): a key, the login of the
+	// account the session borrows, or the workspace's own. It is read here the way the launch reads it,
+	// without asking Cursor: `agent models` would put a network round trip in front of every session.
+	if bin == providerCursor {
+		job := &ClaimedSession{Provider: providerCursor, Agent: AgentExecConfig{Provider: providerCursor, Env: agentEnv}}
+		credential, _, err := cursorLaunchCredential(job)
+		if err != nil {
+			return err.Error()
+		}
+		if credential == "" && !hasInjectedCredentials(bin, agentEnv) {
+			return cursorSignedOutMessage()
+		}
+		return ""
+	}
 	if hasInjectedCredentials(bin, agentEnv) {
 		return ""
 	}
@@ -492,6 +517,11 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 		return false
 	case providerAntigravity:
 		keys = []string{"GEMINI_API_KEY"}
+	case providerCursor:
+		// A Cursor API key saved in Orbit, or a key or token of the workspace's own, which the session's
+		// CLI runs on (cursor_launch.go cursorLaunchCredential) — the control plane's sign-in preflight
+		// counts the same two.
+		keys = []string{cursorAPIKeyVar, "CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"}
 	}
 	for _, k := range keys {
 		if strings.TrimSpace(agentEnv[k]) != "" {
@@ -508,6 +538,11 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 func lookEngine(engine string) (string, bool) {
 	if engine == providerDsh {
 		p, err := dshExecutablePath()
+		return p, err == nil
+	}
+	// The pinned build in Orbit's version directory, never a Cursor CLI the user put on PATH.
+	if engine == providerCursor {
+		p, err := cursorExecutablePath()
 		return p, err == nil
 	}
 	exe := engine

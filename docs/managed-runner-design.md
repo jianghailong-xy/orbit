@@ -811,3 +811,49 @@ The local evidence is `managedRunnerDisplay.spec.ts`, `managed-runner-states-fix
 `ManagedRunnerNotice.test.tsx`, `App.managedRunner.test.tsx`, `WorkspaceView.managedRunner.test.tsx`
 and `SetupPage.test.tsx`, and OrbitKit's `ManagedRunnerFixtureTests`, `ManagedRunnerLogicTests`,
 `ManagedRunnerAPIClientTests` and `ManagedRunnerWiringTests`.
+
+## Implementation record: run backends
+
+Recorded 2026-10-17 for the second phase's backend task (D1: a Docker backend beside Kubernetes). It
+was verified with the in-memory Kubernetes namespace of `test-support/fake-kube-client.ts`, an
+in-memory one-host backend (`test-support/memory-run-backend.ts`), disposable PostgreSQL databases
+and every existing managed runner spec, none of whose assertions changed. No cluster, Docker daemon
+or credential was used. Kubernetes behaviour is unchanged: the same calls in the same order, the same
+identity checks, stored proofs, reason codes and messages.
+
+| Area | As implemented |
+| --- | --- |
+| Interface | `ManagedRunnerBackend` (`managed-runner-backend.ts`): its name; the words operator details use for its objects; its location — where a new mapping's volume lives (cluster key, namespace) and the key of its capacity pool — and the fixed names of a runner's objects; the pool's budget and one runner's compute and storage shares; the data volume (read, create once, identity check, the storage it is bound to and that storage's identity, and what still holds it — nothing holding it means released); the bootstrap credential of a generation (read, issue, identity check, removal of a retired one by UID); the instance (read — UID, machine, running, terminated, stop confirmed by its host, being removed — proof of the single-instance guard before a create, create once, identity check, removal by UID); the stop proof (the recorded observation of an instance's own stop, and an operator's fencing receipt); and what a failure means (transient, or a definite refusal with its reason code). A backend observes and acts; the manager decides and writes every row. |
+| Kubernetes | `KubernetesBackend` (`kubernetes-backend.ts`) over the unchanged client of `kube-client.ts`: the PVC and its PV, VolumeAttachments, the Secret, the bare Pod, the kubelet's terminal container states, the ConfigMap receipt and the admission dry-run probe. 401 and 403 are `KUBERNETES_FORBIDDEN`, other refusals `KUBERNETES_REJECTED`; ambiguous answers, 429 and 5xx are retried. The object builders and checks (`managed-runner-resources.ts`), the receipt reader (`managed-runner-fencing.ts`) and the admission webhook stay where they were. |
+| Manager | `managed-runner-manager.ts` keeps the states, capacity admission, the single-writer gate, wake and sleep, a disabled owner's runner, every database write and every reason sentence, and calls no Kubernetes API. Its one Kubernetes import is for its constructor: a bare Kubernetes client — how every caller and spec built a manager before — runs on KubernetesBackend. The service takes a new mapping's location and volume name from the backend; the capacity pool is keyed by the backend's location and holds the backend's budget. The stored vocabulary stays for every backend: the mapping's columns (`pvcName`, `pvcUid`, `pvUid`, `volumeHandle`, `podName`, `podUid`, `nodeName`), the resource operation kinds (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`, `DELETE_POD`, `DELETE_SECRET`) and the reason codes, which a backend reads as the data volume, the storage behind it, the credential and the instance. |
+| Not in the interface | No call stops a running instance and none removes a data volume. An instance stops by itself — it accepted a sleep request, or its owner's account was disabled and the runner door refuses it — and nothing is forced; a volume stays until an explicit deletion workflow exists. A backend that needs a forced stop has to add it together with what the gate then accepts as proof. |
+| Profile | Optional `backend`. Absent, it is `kubernetes`, as every existing profile is read; `kubernetes` is accepted; `docker` is refused with the one problem `backend is "docker", which this server does not implement yet; it does not run managed runners on Kubernetes instead`, which leaves the enabled feature unavailable (`MANAGED_RUNNER_UNAVAILABLE`) with no Kubernetes client built; any other value is refused. The shipped example is unchanged. |
+| Data | No migration. Every mapping so far is a Kubernetes one, and with Docker refused no other kind can be made. A mapping's location (cluster key and namespace) already tells pools apart. A backend recorded on the mapping is left to the Docker work if it needs one; a new `managed_runner` column also changes the full-row literal in `managed-runner-status.spec.ts`. |
+| Switch off | Unchanged: the runtime factory returns null before reading a profile, so no backend exists. |
+
+Left for the Docker backend (D2): its implementation of the interface over the restricted Docker
+channel; the Docker profile's shape and validation; its pool key and a budget derived from the host;
+an instance UID in canonical UUID form, which the runner door requires; the stop report from Docker's
+own container state; release once no container uses the volume; a guard to prove before a create;
+and the admission webhook route's answer when the backend is not Kubernetes. Real-environment work
+on Kubernetes (T04) changes `kubernetes-backend.ts` and its helpers for what a real cluster does, and
+the manager only for the states.
+
+The local evidence is `managed-runner-backend.spec.ts` in the unit suite and
+`managed-runner-backend.pg.spec.ts`, run with `scripts/run-pg-spec.sh <spec>`, beside every existing
+managed runner unit and pg spec.
+
+## Implementation record: single-machine lab
+
+Recorded 2026-10-17 for the lab task. The owner authorized one KVM virtual machine on the shared
+HPC host as the authorized isolated test environment: one physical machine, one node, one failure
+domain. [The lab page](managed-runner-lab.md) records its versions, names, memory measurements,
+operation and smoke results; the scripts are in `scripts/managed-runner/lab/`.
+
+| Area | As built |
+| --- | --- |
+| Stack | Ubuntu 26.04.1 LTS with kernel 7.0.0-34-generic (kernel RBD), k3s v1.36.5+k3s1, Ceph 20.2.4 under cephadm, Ceph-CSI v3.18.0 deployed by Ceph-CSI Operator v1.1.0, every download and image pinned by checksum or digest. |
+| Topology | Ceph runs beside k3s in the same VM, outside Kubernetes, so k3s consumes it as an external backend. Three OSDs on three virtual disks; pool `orbit-mr-rbd` size 3, `min_size` 2, CRUSH failure domain `osd`. |
+| Profile | StorageClass `runner-data` rendered from `deploy/managed-runner/storage/storageclass.template.json` by `ceph_rbd.render`, with the storage profile fields required above; `clusterID` is the FSID, which also names the operator's ClientProfile. The CSI identity has exactly the documented pool-scoped caps; its key is `aes256k`, the only cipher a fresh 20.2.4 cluster allows, which the 7.0 kernel maps without a downgraded key. |
+| Observed | Pod recreation and a VM stop/start kept file, Git and SQLite data (`integrity_check` ok, row hashes equal). A second, differently named Pod on the same node ran on the RWO claim and wrote to it, so RWO is not single-Pod protection here either; a ReadWriteOncePod claim's second Pod stayed Pending. |
+| Not covered | The multi-node parts of criteria 2 and 8; no admission guard, fencing, Rook or CSI snapshots are installed. `ceph-rbd-verify.py`'s live phases need two nodes and were not run. |

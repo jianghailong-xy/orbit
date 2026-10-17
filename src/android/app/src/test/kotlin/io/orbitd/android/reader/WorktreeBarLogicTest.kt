@@ -30,6 +30,37 @@ class WorktreeBarLogicTest {
         assertEquals(WorktreeBarLogic.Primary.MERGE, L.primary(null, committed = true, turnActive = false))
     }
 
+    // A06-14: OrbitKit's turn-in-flight cases (f759d743e), case for case.
+    @Test fun turnActiveWhileQueuedOrRunning() {
+        // The owner's report, 2026-10-09: Merge pressed just after sending, while the turn was still queued, came back
+        // "wait for the current turn to finish before merging".
+        assertTrue(L.turnActive("PENDING", runningSubagents = null, sending = false))
+        assertTrue(L.turnActive("RUNNING", runningSubagents = null, sending = false))
+    }
+
+    @Test fun turnActiveFromTheSendBeforeTheRecordCatchesUp() {
+        assertTrue(L.turnActive("AWAITING_INPUT", runningSubagents = null, sending = true))
+        assertFalse(L.turnActive("AWAITING_INPUT", runningSubagents = null, sending = false))
+        assertTrue(L.turnActive("INTERRUPTED", runningSubagents = null, sending = true))
+    }
+
+    @Test fun turnActiveWhileParkedSubagentsRun() {
+        assertTrue(L.turnActive("AWAITING_INPUT", runningSubagents = 1, sending = false))
+        assertFalse(L.turnActive("AWAITING_INPUT", runningSubagents = 0, sending = false))
+        assertTrue(L.turnActive("INTERRUPTED", runningSubagents = 2, sending = false))
+    }
+
+    @Test fun endedSessionHoldsNothingBack() {
+        for (status in listOf("SUCCEEDED", "FAILED", "CANCELLED")) assertFalse(status, L.turnActive(status, runningSubagents = 2, sending = true))
+    }
+
+    @Test fun subagentsAreReadFromTheDetailOrTheListRow() {
+        assertEquals(2, L.runningSubagents(Wire.json.parseToJsonElement("""{"runningSubagents":["toolu_a","toolu_b"]}""").jsonObject))
+        assertEquals(0, L.runningSubagents(Wire.json.parseToJsonElement("""{"runningSubagents":[]}""").jsonObject))
+        assertEquals(3, L.runningSubagents(Wire.json.parseToJsonElement("""{"runningSubagentCount":3}""").jsonObject))
+        assertNull(L.runningSubagents(JsonObject(emptyMap())))
+    }
+
     @Test fun targets() {
         assertEquals("develop", L.defaultTarget(listOf("main", "develop"), "develop"))
         assertEquals("main", L.defaultTarget(listOf("main", "master"), "deleted"))

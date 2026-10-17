@@ -182,6 +182,9 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Startup · model_catalog · codex_model_catalog_auth:", substring = true).assertExists()
         list.performScrollToNode(hasText("exceeded retry limit, last status: 429 Too Many Requests", substring = true))
         compose.onNodeWithText("Provider unavailable").assertIsDisplayed()
+        // The notice is a row of its own, brought into view as the others are: since A07c's auto-retry card, the 429 is
+        // tall enough that the row beside it is not composed at this size.
+        list.performScrollToNode(hasText("Switched to Wikova · Pro", substring = true))
         compose.onNodeWithText("Switched to Wikova · Pro", substring = true).assertExists()
         capture("a06c-engine-rows")
         // A workflow's progress and an agent row that opens to what it did (baseline, A06-6).
@@ -227,28 +230,30 @@ class TranscriptDeviceTest {
         capture("a06c-binary-zip")
         compose.onNodeWithText("Done").performClick()
         // A06-5: at the bottom, focusing the composer raises the keyboard and the last line stays in view. At the
-        // script's 360×640 dp the toolbar, link row, status and composer leave the transcript no height above the
-        // keyboard (iOS folds that chrome while you type; Android doesn't), so this step runs at the emulator's own size.
-        shell("wm size reset"); shell("wm density reset")
-        try {
-            // Both resets have landed (each recreates the activity) before the reader is used again.
-            compose.waitUntil(30_000) {
-                runCatching { compose.activity.resources.configuration.let { it.densityDpi != 320 && it.screenWidthDp > 400 } }.getOrDefault(false)
-            }
-            awaitText("Latest answer A06C", substring = true)
-            if (compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithText("Jump to latest").performClick()
-            compose.waitForIdle()
-            compose.onNodeWithTag("composer-input").performClick()
-            compose.waitUntil(15_000) { imeVisible() }
-            compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Jump to your last question").fetchSemanticsNodes().isEmpty() }
-            SystemClock.sleep(1_500)
-            compose.waitForIdle()
-            val latest = compose.onNodeWithText("Latest answer A06C", substring = true).fetchSemanticsNode().boundsInWindow
-            val visible = list.fetchSemanticsNode().boundsInWindow
-            File(evidence, "a06c-tail.txt").writeText(shell("wm size") + shell("wm density") + "ime=${imeVisible()}\nlatest=$latest list=$visible\n")
-            assertTrue("the last line stays above the keyboard: $latest in $visible", latest.bottom <= visible.bottom + 2f && latest.top >= visible.top)
-            capture("a06c-tail-pinned-keyboard")
-        } finally { shell("wm size 720x1280"); shell("wm density 320") }
+        // script's 360×640 dp that is only possible because the chrome folds away while the composer holds the
+        // keyboard (iOS `ConsoleView.foldsChrome`): the bar, the rows under it and the cards above the composer.
+        awaitText("Latest answer A06C", substring = true)
+        if (compose.onAllNodesWithText("Jump to latest").fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithText("Jump to latest").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Context:", substring = true).assertExists()
+        compose.onNodeWithTag("composer-input").performClick()
+        compose.waitUntil(15_000) { imeVisible() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Session").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Context:", substring = true).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Jump to your last question").fetchSemanticsNodes().isEmpty() }
+        SystemClock.sleep(1_500)
+        compose.waitForIdle()
+        val latest = compose.onNodeWithText("Latest answer A06C", substring = true).fetchSemanticsNode().boundsInWindow
+        val visible = list.fetchSemanticsNode().boundsInWindow
+        File(evidence, "a06c-tail.txt").writeText(shell("wm size") + shell("wm density") + "ime=${imeVisible()}\nlatest=$latest list=$visible\n")
+        assertTrue("the last line stays above the keyboard: $latest in $visible", latest.bottom <= visible.bottom + 2f && latest.top >= visible.top)
+        capture("a06c-tail-pinned-keyboard")
+        // The keyboard going gives the chrome back, as it was.
+        shell("input keyevent KEYCODE_BACK")
+        compose.waitUntil(15_000) { !imeVisible() }
+        awaitText("Session")
+        compose.onNodeWithText("Context:", substring = true).assertExists()
+        capture("a06c-tail-restored")
     }
     private fun shell(command: String): String =
         ParcelFileDescriptor.AutoCloseInputStream(instrument.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }

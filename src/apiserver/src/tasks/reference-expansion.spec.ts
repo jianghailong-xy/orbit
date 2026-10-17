@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
-import { uuidToBase62 } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { parseReferences, ReferenceExpansionService } from './reference-expansion';
 
 const LIST_ID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
@@ -99,12 +101,12 @@ test('a list reference appends the shape of the list, not its tasks', async () =
   assert.ok(out.includes(`<referenced-list id="${LIST_PUBLIC_ID}">`), out);
   assert.match(out, /FineWeb CC-MAIN-2025-26/);
   assert.match(out, /DONE 249 \/ OPEN 248/);
-  assert.match(out, /在跑 {3}2/);
+  assert.match(out, /Running {5}2/);
   // Attribution rides along, so "is this a prompt problem" is answerable without a second call.
   assert.match(out, /quota 1 \/ infrastructure 1/);
-  assert.match(out, /已暂停 · 并发上限 3/);
+  assert.match(out, /paused · concurrency cap 3/);
   // And it says where the contents are, rather than carrying them.
-  assert.match(out, /tasklist_get \/ task_list \/ task_get 自取/);
+  assert.match(out, /fetch them yourself with tasklist_get \/ task_list \/ task_get/);
   // The user's own words survive ahead of the block.
   assert.match(out, /^帮我看下 \[FineWeb\]/);
 });
@@ -117,8 +119,57 @@ test('a task reference leads with whether anything ever ran', async () => {
   const out = (await service.expand(OWNER, `查一下 ${taskRef()}`))!;
 
   assert.ok(out.includes(`<referenced-task id="${TASK_PUBLIC_ID}">`), out);
-  assert.match(out, /共 3 次，其中执行过 turn 的 0 次/);
-  assert.match(out, /最近一次：FAILED \(infrastructure\), 0 turns/);
+  assert.match(out, /3 in total, 0 of them took a turn/);
+  assert.match(out, /last: FAILED \(infrastructure\), 0 turns/);
+});
+
+test('the task block is, byte for byte, the English note both clients are proved against', async () => {
+  // The web (lib/referencedTask.ts) and OrbitKit (ReferencedTask.swift) read this block back into a
+  // card, and their tests read the note `IN_ENGLISH` (web lib/referencedTask.fixtures.ts, which
+  // OrbitKit's fixtures are held to byte for byte). A label or sentence reworded here and not there
+  // is a block every client draws as plain text — so the two blocks are written here and compared
+  // with that note, rather than restated.
+  const fixtures = readFileSync(
+    path.join(path.resolve(__dirname, '../../../..'), 'src/web/src/lib/referencedTask.fixtures.ts'),
+    'utf8',
+  );
+  const note = /export const IN_ENGLISH = `([\s\S]*?)`;/.exec(fixtures)?.[1];
+  assert.ok(note, 'IN_ENGLISH is not in the web fixtures');
+  const ran = toUuid('34DH29mTc7OQ6AwxAFIJu');
+  const never = toUuid('349vy0HknpSjHwdwJ31O1');
+  const tasks: Record<string, unknown> = {
+    [ran]: {
+      id: ran,
+      title: 'Claude QA: verify the Watch core backend and its recovery semantics',
+      status: 'DONE',
+      isForeman: false,
+      verifiesTaskId: 'subject-task',
+      list: null,
+      assignee: { name: 'orbit' },
+    },
+    [never]: {
+      id: never,
+      title: 'P0 | Review and publish the docs and the community baseline',
+      status: 'OPEN',
+      isForeman: false,
+      verifiesTaskId: null,
+      list: null,
+      assignee: null,
+    },
+  };
+  const prisma = {
+    task: { findFirst: async ({ where }: any) => (where.ownerId === OWNER ? tasks[where.id] ?? null : null) },
+    session: {
+      count: async ({ where }: any) => (where.taskId === ran ? 1 : 0),
+      findFirst: async ({ where }: any) =>
+        where.taskId === ran ? { status: 'SUCCEEDED', numTurns: 144, error: null } : null,
+    },
+  } as never;
+  const typed = '[QA](orbit-task:34DH29mTc7OQ6AwxAFIJu) [P0](orbit-task:349vy0HknpSjHwdwJ31O1)';
+
+  const out = (await new ReferenceExpansionService(prisma).expand(OWNER, typed))!;
+
+  assert.equal(out, `${typed}\n\n${note}`);
 });
 
 test('both blocks name their row by its public id, never by the uuid the column holds', async () => {

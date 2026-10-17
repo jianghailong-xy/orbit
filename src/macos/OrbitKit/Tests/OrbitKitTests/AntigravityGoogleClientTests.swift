@@ -59,7 +59,7 @@ final class AntigravityGoogleClientTests: XCTestCase {
         let gemini = ConfiguredProvider(slug: "gemini-key", label: "Gemini", runtime: "antigravity", presetSlug: "gemini")
         for state in ["google", "unknown", "env-key", "expired"] {
             let runner = try XCTUnwrap(data[state])
-            let choices = SessionProviderChoices.choices(configured: [gemini], engines: runner.engines, antigravity: runner.antigravity)
+            let choices = SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [gemini], engines: runner.engines, antigravity: runner.antigravity))
             let builtin = try XCTUnwrap(choices.first { $0.slug == "antigravity" })
             XCTAssertEqual(builtin.labelDetail, state == "env-key" ? "env key" : "Google account")
             XCTAssertEqual(builtin.unavailable, state == "expired" ? "Not signed in" : nil)
@@ -67,14 +67,14 @@ final class AntigravityGoogleClientTests: XCTestCase {
         }
         let out = try XCTUnwrap(data["signed-out"])
         let google = try XCTUnwrap(data["google"])
-        let signedOut = SessionProviderChoices.choices(configured: [], engines: out.engines, antigravity: google.antigravity)
+        let signedOut = SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [], engines: out.engines, antigravity: google.antigravity))
         XCTAssertEqual(signedOut.first { $0.slug == "antigravity" }?.unavailable, "Not signed in")
-        XCTAssertFalse(SessionProviderChoices.choices(configured: [], engines: out.engines, antigravity: out.antigravity).contains { $0.slug == "antigravity" })
-        XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: out.engines, antigravity: out.antigravity, antigravityKeyAvailable: true).first { $0.slug == "antigravity" }?.unavailable,
+        XCTAssertFalse(SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [], engines: out.engines, antigravity: out.antigravity)).contains { $0.slug == "antigravity" })
+        XCTAssertNil(SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [], engines: out.engines, antigravity: out.antigravity, antigravityKeyAvailable: true)).first { $0.slug == "antigravity" }?.unavailable,
                      "a workspace's own GEMINI_API_KEY still runs on a signed-out runner")
         let expired = try XCTUnwrap(data["expired"])
-        let workspaceKey = try XCTUnwrap(SessionProviderChoices.choices(configured: [], engines: expired.engines,
-            antigravity: expired.antigravity, antigravityKeyAvailable: true).first { $0.slug == "antigravity" })
+        let workspaceKey = try XCTUnwrap(SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [], engines: expired.engines,
+            antigravity: expired.antigravity, antigravityKeyAvailable: true)).first { $0.slug == "antigravity" })
         XCTAssertNil(workspaceKey.unavailable, "a workspace key also bypasses a lapsed Google account")
         XCTAssertEqual(workspaceKey.labelDetail, "env key", "this session spends the workspace key")
     }
@@ -101,8 +101,8 @@ final class AntigravityGoogleClientTests: XCTestCase {
         XCTAssertFalse(RunnerPageFormat.antigravityCanSignIn(runner))
         XCTAssertEqual(EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin), "Google sign-in is not supported on macOS runners yet. Use a Gemini API key.")
         XCTAssertTrue(RunnerPageFormat.engineWindows(runner, engine: "antigravity").isEmpty)
-        let choice = try XCTUnwrap(SessionProviderChoices.choices(configured: [], engines: runner.engines,
-            antigravity: runner.antigravity).first { $0.slug == "antigravity" })
+        let choice = try XCTUnwrap(SessionProviderChoices.providers(for: "antigravity", sources: ChoiceSources(configured: [], engines: runner.engines,
+            antigravity: runner.antigravity)).first { $0.slug == "antigravity" })
         XCTAssertNil(choice.unavailable)
         XCTAssertEqual(choice.labelDetail, "env key")
     }

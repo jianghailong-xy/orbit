@@ -411,9 +411,11 @@ export type WikiPlanJobKind = (typeof WIKI_PLAN_JOB_KINDS)[number];
 
 /**
  * The fact that asked for a job: the space was created, or its owner asked on the plan page — for a draft,
- * or, by confirming a version, for the build of its documents.
+ * or, by confirming a version or asking for the documents of the version in force again, for a build of its
+ * documents — or an administrator asked for that build again for support (`support`, contract
+ * `plan.jobs.rebuild`, migration 0429).
  */
-export const WIKI_PLAN_JOB_TRIGGERS = ['space_created', 'owner'] as const;
+export const WIKI_PLAN_JOB_TRIGGERS = ['space_created', 'owner', 'support'] as const;
 export type WikiPlanJobTrigger = (typeof WIKI_PLAN_JOB_TRIGGERS)[number];
 
 /** Where a job stands as it is stored (`wiki_plan_job.state`). */
@@ -481,8 +483,9 @@ export const WIKI_PLAN_SERVER_JOB = {
   snapshotWaitSeconds: 300,
   readWaitSeconds: 300,
   /** Every call's whole system prompt, word for word the runner's (wikiPlanSystemPrompt). */
-  systemPrompt: '你是这个仓库的文档主编。你根据给你的材料规划产品与技术文档。只使用材料里出现的文件路径、'
-    + '章节标题、符号、项目名，不编造。用中文写，代码名、路径、命令保留原文。只输出要求的内容。',
+  systemPrompt: "You are the chief editor of this repository's documentation. You plan its product and technical documents from the "
+    + 'materials you are given. Use only the file paths, section headings, symbols and project names that appear in the materials, '
+    + 'and invent none. Write in English; keep code names, paths and commands as they are. Output only what is asked for.',
   /**
    * The repository's materials, cut to the runner's caps, in characters: the overview a catalogue, a category's
    * details and a document's outline read; the structure and the documents' heading tree a catalogue and the
@@ -595,6 +598,57 @@ export interface WikiPlanRedraftResult {
 }
 
 /**
+ * The documents of the version in force asked for again (contract `plan.jobs.rebuild`): by the space's owner,
+ * `POST /api/wiki/spaces/:id/plan/versions/:version/build`, or by an administrator for support,
+ * `POST /api/admin/wiki/spaces/:id/plan/build`. Only while the server executes the account's wiki.
+ */
+export const WIKI_PLAN_REBUILD = {
+  /** An administrator's reason, at most: what the support request is, recorded with it in Activity. */
+  reasonMaxChars: 500,
+  /** The Activity row of an administrator's request: theirs, naming the account, the space and the reason. */
+  activity: 'wiki.plan.build_requested',
+} as const;
+
+/** Its answer: the build — the one made now, or the one of the version in force that had not ended. */
+export interface WikiPlanBuildResult {
+  created: boolean;
+  job: WikiPlanJob;
+}
+
+/** `POST /api/admin/wiki/spaces/:id/plan/build`: why an administrator asks for the build. */
+export interface WikiPlanSupportBuildRequest {
+  reason: string;
+}
+
+/** An administrator's answer: the owner's build, and whose space it is. */
+export interface WikiPlanSupportBuildResult extends WikiPlanBuildResult {
+  ownerId: string;
+}
+
+/**
+ * One space of an account, as `GET /api/admin/wiki/users/:id/spaces` lists it for an administrator: what picking
+ * it to build needs, and nothing of what the space knows — its title, its version in force, how many of that
+ * version's documents are written, and whether a build of it is on its way.
+ */
+export interface WikiSupportSpace {
+  id: string;
+  title: string;
+  /** The version in force, or null when the space has no plan its owner confirmed. */
+  confirmedVersion: number | null;
+  /** The version in force's documents, written of how many; null without one. */
+  docs: { written: number; total: number } | null;
+  /** A build of the space that has not ended — queued, held or running — is on its way. */
+  building: boolean;
+}
+
+export interface WikiSupportSpaces {
+  userId: string;
+  /** Whether the server executes this account's wiki: only then can its documents be asked for again. */
+  serverExecutes: boolean;
+  spaces: WikiSupportSpace[];
+}
+
+/**
  * `GET /api/runner/wiki/spaces/:id/plan/job`: the job the calling maintenance session runs, and what it
  * starts from — the space, its repository and the maintenance workspace's checkout.
  */
@@ -631,6 +685,16 @@ export interface WikiPlanJobCheck {
   ok: boolean;
   /** Why it is not ok, one sentence each. */
   problems: string[];
+}
+
+/**
+ * A topic of the space as a session condition may name it (contract `plan.gate.references`): its slug, its
+ * display name, and how many of the space's active entries name it.
+ */
+export interface WikiPlanTopic {
+  slug: string;
+  title: string;
+  active: number;
 }
 
 /**

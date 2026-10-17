@@ -2,23 +2,35 @@ import Foundation
 
 /// What the clients need to know about DeepSeek Harness (`dsh`) that no other engine shares.
 ///
-/// Harness has no sign-in on the runner: its credential is a configured provider's API key (the
-/// `deepseek-harness` preset, runtime `dsh`), handed to the session at dispatch. So a runner can only
-/// be asked whether it can START Harness — it declares `provider:dsh`, and its engine report says the
-/// pinned CLI is installed on a platform it admits — never whether a key works; an invalid key shows
-/// in the session that used it. The existing `deepseek` preset is Claude Code on DeepSeek's
-/// Anthropic-compatible endpoint, and nothing here applies to it.
+/// Harness has no sign-in on the runner: it runs on a DeepSeek key — the same key Claude Code and
+/// OpenCode run on (docs/provider-engine-contract.md §2.1) — handed to the session at dispatch. So a
+/// runner can only be asked whether it can START Harness — it declares `provider:dsh`, and its engine
+/// report says the pinned CLI is installed on a platform it admits — never whether a key works; an
+/// invalid key shows in the session that used it.
 ///
 /// Mirrors web's `lib/dshRuntime.ts`; keep the two in sync.
 public enum DshRuntime {
-    /// The preset a Harness key is connected from.
+    /// The retired preset keys were connected from for Harness before it became an engine. A row made
+    /// from it is a DeepSeek key like any other.
     public static let presetSlug = "deepseek-harness"
+    /// The preset the DeepSeek key Harness runs on is connected from (web `DSH_CONNECT_HREF`,
+    /// `/providers/new/deepseek`).
+    public static let keyPreset = "deepseek"
     /// The heartbeat capability the server requires before it creates, resumes or hands out a dsh
     /// session.
     public static let runnerCapability = "provider:dsh"
-    /// The `fixEngine` of the picker's connect-a-key row: fixed by connecting the key in Infrastructure
-    /// (web `/providers/new/deepseek-harness`), not on any runner.
+    /// The `fixEngine` of DeepSeek Harness in the new-session hero while there is no DeepSeek key: fixed
+    /// by connecting one in Infrastructure (web `/providers/new/deepseek`), not on any runner.
     public static let connectFix = "dsh-connect"
+    /// What DeepSeek Harness says in the hero while there is no DeepSeek key to run on.
+    public static let connectKey = "Connect a DeepSeek key"
+    /// Its engine page on a machine that can run it (board iOS 1 ⑥): a session runs on the DeepSeek key
+    /// it was started with — any of the user's, not a key of Harness's own.
+    public static let readyLine = "Ready · each session uses the DeepSeek key it was started with"
+    /// Its engine page's footer (board iOS 1 ⑦), in place of the other engines' words about sign-ins
+    /// living on the machine: Harness has none.
+    public static let enginePageFooter =
+        "Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key."
     /// The permission modes Harness enforces (shared `DSH_PERMISSION_MODES`, measured in P4). The
     /// server rejects a session configured with any other.
     public static let permissionModes: [PermissionMode] = [.default, .auto, .dontAsk]

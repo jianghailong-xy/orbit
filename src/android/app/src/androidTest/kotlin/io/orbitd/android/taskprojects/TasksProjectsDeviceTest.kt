@@ -310,7 +310,7 @@ class TasksProjectsDeviceTest {
         compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Checked the fixed source and current server record")
         hideKeyboard()
-        compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
+        compose.onNodeWithTag("item:x1:mark-handled-confirm").performScrollTo().performClick()
         compose.waitUntil(20_000) { journal().any { row ->
             row.text("method") == "POST" && row.text("path") == "/api/projects/$projectId/open-items/x1/resolve" &&
                 row.obj("body")?.text("note") == "Checked the fixed source and current server record"
@@ -412,8 +412,15 @@ class TasksProjectsDeviceTest {
             put("criteriaDigest", "seal1"); put("requestId", "start1"); put("line", "PROJECT_BRANCH"); put("automatic", true); put("maxConcurrentTasks", 2)
             put("mergeCheckCommand", "./verify"); put("projectBranchName", "refs/heads/project/cards")
         }, journal().drop(before).last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
-        // The review says the decision was recorded, then closes itself.
-        awaitGone("card-review"); capture("start-asked-4-accepted")
+        // The review stays open as the record the start made: its settings one line, who started it where Start was.
+        compose.waitUntil(20_000) {
+            compose.onAllNodes(hasTestTag("card-review:footer-line") and hasText("Started by you · ", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("card-review:title").assertTextEquals(CardPreviews.decisionRecorded)
+        compose.onNodeWithTag("start:start1-settings").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithTag("start:start1:START").assertCountEquals(0)
+        capture("start-asked-4-accepted")
+        compose.onNodeWithTag("card-review:close").performClick(); awaitGone("card-review")
     }
 
     @Test fun aDeliveryBlockerIsReviewedWithItsReasonRecorded() = journey("project-blocker") {
@@ -773,12 +780,12 @@ class TasksProjectsDeviceTest {
     @Test fun a11cLandingJobsAndRetry() = journey("a11c-landing-jobs") {
         login(); http("/__control", """{"landingJobs":true}""")
         open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
-        awaitScrollTo("project-detail", hasTestTag("landing-row"))
-        compose.onNodeWithTag("landing-row").assertTextContains("2 jobs · 1 timed out", substring = true).assertTextContains("Timed out", substring = true)
+        awaitScrollTo("project-detail", hasTestTag("landing-card"))
+        compose.onNodeWithTag("landing-card:body").assertTextContains("2 jobs · 1 timed out", substring = true).assertTextContains("Timed out", substring = true)
             .assertTextContains("limit 10m", substring = true)
-        compose.onNodeWithTag("landing-timed-out", useUnmergedTree = true).assertExists()
-        capture("a11c-landing-row-timed-out")
-        tap("landing-row", "project-detail"); awaitTag("landing-jobs-sheet")
+        compose.onNodeWithTag("landing-head:timed-out", useUnmergedTree = true).assertExists()
+        capture("a11c-landing-card-timed-out")
+        tap("landing-card:body", "project-detail"); awaitTag("landing-jobs-sheet")
         compose.onNodeWithTag("landing-jobs-title").assertTextEquals("2 jobs in flight")
         compose.onNodeWithTag("landing-job:34cJobStuck:detail", useUnmergedTree = true)
             .assertTextContains("Runner workstation-gpu took it at ", substring = true).assertTextContains(" · stopped at fetching · no push recorded", substring = true)

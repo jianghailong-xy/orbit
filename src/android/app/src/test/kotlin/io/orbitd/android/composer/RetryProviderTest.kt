@@ -5,8 +5,9 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
-/** A07-8 (iOS 163e67872): a Retry pressed after picking a provider in the composer re-sends on it — the retry door gets the pick
- * and its account (RetryIdentityDto) — and one pressed with nothing picked re-sends where the session is. */
+/** A07-8 (iOS 163e67872): a Retry pressed after picking a provider in the composer re-sends on it — the retry door gets the pick,
+ * with the session's engine beside it (contract §3.5), and its account (RetryIdentityDto) — and one pressed with nothing picked
+ * re-sends where the session is. */
 class RetryProviderTest : ComposerShellTest() {
     private fun failedSession() {
         ComposerShell.providers = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek",
@@ -26,10 +27,12 @@ class RetryProviderTest : ComposerShellTest() {
         failedSession()
         signIn(); openSession(); openModelMenu()
         compose.onNode(hasText("DeepSeek") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
-        awaitText("Applies when this session resumes.")
+        // What the pick will do, and when (A07-19 (a)): the session has ended, so its next message.
+        awaitText("Your next message uses DeepSeek.")
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
         retryFromTheMenu()
-        assertEquals(buildJsonObject { put("provider", "deepseek") }, ComposerShell.body("POST sessions/${ComposerShell.SESSION}/retry-message"))
+        assertEquals(buildJsonObject { put("provider", "deepseek"); put("engine", "claude") },
+            ComposerShell.body("POST sessions/${ComposerShell.SESSION}/retry-message"))
     }
 
     @Test fun aRetryWithNothingPickedGoesWhereTheSessionIs() {

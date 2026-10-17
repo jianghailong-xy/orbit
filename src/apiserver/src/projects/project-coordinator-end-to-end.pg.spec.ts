@@ -397,9 +397,9 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       where: { id: settledWake.sessionId! },
       select: { prompt: true },
     });
-    assert.equal((settlementJudgment.prompt ?? '').includes('合并并录入主干证据'), false,
+    assert.equal((settlementJudgment.prompt ?? '').includes('merge and record main evidence'), false,
       'the settlement judgment is still told to file a merge task against a criterion');
-    assert.match(settlementJudgment.prompt ?? '', /LAND_TASK、CHECK_PROMOTION、LAND_PROMOTION 排队或在跑/);
+    assert.match(settlementJudgment.prompt ?? '', /LAND_TASK, CHECK_PROMOTION or LAND_PROMOTION queued or running/);
     assert.match(settlementJudgment.prompt ?? '', /TASK_LANDING_IN_FLIGHT/);
     assert.equal(
       await db.projectConvergenceDecision.count({ where: { projectId: project.id } }),

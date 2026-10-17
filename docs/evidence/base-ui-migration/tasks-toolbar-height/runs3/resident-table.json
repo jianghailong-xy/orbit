@@ -1,0 +1,911 @@
+{
+ "steps": [
+  {
+   "tree": "base",
+   "project": "chromium-dark-desktop",
+   "step": "Space with a task open",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-dark-desktop",
+   "step": "a row checked with a task open",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-dark-desktop",
+   "step": "a row checked, no task open",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-dark-desktop",
+   "step": "a task opened",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-dark-desktop",
+   "step": "the task closed",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-dark-desktop",
+   "step": "the window back at 1280px",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-dark-desktop",
+   "step": "the window widened to 1920px",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-light-desktop",
+   "step": "Space with a task open",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-light-desktop",
+   "step": "a row checked with a task open",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-light-desktop",
+   "step": "a row checked, no task open",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-light-desktop",
+   "step": "a task opened",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-light-desktop",
+   "step": "the task closed",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-light-desktop",
+   "step": "the window back at 1280px",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "chromium-light-desktop",
+   "step": "the window widened to 1920px",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "step": "Space with a task open",
+   "off": 3,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 3,
+    "42": 1
+   },
+   "barHeights": {
+    "42": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "step": "a row checked with a task open",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "42": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "step": "a row checked, no task open",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "step": "a task opened",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "42": 4
+   },
+   "barHeights": {
+    "42": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "step": "the task closed",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "42": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "step": "the window back at 1280px",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "42": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "step": "the window widened to 1920px",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "42": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "step": "Space with a task open",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "42": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "step": "a row checked with a task open",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "42": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "step": "a row checked, no task open",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "step": "a task opened",
+   "off": 0,
+   "runs": 4,
+   "toolbarHeights": {
+    "42": 4
+   },
+   "barHeights": {
+    "42": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "step": "the task closed",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "42": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "step": "the window back at 1280px",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "34": 4
+   },
+   "barHeights": {
+    "42": 4
+   }
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "step": "the window widened to 1920px",
+   "off": 4,
+   "runs": 4,
+   "toolbarHeights": {
+    "42": 4
+   },
+   "barHeights": {
+    "34": 4
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-dark-desktop",
+   "step": "Space with a task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-dark-desktop",
+   "step": "a row checked with a task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-dark-desktop",
+   "step": "a row checked, no task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-dark-desktop",
+   "step": "a task opened",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-dark-desktop",
+   "step": "the task closed",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-dark-desktop",
+   "step": "the window back at 1280px",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-dark-desktop",
+   "step": "the window widened to 1920px",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-light-desktop",
+   "step": "Space with a task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-light-desktop",
+   "step": "a row checked with a task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-light-desktop",
+   "step": "a row checked, no task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-light-desktop",
+   "step": "a task opened",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-light-desktop",
+   "step": "the task closed",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-light-desktop",
+   "step": "the window back at 1280px",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-light-desktop",
+   "step": "the window widened to 1920px",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-dark-desktop",
+   "step": "Space with a task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "42": 8
+   },
+   "barHeights": {
+    "42": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-dark-desktop",
+   "step": "a row checked with a task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "42": 8
+   },
+   "barHeights": {
+    "42": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-dark-desktop",
+   "step": "a row checked, no task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-dark-desktop",
+   "step": "a task opened",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "42": 8
+   },
+   "barHeights": {
+    "42": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-dark-desktop",
+   "step": "the task closed",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-dark-desktop",
+   "step": "the window back at 1280px",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "42": 8
+   },
+   "barHeights": {
+    "42": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-dark-desktop",
+   "step": "the window widened to 1920px",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-light-desktop",
+   "step": "Space with a task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "42": 8
+   },
+   "barHeights": {
+    "42": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-light-desktop",
+   "step": "a row checked with a task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "42": 8
+   },
+   "barHeights": {
+    "42": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-light-desktop",
+   "step": "a row checked, no task open",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-light-desktop",
+   "step": "a task opened",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "42": 8
+   },
+   "barHeights": {
+    "42": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-light-desktop",
+   "step": "the task closed",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-light-desktop",
+   "step": "the window back at 1280px",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "42": 8
+   },
+   "barHeights": {
+    "42": 8
+   }
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-light-desktop",
+   "step": "the window widened to 1920px",
+   "off": 0,
+   "runs": 8,
+   "toolbarHeights": {
+    "34": 8
+   },
+   "barHeights": {
+    "34": 8
+   }
+  }
+ ],
+ "tests": [
+  {
+   "tree": "base",
+   "project": "chromium-dark-desktop",
+   "status": "passed",
+   "count": 12
+  },
+  {
+   "tree": "base",
+   "project": "chromium-light-desktop",
+   "status": "passed",
+   "count": 12
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "status": "failed",
+   "count": 11
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "status": "passed",
+   "count": 1
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "status": "failed",
+   "count": 12
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-dark-desktop",
+   "status": "passed",
+   "count": 24
+  },
+  {
+   "tree": "fix",
+   "project": "chromium-light-desktop",
+   "status": "passed",
+   "count": 24
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-dark-desktop",
+   "status": "passed",
+   "count": 24
+  },
+  {
+   "tree": "fix",
+   "project": "webkit-light-desktop",
+   "status": "passed",
+   "count": 24
+  }
+ ],
+ "errors": [
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "Space with a task open: the list starts the toolbar's margin below the bar",
+   "count": 3
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "Space with a task open: the toolbar is as tall as the bar",
+   "count": 3
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "a row checked with a task open: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "a row checked with a task open: the toolbar is as tall as the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "the task closed: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "the task closed: the toolbar is as tall as the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "the window back at 1280px: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "the window back at 1280px: the toolbar is as tall as the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "the window widened to 1920px: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-dark-desktop",
+   "message": "the window widened to 1920px: the toolbar is as tall as the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "Space with a task open: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "Space with a task open: the toolbar is as tall as the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "a row checked with a task open: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "a row checked with a task open: the toolbar is as tall as the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "the task closed: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "the task closed: the toolbar is as tall as the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "the window back at 1280px: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "the window back at 1280px: the toolbar is as tall as the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "the window widened to 1920px: the list starts the toolbar's margin below the bar",
+   "count": 4
+  },
+  {
+   "tree": "base",
+   "project": "webkit-light-desktop",
+   "message": "the window widened to 1920px: the toolbar is as tall as the bar",
+   "count": 4
+  }
+ ]
+}

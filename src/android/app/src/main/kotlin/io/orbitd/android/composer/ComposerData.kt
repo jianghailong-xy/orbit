@@ -5,6 +5,7 @@ import io.orbitd.android.management.AccountCopy
 import io.orbitd.android.management.CodexLogins
 import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.ProviderPools
+import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.UsageRow
 import io.orbitd.android.management.accountSnapshot
@@ -42,18 +43,90 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val notice: String? = null, val uploads: Map<String, Float> = emptyMap(),
     val failures: Map<String, String> = emptyMap(), val catalog: ComposerCatalog? = null,
     val catalogLoading: Boolean = false, val catalogError: String? = null,
-    val acknowledgementPending: Boolean = false)
+    val acknowledgementPending: Boolean = false,
+    /** What the provider picked for the session will do, and when, until the next message goes ([EngineCopy.switchNote]). */
+    val switchNote: String? = null,
+    /** The tray's presses, by canonical turn id (docs/mocks/steer-tray): a Withdraw — or a Put back's discard of a receipt — asked and
+     * not yet answered, and a Steer. */
+    val withdrawing: Set<String> = emptySet(), val steering: Set<String> = emptySet(),
+    /** What the server confirmed before the queue's listing or the runner says so: a message sent into the running turn, drawn on its
+     * way there, and one taken back, gone from the tray — or, put back, from the tail. */
+    val steered: Set<String> = emptySet(), val withdrawn: Set<String> = emptySet())
 
-/** One row of the Provider list (OrbitKit `ProviderChoice`): [labelDetail] says which credential it runs on ("Google account",
- * "env key", "Antigravity CLI"); [fixEngine] is the engine whose page on the runner fixes [unavailable], null when none can. */
-data class ProviderOption(val id: String, val label: String, val runtime: String,
-    val models: List<JsonObject>, val unavailable: String? = null, val labelDetail: String? = null, val fixEngine: String? = null)
+/** Where a credential comes from, as the Provider menu groups it (docs/provider-engine-contract.md §1.3): the engine's own
+ * sign-in on the runner, OpenCode's own configuration there, an account pool, or one of the user's keys. */
+enum class CredentialKind { LOGIN, OPENCODE, POOL, KEY }
+
+/** One credential an engine can run on, as the Provider menu lists it under that engine (web `ProviderChoice`). A key is a
+ * choice under every engine that runs it; picking one never changes the engine. [detail] is what a sign-in is, in small type
+ * beside it (`opencode auth`; Antigravity's Google account or env key). [fixEngine] is the engine whose page on the runner fixes
+ * [unavailable] (OrbitKit `ProviderChoice.fixEngine`), null when none can. */
+data class ProviderOption(val id: String, val label: String, val kind: CredentialKind,
+    val models: List<JsonObject>, val unavailable: String? = null, val detail: String? = null, val fixEngine: String? = null)
+
+/** An engine as the new session's Engine list shows it (web `EngineChoice`): every credential it runs on here, and the one a pick
+ * of it lands on — none for DeepSeek Harness before a DeepSeek key is connected, whose row offers the connection instead. */
+data class EngineOption(val engine: String, val providers: List<ProviderOption>, val landing: ProviderOption?,
+    val unavailable: String? = null) {
+    val label get() = ProviderEngines.cliName(engine)
+    /** The engine page that fixes why this engine can't run here — an install, a sign-in, a runner update. */
+    val fixEngine get() = landing?.fixEngine?.takeIf { unavailable != null }
+}
+
+/** The words the engine and provider pickers share across the composer and a task's pins (boards 4–6). */
+object EngineCopy {
+    const val ENGINE = "Engine"
+    const val ENGINE_FOOTER = "Pick the provider and account in the composer's model menu."
+    const val CONNECT_DEEPSEEK_KEY = "Connect a DeepSeek key"
+    /** Where a DeepSeek key is connected: the web's connect page for the DeepSeek preset. */
+    const val DEEPSEEK_CONNECT_PATH = "/providers/new/deepseek"
+    const val PROVIDER = "Provider"
+    const val ACCOUNT_POOLS = "Account pools"
+    const val API_KEYS = "API keys"
+    const val THIS_SESSIONS_KEY = "This session's key"
+    const val KEY_DELETED = "Key deleted"
+    const val TURNED_OFF = "Turned off"
+    const val AUTOMATIC = "Automatic"
+    const val AUTOMATIC_DETAIL = "Switches to soonest reset"
+    const val DEFAULT = "Default"
+    const val OPENCODE_OWN = "OpenCode's own sign-in"
+    const val OPENCODE_OWN_DETAIL = "opencode auth"
+    /** The Provider row's value for OpenCode's own configuration (OrbitKit `SessionProviderChoices.providerValue`). */
+    const val OWN_SIGN_IN_VALUE = "Own sign-in"
+    const val WORKSPACE_KEY = "Workspace key"
+    const val ASSIGNEES = "Assignee's"
+    const val ENGINE_DEFAULT = "Engine default"
+    const val YOUR_KEYS = "Your keys"
+    const val YOUR_DEEPSEEK_KEYS = "Your DeepSeek keys"
+    const val FIRST_DEEPSEEK_KEY = "first DeepSeek key"
+    const val RUNNER_SIGN_IN = "runner sign-in"
+    const val OWN_SIGN_IN = "own sign-in"
+    fun signedInOn(runner: String) = "Signed in on $runner"
+    fun on(runner: String) = "On $runner"
+    fun signInOn(runner: String) = "sign-in on $runner"
+    /** A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run: its absence there is said. */
+    fun subscriptionOnly(labels: List<String>) =
+        "${labels.joinToString(", ")} ${if (labels.size == 1) "isn’t" else "aren’t"} here: a subscription token runs on Claude Code only."
+
+    /** What a provider picked for a session will do, and when (A07-19 (a); OrbitKit `TaskRunHandoff.providerSwitchNote`, web
+     * `providerSwitchNote`): a run keeps its provider for its whole life, so over a session still going the pick lands on its next
+     * turn. Said by the credentials' names, with "uses": the engine stays, only the credential moves. Null when nothing moves. */
+    fun switchNote(from: String, to: String, liveRun: Boolean): String? = when {
+        from.isEmpty() || to.isEmpty() || from == to -> null
+        liveRun -> "The turn in flight finishes on $from. Your next one uses $to."
+        else -> "Your next message uses $to."
+    }
+}
 
 /** One of the runner's accounts of an engine as a row of the account menu (web AccountChoice): its own quota's tightest
  * window, compactly ("5h 12%", an Antigravity bucket by what is left: "gemini-5h 4% left"), "env key" for an Antigravity
  * Default on the runner's own Gemini key, and why it can't take a session. */
 data class AccountChoice(val id: String, val label: String, val quota: String? = null, val nearLimit: Boolean = false,
     val unavailable: String? = null)
+
+/** Where a session or a draft on an engine's own sign-in stands among the runner's accounts of it ([ComposerCatalog.accountOn]): on
+ * Automatic, or on [account]. */
+data class AccountOn(val automatic: Boolean, val account: String)
 
 /** The account of a pool a session spends (iOS `PoolAccount`, f929ab1e4, a0a76a760): its name, its own quota, whether it is the
  * session's own ([current]) or the one the next claim picks, and how many the pool holds. */
@@ -63,10 +136,35 @@ data class PoolAccount(val pool: String, val label: String, val usage: JsonObjec
         else "A session on $pool starts on $label — " + if (shared) "the key it picks for you right now" else "the account whose quota resets soonest"
 }
 
-data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObject>) {
+/**
+ * What the composer's pickers judge by: the runner a session runs on (its engines, accounts, model catalogue and quotas) and the
+ * account's keys and pools ([providers]: GET /providers with each key's `engines`, and the pools read as providers). [own] is the
+ * account's own keys turned off included (GET /providers/mine), read only when a session's key is no longer listed: it tells a
+ * key turned off from one deleted. Everything here is asked of an engine — the session's, fixed for its life — and of a credential
+ * that engine runs (docs/provider-engine-contract.md §2).
+ */
+data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObject>, val own: List<JsonObject>? = null) {
+    /** The key or pool [provider] names. An engine's own sign-in and OpenCode's own config never match one. */
+    fun row(provider: String?): JsonObject? = provider?.takeIf { it !in ProviderEngines.LOGIN_ENGINES && it != ProviderEngines.OPENCODE }
+        ?.let { slug -> providers.firstOrNull { it.text("slug") == slug } }
+    private fun isPool(row: JsonObject) = row.flag("pool") == true || row["members"] is JsonArray
+    fun providerEngines(provider: String?) = ProviderEngines.providerEngines(provider, providers)
+
+    /** The engine [detail] runs on: a session's recorded engine; a draft's pick; else a workspace's last (`lastEngine`) where it
+     * runs the provider beside it; else that provider's default engine (contract §1.1, §3.4). */
+    fun engineOf(detail: JsonObject): String {
+        detail.text("engine")?.takeIf(ProviderEngines::isEngine)?.let { return it }
+        val runs = providerEngines(detail.text("provider"))
+        detail.text("lastEngine")?.takeIf { ProviderEngines.isEngine(it) && (runs.isEmpty() || it in runs) }?.let { return it }
+        return runs.firstOrNull() ?: ProviderEngines.CLAUDE
+    }
+
+    private fun health(engine: String) = runner.objects("engines").firstOrNull { it.text("engine") == engine }
+    private fun catalogRows(engine: String) = ((runner["modelCatalog"] as? JsonObject)?.get(engine) as? JsonArray)?.filterIsInstance<JsonObject>()
+
     fun usage(detail: JsonObject): JsonObject? {
         val provider = detail.text("provider") ?: return null
-        if (provider == "opencode") return null
+        if (provider == ProviderEngines.OPENCODE) return null
         // Antigravity's quota travels with its engine health, each Google account's its own; Default's too, which a Default
         // on the machine's Gemini key has none of.
         if (provider == "antigravity") {
@@ -74,7 +172,7 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             if (account == EngineAccounts.AUTOMATIC) return null
             return accountSnapshot(EngineAccounts.usage(provider, runner), account)
         }
-        if (provider !in BUILT_INS) {
+        if (provider !in ProviderEngines.LOGIN_ENGINES) {
             val row = providers.firstOrNull { it.text("slug") == provider } ?: return null
             // A pool's quota is the account the session spends, never the pool's — and none while no account can be named.
             if (isPool(row)) return poolAccount(detail)?.usage
@@ -110,47 +208,268 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         val accounts = if (CodexLogins.isLoginPool(pool)) CodexLogins.logins(pool).size else pool.members.size
         return PoolAccount(pool.label, member.label, member.planUsage, current, accounts, shared)
     }
-    /** A pool as the catalog marks it, or a row with the members GET /providers/pools answers with. */
-    private fun isPool(row: JsonObject) = row.flag("pool") == true || row["members"] is JsonArray
-    fun slashItems(provider: String, agentId: String?): List<JsonObject> =
+    /** The runner's slash commands and skills for a session on [engine] (web `slashAssetMatchesEngine`): asked of the engine, never of
+     * the provider — a DeepSeek key on Claude Code has Claude Code's. Codex, OpenCode, Antigravity and DeepSeek Harness take none. */
+    fun slashItems(engine: String, agentId: String?): List<JsonObject> =
         (runner.objects("commands") + runner.objects("skills")).filter { item ->
-            (item.text("agentId").isNullOrEmpty() || item.text("agentId") == agentId) && when (provider) {
-                "codex", "opencode", "antigravity" -> false
-                "kimi" -> item.text("provider") == "kimi"
+            (item.text("agentId").isNullOrEmpty() || item.text("agentId") == agentId) && when (engine) {
+                ProviderEngines.CODEX, ProviderEngines.OPENCODE, ProviderEngines.ANTIGRAVITY, ProviderEngines.DSH -> false
+                ProviderEngines.KIMI -> item.text("provider") == "kimi"
                 else -> item.text("provider") in listOf(null, "claude")
             }
         }.sortedWith(compareBy({ it.flag("builtin") == true }, { it.text("name")?.lowercase() }))
-    fun runtime(provider: String): String? = if (provider in BUILT_INS || OpenCodeKeys.choiceKey(provider) != null) provider.substringBefore('/')
-        else providers.firstOrNull { it.text("slug") == provider }?.text("runtime")
-    fun models(provider: String): List<JsonObject> {
-        // A key run on OpenCode offers the key's own models, under the OpenCode ids that name the key (OpenCodeKeys).
-        OpenCodeKeys.choiceKey(provider)?.let { key ->
-            return models(key).map { row -> JsonObject(row + ("value" to JsonPrimitive(OpenCodeKeys.model(key, row.text("value").orEmpty())))) }
+
+    /**
+     * The models a session on [engine] with [provider] can pick: the model space is the pair's (contract §2.2). DeepSeek Harness
+     * takes the runner's ACP catalogue whichever DeepSeek key it spends; a key brings its own table to every engine that runs it —
+     * the runner's catalogue of its own endpoint's CLI where it opts in (`modelsFromRuntime`, read under that CLI's engine, never the
+     * slug); an engine's own sign-in, and OpenCode's own config, the runner's catalogue of that CLI.
+     */
+    fun models(engine: String, provider: String): List<JsonObject> {
+        if (engine == ProviderEngines.DSH) return catalogRows(ProviderEngines.DSH).orEmpty()
+        val row = row(provider)
+        if (row != null) {
+            val live = if (row.flag("modelsFromRuntime") == true && row.text("runtime") != ProviderEngines.DSH)
+                catalogRows(ProviderEngines.nativeEngine(row.text("runtime"))) else null
+            return live ?: row.objects("models")
         }
-        val configured = providers.firstOrNull { it.text("slug") == provider }
-        val own = configured?.objects("models").orEmpty()
-        val space = runtime(provider) ?: return emptyList()
-        // Configured third-party endpoints own their model space; modelsFromRuntime explicitly opts
-        // vendor endpoints/pools into the runner's catalog, as in the existing provider contract.
-        val live = (runner["modelCatalog"] as? JsonObject)?.get(space) as? JsonArray
-        if (configured != null && (configured.flag("modelsFromRuntime") != true || live == null)) return own
-        return live.orEmpty().filterIsInstance<JsonObject>()
+        return catalogRows(engine).orEmpty()
     }
-    fun options(current: String, newSession: Boolean = false): List<ProviderOption> {
-        val runtime = runtime(current) ?: return emptyList()
-        val engines = if (newSession) runner.objects("engines").mapNotNull { it.text("engine") } else listOf(runtime)
-        return (engines + providers.mapNotNull { it.text("slug") }).distinct().filter { newSession || runtime(it) == runtime }.map { slug ->
-            val row = providers.firstOrNull { it.text("slug") == slug }
-            val space = runtime(slug) ?: runtime
-            val engine = runner.objects("engines").firstOrNull { it.text("engine") == space }
-            val blocker = if (engine?.flag("installed") == false) "Not installed" else null
-            ProviderOption(slug, row?.text("label") ?: slug, space, models(slug), blocker
-                ?: row?.text("unavailable") ?: if (row == null && engine?.text("auth") == "no" && engine.objects("accounts").none { it.text("auth") == "yes" }) "Not signed in" else null)
+
+    /** The model a session on [engine] with [provider] runs when nothing names one — the same pair-wise space as [models]; "" lets
+     * the runtime pick (OpenCode always, DeepSeek Harness until a runner reports its catalogue). */
+    fun defaultModel(engine: String, provider: String): String {
+        val defaults = runner["runtimeDefaultModels"] as? JsonObject
+        fun reported(engine: String) = defaults?.text(engine)?.takeIf { it.isNotEmpty() }
+        val first = models(engine, provider).firstOrNull()?.text("value")
+        val row = row(provider)
+        return when {
+            engine == ProviderEngines.DSH -> reported(ProviderEngines.DSH) ?: first
+            row != null -> if (row.flag("modelsFromRuntime") == true && row.text("runtime") != ProviderEngines.DSH)
+                reported(ProviderEngines.nativeEngine(row.text("runtime"))) ?: first
+                else row.text("defaultModel")?.takeIf { it.isNotEmpty() } ?: first
+            engine == ProviderEngines.OPENCODE -> reported(ProviderEngines.OPENCODE)
+            else -> reported(engine) ?: first
+        }.orEmpty()
+    }
+
+    /** The model last picked for [engine] on [provider] (`preferences.defaultModels`, contract §6.5's order; OrbitKit
+     * `AgentDefaults.rememberedModel`, web `rememberedModel`): the pair's own key, `<engine>:<provider>`, then what an older client
+     * remembered — `opencode/<slug>` (whose value names the key, `orbit-<slug>/<model>`) and `opencode` for OpenCode, the bare slug
+     * for the engine a provider runs on by default. */
+    fun rememberedModel(engine: String, provider: String, remembered: Map<String, String>): String? {
+        remembered["$engine:$provider"]?.let { return it }
+        if (engine == ProviderEngines.OPENCODE) {
+            if (provider == ProviderEngines.OPENCODE) return remembered[ProviderEngines.OPENCODE]?.takeUnless { it.startsWith("orbit-") && '/' in it }
+            val named = remembered["opencode/$provider"] ?: return null
+            return named.removePrefix("orbit-$provider/").takeIf { named.startsWith("orbit-$provider/") }
         }
+        return remembered[provider]?.takeIf { providerEngines(provider).firstOrNull() == engine }
     }
-    private fun health(engine: String) = runner.objects("engines").firstOrNull { it.text("engine") == engine }
-    private fun option(slug: String, unavailable: String?, fixEngine: String? = null, labelDetail: String? = null) =
-        ProviderOption(slug, ProviderChoices.providerName(slug, providers), runtime(slug) ?: slug, models(slug), unavailable, labelDetail, fixEngine)
+
+    /** That model while the pair still offers it, null once the runtime has retired it (OrbitKit `AgentDefaults.livePin`, web
+     * `livePinnedModel`): OpenCode owns its own selection, a key's own list is a document rather than a live probe, a catalogue not
+     * reported retires nothing, and an id the runtime names as its default is current by definition. Judged against the catalogue of
+     * the CLI that runs it — DeepSeek Harness's own, whichever key it spends. */
+    fun liveRememberedModel(engine: String, provider: String, remembered: Map<String, String>): String? {
+        val model = rememberedModel(engine, provider, remembered) ?: return null
+        if (engine == ProviderEngines.OPENCODE) return model
+        val row = row(provider)
+        if (model.isEmpty()) return if (row == null && engine == ProviderEngines.ANTIGRAVITY) null else model
+        if (engine != ProviderEngines.DSH && row != null && row.flag("modelsFromRuntime") != true) return model
+        val judge = if (engine == ProviderEngines.DSH) engine else row?.let { ProviderEngines.nativeEngine(it.text("runtime")) } ?: engine
+        val offered = catalogRows(judge).orEmpty()
+        if (offered.isEmpty() || (runner["runtimeDefaultModels"] as? JsonObject)?.text(judge) == model) return model
+        return model.takeIf { offered.any { it.text("value") == model } }
+    }
+
+    /** The model a new session on [engine] with [provider] starts on (A07-19 (e); OrbitKit `AgentDefaults.newSessionModel`, web
+     * `newSessionModelFor`): the one last picked for the pair while it is still offered, else the pair's default. */
+    fun newSessionModel(engine: String, provider: String, remembered: Map<String, String>): String =
+        liveRememberedModel(engine, provider, remembered) ?: defaultModel(engine, provider)
+
+    /** A credential by the name a sentence gives it where its engine is not beside it (OrbitKit `SessionProviderChoices.providerName`,
+     * web `providerNameOn`): an engine's own sign-in by the engine's CLI, anything else by its own label. */
+    fun providerName(engine: String, provider: String): String =
+        current(engine, provider).let { if (it.kind == CredentialKind.LOGIN) ProviderEngines.cliName(engine) else it.label }
+
+    /**
+     * Where a session — or a draft — on [engine]'s own sign-in stands among the runner's accounts of it (OrbitKit ConsoleModel
+     * `sessionAutomatic` and `account(for:)`, web `sessionAutomatic` and `shownAccount`): on Automatic where the workspace leaves the
+     * account to Orbit ([EngineAccounts.automaticOffered]) and nobody picked one by hand — a draft's pick, a pick [held] for a
+     * session's next turn, a session's own `<engine>AccountPinned`; else on the account it names — that pick, the session's own, the
+     * workspace's — and on Default where the runner lists no such account. [detail] is the session's read, or the draft's workspace,
+     * with what is held over it.
+     */
+    fun accountOn(engine: String, detail: JsonObject, held: JsonObject, draft: Boolean): AccountOn {
+        val accounts = accounts(engine)
+        val workspace = if (draft) detail else detail["workspace"] as? JsonObject
+        val pick = held.text("account")
+        val offered = EngineAccounts.automaticOffered(engine, workspace?.text("${engine}Account"), workspace?.get("env") as? JsonObject, accounts.size)
+        val automatic = offered && when {
+            pick != null -> pick == EngineAccounts.AUTOMATIC
+            // A draft with nothing picked, and an ended session's switch onto the sign-in naming no account, start on Automatic's.
+            draft || held.text("provider") == engine -> true
+            else -> detail.flag("${engine}AccountPinned") != true
+        }
+        val named = pick?.takeIf { it != EngineAccounts.AUTOMATIC } ?: detail.text("${engine}Account") ?: workspace?.text("${engine}Account")
+        return AccountOn(automatic, named?.takeIf { id -> accounts.any { it.text("id") == id } } ?: EngineAccounts.DEFAULT)
+    }
+
+    /** What the Provider row says the session (or draft) is on (A07-19 (d); OrbitKit `SessionProviderChoices.providerValue`, web
+     * `shownProviderValue`): an engine's own sign-in by the account in use — Automatic while Orbit picks it — OpenCode's own
+     * configuration as its own sign-in, anything else by its own name. */
+    fun providerValue(option: ProviderOption, engine: String, detail: JsonObject, held: JsonObject, draft: Boolean): String = when (option.kind) {
+        CredentialKind.OPENCODE -> EngineCopy.OWN_SIGN_IN_VALUE
+        CredentialKind.LOGIN -> {
+            val accounts = accounts(engine)
+            if (option.id != engine || accounts.size < 2) option.label
+            else accountOn(engine, detail, held, draft).let { on ->
+                // Automatic is said where the account rows offer it: a draft's, or a session's on a runner that moves it between them.
+                if (on.automatic && (draft || movesAccounts(engine))) EngineCopy.AUTOMATIC else RunnerPage.accountLabel(on.account, accounts)
+            }
+        }
+        else -> option.label
+    }
+
+    /** A model as its row names it, or the id itself; an empty one is the runtime's own pick. */
+    fun modelLabel(engine: String, provider: String, model: String): String =
+        models(engine, provider).firstOrNull { it.text("value") == model }?.let { it.text("label") ?: model }
+            ?: model.ifEmpty { if (engine == ProviderEngines.OPENCODE) "Managed by OpenCode" else "Runtime default" }
+
+    /** Whether this runner can start a DeepSeek Harness session, as the server admits one (web `dshRunnerState`): null when it can,
+     * else why not, most fundamental first. A runner that has not reported Harness claims nothing. */
+    fun dshBlocker(): String? {
+        if ("provider:dsh" !in runner.strings("capabilities")) return "Update runner"
+        val health = health(ProviderEngines.DSH) ?: return null
+        if (Regex("^DSH_(PLATFORM|NODE)_UNSUPPORTED").containsMatchIn(health.text("installationError").orEmpty())) return "Not supported here"
+        if (health.flag("installed") != true) return RunnerCopy.NOT_INSTALLED
+        if ((health["dsh"] as? JsonObject)?.let { it.flag("versionCompatible") != true } == true) return "Unsupported version"
+        return null
+    }
+
+    /**
+     * The credentials [engine] can run on, in the Provider menu's order (web `engineProviders`): the engine's own sign-in on the
+     * runner — or OpenCode's own configuration — then the account pools that run on it, then every key it runs, as GET /providers
+     * returned them. DeepSeek Harness has no sign-in: its credentials are the account's DeepSeek keys, every one of them.
+     *
+     * Each carries why this runner can't run it — the engine's CLI missing, its sign-in signed out, a pool none of whose accounts can
+     * run — and the engine page that fixes it, and stays listed: a hidden row would leave nobody able to tell why it isn't offered.
+     * Antigravity's sign-in is the one exception, as on iOS (A07-4): it is offered only for a Google account or a key the server
+     * confirms on this machine ([antigravityKey], [antigravityKeyAvailable]). A runner that reports its engines runs nothing on one
+     * it leaves out, being older than it; one that has reported none claims nothing, so everything is listed as it is. Harness
+     * answers by what the server admits it on ([dshBlocker]). OpenCode, which Orbit installs, is listed whether or not the runner
+     * has it (A07-15, iOS 82d7003fc `openCodeMissing`): one that reports its engines without it installed says "Not installed", and
+     * the keys OpenCode would spend wait with it.
+     */
+    fun credentials(engine: String, antigravityKey: Boolean = false): List<ProviderOption> {
+        val health = health(engine)
+        val reported = runner["engines"] is JsonArray
+        if (reported && health == null && engine != ProviderEngines.DSH && engine != ProviderEngines.OPENCODE) return emptyList()
+        // What a credential that brings its own key needs from this runner: the engine's CLI — Antigravity's on its own terms, a
+        // runner too old for it included — and for Harness what the server admits it on. An engine page fixes the first two.
+        val carried = when (engine) {
+            ProviderEngines.DSH -> dshBlocker()
+            ProviderEngines.ANTIGRAVITY -> ProviderChoices.antigravityBlocker(runner["antigravity"] as? JsonObject, health)
+            ProviderEngines.OPENCODE -> if (reported && health?.flag("installed") != true) RunnerCopy.NOT_INSTALLED else null
+            else -> if (health?.flag("installed") == false) RunnerCopy.NOT_INSTALLED else null
+        }
+        val fix = engine.takeIf { carried != null && it != ProviderEngines.DSH }
+        val own = buildList {
+            if (engine in ProviderEngines.LOGIN_ENGINES) signIn(engine, antigravityKey)?.let(::add)
+            if (engine == ProviderEngines.OPENCODE) add(ProviderOption(ProviderEngines.OPENCODE,
+                EngineCopy.OPENCODE_OWN, CredentialKind.OPENCODE, models(engine, ProviderEngines.OPENCODE), carried, EngineCopy.OPENCODE_OWN_DETAIL, fix))
+        }
+        val runs = providers.filter { row ->
+            val slug = row.text("slug") ?: return@filter false
+            slug !in ProviderEngines.LOGIN_ENGINES && slug != ProviderEngines.OPENCODE && engine in providerEngines(slug)
+        }
+        fun option(row: JsonObject, kind: CredentialKind) = ProviderOption(row.text("slug")!!, row.text("label") ?: row.text("slug")!!, kind,
+            models(engine, row.text("slug")!!), carried ?: row.text("unavailable"), fixEngine = fix)
+        return own + runs.filter(::isPool).map { option(it, CredentialKind.POOL) } + runs.filterNot(::isPool).map { option(it, CredentialKind.KEY) }
+    }
+
+    /**
+     * An engine's own sign-in on this runner, with why it can't take a session and the engine page that fixes that: missing
+     * outranks signed out. Antigravity's (OrbitKit `SessionProviderChoices`, A07-4) runs on a Google account or a key the server
+     * confirms, and says which; a runner too old for it says "Update runner". Without either it is not offered, unless [always]:
+     * it is the session's own.
+     */
+    private fun signIn(engine: String, antigravityKey: Boolean, always: Boolean = false): ProviderOption? {
+        val health = health(engine)
+        if (engine == ProviderEngines.ANTIGRAVITY) {
+            val state = runner["antigravity"] as? JsonObject
+            val google = state?.text("authSource") == "google"
+            if (!always && !antigravityKey && !google) return null
+            // A Google sign-in, unless that has lapsed where a key still runs it.
+            val googleAccount = google && !(antigravityKey && state?.flag("envKeyAvailable") == false)
+            val blocker = ProviderChoices.antigravityBlocker(state, health, login = !antigravityKey || googleAccount)
+            return ProviderOption(engine, signInLabel(engine), CredentialKind.LOGIN, models(engine, engine), blocker,
+                if (googleAccount) "Google account" else AccountCopy.ENV_KEY, engine.takeIf { blocker != null })
+        }
+        val signedOut = health?.text("auth") == "no" && health.objects("accounts").none { it.text("auth") == "yes" }
+        val blocker = if (health?.flag("installed") == false) RunnerCopy.NOT_INSTALLED else if (signedOut) "Not signed in" else null
+        return ProviderOption(engine, signInLabel(engine), CredentialKind.LOGIN, models(engine, engine), blocker, fixEngine = engine.takeIf { blocker != null })
+    }
+
+    /** What an engine's own sign-in is called in the menu: the one account the runner reports by its own name, else Default — the
+     * account dispatch resolves a session on the sign-in to. */
+    private fun signInLabel(engine: String): String {
+        val accounts = accounts(engine)
+        return if (accounts.size == 1) RunnerPage.accountLabel(accounts.single().text("id").orEmpty(), accounts) else EngineCopy.DEFAULT
+    }
+
+    /**
+     * The credential to show as current when [engine]'s menu does not list [provider]: a key this account no longer has on offer —
+     * turned off, deleted — or not loaded yet, the legacy built-in `dsh` (DeepSeek Harness on a key in its workspace's environment),
+     * a sign-in this runner does not report or offer. Each renders what it is rather than silently reading as another credential,
+     * and never changes the engine.
+     */
+    fun current(engine: String, provider: String, antigravityKey: Boolean = false): ProviderOption =
+        credentials(engine, antigravityKey).firstOrNull { it.id == provider } ?: when {
+            provider == ProviderEngines.OPENCODE -> ProviderOption(provider, EngineCopy.OPENCODE_OWN, CredentialKind.OPENCODE, models(engine, provider),
+                detail = EngineCopy.OPENCODE_OWN_DETAIL)
+            provider in ProviderEngines.LOGIN_ENGINES -> signIn(provider, antigravityKey, always = true)!!
+            provider == ProviderEngines.DSH && row(provider) == null -> ProviderOption(provider, EngineCopy.WORKSPACE_KEY, CredentialKind.KEY,
+                models(engine, provider), detail = "ORBIT_DSH_API_KEY")
+            else -> (row(provider) ?: own?.firstOrNull { it.text("slug") == provider }).let { row ->
+                ProviderOption(provider, row?.text("label") ?: provider, CredentialKind.KEY, models(engine, provider))
+            }
+        }
+
+    /** What became of a session's own key when its engine's menu no longer lists it (board 5 ④): turned off — its page is where it
+     * is turned back on — or deleted. Null for anything listed, a sign-in, OpenCode's own config, the legacy built-in `dsh`, and
+     * while the account's own keys are unread. */
+    fun gone(engine: String, provider: String): String? {
+        if (provider in ProviderEngines.LOGIN_ENGINES || provider == ProviderEngines.OPENCODE) return null
+        if (credentials(engine).any { it.id == provider } || row(provider) != null) return null
+        val mine = own ?: return null
+        val row = mine.firstOrNull { it.text("slug") == provider }
+        if (row != null) return if (row.flag("enabled") == false) EngineCopy.TURNED_OFF else null
+        return if (provider == ProviderEngines.DSH) null else EngineCopy.KEY_DELETED
+    }
+
+    /**
+     * The New Session's engines, in ALL_ENGINES order (Claude Code, Codex, Kimi Code, Antigravity CLI, OpenCode, DeepSeek Harness),
+     * each with its credentials and the one a pick of it lands on: the first of [preferred] it holds that can run (the draft's pick,
+     * then what the workspace last ran), else its own sign-in, else the first credential that can run. An engine with nothing to run
+     * on here is left out — except DeepSeek Harness on a runner that could run it: with no DeepSeek key yet it offers the connection.
+     * One this app does not draw yet (ProviderEngines.androidShowsEngine) is never listed.
+     */
+    fun engines(preferred: List<Pair<String?, String?>> = emptyList(), antigravityKey: Boolean = false): List<EngineOption> =
+        ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).mapNotNull { engine ->
+            val options = credentials(engine, antigravityKey)
+            if (options.isEmpty()) {
+                return@mapNotNull if (engine == ProviderEngines.DSH && dshBlocker() != "Update runner")
+                    EngineOption(engine, emptyList(), null, EngineCopy.CONNECT_DEEPSEEK_KEY) else null
+            }
+            val ready = options.filter { it.unavailable == null }
+            val own = { option: ProviderOption -> option.kind == CredentialKind.LOGIN || option.kind == CredentialKind.OPENCODE }
+            val landing = preferred.filter { it.first == engine }.firstNotNullOfOrNull { pick -> ready.firstOrNull { it.id == pick.second } }
+                ?: ready.firstOrNull(own) ?: ready.firstOrNull() ?: options.firstOrNull(own) ?: options.first()
+            EngineOption(engine, options, landing, landing.unavailable)
+        }
+
     /** SessionProviderChoices.antigravityKeyAvailable: the server's answer for the machine this runs on — the workspace's, by runner
      * (a draft's detail is its workspace) — else the runner's own credential. */
     fun antigravityKeyAvailable(detail: JsonObject): Boolean {
@@ -158,60 +477,6 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             ?: return (runner["antigravity"] as? JsonObject)?.flag("envKeyAvailable") == true
         val byRunner = workspace["antigravityKeyAvailableByRunner"] as? JsonObject ?: return false
         return byRunner.entries.any { (id, available) -> ObjectId.same(id, runner.text("id")) && (available as? JsonPrimitive)?.booleanOrNull == true }
-    }
-    /** SessionProviderChoices.choices: the runner's engines in iOS's order — claude, codex, antigravity, kimi — then the account
-     * pools, then the configured keys, then OpenCode once the runner has it and the keys it may spend (A07-6: each key the server
-     * marks `runsOnOpenCode`, listed again under OpenCode as `opencode/<slug>`). A row this runner can't run stays listed with why. */
-    fun choices(keyAvailable: Boolean = false): List<ProviderOption> {
-        // A07-4 (and A13-3's composer part): Antigravity is offered for a Google account or a key the server confirms, named by which
-        // one it runs on — a Google sign-in, unless that has lapsed where a key still runs it.
-        val antigravity = runner["antigravity"] as? JsonObject
-        val google = antigravity?.text("authSource") == "google"
-        val googleAccount = google && !(keyAvailable && antigravity?.flag("envKeyAvailable") == false)
-        val engines = ProviderChoices.engineSlugs.filter { it != "antigravity" || keyAvailable || google }.map { slug ->
-            val blocker = if (slug == "antigravity") ProviderChoices.antigravityBlocker(antigravity, health(slug), login = !keyAvailable || googleAccount)
-                else ProviderChoices.engineBlocker(health(slug))
-            option(slug, blocker, fixEngine = slug.takeIf { blocker != null },
-                labelDetail = if (slug != "antigravity") null else if (googleAccount) "Google account" else "env key")
-        }
-        // A pool, like a configured key, needs the CLI it runs on and nothing signed in; what the server says it lacks follows,
-        // and no runner fixes that.
-        val pools = providers.filter { it.flag("pool") == true }.map { row ->
-            val slug = row.text("slug").orEmpty()
-            val engine = runtime(slug) ?: "claude"
-            val missing = ProviderChoices.byokBlocker(health(engine))
-            option(slug, missing ?: row.text("unavailable"), fixEngine = engine.takeIf { missing != null })
-        }
-        // A configured row shadowing a built-in slug would dispatch the same identity as the engine above. A key is judged through
-        // the CLI it borrows; a Gemini key on Antigravity's own terms, and named for it.
-        val keys = providers.filter { it.flag("pool") != true && it.text("slug") !in ProviderChoices.engineSlugs + "opencode" }.map { row ->
-            val slug = row.text("slug").orEmpty()
-            val engine = ProviderChoices.executingRuntime(slug, providers)
-            val blocker = if (engine == "antigravity") ProviderChoices.antigravityBlocker(antigravity, health(engine)) else ProviderChoices.byokBlocker(health(engine))
-            option(slug, blocker, fixEngine = engine.takeIf { blocker != null }, labelDetail = "Antigravity CLI".takeIf { engine == "antigravity" })
-        }
-        val openCode = if (health("opencode")?.flag("installed") != true) emptyList() else listOf(option("opencode", null)) +
-            providers.filter { it.flag("runsOnOpenCode") == true && it.flag("pool") != true }.map { row ->
-                val choice = OpenCodeKeys.choice(row.text("slug").orEmpty())
-                ProviderOption(choice, row.text("label") ?: choice, "opencode", models(choice), null)
-            }
-        return engines + pools + keys + openCode
-    }
-    /** SessionProviderChoices.sameRuntime: what an existing session may move to — the choices on the CLI it was started on, in
-     * the list's own order. A provider absent from them (removed, or OpenCode before the runner reports it) leads. */
-    fun sameRuntime(current: String, choices: List<ProviderOption> = choices()): List<ProviderOption> {
-        val runtime = ProviderChoices.executingRuntime(current, providers)
-        val same = choices.filter { ProviderChoices.executingRuntime(it.id, providers) == runtime }
-        return if (same.any { it.id == current }) same else listOf(currentOption(current)) + same
-    }
-    /** SessionProviderChoices.current: a provider absent from the list still renders as what it is — an Antigravity one with its
-     * own reason and credential. */
-    private fun currentOption(slug: String): ProviderOption {
-        if (ProviderChoices.executingRuntime(slug, providers) != "antigravity") return option(slug, null)
-        val antigravity = runner["antigravity"] as? JsonObject
-        val blocker = ProviderChoices.antigravityBlocker(antigravity, null, login = slug == "antigravity" && antigravity?.flag("envKeyAvailable") != true)
-        return option(slug, blocker, fixEngine = "antigravity".takeIf { blocker != null }, labelDetail = if (slug != "antigravity") "Antigravity CLI"
-            else if (antigravity?.text("authSource") == "google") "Google account" else "env key")
     }
     fun accounts(provider: String) = if (RunnerPage.keepsAccounts(provider))
         runner.objects("engines").firstOrNull { it.text("engine") == provider }?.objects("accounts").orEmpty() else emptyList()
@@ -235,24 +500,54 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 if (account.text("auth") == "no") "Not signed in" else null)
         }
     }
-    fun permissions(provider: String, model: String): List<String> {
-        val runtime = runtime(provider)
-        val reported = models(provider).firstOrNull { it.text("value") == model }
+
+    /**
+     * The permission modes a session on [engine] can pick for [model] (web `permissionModeSupported` / `supportsAuto`): DeepSeek
+     * Harness enforces Default, Auto and Don't Ask alone and the server refuses the rest at admission, so those are not offered;
+     * elsewhere Bypass is gone on a root runner, and Auto on a Claude Code sign-in's model the runner says lacks it. A key or pool on
+     * Claude Code owns its model space, which Claude's list cannot speak for.
+     */
+    fun permissions(engine: String, provider: String, model: String): List<String> {
         val modes = listOf("default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions")
+        if (engine == ProviderEngines.DSH) return modes.filter { it in ProviderEngines.DSH_PERMISSION_MODES }
+        val reported = models(engine, provider).firstOrNull { it.text("value") == model }
         return modes.filterNot { mode ->
             (runner.flag("runsAsRoot") == true && mode == "bypassPermissions") ||
-                (mode == "auto" && provider == "claude" && runtime == "claude" &&
+                (mode == "auto" && engine == ProviderEngines.CLAUDE && row(provider) == null &&
                     if (reported?.get("permissionModes") is JsonArray) "auto" !in reported.strings("permissionModes")
                     else model !in setOf("claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-fable-5", "claude-sonnet-5"))
         }
     }
-    companion object { private val BUILT_INS = setOf("claude", "codex", "kimi", "opencode", "antigravity") }
+
+    /** The efforts [model] takes on [engine] with [provider]: its row's levels. A key's declared levels are Claude Code's to honour;
+     * under OpenCode the same key's model is OpenCode's to describe, and says none here (contract §2.3). */
+    fun efforts(engine: String, provider: String, model: String): List<String> {
+        if (engine == ProviderEngines.OPENCODE && row(provider) != null) return emptyList()
+        return models(engine, provider).firstOrNull { it.text("value") == model }?.strings("reasoningLevels").orEmpty()
+    }
+
+    /** Whether [model] has a fast lane on [engine] (@orbit/shared `fastModeAvailable`): Claude Code's where its row says so, Codex's
+     * priority service tier; no other engine has one. */
+    fun fast(engine: String, provider: String, model: String): Boolean {
+        val row = models(engine, provider).firstOrNull { it.text("value") == model } ?: return false
+        return when (engine) {
+            ProviderEngines.CLAUDE -> row.flag("fastMode") == true
+            ProviderEngines.CODEX -> row.flag("fastMode") == true || "priority" in row.strings("serviceTiers")
+            else -> false
+        }
+    }
 }
 
 /** One account's tightest window, compactly: "5h 100%" — or, for an Antigravity bucket, which counts what is left, its bucket
  * and that: "gemini-5h 4% left". */
 internal fun quotaText(row: UsageRow) =
     if (row.remaining) "${row.groupLabel ?: row.label} ${row.percent}% left" else ProviderPools.quotaReading(row)
+
+/** What the re-send behind Retry runs on while this composer holds a pick for the session (RetryIdentityDto): the provider, its
+ * engine and the account, and nothing else of what is held, which only a message sent carries. Empty without a provider: the
+ * session's own. */
+internal fun retryIdentityOf(config: JsonObject) =
+    if (config.text("provider") == null) JsonObject(emptyMap()) else JsonObject(config.filterKeys { it in setOf("provider", "engine", "account") })
 
 internal fun terminal(detail: JsonObject) = detail.text("status") in setOf("ENDED", "FAILED", "CANCELLED", "COMPLETED") ||
     detail.text("runStatus") in setOf("ENDED", "FAILED", "CANCELLED", "COMPLETED")

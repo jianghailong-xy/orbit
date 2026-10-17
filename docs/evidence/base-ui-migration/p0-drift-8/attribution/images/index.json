@@ -1,0 +1,125 @@
+[
+ {
+  "image": "A15--chromium-light-desktop--settings--crop.png",
+  "change": "A15",
+  "screenshot": "chromium-light-desktop/settings.png",
+  "crop": [
+   500,
+   300,
+   300,
+   190
+  ],
+  "left": {
+   "run": "full-56c21bdd2",
+   "sha256": "6f6c1abcefc6f9dd164b0dc764d0259f54720c512fdd15e27aa704139f646b7a"
+  },
+  "right": {
+   "run": "full-46e28aaa3",
+   "sha256": "3afc3f3e736c51c13b834bc37fe7dedeeb28fd89e59fc1da912d21acc35d8dcd"
+  }
+ },
+ {
+  "image": "A15--chromium-light-desktop--settings.png",
+  "change": "A15",
+  "screenshot": "chromium-light-desktop/settings.png",
+  "crop": null,
+  "left": {
+   "run": "full-56c21bdd2",
+   "sha256": "6f6c1abcefc6f9dd164b0dc764d0259f54720c512fdd15e27aa704139f646b7a"
+  },
+  "right": {
+   "run": "full-46e28aaa3",
+   "sha256": "3afc3f3e736c51c13b834bc37fe7dedeeb28fd89e59fc1da912d21acc35d8dcd"
+  }
+ },
+ {
+  "image": "A15-drill--chromium-light-desktop--settings--crop.png",
+  "change": "A15-drill",
+  "screenshot": "chromium-light-desktop/settings.png",
+  "crop": [
+   500,
+   300,
+   300,
+   190
+  ],
+  "left": {
+   "run": "full-92ce415e9",
+   "sha256": "6f6c1abcefc6f9dd164b0dc764d0259f54720c512fdd15e27aa704139f646b7a"
+  },
+  "right": {
+   "run": "full-83671b995",
+   "sha256": "3afc3f3e736c51c13b834bc37fe7dedeeb28fd89e59fc1da912d21acc35d8dcd"
+  }
+ },
+ {
+  "image": "A16--chromium-light-desktop--task-detail--crop.png",
+  "change": "A16",
+  "screenshot": "chromium-light-desktop/task-detail.png",
+  "crop": [
+   615,
+   150,
+   340,
+   200
+  ],
+  "left": {
+   "run": "full-46e28aaa3",
+   "sha256": "b99cd3fbdd0bf11de4d13aed94551cedd17227508add7d54839d6981434187c9"
+  },
+  "right": {
+   "run": "full-e69765706",
+   "sha256": "447bca1a358a26c2420abaf9779879fb807323c1bb92e3c4ca7a923a9068b03a"
+  }
+ },
+ {
+  "image": "A16-drill--chromium-light-desktop--task-detail--crop.png",
+  "change": "A16-drill",
+  "screenshot": "chromium-light-desktop/task-detail.png",
+  "crop": [
+   615,
+   150,
+   340,
+   200
+  ],
+  "left": {
+   "run": "full-a68f07f74",
+   "sha256": "b99cd3fbdd0bf11de4d13aed94551cedd17227508add7d54839d6981434187c9"
+  },
+  "right": {
+   "run": "full-3a3c58c1f",
+   "sha256": "447bca1a358a26c2420abaf9779879fb807323c1bb92e3c4ca7a923a9068b03a"
+  }
+ },
+ {
+  "image": "A17--chromium-light-phone--session-idle--crop.png",
+  "change": "A17",
+  "screenshot": "chromium-light-phone/session-idle.png",
+  "crop": [
+   14,
+   160,
+   330,
+   130
+  ],
+  "left": {
+   "run": "full-c26b69643",
+   "sha256": "3f3ec1501c81ec3ed0166179202077ecd8d3d68914caafc6ebe7a881dd818b02"
+  },
+  "right": {
+   "run": "full-d2e295917",
+   "sha256": "8e7b55c472e237bd377de0779e6cab0f5b17ad57517960318cdd8f0264e0a73a"
+  }
+ },
+ {
+  "image": "A17--webkit-dark-desktop--session-idle.png",
+  "change": "A17",
+  "screenshot": "webkit-dark-desktop/session-idle.png",
+  "crop": null,
+  "left": {
+   "run": "full-c26b69643",
+   "sha256": "ee5201ad43c0dcfd4abfa3f08dffc0c0835811ff5191e8871cd7ee92e89f93c1"
+  },
+  "right": {
+   "run": "full-d2e295917",
+   "sha256": "b3b19a069d4a22c00a73539bcf46493ab2befac3bb73e390d57f7415c27cc087"
+  }
+ }
+]

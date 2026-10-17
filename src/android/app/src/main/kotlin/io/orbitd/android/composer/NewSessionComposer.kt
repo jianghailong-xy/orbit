@@ -3,7 +3,9 @@ package io.orbitd.android.composer
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
@@ -23,6 +25,10 @@ fun NewSessionComposer(app: OrbitApplication, handle: SessionHandle, route: Orbi
     var detail by remember { mutableStateOf<JsonObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
+    // Held outside the workspace's read, which a directory refresh briefly clears: the engine list stays open across one.
+    var choosingEngine by remember(target) { mutableStateOf(false) }
+    // Where an engine or a credential that can't run here is fixed: the runner's page for that engine.
+    val openRunner = { runner: String, engine: String -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }
     LaunchedEffect(handle, target, data.fresh, retry) {
         detail = null
         if (!data.fresh) return@LaunchedEffect
@@ -42,14 +48,25 @@ fun NewSessionComposer(app: OrbitApplication, handle: SessionHandle, route: Orbi
         Text(data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.name ?: "New session", Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
         route.folderId?.let { id -> Text(data.folders.firstOrNull { ObjectId.same(it.id, id) }?.name ?: "Folder", Modifier.padding(horizontal = 16.dp)) }
         error?.let { Text(it); TextButton(onClick = { retry++ }) { Text("Retry workspace") } }
+        // First the engine — the CLI this session runs on for good — then, in the composer's model menu, the credential it spends.
+        detail?.let { workspace ->
+            val effective = JsonObject(workspace + state.draft.resumeConfig)
+            val engine = state.catalog?.engineOf(effective)
+                ?: ProviderEngines.sessionEngine(effective.text("engine") ?: effective.text("lastEngine"), effective.text("provider"), emptyList())
+            Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(EngineCopy.ENGINE, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(enabled = state.loaded && !state.busy && state.draft.pending == null && state.draft.createdSessionId == null,
+                    onClick = { choosingEngine = true; model.loadCatalog() }, modifier = Modifier.testTag("new-session-engine")) {
+                    Text("${ProviderEngines.cliName(engine)} ⌄", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            if (choosingEngine) EngineChoices(model, state, effective, handle.account.server, openRunner) { choosingEngine = false }
+        }
         Spacer(Modifier.weight(1f))
         val current = detail
         val fresh = data.fresh && current != null && current.flag("enabled") != false
         val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
-        Box(Modifier.heightIn(max = composerHeight)) {
-            SessionComposer(app, handle, target.key, session, target,
-                openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) })
-        }
+        Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, target.key, session, target, openRunner = openRunner) }
       }
     }
 }

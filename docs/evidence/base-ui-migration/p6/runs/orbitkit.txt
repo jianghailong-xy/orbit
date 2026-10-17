@@ -1,0 +1,32 @@
+argv: bash -c rm -rf /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/orbitkit && mkdir -p /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/orbitkit && git -C /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del archive HEAD | tar -x -C /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/orbitkit && docker run --rm --memory 6g -v /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/orbitkit:/repo -w /repo/src/macos/OrbitKit swift:6.1 swift test > /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/orbitkit-full.txt 2>&1; c=$?; grep -E 'Executed|error:|failed' /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/orbitkit-full.txt | tail -20; exit $c
+tree: /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/del
+head: 6879542dc23a10a74417002810331a7e73778842
+uncommitted:
+load: 12.93 12.63 13.17 16/3541 1578796
+mem: 6642M available
+disk: / 66240M available, TMPDIR /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/tmp
+started: 2026-10-10T16:02:43Z
+
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.231 (0.231) seconds
+	 Executed 21 tests, with 0 failures (0 unexpected) in 1.331 (1.331) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.009 (0.009) seconds
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.279 (0.279) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.125 (0.125) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+	 Executed 24 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.015 (0.015) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.403 (0.403) seconds
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.381 (0.381) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.025 (0.025) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.383 (0.383) seconds
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.0 (0.0) seconds
+	 Executed 41 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.006 (0.006) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+	 Executed 3671 tests, with 5 tests skipped and 0 failures (0 unexpected) in 32.172 (32.172) seconds
+	 Executed 3671 tests, with 5 tests skipped and 0 failures (0 unexpected) in 32.172 (32.172) seconds
+exit=0
+load: 12.80 12.78 13.19 12/3507 1583751
+ended: 2026-10-10T16:03:57Z

@@ -1,0 +1,50 @@
+{
+ "box": {
+  "x": 344,
+  "y": 20.953125,
+  "width": 32,
+  "height": 32
+ },
+ "ev": [
+  "46 mouseout (360,37) DIV.workspace-view",
+  "46 mouseover (360,37) path.",
+  "47 mousemove (360,37) path.",
+  "71 mouseout (0,0) path.",
+  "71 mouseover (0,0) DIV.workspace-view"
+ ],
+ "samples": [
+  {
+   "at": "DIV.workspace-view",
+   "fromPoint": "path.",
+   "backdrop": [
+    "LI ",
+    "DIV "
+   ]
+  },
+  {
+   "at": "path.",
+   "fromPoint": "path.",
+   "backdrop": [
+    "LI ",
+    "DIV "
+   ]
+  },
+  {
+   "at": "DIV.workspace-view",
+   "fromPoint": "path.",
+   "backdrop": [
+    "LI ",
+    "DIV "
+   ]
+  },
+  {
+   "at": "DIV.workspace-view",
+   "fromPoint": "path.",
+   "backdrop": [
+    "LI ",
+    "DIV "
+   ]
+  }
+ ]
+}
+active <button title="More actions" type="button" class="ant-btn css-oc1rc0 css-var-_r_0_ ant-btn-text ant-btn-color-default ant-btn-variant-text ant-btn-icon-only ant

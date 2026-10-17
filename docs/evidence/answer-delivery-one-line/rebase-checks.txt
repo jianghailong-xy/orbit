@@ -1,0 +1,21 @@
+rebase 到 main 之后的复跑记录（2026-10-16）
+
+基线：main 727735109（分支自 6fa5196e5 rebase；冲突 6 个文件全部解在 feature 提交里，另补了 main 六天里新增的一处普查 src/web/src/components/Transcript.tsx 的 readersOwnWords）。
+代码提交：3b9847181（feature；rebase 前 7aa1e5de0）。分支：orbit/owner-answer-rebased-51eb79。
+
+本机（wikova，8 核，负载 15–32）：
+
+- web `tsc -b`：0 错。
+- web vitest，本次改动相关的四个文件（OwnerAnswerLine / QueuedUserTurn / WorkspaceView.taskStartWaiting / queuedTurnRestore）：55/55。
+- web 全量 vitest：5327/5328（409 个文件里 1 个超时红——`src/firstPageStylesheet.test.ts` 的 production build 撞上 30s 上限，隔离复跑 1/1 绿，是负载 flake）。
+- apiserver 全量单测：5231/5232。唯一一条红不是本次改动：`src/apiserver/src/test-support/transaction-double-surface.spec.ts` 的「no spec hand-rolls the $queryRaw calling conventions」点名 `src/apiserver/src/sessions/steer-queued.spec.ts`（2026-10-16 的 steer 托盘提交 0bc4efdf4 带进来的，那两个文件都与 origin/main 逐字节相同），隔离复跑确定性红；main 自己的 CI 挂在同一条断言上（run 38894290993，`Test API server`，且因此 `Test web` 被跳过）。
+- `scripts/run-pg-spec.sh`：owner-answer-turn-card 5/5、turn-cards-parity 11/11、blocking-request-replies 10/10、project-done-not-yet 8/8、task-run-resume-card 4/4 —— 5 个 spec 全绿、无 skip。
+- OrbitKit `swift test`（docker swift:6.1，整棵 worktree 挂进去）：3842 个，0 失败（5 个 PerfBaseline 照旧跳过）。
+- `node scripts/check-docs.mjs`：0 问题。
+
+GitHub（分支 orbit/owner-answer-rebased-51eb79，tip 0945461bf）：
+
+- Android CI run 38896713887：绿（test + lint + debug APK）。第一次推（8b2a47a70）时这里红过三处手工合并的错（TranscriptCardView 少一个右括号、StickyQuestions 注释头与函数尾重复、TranscriptRowView 多留旧签名行），已修在 feature 提交里。
+- Client CI（`gh workflow run client.yml`，push 不跑 Xcode）：run 38896775953 绿 —— iOS generate + build、macOS build + test。
+
+没重拍 iPhone 探针图：功能代码与线上那次（run 38045204559）相同，本目录的 ios-*.png 仍是它的证据；要在 rebase 后的树上重拍，把本目录的 probe-harness 接到分支上重推 probe 分支即可。

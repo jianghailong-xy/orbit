@@ -5,6 +5,7 @@ import type {
   ConfirmationReviewRequestCard,
   ConversationTurnKind,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
   SessionMessageCard,
@@ -29,6 +30,12 @@ import { compatibleUuid as uuid } from './lib/uuid';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
+// While an administrator views Orbit as another user, their own session waits here until the look
+// ends: the token for looking has no refresh token of its own (see startImpersonation).
+const ADMIN_TOKEN_KEY = 'orbit_admin_token';
+const ADMIN_REFRESH_KEY = 'orbit_admin_refresh';
+/** The audience of the token an administrator views Orbit as another user with (apiserver auth/impersonation.ts). */
+const IMPERSONATION_AUDIENCE = 'orbit-impersonation';
 
 // Auto-refresh state (see the "Token auto-refresh" block below). Declared up here so the token
 // accessors can reference the timer without a use-before-define.
@@ -42,6 +49,9 @@ export const getRefreshToken = (): string | null => localStorage.getItem(REFRESH
 export const setSession = (s: { accessToken: string; refreshToken: string }): void => {
   localStorage.setItem(TOKEN_KEY, s.accessToken);
   localStorage.setItem(REFRESH_KEY, s.refreshToken);
+  // A sign-in is nobody's look at another user: no session waits to come back after it.
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_REFRESH_KEY);
   scheduleProactiveRefresh();
   // Scope the persistent transcript cache to whoever this token belongs to. Done here rather than
   // from the `me` query so it is bound before the first read: the token itself names the user, so
@@ -53,6 +63,8 @@ export const setSession = (s: { accessToken: string; refreshToken: string }): vo
 export const clearToken = (): void => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_REFRESH_KEY);
   if (refreshTimer !== undefined) {
     clearTimeout(refreshTimer);
     refreshTimer = undefined;
@@ -98,29 +110,80 @@ async function doRefresh(): Promise<boolean> {
   }
 }
 
-/** Decode a JWT's `exp` (seconds since epoch), or null if it can't be read. The payload is
- *  base64url, so map `-_` back to `+/` before atob (which only accepts standard base64). */
-function jwtExp(token: string): number | null {
+/** Decode a JWT's payload, or null if it can't be read. The payload is base64url, so map `-_` back
+ *  to `+/` before atob (which only accepts standard base64). Read unverified: the server re-verifies
+ *  the token regardless, so nothing read here grants anything. */
+function jwtClaims(token: string): Record<string, unknown> | null {
   try {
     const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const { exp } = JSON.parse(atob(b64)) as { exp?: number };
-    return typeof exp === 'number' ? exp : null;
+    const claims: unknown = JSON.parse(atob(b64));
+    return claims && typeof claims === 'object' ? (claims as Record<string, unknown>) : null;
   } catch {
     return null;
   }
 }
 
-/** Decode a JWT's `sub` (the user id), or null if it can't be read. Same base64url handling as
- *  jwtExp above. Only used to scope local caches — the server re-verifies the token regardless,
- *  so reading it unverified here grants nothing. */
+/** Decode a JWT's `exp` (seconds since epoch), or null if it can't be read. */
+function jwtExp(token: string): number | null {
+  const exp = jwtClaims(token)?.exp;
+  return typeof exp === 'number' ? exp : null;
+}
+
+/** Decode a JWT's `sub` (the user id), or null if it can't be read. Only used to scope local caches. */
 function jwtSubject(token: string): string | null {
-  try {
-    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const { sub } = JSON.parse(atob(b64)) as { sub?: string };
-    return typeof sub === 'string' ? sub : null;
-  } catch {
-    return null;
-  }
+  const sub = jwtClaims(token)?.sub;
+  return typeof sub === 'string' ? sub : null;
+}
+
+/** The user `token` views Orbit as, when it is an administrator's token for looking at another user:
+ *  their email, and when the look ends (seconds since epoch). Null for every other token. */
+function lookOf(token: string | null): { email: string; expiresAt: number } | null {
+  const claims = token ? jwtClaims(token) : null;
+  if (claims?.aud !== IMPERSONATION_AUDIENCE || typeof claims.email !== 'string' || typeof claims.exp !== 'number') return null;
+  return { email: claims.email, expiresAt: claims.exp };
+}
+
+/** The user this browser is viewing Orbit as, read-only, while an administrator's look at another user
+ *  is under way: their email, and when the look ends (seconds since epoch). Null otherwise. */
+export const impersonation = (): { email: string; expiresAt: number } | null => lookOf(getToken());
+
+/**
+ * Start viewing Orbit as another user, with the token POST /admin/users/:id/impersonate answered.
+ * This browser's own session waits aside until stopImpersonation brings it back, and nothing refreshes
+ * meanwhile: the look has no refresh token, and ends with its token. Callers load the app again
+ * afterwards, so nothing read as the administrator stays on screen.
+ */
+export function startImpersonation(accessToken: string): void {
+  const token = getToken();
+  const refreshToken = getRefreshToken();
+  if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token);
+  if (refreshToken) localStorage.setItem(ADMIN_REFRESH_KEY, refreshToken);
+  localStorage.setItem(TOKEN_KEY, accessToken);
+  localStorage.removeItem(REFRESH_KEY);
+  scheduleProactiveRefresh();
+}
+
+/** End the look: the administrator's own session comes back. Callers load the app again afterwards. */
+export function stopImpersonation(): void {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  const refreshToken = localStorage.getItem(ADMIN_REFRESH_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_REFRESH_KEY);
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+  else localStorage.removeItem(REFRESH_KEY);
+  scheduleProactiveRefresh();
+}
+
+/** Call `onChange` when another tab starts or ends a look at another user, so this one can follow it
+ *  rather than go on showing one user's data under the other's token. Returns the unsubscribe. */
+export function onImpersonationChange(onChange: () => void): () => void {
+  const listener = (event: StorageEvent) => {
+    if (event.key === TOKEN_KEY && (lookOf(event.oldValue) || lookOf(event.newValue))) onChange();
+  };
+  window.addEventListener('storage', listener);
+  return () => window.removeEventListener('storage', listener);
 }
 
 /** (Re)arm a timer to refresh ~1 min before the current access token expires. Called on boot, after
@@ -133,7 +196,9 @@ export function scheduleProactiveRefresh(): void {
   if (refreshTimer !== undefined) clearTimeout(refreshTimer);
   refreshTimer = undefined;
   const token = getToken();
-  setTranscriptUser(token ? jwtSubject(token) : null);
+  // Nothing of another user's is kept on this browser's disk while an administrator looks at it, and
+  // the administrator's own cache is left as it was, to come back with them.
+  setTranscriptUser(token && !lookOf(token) ? jwtSubject(token) : null);
   if (!token || !getRefreshToken()) return;
   const exp = jwtExp(token);
   if (exp == null) return;
@@ -152,17 +217,27 @@ declare const __APP_VERSION__: string;
  *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
  *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
 export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const withAuth = (): RequestInit => ({
+  const withAuth = (token: string | null): RequestInit => ({
     ...init,
     headers: {
       ...init.headers,
       'x-orbit-client': `web/${__APP_VERSION__}`,
-      ...(getToken() ? { authorization: `Bearer ${getToken()}` } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
   });
-  let res = await fetch(input, withAuth());
+  let sent = getToken();
+  let res = await fetch(input, withAuth(sent));
   if (res.status === 401 && (await refreshSession())) {
-    res = await fetch(input, withAuth()); // retry once with the refreshed token
+    sent = getToken();
+    res = await fetch(input, withAuth(sent)); // retry once with the refreshed token
+  }
+  if (res.status === 401 && lookOf(sent)) {
+    // A look at another user that is over (it ran out, or an account was disabled): back to the
+    // administrator's own session, on the page the look was started from. Another request answered
+    // 401 at the same time may have brought it back already, and must not sign the administrator out.
+    if (getToken() === sent) stopImpersonation();
+    location.href = '/admin';
+    return res;
   }
   if (res.status === 401) {
     clearToken();
@@ -173,7 +248,8 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
 
 /** Revoke the stored refresh token server-side (best-effort) — called on explicit sign-out. */
 export async function logoutSession(): Promise<void> {
-  const refreshToken = getRefreshToken();
+  // Signing out while looking at another user signs the administrator out, whose session waits aside.
+  const refreshToken = getRefreshToken() ?? localStorage.getItem(ADMIN_REFRESH_KEY);
   if (!refreshToken) return;
   try {
     await fetch('/api/auth/logout', {
@@ -608,10 +684,10 @@ export const setAvatar = async (photo: Blob): Promise<Me> => {
   return (await res.json()) as Me;
 };
 
-/** The account's profile photo as a data URL. The endpoint is bearer-guarded, so an `<img src>`
- *  pointing at it would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
-export const fetchAvatarDataUrl = async (): Promise<string> => {
-  const res = await authedFetch('/api/users/me/avatar');
+/** A profile photo as a data URL. The endpoints are bearer-guarded, so an `<img src>` pointing at
+ *  one would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
+const fetchPhotoDataUrl = async (path: string): Promise<string> => {
+  const res = await authedFetch(path);
   if (!res.ok) throw new Error(`profile photo: ${res.status}`);
   const blob = await res.blob();
   return await new Promise<string>((resolve, reject) => {
@@ -622,9 +698,25 @@ export const fetchAvatarDataUrl = async (): Promise<string> => {
   });
 };
 
+/** The account's profile photo as a data URL. */
+export const fetchAvatarDataUrl = (): Promise<string> => fetchPhotoDataUrl('/api/users/me/avatar');
+
+/** Another account's profile photo as a data URL, for Admin → Users (`GET /admin/users/:id/avatar`). */
+export const fetchUserAvatarDataUrl = (userId: string): Promise<string> =>
+  fetchPhotoDataUrl(`/api/admin/users/${encodeURIComponent(userId)}/avatar`);
+
 /** Withdraw a still-queued message (only works before the runner picks it up). */
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
+
+/** Send a message queued for the next turn into the one running now (the tray's Steer). It becomes
+ *  the steer it would have been had it been sent that way; with no turn to join, or an engine or
+ *  runner that cannot take one, it stays queued and the refusal is CURRENT_WORK_UNAVAILABLE. */
+export const steerQueuedTurn = (sessionId: string, turnId: string) =>
+  api<{ turnId: string; seq: number; kind: ConversationTurnKind; placement: SessionTurnPlacement; targetTurnId?: string }>(
+    `/sessions/${sessionId}/turns/${turnId}/steer`,
+    { method: 'POST' },
+  );
 
 /** The cards a user turn is drawn as, under the names the runner's echo stores them by (apiserver
  *  `TurnCards`, sessions/turn-cards.ts): a queued row carries the same fields its echo will, each
@@ -633,6 +725,9 @@ export interface TurnCards {
   /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
    *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The owner's answer handed to the coordinator (`OwnerAnswerCard`): which item, and when this
+   *  conversation was told. Its words are written for the agent. Absent on every turn a person typed. */
+  ownerAnswer?: OwnerAnswerCard;
   /** The same for the turn that hands a task's run its brief (`TaskStartCard`): a resumed run's — a
    *  run's opening turn is never listed here. */
   taskStart?: TaskStartCard;
@@ -823,19 +918,34 @@ export const renameSession = (sessionId: string, title: string) =>
  * that arrives just after is filed as a steer — written into the very turn being stopped.
  * Which of those happened would come down to network ordering. Sent together, the message
  * is filed after the drop and delivered as the next turn.
+ *
+ * `options.stopBackgroundWork` is the composer's Stop, and only that: it also ends the
+ * background work the session left running (the runner's jobs, the engine's own shells and
+ * Monitors, its background Workflows). Omitted, this is a plain interrupt — nothing is
+ * killed, and the engine's process, conversation and stdin survive, which is the whole
+ * difference between stopping a turn and ending a session. It rides this request rather
+ * than a second one for the same reason the follow-up does: one press is one decision.
  */
 export const interruptSession = (
   sessionId: string,
   followUp?: { content: string; attachmentIds?: string[] },
+  options?: { stopBackgroundWork?: boolean },
 ) =>
   api<{ ok: true; turnId?: string; seq?: number }>(`/sessions/${sessionId}/interrupt`, {
     method: 'POST',
-    ...(followUp
+    ...(followUp || options?.stopBackgroundWork
       ? {
           body: {
-            clientTurnId: uuid(),
-            content: followUp.content,
-            ...(followUp.attachmentIds?.length ? { attachmentIds: followUp.attachmentIds } : {}),
+            ...(followUp
+              ? {
+                  clientTurnId: uuid(),
+                  content: followUp.content,
+                  ...(followUp.attachmentIds?.length
+                    ? { attachmentIds: followUp.attachmentIds }
+                    : {}),
+                }
+              : {}),
+            ...(options?.stopBackgroundWork ? { stopBackgroundWork: true } : {}),
           },
         }
       : {}),
@@ -1678,6 +1788,10 @@ export interface SessionDetail {
   kimiAccount?: string | null;
   /** See codexAccountPinned. */
   kimiAccountPinned?: boolean;
+  /** The Cursor CLI account picked or chosen for this session; null follows the workspace's. */
+  cursorAccount?: string | null;
+  /** See codexAccountPinned. */
+  cursorAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1701,6 +1815,8 @@ export interface SessionDetail {
     antigravityAccount?: string | null;
     /** The Kimi Code account this workspace's sessions run on; null is Default. */
     kimiAccount?: string | null;
+    /** The Cursor CLI account this workspace's sessions run on; null is Default. */
+    cursorAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;

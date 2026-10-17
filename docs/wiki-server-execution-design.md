@@ -90,6 +90,7 @@
   - 去掉 Provider 项，改为只读的「Model: System model · <模型名>」，并显示状态：未配置、不可达、key 被拒、worker 未运行，或正常。
   - Workspace 项保留，含义改为"从哪个 workspace（也就是哪台 runner）读仓库"。
 - **Activity**：每次运行（维护、plan 起草/修订、文档构建、导入、核实）显示步骤进度和逐次调用日志（排队时长、耗时、token、错误）。正在排队的请求显示前面还有几个。不再链接到隐藏的任务和会话。
+- **Plan 页**：服务端执行时，在册版本的头部多一个「Update documents」。确认后生成没写完、仓库或条目变了而维护还没轮到，或者空间闲着不再触发维护，owner 都可以自己再要一次生成；运营侧也能在管理区代他再要一次（§5.6）。
 - **健康行**：新增几种原因：「等待 runner 上线」「System model 不可达」「System model 拒绝了 key」「System model 未配置」「wiki worker 未运行」。
 - **导入**：`orbit wiki import` 仍在 runner 上运行，但只负责读文件、注册 note。条目由服务端作业抽取，命令行等作业结束后打印结果。
 - **核实**：Automatic 空间里会话提议的 op，改由服务端作业核实，会话不用再跑 `orbit wiki verify`。这个命令保留，含义变为"请求服务端核实并等待结果"。
@@ -218,12 +219,17 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - 重试：`attempts`、`next_attempt_at`
   - 租约：`lease_owner`、`lease_generation`、`lease_deadline_at`
   - 结果：`progress`、`report`、`error`；`failure_kind`，取值为 infra / content
+  - 带到重放：作业没结束时 `report` 只暂存 `{ carry }`——之前的尝试做完、重放不会再做的部分（2026-10-10）；结束时的报告并进它，交还、重放过的作业报告的也是整个作业（契约 §24.10）
   - 时间：`created_at`、`started_at`、`ended_at`
 - 领取：照 `watch_delivery` 的做法。
   - 用 `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)` 领取，每次领取给这一行一个新代数；
   - 所有回写都按代数做比较并交换；
   - 租约 60 秒，执行中定期续租；
   - 过期回收：租约已过期的作业放回 queued。
+  - 同一空间里维护优先，文章最多让一轮（owner 2026-10-10 定）：还没被领取过的文章作业，要等这个空间在它之后建的第一个维护作业
+    结束才领；这一轮结束以后照常先来先得，所以每个文章作业只让一轮，不会饿死。优先级不变，空间在部署队列里的位置也不变。
+    下一轮要等触发器听到 owner 的下一个事件才建，canary 上比文章作业晚 8.6～99.2 秒，所以排了文章作业的运行结束时，马上对这个
+    空间再评估一次，空间仍到期就先把下一轮建出来。
 - 文章作业（`articles`）由维护运行的结束触发，规则见 §8（owner 2026-10-08 定）。
 - 同一个空间同一时间只跑一个作业，沿用隐藏列表 `maxConcurrent 1` 的语义。一个 worker 同时执行的作业数另有上限。作业大部分时间在等模型，真正压在 GPU 上的量由 §5.2 的队列决定。
 - `wiki_maintenance_run`、`wiki_plan_job`：增加 `job_id`，`task_id` 改为可空，用 CHECK 约束二者必有其一。健康状态和每日计数改为读运行行，不再读 Task 和 Session。
@@ -279,7 +285,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   1. 停止领取新的作业和请求；
   2. 中止在途的请求，把已经收到的部分存进 `partial`，把请求的租约截止时间设为当前时间，让新进程立即接手；
   3. 把在跑的作业交还：直接放回 queued，租约清空，`attempts` 不变，不退避，`error` 写明是 worker 停机交还。新进程第一轮领取
-     就能拿到它，在同一空间里照常按优先级、再按先来先得排序。停在仓库操作上等待的作业，等待被停机打断时同样这样交还。
+     就能拿到它，在同一空间里照常按空间自己的顺序（§5.1）排序。停在仓库操作上等待的作业，等待被停机打断时同样这样交还。
 - **停机交还不计次、不退避**（owner 2026-10-09 定：部署打断不计入尝试次数）。在此之前，停机只把租约截止时间设为当前时间，由过期回收
   接手，回收把它当成一次丢掉的尝试：`attempts + 1`，再退避。2026-10-09 生产部署了 4 次，v27 的 docs_build 79620f23 被打断 3 次，
   加上之前的故障，10 次尝试用掉了 8 次；06:56Z 接手时它还在 30 秒的退避里，同空间 priority 0 的文章作业先被领走，它多等了 40 多分钟。
@@ -298,6 +304,29 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 | 401 | 队列暂停（§5.3），健康行写明 key 被拒 |
 | content：模型给不出可解析的结果、服务端拒绝 | 结束作业，计入连续失败；连续 3 次通知 owner（与现在一致） |
 | owner 关闭维护或删除空间 | 作业和它排队中的请求改为 cancelled |
+
+### 5.6 再要一次文档生成（owner 2026-10-17 定）
+
+- **起因**：生产上 cbai 空间确认 v1（34 篇）以后，唯一一次生成死在仓库故障上（`REPO_OP_FAILED`：维护 workspace 的目录不是 git checkout），
+  10 次尝试用完。仓库修好以后的维护都在追赶期，按设计跳过文档；追平以后空间闲着，不再触发维护。生成只能由确认来要，确认又只收草稿，
+  所以谁都没有入口再要一次，至今 0/34。
+- **做什么**：owner 在 Plan 页对在册版本按「Update documents」，服务端排一个和确认要的同一种生成：`docs_build` 作业，owner 发起的优先级，
+  不建任务、不建会话。生成照在册版本写：
+  - 没写过的节写出来；
+  - 材料指纹变了的节、被撤过句的节重写；
+  - 指纹没变的节不动，也不为它们调模型。
+- **运营侧代触发**（owner 选了"所有者 + 运营侧"）：管理员在管理区 Users 某个账号的菜单里选「Update wiki documents…」，挑一个空间、写明理由，
+  服务端为这个账号排同一个生成。
+  - 作业的 `trigger` 记 `support`（迁移 0429 放宽 CHECK），`requested_by_user_id` 记管理员；
+  - 和作业同一个事务写一行管理员的 Activity：`wiki.plan.build_requested`，记下账号、空间、版本、作业和理由。
+  - 只给登录的管理员：个人访问令牌不行，View as 的令牌也不行。不做 CLI：管理路由不收令牌，做 CLI 还要发 runner 版本。
+- **一次一个**：在册版本的生成在排队、等设置或在跑时，再按就答这个生成，不建第二个。查和建在 space 行锁下完成，两次同时按也只出一个。
+- **额度**：生成不是维护运行，不计入 `dailyRunLimit`，也不被它挡（与 §2.3、与确认要的生成相同：每日上限保护的是审阅队列，生成不提议 op）。
+  对 GPU 的压力仍然由全局并发上限和每作业的在途上限控制。
+- **失败**：照 §5.5。infra 退避重试，次数用完以失败结束；有节没写成是 content 失败。两种都不碰维护游标和连续失败，结束以后可以再按。
+- **只在服务端执行时有**：runner 路径（P11 之前）没有这个入口，两条路由都答 `WIKI_RUNNER_EXECUTES`，客户端不画按钮。
+- **客户端**：只做 web（Plan 页的按钮、管理区的对话框）；macOS/iOS 和 Android 不变，文案和共享夹具不动。
+- 合同见 `docs/wiki-contract.md` §21.11（`plan.jobs.rebuild`）。
 
 ## 6. 模型调用（Claude Code 现在隐式做的事，要显式实现）
 
@@ -354,6 +383,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - runner 模式下不变：维护运行自判据 3 第 3 版起不再重写主题文章，也没有别的东西自动重写。
   - 服务端执行的账号（`server`，或 `canary` 名单内）：一次维护运行成功结束、记下了 op、且不在追赶期（追赶进行中或暂停时都不建）时，服务端给这个空间排一个 `articles` 作业。runner 跑的维护运行也算，触发点在服务端记录运行结束的地方（finish 路由）；P8 的服务端维护作业结束时调用同一个入口。
   - 每个空间最多排一个，后台优先级 0，排在 owner 主动发起的请求之后；作业只重写指纹变了的主题。
+  - 它第一次被领取之前，先等这个空间的下一轮维护走完，只让这一轮（owner 2026-10-10 定，§5.1）。
   - 文章的 ref 取该空间最近一份仓库快照的 sha；还没有快照时先请求一次，作业挂起等它。
   - 对这样的账号，runner 门的文章三条路由回 `WIKI_SERVER_EXECUTES`，会话不再拿自己的 provider 写文章。
 
@@ -396,6 +426,7 @@ agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，�
 - **`contracts/wiki.contract.json`**：
   - 新增 `systemModel`、`jobs`、`modelQueue`、`repoOps`；
   - 改写 `maintenance.run` / `session` / `list`、`plan.jobs.task` / `run`、`agentSurface.verify`、`articles.cleanClaudeCode`、`import.cli.model`；
+  - 新增 `plan.jobs.rebuild`（§5.6，2026-10-17）；
   - 删除 `space.settings.maintenance.provider`。
 - **文档**：`docs/wiki-contract.md`、`docs/wiki-design.md` 的 §0 和 §8、`docs/configuration.md`、`docs/self-hosting.md`、upgrade skill 的说明。
 

@@ -1,0 +1,175 @@
+{
+ "names": 240,
+ "onlyDel": [
+  "chromium-dark-desktop/p52-result.png",
+  "chromium-dark-phone/p52-diagram-focus.png"
+ ],
+ "onlyRef": [
+  "chromium-dark-phone/p52-streaming.png",
+  "chromium-dark-phone/p52-tail.png",
+  "chromium-light-phone/p52-diagram-focus.png"
+ ],
+ "pairs": {
+  "del|del2": {
+   "antialias": 1,
+   "beyond": 1,
+   "differing": {
+    "chromium-dark-desktop/p52-result.png": {
+     "max": 2,
+     "pixels": 11
+    },
+    "chromium-dark-phone/p52-diagram-focus.png": {
+     "max": 255,
+     "pixels": 19286
+    }
+   },
+   "identical": 238
+  },
+  "ref2|del": {
+   "antialias": 1,
+   "beyond": 3,
+   "differing": {
+    "chromium-dark-desktop/p52-result.png": {
+     "max": 2,
+     "pixels": 11
+    },
+    "chromium-dark-phone/p52-diagram-focus.png": {
+     "max": 255,
+     "pixels": 19286
+    },
+    "chromium-dark-phone/p52-streaming.png": {
+     "max": 255,
+     "pixels": 201784
+    },
+    "chromium-dark-phone/p52-tail.png": {
+     "max": 247,
+     "pixels": 178182
+    }
+   },
+   "identical": 236
+  },
+  "ref2|del2": {
+   "antialias": 0,
+   "beyond": 2,
+   "differing": {
+    "chromium-dark-phone/p52-streaming.png": {
+     "max": 255,
+     "pixels": 201784
+    },
+    "chromium-dark-phone/p52-tail.png": {
+     "max": 247,
+     "pixels": 178182
+    }
+   },
+   "identical": 238
+  },
+  "ref|del": {
+   "antialias": 1,
+   "beyond": 2,
+   "differing": {
+    "chromium-dark-desktop/p52-result.png": {
+     "max": 2,
+     "pixels": 11
+    },
+    "chromium-dark-phone/p52-diagram-focus.png": {
+     "max": 255,
+     "pixels": 19286
+    },
+    "chromium-light-phone/p52-diagram-focus.png": {
+     "max": 255,
+     "pixels": 19334
+    }
+   },
+   "identical": 237
+  },
+  "ref|del2": {
+   "antialias": 0,
+   "beyond": 1,
+   "differing": {
+    "chromium-light-phone/p52-diagram-focus.png": {
+     "max": 255,
+     "pixels": 19334
+    }
+   },
+   "identical": 239
+  },
+  "ref|ref2": {
+   "antialias": 0,
+   "beyond": 3,
+   "differing": {
+    "chromium-dark-phone/p52-streaming.png": {
+     "max": 255,
+     "pixels": 201784
+    },
+    "chromium-dark-phone/p52-tail.png": {
+     "max": 247,
+     "pixels": 178182
+    },
+    "chromium-light-phone/p52-diagram-focus.png": {
+     "max": 255,
+     "pixels": 19334
+    }
+   },
+   "identical": 237
+  }
+ },
+ "perRun": {
+  "del": 240,
+  "del2": 240,
+  "ref": 240,
+  "ref2": 240
+ },
+ "set": "p52",
+ "variants": {
+  "chromium-dark-desktop/p52-result.png": {
+   "del": [
+    "0351cdff9f357c99",
+    "1d65f30c6591b0e9"
+   ],
+   "ref": [
+    "1d65f30c6591b0e9",
+    "1d65f30c6591b0e9"
+   ]
+  },
+  "chromium-dark-phone/p52-diagram-focus.png": {
+   "del": [
+    "1607d9a253d3fc2a",
+    "7521a0944423b5cb"
+   ],
+   "ref": [
+    "7521a0944423b5cb",
+    "7521a0944423b5cb"
+   ]
+  },
+  "chromium-dark-phone/p52-streaming.png": {
+   "del": [
+    "33bccf317c3fee2d",
+    "33bccf317c3fee2d"
+   ],
+   "ref": [
+    "33bccf317c3fee2d",
+    "0904f5f1937396a9"
+   ]
+  },
+  "chromium-dark-phone/p52-tail.png": {
+   "del": [
+    "4fc1108f038efb28",
+    "4fc1108f038efb28"
+   ],
+   "ref": [
+    "4fc1108f038efb28",
+    "0904f5f1937396a9"
+   ]
+  },
+  "chromium-light-phone/p52-diagram-focus.png": {
+   "del": [
+    "b4eecf503661a0f3",
+    "b4eecf503661a0f3"
+   ],
+   "ref": [
+    "da24d105ee05e539",
+    "b4eecf503661a0f3"
+   ]
+  }
+ }
+}

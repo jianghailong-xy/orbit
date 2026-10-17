@@ -1,0 +1,11 @@
+18:10:50 "POST /__reset HTTP/1.1" 200 -
+18:11:39 BODY /api/projects/P5/start {"automatic": true, "criteriaDigest": "5d1a09c3be427777777777777777777777777777777777777777777777777777", "line": "PROJECT_BRANCH", "maxConcurrentTasks": 2, "mergeCheckCommand": "make test", "requestId": "I5", "upstreamRef": "refs/heads/master"}
+18:11:39 "POST /api/projects/P5/start HTTP/1.1" 201 -
+18:11:43 "POST /__reset HTTP/1.1" 200 -
+18:13:03 BODY /api/projects/P2/start {"automatic": false, "criteriaDigest": "5d1a09c3be427777777777777777777777777777777777777777777777777777", "line": "MAIN", "maxConcurrentTasks": 2, "mergeCheckCommand": "make test", "requestId": null, "upstreamRef": "refs/heads/develop"}
+18:13:03 "POST /api/projects/P2/start HTTP/1.1" 201 -
+18:13:09 "POST /__reset HTTP/1.1" 200 -
+18:13:24 BODY /api/projects/P1/integration {"upstreamRef": "refs/heads/develop"}
+18:13:24 "PATCH /api/projects/P1/integration HTTP/1.1" 200 -
+18:13:42 "POST /__reset HTTP/1.1" 200 -
+18:13:52 "POST /__reset HTTP/1.1" 200 -

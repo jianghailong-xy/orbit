@@ -104,7 +104,12 @@ export function wikiPlanCut(text: string, maxChars: number): string {
   if (maxChars <= 0) return text;
   const runes = [...text];
   if (runes.length <= maxChars) return text;
-  return `${runes.slice(0, maxChars).join('')}\n…（后略）\n`;
+  return `${runes.slice(0, maxChars).join('')}\n… (rest omitted)\n`;
+}
+
+/** `1 file`, `3 files`: the runner's `wikiCount`. */
+function count(n: number, one: string, many: string): string {
+  return n === 1 ? `1 ${one}` : `${n} ${many}`;
 }
 
 /** The first twelve characters of a sha, as the runner's messages name a commit. */
@@ -186,7 +191,8 @@ export class WikiPlanRepo {
    * source files — tests and fixtures left out (the sample's repo.md, for any repository).
    */
   layoutText(maxChars: number): string {
-    let b = `# 仓库结构（origin/main ${shortWikiHash(this.sha)}，提交时间 ${this.date}）\n\n只列源文件（去掉测试与夹具），路径相对仓库根。\n\n## 顶层\n\n`;
+    let b = `# Repository structure (origin/main ${shortWikiHash(this.sha)}, committed ${this.date})\n\nSource files only (tests and fixtures `
+      + 'left out); paths are relative to the repository root.\n\n## Top level\n\n';
     const top = new Map<string, number>();
     const topFiles: string[] = [];
     for (const file of this.files) {
@@ -194,8 +200,8 @@ export class WikiPlanRepo {
       if (i > 0) top.set(file.slice(0, i), (top.get(file.slice(0, i)) ?? 0) + 1);
       else topFiles.push(file);
     }
-    for (const name of [...top.keys()].sort(goCompare)) b += `- \`${name}/\`（${top.get(name)} 个文件）\n`;
-    if (topFiles.length > 0) b += `- 顶层文件：${topFiles.join(', ')}\n`;
+    for (const name of [...top.keys()].sort(goCompare)) b += `- \`${name}/\` (${count(top.get(name)!, 'file', 'files')})\n`;
+    if (topFiles.length > 0) b += `- Top-level files: ${topFiles.join(', ')}\n`;
     const packages = new Map<string, string[]>();
     const entries = new Map<string, string[]>();
     for (const file of this.files) {
@@ -207,13 +213,13 @@ export class WikiPlanRepo {
       if (wikiPlanIsSource(file)) packages.set(pkg, [...(packages.get(pkg) ?? []), file]);
     }
     const pkgs = [...packages.keys()].sort(goCompare);
-    b += '\n## 各包与入口\n\n';
+    b += '\n## Packages and entry points\n\n';
     for (const pkg of pkgs) {
-      let line = `- \`${pkg}\`（${packages.get(pkg)!.length} 个源文件）`;
-      if ((entries.get(pkg) ?? []).length > 0) line += `；入口与装配：${entries.get(pkg)!.join('、')}`;
+      let line = `- \`${pkg}\` (${count(packages.get(pkg)!.length, 'source file', 'source files')})`;
+      if ((entries.get(pkg) ?? []).length > 0) line += `; entry points and wiring: ${entries.get(pkg)!.join(', ')}`;
       b += `${line}\n`;
     }
-    b += '\n## 各目录的源文件\n';
+    b += '\n## Source files by directory\n';
     for (const pkg of pkgs) {
       b += `\n### ${pkg}\n`;
       const byDir = new Map<string, string[]>();
@@ -221,7 +227,7 @@ export class WikiPlanRepo {
       for (const dir of [...byDir.keys()].sort(goCompare)) {
         const files = byDir.get(dir)!;
         if (files.length <= 40) {
-          b += `- ${dir}/（${files.length}）: ${files.join(', ')}\n`;
+          b += `- ${dir}/ (${files.length}): ${files.join(', ')}\n`;
           continue;
         }
         // A flat directory of many files, as a Go package is: grouped by the prefix of their names.
@@ -233,14 +239,14 @@ export class WikiPlanRepo {
           groups.set(prefix, [...(groups.get(prefix) ?? []), file]);
         }
         const prefixes = [...groups.keys()].sort((x, y) => groups.get(y)!.length - groups.get(x)!.length || goCompare(x, y));
-        b += `- ${dir}/（${files.length}，按文件名前缀）:\n`;
+        b += `- ${dir}/ (${files.length}, by file name prefix):\n`;
         for (const prefix of prefixes) b += `  - ${prefix}: ${groups.get(prefix)!.join(', ')}\n`;
       }
     }
     for (const file of this.files) {
       if (goBase(file) !== 'schema.prisma') continue;
       const names = [...this.textOf(file).matchAll(PRISMA_MODEL)].map((m) => m[1]);
-      if (names.length > 0) b += `\n## 数据模型（${file}）\n\n模型 ${names.length} 个：${names.join(', ')}\n`;
+      if (names.length > 0) b += `\n## Data model (${file})\n\n${count(names.length, 'model', 'models')}: ${names.join(', ')}\n`;
     }
     return wikiPlanCut(b, maxChars);
   }
@@ -258,8 +264,9 @@ export class WikiPlanRepo {
 
   /** Every document with its title and its second- and third-level headings (docs-tree.md). */
   docsTreeText(maxChars: number): string {
-    let b = `# 文档标题树（origin/main ${shortWikiHash(this.sha)}）\n\n范围：docs/ 下的设计、契约与运维文档（不含 docs/mocks、docs/evidence），以及仓库里其他说明文件。`
-      + '每篇列出 H1 标题与二、三级标题；[大小] 是字节数。\n\n';
+    let b = `# Document heading tree (origin/main ${shortWikiHash(this.sha)})\n\nScope: the design, contract and operations documents under docs/ `
+      + "(not docs/mocks or docs/evidence), and the repository's other Markdown files. Each document lists its H1 title and its second- "
+      + 'and third-level headings; [size] is in bytes.\n\n';
     for (const file of this.docFiles()) b += this.docBlock(file, 3);
     return wikiPlanCut(b, maxChars);
   }
@@ -292,24 +299,24 @@ export class WikiPlanRepo {
    * JSON at all.
    */
   contractsText(): string {
-    let b = `# contracts/ 清单（origin/main ${shortWikiHash(this.sha)}）\n\n`;
+    let b = `# contracts/ inventory (origin/main ${shortWikiHash(this.sha)})\n\n`;
     let n = 0;
     for (const file of this.files) {
       if (!file.startsWith('contracts/')) continue;
       n += 1;
-      let desc = '（非 JSON）';
+      let desc = '(not JSON)';
       const keys = this.contractKeys.get(file);
-      if (keys) desc = `顶层键：${(keys.length > 14 ? [...keys.slice(0, 14), '…'] : keys).join(', ')}`;
+      if (keys) desc = `top-level keys: ${(keys.length > 14 ? [...keys.slice(0, 14), '…'] : keys).join(', ')}`;
       b += `- \`${file}\` [${this.sizeOf(file)}] ${desc}\n`;
     }
-    if (n === 0) b += '（这个仓库没有 contracts/）\n';
+    if (n === 0) b += '(this repository has no contracts/)\n';
     return b;
   }
 
   /** What tells the model what the repository is: docs/README.md and docs/architecture.md when it has them, else its README. */
   overviewText(maxChars: number): string {
     const parts: string[] = [];
-    for (const file of this.overviewFiles()) parts.push(`<${file} 全文>\n${goTrimSpace(this.textOf(file))}\n</${file}>`);
+    for (const file of this.overviewFiles()) parts.push(`<${file} full text>\n${goTrimSpace(this.textOf(file))}\n</${file}>`);
     return wikiPlanCut(parts.join('\n\n'), maxChars);
   }
 
@@ -353,13 +360,13 @@ export class WikiPlanRepo {
       const line = `${file}: ${symbols.join(', ')}\n`;
       const size = Buffer.byteLength(line, 'utf8');
       if (bytes + size > maxChars) {
-        b += `…（另有 ${files.length - i} 个文件略去）\n`;
+        b += `… (${count(files.length - i, 'more file', 'more files')} left out)\n`;
         break;
       }
       b += line;
       bytes += size;
     }
-    return b === '' ? '（没有匹配到带符号的源文件）\n' : b;
+    return b === '' ? '(no source file with symbols matched)\n' : b;
   }
 
   // ── The references ──────────────────────────────────────────────────────────────────────────────

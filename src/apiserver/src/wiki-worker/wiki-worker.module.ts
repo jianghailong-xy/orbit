@@ -83,7 +83,7 @@ import { wikiVerifyJobRunner } from './wiki-verify-job';
           ...WIKI_JOB_RUNNERS,
           import: wikiImportJobRunner({ prisma, wiki, repoOps, model: model.model, repoWake }),
           articles: wikiArticlesJobRunner({ prisma, articles, repoOps, repoWake, model: model.model ?? '' }),
-          verify: wikiVerifyJobRunner(wiki, model.model),
+          verify: wikiVerifyJobRunner(wiki, model.model, prisma),
           [WIKI_PLAN_SERVER_JOB.kinds.draft]: plan,
           [WIKI_PLAN_SERVER_JOB.kinds.revise]: plan,
           docs_build: wikiDocsBuildJobRunner({ prisma, docs, wiki, repoOps, repoWake, model: model.model ?? '' }),

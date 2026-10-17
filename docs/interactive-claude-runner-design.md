@@ -80,7 +80,8 @@ Residual risk: a turn re-served after lease expiry while the runner *did* consum
   - Residual UX: a user who wants to queue-while-running gets a 409 + "a turn is in progress." If queue-while-running is later desired, the runner must gate the next pull on observing its own `result`/`AWAITING_INPUT` transition.
   - **Superseded for `claude` by the steer lane below.** A send during `RUNNING` is no longer rejected: it is accepted and queued, and — once the mid-turn stdin semantics were settled (§3a) — written into the turn already running rather than behind it. Executable turns are still serialized; steering is a separate lane, not a relaxation of that one.
 - **`interrupt` and `end` are a priority lane.** The inbox dequeue returns `kind IN ('interrupt','end')` **before** any `message`, so Stop preempts queued sends. Interrupt is processed even while `RUNNING`.
-- **Interrupt while `AWAITING_INPUT` is a no-op** (nothing to interrupt) — rejected server-side rather than leaking into the next turn.
+- **Interrupt while `AWAITING_INPUT` is a no-op only when no turn is running at all.** Parked is not the same as idle: the engine also runs turns nobody dispatched — a background task reporting in, a scheduled wake-up — and those never reach `/turn-complete`, so the session sits in `AWAITING_INPUT` while tools and replies stream for minutes. `Session.engineTurnActive` is what tells such a turn from a genuinely idle park (`runner-api/engine-turn.ts:37-52`), and an interrupt is accepted in `AWAITING_INPUT` like any other live state — the runner asks the engine unconditionally for exactly these self-driven turns (§6, **Asked unconditionally**).
+- **The race the old no-op line guarded is closed by the interrupt itself, not by a gate.** Stop clicked as `turn_end` lands once risked the interrupt turn being applied to the next turn; today `SessionsService.interrupt` runs under the Session row lock and deletes every `message`/`shell`/`steer` turn still queued behind the running turn, settling the wakes those turns carried (`deadLetterQueuedWatchWakes`, `settleUnrunWakeTurns`) — so no next turn is left for an interrupt to leak into. The one window it cannot take — `turn-complete` already handed the runner-local permit to a successor that has not been leased — is refused with 409 'the next turn is already starting' rather than stranding the permit.
 - **Per-run pending cap:** `/turns` rejects with 429 if pending+in-flight message turns exceed `K` (e.g. 1, since we serialize) — backpressure against rapid sends / key-repeat.
 - **Idempotency key:** `RunTurnRequest.clientTurnId` (client UUID); `@@unique([runId, clientTurnId])` makes a double-click / cross-tab duplicate a no-op returning the existing turn.
 
@@ -125,13 +126,22 @@ it gets no reply of its own, so how far it got is the only report it ever produc
   transcript rebuilt from durable events alone still knows which bubble that was.
 - **A still-PENDING steer is listed** by `GET /sessions/:id/turns`, tagged `kind: 'steer'`. Until
   the runner leases it there is nothing else to render it from, and a message that vanishes on
-  refresh is the one outcome mid-turn sending must not produce. Listed ≠ withdrawable.
+  refresh is the one outcome mid-turn sending must not produce. Listed ≠ cancellable: a steer is
+  withdrawn by its own rule (below), never by Cancel's delete of a queued message.
 - **Four states, from the runner's own `user_delivery` transitions:** *Sending…* (accepted, by the
-  control plane or the runner's writer), *Delivering…* (`written` — its bytes are in the engine's
-  stdin, unread while a tool runs), *Sent into this turn* (`acknowledged` — the engine echoed it
-  back), *Not delivered* (`failed`, with the reason). Shown for a steer alone: an ordinary message
-  is reported by the reply that follows it. Web `lib/steerDelivery.ts` and OrbitKit
-  `Transcript/SteerDelivery.swift` are the same table, so every client says the same words.
+  control plane or the runner's writer), *Waiting to be read* (`written` — the engine has it and
+  takes it into the conversation at its next tool boundary), *Read in this turn* (`acknowledged` —
+  the engine echoed it back), *Not delivered* (`failed`, with the reason). The words follow chat read
+  receipts; until 2026-10-16 the middle two were *Delivering…* and *Sent into this turn*. Shown for a
+  steer alone: an ordinary message is reported by the reply that follows it. Web
+  `lib/steerDelivery.ts` and OrbitKit `Transcript/SteerDelivery.swift` are the same table, so every
+  client says the same words.
+- **A steer can be withdrawn while nothing has read it.** Each steer frame carries its turn id as the
+  frame's `uuid`; the CLI keeps it, echoes it back, and drops a still-queued message by it
+  (`cancel_async_message`, measured on 2.1.296 and 2.1.300). The runner marks such a steer
+  `withdrawable` on its `user` event, takes a `withdraw` turn, and answers it with what the CLI said
+  (`claude_withdraw.go`); only `cancelled: true` removes the message, reported as a `withdrawn`
+  delivery. See `apiserver/src/sessions/steer-withdraw.ts` for the control plane's half.
 - **A mid-turn `user` event is not a turn boundary.** It lands inside a reply that is still
   streaming: clients must not clear/close the open assistant bubble on it, or the reply is blanked
   (web) or rendered twice once its authoritative `assistant` event arrives (native).
@@ -359,10 +369,19 @@ just a different transport but a different guarantee.
   generation makes a straggler recognisable instead of matching it against the new process's
   identically numbered request. Waiters live in a table owned by their own runtime, and every
   one of them is failed when that process goes terminal.
-- **No kill anywhere on this path.** The process, its conversation and its stdin survive an
+- **No kill on this path by default.** The process, its conversation and its stdin survive an
   interrupt — that is the entire difference from `end`. A kill would stop the turn too and look
   identical for a second, at the cost of a resumable context, so an interrupt that cannot be
-  confirmed is *reported*, never covered up.
+  confirmed is *reported*, never covered up. The one exception is explicit and belongs to the
+  caller: an interrupt filed with `stopBackgroundWork: true` (the composer's Stop) also ends the
+  background work the session left running — the runner-hosted jobs are killed for real
+  (`kind:'service'` included: a dev server or watcher the stopped turn started is taken down with
+  it), and the engine's own shells, Monitors and background Workflows are reported killed so the
+  session's background tray resolves instead of asserting a stopped watcher is still running. That
+  flag does not make this `end`: the engine process, its conversation and its stdin still survive,
+  and the next turn runs in the same session. Every caller that omits it — the engine's own
+  `session_interrupt`, the MCP tool, the CLI, the browser's plain interrupt — gets the interrupt
+  this bullet has always described, unchanged.
 - **The transcript marker costs an answer.** `interrupt{requestId}` is emitted only once the
   engine has confirmed; a failure emits an `error` event saying the session is still running and
   its context intact. The drain's own teardown marker (`interrupt{reason:'runner_restart'}`) is a
@@ -435,7 +454,7 @@ subtraction. This snapshot does not sum every model request in a multi-request t
 | **`POST /api/runner/runs/:id/turn-complete`** | runner→srv (NEW) | RunnerAuth + ownership | Flip turn `→ANSWERED` (no-op if already ANSWERED — retry-safe). **Increment** `numTurns/costUsd/sum*` via `{increment:...}`, keyed by turnId dedup (RT: failure high — never overwrite). Set `AWAITING_INPUT`, bump `lastTurnAt`/`idleDeadlineAt`. |
 | `POST /api/runner/runs/:id/complete` (gated) | runner→srv | RunnerAuth + ownership | Interactive: **only** stamp terminal status/finishedAt; do NOT re-assign accumulated totals (gate on `interactive`; one-shot keeps absolute assignment). |
 | **`POST /api/tasks/:id/turns`** | browser→srv | Jwt + owner | `task = TasksService.get(userId, taskId)` (enforces `{id,ownerId}`) → resolve `Task.activeRunId` → reject 409 if not `AWAITING_INPUT`, 404 if no live run, **409 if owning runner offline (>90 s stale)** (RT: authz/failure high). Validate `content ≤ 10 MB`, `permissionMode ∈ enum`, `model ∈ allowlist` BEFORE insert (RT: authz high, flag injection). Allocate seq atomically. Idempotent on `clientTurnId`. `notifyInbox`. |
-| **`POST /api/tasks/:id/interrupt`** | browser→srv | Jwt + owner | Insert `kind:'interrupt'` + `cancelRequestedAt`-style durable intent; notify. No-op if `AWAITING_INPUT`. |
+| **`POST /api/tasks/:id/interrupt`** | browser→srv | Jwt + owner | Insert `kind:'interrupt'` + `cancelRequestedAt`-style durable intent; notify. Accepted in `AWAITING_INPUT` too — a self-driven engine turn parks there (`engineTurnActive`, §3). |
 | **`POST /api/tasks/:id/end`** | browser→srv | Jwt + owner | Insert `kind:'end'` (priority) + set `TaskRun.cancelRequestedAt` (durable) + `requestCancel`. |
 | `POST /api/tasks/:id/cancel` (FIXED) | browser→srv | Jwt + owner | Match live run `status IN (RUNNING, AWAITING_INPUT)` and always `requestCancel` when a non-terminal run exists; set `cancelRequestedAt` (RT: failure/concurrency critical). |
 | `GET /api/runs/:id/events` (FIXED) | srv→browser SSE | Jwt + **owner scope** | **Load run→task, assert `task.ownerId===userId` or 403** (RT: authz critical IDOR). Accept `?sinceSeq=`/Last-Event-ID; subscribe live FIRST then read history > since, dedup by seq (RT: failure/data-consistency high gap + replay-cost). Persist turn boundaries as real seq'd rows; reserve `MAX_SAFE_INTEGER` terminal status only for true teardown (RT: data-consistency critical). |
@@ -771,7 +790,7 @@ Move hub + inbox signal + cancel to Postgres `LISTEN/NOTIFY` (keyed by runId); p
   - fix: Couple turn lifecycle to liveness: when a runner crosses OFFLINE_AFTER_MS while it has a RUNNING interactive run, the server should mark that run FAILED (or AWAITING_INPUT with an injected error event) and publish a terminal/error RunEvent so the UI exits the streaming state. In AgentView, treat runner.online===false during a mid-turn (between user and turn_end) as a turn failure and surface it, don't just disable the composer.
 - **[medium] (data-consistency-and-ux)** No interrupt-acknowledged event with defined ordering; interrupted partial assistant text is left in the transcript unmarked, and a Stop click racing turn completion can leak the interrupt into the next turn.
   - scenario: Interrupt has no acknowledgement event, so the Stop button has undefined UX and the transcript misrepresents what happened. The design's interrupt path writes a control_request to stdin (or SIGINT+resume fallback). On the fallback path the process is killed and respawned with --resume; in-flight assistant text already streamed to the browser stays in the transcript, but the model never actually finished/used it — the transcript now shows a half-answer with no marker that it was interrupted. There's also a race: user clicks Stop, but the turn's 'result' (turn_end) is already in flight; the interrupt ConversationTurn(kind:interrupt) gets delivered to a parked AWAITING_INPUT session and is either dropped or misapplied to the NEXT turn. The 'interrupt' RunEvent marker is mentioned but its emission timing vs. the abandoned text is unspecified.
-  - fix: Emit an 'interrupt' RunEvent with a real seq AT the point the runner actually stops generation (after killing/steering), so the transcript clearly delimits abandoned output. Server-side, reject/no-op an interrupt ConversationTurn if the run is AWAITING_INPUT (nothing to interrupt) instead of queuing it for the next turn. In AgentView, disable Stop the moment turn_end arrives to close the race.
+  - fix: Emit an 'interrupt' RunEvent with a real seq AT the point the runner actually stops generation (after killing/steering), so the transcript clearly delimits abandoned output. Server-side, reject/no-op an interrupt ConversationTurn if the run is AWAITING_INPUT (nothing to interrupt) instead of queuing it for the next turn. **(Superseded: `AWAITING_INPUT` accepts an interrupt — a self-driven engine turn parks there; the race is closed by the interrupt's own queue-drop, not a gate. §3.)** In AgentView, disable Stop the moment turn_end arrives to close the race.
 - **[medium] (data-consistency-and-ux)** Existing cancel() filters on status:'RUNNING' so it cannot stop an AWAITING_INPUT session, and complete()'s terminal Task-status mapping is incompatible with the new parked state — both are coexistence regressions.
   - scenario: One-shot coexistence regression: an interactive run that should park in AWAITING_INPUT will be force-completed by the existing cancel path, and TaskStatus mapping has no AWAITING_INPUT case. tasks.service.ts cancel() (line 109-122) finds the RUNNING TaskRun and requestCancel; but an interactive session that is parked is AWAITING_INPUT, not RUNNING — so the existing cancel query (status:'RUNNING') will MISS it and the End/cancel button silently does nothing for a parked session. Conversely complete()'s taskStatus mapping (runner-api.controller.ts:299-308) only maps SUCCEEDED/CANCELLED/else->FAILED; there is no handling for a run that completes a turn — if the interactive branch ever calls the shared complete() with a non-terminal intent it will flip Task to a terminal status and AgentView will show 'Session ended' prematurely.
   - fix: Update cancel() (and the new /end) to match status IN (RUNNING, AWAITING_INPUT). Ensure the interactive runner NEVER calls /complete on a turn boundary (only /turn-complete), and add an explicit guard/test that /complete is reached only on true teardown. Keep Task RUNNING for the whole interactive session as the design states, and verify no code path maps AWAITING_INPUT to a terminal TaskStatus.

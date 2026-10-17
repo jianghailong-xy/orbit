@@ -10,6 +10,7 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   type ConversationTurn,
@@ -28,6 +29,13 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import {
+  readSteerWithdrawRequest,
+  steerWithdrawAnswer,
+  steerWithdrawContent,
+  STEER_WITHDRAW_POLL_MS,
+  STEER_WITHDRAW_WAIT_MS,
+} from './steer-withdraw';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -83,7 +91,9 @@ import {
   type SessionSourceRefusalDetail,
   type SourceRefusalCode,
   type SourceState,
+  STEER_WITHDRAW_ERRORS,
   supportsMidTurnSteer,
+  supportsSteerWithdraw,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
   accountToMoveTo,
@@ -113,6 +123,7 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { cursorDefaultPermissionMode } from '../common/permission-semantics';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -224,7 +235,11 @@ import {
   type ManagedRunnerDemandAnswer,
 } from '../managed-runners/managed-runner-demand';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
-import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
+import {
+  CURSOR_RUNNER_UPGRADE_ERROR,
+  DSH_RUNNER_UPGRADE_ERROR,
+  dshRuntimeUnavailable,
+} from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -238,11 +253,13 @@ import {
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
-import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
+import { ACCOUNT_MOVE_CAPABILITY, cursorMoveRefusal } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
   CURRENT_WORK_INTERRUPTED,
+  CURRENT_WORK_INTERRUPTED_REASON,
   CURRENT_WORK_SESSION_ENDED,
+  stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
@@ -670,6 +687,8 @@ interface AccountSwitchWrite {
   antigravityAccountPinned?: boolean;
   kimiAccount?: string;
   kimiAccountPinned?: boolean;
+  cursorAccount?: string;
+  cursorAccountPinned?: boolean;
 }
 
 @Injectable()
@@ -677,6 +696,9 @@ export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
   /** The snapshots `listOpenSince` answers a cursor against — see open-list-delta.ts. */
   private readonly openListDelta = new OpenListDeltaStore();
+  /** How long a steer's withdrawal waits for the runner's answer (steer-withdraw.ts). A field so a
+   *  spec can wait less for an answer it knows is not coming. */
+  protected steerWithdrawWaitMs = STEER_WITHDRAW_WAIT_MS;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -886,6 +908,12 @@ export class SessionsService {
     ) {
       throw new BadRequestException('kimiAccount must be "default" or the id of one of the runner\'s accounts');
     }
+    if (
+      dto.cursorAccount != null &&
+      (typeof dto.cursorAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.cursorAccount))
+    ) {
+      throw new BadRequestException('cursorAccount must be "default" or the id of one of the runner\'s accounts');
+    }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -946,6 +974,7 @@ export class SessionsService {
           claudeAccount: true,
           antigravityAccount: true,
           kimiAccount: true,
+          cursorAccount: true,
           managedRunnerDefault: { select: { runnerId: true } },
         },
       });
@@ -968,7 +997,7 @@ export class SessionsService {
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
         select: {
           enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
-          kimiAccount: true,
+          kimiAccount: true, cursorAccount: true,
           managedRunnerDefault: { select: { runnerId: true } },
         },
       });
@@ -1035,9 +1064,16 @@ export class SessionsService {
     //                           and must not make every session on one runner unstartable.
     //
     // The lookup sits behind the mode test, so no caller that named a runnable mode pays for it.
+    // DeepSeek Harness and Cursor CLI are not Claude Code: dsh keeps its own sandbox, and Cursor CLI's
+    // `--force` runs as root (docs/cursor-runtime-contract.md §5).
     let rootRefusedFallback: PermissionMode | undefined;
     const requestedMode = dto.permissionMode ?? accountPermissionMode;
-    if (runtime !== AgentProvider.DSH && requestedMode && ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)) {
+    if (
+      runtime !== AgentProvider.DSH &&
+      runtime !== AgentProvider.CURSOR &&
+      requestedMode &&
+      ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)
+    ) {
       const target = await this.prisma.runner.findUnique({
         where: { id: assignedRunnerId },
         select: { name: true, runsAsRoot: true },
@@ -1139,13 +1175,24 @@ export class SessionsService {
       const unavailable = dshRuntimeUnavailable(targetRunner.engines);
       if (unavailable) throw new ConflictException(unavailable);
     }
-    // The Codex, Claude, Antigravity or Kimi account this session runs on: the one picked for it —
-    // which pins it there — else, when its workspace leaves the account to Orbit, the runner's account
-    // whose quota resets soonest (automaticAccount), which Orbit may move it off when that account's
-    // usage limit stops it. Stored here; a Codex, Claude or Kimi conversation lives in that account's
-    // directory. Null runs on the workspace's. An engine's account is the runner's sign-in to it, so it
-    // is read only for a session that runs on that sign-in: a key or a pool brings its own credential,
-    // and an account named beside one is not kept (docs/provider-engine-contract.md §8.2 4).
+    // Cursor CLI likewise only on a runner whose heartbeat declares it (migration 0426), refused here
+    // rather than left waiting for one. A mode the caller named has to be one it keeps; a session nobody
+    // named one for starts in one it does (cursorDefaultPermissionMode, below).
+    if (runtime === AgentProvider.CURSOR) {
+      if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:cursor')) {
+        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+      }
+      if (dto.permissionMode) normalizeBuiltinPermissionMode(runtime, model ?? '', dto.permissionMode as PermissionMode);
+    }
+    // The Codex, Claude, Antigravity, Kimi or Cursor CLI account this session runs on: the one picked
+    // for it — which pins it there — else, when its workspace leaves the account to Orbit, the runner's
+    // account whose quota resets soonest (automaticAccount), which Orbit may move it off when that
+    // account's usage limit stops it. Cursor CLI reports no quota yet, so Automatic starts it on Default,
+    // or on the first account signed in when Default is not (accountToStartOn). Stored here; a Codex,
+    // Claude or Kimi conversation lives in that account's directory. Null runs on the workspace's. An
+    // engine's account is the runner's sign-in to it, so it is read only for a session that runs on that
+    // sign-in: a key or a pool brings its own credential, and an account named beside one is not kept
+    // (docs/provider-engine-contract.md §8.2 4).
     const signedInOn = (engine: AccountEngine) =>
       resolved.credential.kind === 'login' && resolved.credential.engine === engine;
     const automatic = (engine: AccountEngine) =>
@@ -1165,10 +1212,12 @@ export class SessionsService {
     const pickedClaudeAccount = picked(AgentProvider.CLAUDE, dto.claudeAccount);
     const pickedAntigravityAccount = picked(AgentProvider.ANTIGRAVITY, dto.antigravityAccount);
     const pickedKimiAccount = picked(AgentProvider.KIMI, dto.kimiAccount);
+    const pickedCursorAccount = picked(AgentProvider.CURSOR, dto.cursorAccount);
     const codexAccount = pickedCodexAccount ?? automatic(AgentProvider.CODEX);
     const claudeAccount = pickedClaudeAccount ?? automatic(AgentProvider.CLAUDE);
     const antigravityAccount = pickedAntigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
     const kimiAccount = pickedKimiAccount ?? automatic(AgentProvider.KIMI);
+    const cursorAccount = pickedCursorAccount ?? automatic(AgentProvider.CURSOR);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
@@ -1182,6 +1231,7 @@ export class SessionsService {
           ...(claudeAccount ? { claudeAccount } : {}),
           ...(antigravityAccount ? { antigravityAccount } : {}),
           ...(kimiAccount ? { kimiAccount } : {}),
+          ...(cursorAccount ? { cursorAccount } : {}),
         },
         runner: targetRunner,
       });
@@ -1233,7 +1283,9 @@ export class SessionsService {
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
         // distinguish their legacy null-model inheritance from new Runtime-default semantics.
         usesRuntimeDefaultModel: true,
-        permissionMode: rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode,
+        permissionMode: runtime === AgentProvider.CURSOR
+          ? (dto.permissionMode ?? cursorDefaultPermissionMode(accountPermissionMode))
+          : (rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode),
         effort: normalizeEffortForProvider(runtime, dto.effort ?? accountEffort),
         // Stored as asked rather than clamped here, unlike effort above: whether this session
         // has a fast lane depends on the MODEL it ends up running (and for Codex on that model's
@@ -1253,6 +1305,8 @@ export class SessionsService {
         antigravityAccountPinned: pickedAntigravityAccount != null,
         kimiAccount,
         kimiAccountPinned: pickedKimiAccount != null,
+        cursorAccount,
+        cursorAccountPinned: pickedCursorAccount != null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -4760,9 +4814,9 @@ export class SessionsService {
     tx: Prisma.TransactionClient,
     sessionId: string,
     exactTurnId?: string,
-  ): Promise<{ id: string } | null> {
-    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT id FROM "conversation_turn"
+  ): Promise<{ id: string; seq: number } | null> {
+    const rows = await tx.$queryRaw<Array<{ id: string; seq: number }>>(Prisma.sql`
+      SELECT id, seq FROM "conversation_turn"
        WHERE "session_id" = ${sessionId}::uuid
          AND kind = 'message'
          AND status = 'IN_FLIGHT'
@@ -5042,7 +5096,9 @@ export class SessionsService {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
+          select: {
+            env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+          },
         })
       : null;
     const move = accountBeforeDispatch(
@@ -5331,6 +5387,16 @@ export class SessionsService {
               : 'there is no live message turn to receive CURRENT_WORK',
           );
         }
+        // A turn somebody has already stopped is on its way out, and a message sent now is the next
+        // instruction rather than part of the work being stopped. Steered into that turn it would be
+        // written off with it (`stopOvertookTarget`); refused as there being no current work, it is
+        // sent again for the next turn and runs once the stopped one is over.
+        if (await stopOvertookTarget(tx, id, liveTarget.seq)) {
+          throw currentWorkUnavailable(
+            'NO_CURRENT_WORK',
+            'the current turn is being stopped, so there is no live message turn to receive CURRENT_WORK',
+          );
+        }
         if (!(await this.runtimeTakesSteer(tx, session))) {
           throw currentWorkUnavailable(
             'STEER_UNSUPPORTED',
@@ -5543,6 +5609,11 @@ export class SessionsService {
   ) {
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
+    // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
+    // follow-up the server filed separately, and the flag that says this interrupt also ends the
+    // session's background work. Shaped like `setconfig`'s payload — a JSON object in `content`,
+    // which for an interrupt is otherwise nothing a model ever reads.
+    const stopBackgroundWork = dto?.stopBackgroundWork === true;
     if (followUp) {
       assertPromptSize(content, 'message');
       if (!dto?.clientTurnId) {
@@ -5555,10 +5626,12 @@ export class SessionsService {
     const interruptClientTurnId = followUp
       ? SessionsService.interruptClientId(dto!.clientTurnId!)
       : randomUUID();
-    const interruptPayload = followUp
+    const interruptPayload = followUp || stopBackgroundWork
       ? JSON.stringify({
-          content,
-          attachmentIds: [...new Set(dto?.attachmentIds ?? [])].sort(),
+          ...(followUp
+            ? { content, attachmentIds: [...new Set(dto?.attachmentIds ?? [])].sort() }
+            : {}),
+          ...(stopBackgroundWork ? { stopBackgroundWork: true } : {}),
         })
       : undefined;
     // Retried whole: the interrupt is decided from the Session row re-read under its lock.
@@ -5622,7 +5695,7 @@ export class SessionsService {
       // with a visible failed-delivery receipt before removing ordinary queued work.
       const terminalized = await terminalizePendingCurrentWorkSteers(tx, id, {
         code: CURRENT_WORK_INTERRUPTED,
-        reason: 'CURRENT_WORK was not delivered because the session was interrupted.',
+        reason: CURRENT_WORK_INTERRUPTED_REASON,
       });
       const protectedTargetIds = terminalized.targetTurnIds;
       // Every follow-up still queued goes below, retired in place or deleted, a Watch wake among them:
@@ -5994,13 +6067,18 @@ export class SessionsService {
    *  running, and will appear in the transcript, so cancelling is rejected.
    *
    *  Also the door for discarding a CURRENT_WORK message whose delivery settled undelivered:
-   *  the engine never received it, so it is still the sender's to take back. */
+   *  the engine never received it, so it is still the sender's to take back.
+   *
+   *  And for withdrawing a steer the reader typed, while nothing has read it. One still PENDING is
+   *  Orbit's alone and goes like a queued message. One the runner holds is the engine's to give
+   *  back: a `withdraw` turn asks it through the runner (steer-withdraw.ts), and this waits for what
+   *  the engine answered — the steer is gone only if it said so. */
   async cancelQueuedTurn(ownerId: string, id: string, turnId: string) {
     await this.getSendable(ownerId, id);
     // Retried whole. A cancel is a compare-and-set against a turn still queued; an attempt the
     // server discarded cancelled nothing, so a re-run either still finds it queued or reports the
     // same 'already gone' the first attempt would have.
-    await withTransactionRetry(this.prisma, async (tx) => {
+    const withdrawal = await withTransactionRetry(this.prisma, async (tx): Promise<{ withdrawTurnId: string } | null> => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -6049,20 +6127,54 @@ export class SessionsService {
             deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
           },
         });
-        if (discarded.count > 0) return;
-        // A steer is the one thing here that is refused for a reason of its own rather than
-        // for being gone: it is not waiting its turn, it is on its way into the one already
-        // running, and the engine may be reading it as we ask. Saying "already started or
-        // not found" would send a client looking for a race that never happened, so name it.
+        if (discarded.count > 0) return null;
         const steer = await tx.conversationTurn.findFirst({
           where: { id: turnId, sessionId: id, kind: 'steer' },
-          select: { id: true },
+          select: { status: true, deliveryStatus: true, clientTurnId: true, senderSessionId: true },
         });
-        throw new ConflictException(
-          steer
-            ? 'this message is being written into the running turn and can no longer be withdrawn'
-            : 'message already started or not found',
-        );
+        if (!steer) throw new ConflictException('message already started or not found');
+        // Only words the reader typed. Another session's message is that session's to take back,
+        // and a turn Orbit wrote itself (a wake, a delivery) has its own door, if it has one.
+        if (steer.senderSessionId || isOrbitAuthoredTurn(steer.clientTurnId)) {
+          throw new ConflictException({
+            code: STEER_WITHDRAW_ERRORS.NOT_WITHDRAWABLE,
+            message: 'Only a message you typed can be withdrawn.',
+          });
+        }
+        // Not handed to anything yet: nothing but Orbit holds it, so it goes the way a queued
+        // message does. A steer occupies no executable slot, so none of the queue bookkeeping
+        // below applies to it.
+        if (steer.status === 'PENDING') {
+          await tx.conversationTurn.deleteMany({
+            where: { id: turnId, sessionId: id, kind: 'steer', status: 'PENDING' },
+          });
+          return null;
+        }
+        const engine = (await sessionEngine(tx, session)) ?? '';
+        const engineName = engine === AgentProvider.CODEX ? 'Codex' : engine === AgentProvider.CLAUDE ? 'Claude' : 'The engine';
+        if (steer.status !== 'IN_FLIGHT' || steer.deliveryStatus === 'ACKNOWLEDGED') {
+          throw new ConflictException({
+            code: STEER_WITHDRAW_ERRORS.ALREADY_READ,
+            message: `${engineName} has already read this message, so it can no longer be withdrawn.`,
+          });
+        }
+        // On its way into the running turn: only the engine can say whether it has read it yet,
+        // and only a runner that declared the way to ask can be asked.
+        const runner = session.assignedRunnerId
+          ? await tx.runner.findUnique({ where: { id: session.assignedRunnerId }, select: { capabilities: true } })
+          : null;
+        if (!supportsSteerWithdraw(engine, runner?.capabilities)) {
+          throw new ConflictException({
+            code: STEER_WITHDRAW_ERRORS.NOT_WITHDRAWABLE,
+            message: `${engineName} already has this message and can't give it back.`,
+          });
+        }
+        const filed = await this.insertTurnLocked(tx, id, {
+          kind: 'withdraw',
+          content: steerWithdrawContent(turnId),
+          clientTurnId: `withdraw:${turnId}:${randomUUID()}`,
+        });
+        return { withdrawTurnId: filed.id };
       }
 
       // Sending to AWAITING_INPUT changes the Session to PENDING. If that last queued
@@ -6088,10 +6200,139 @@ export class SessionsService {
           data: { status: RunStatus.AWAITING_INPUT, lastTurnAt: new Date() },
         });
       }
+      return null;
     }, loggedRetry(this.logger, 'sessions.cancelQueuedTurn'));
     this.realtime.notifyInbox(id);
     this.realtime.publishQueuedTurnsChanged(id);
+    if (withdrawal) return this.awaitSteerWithdrawal(id, withdrawal.withdrawTurnId);
     return { ok: true };
+  }
+
+  /**
+   * Wait for the runner to say what came of a `withdraw` turn, and answer the person with it. The
+   * steer is gone only when the engine said it dropped it; everything else is a refusal naming why.
+   */
+  private async awaitSteerWithdrawal(sessionId: string, withdrawTurnId: string) {
+    const deadline = Date.now() + this.steerWithdrawWaitMs;
+    for (;;) {
+      const row = await this.prisma.conversationTurn.findFirst({
+        where: { id: withdrawTurnId, sessionId },
+        select: { content: true },
+      });
+      const answer = readSteerWithdrawRequest(row?.content);
+      if (answer?.outcome) return steerWithdrawAnswer(answer);
+      if (Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, STEER_WITHDRAW_POLL_MS));
+    }
+    // Nobody answered. A request still undelivered is taken back, so no runner can act on it after
+    // this has said the message stayed (the inbox stops offering it after its window regardless).
+    await this.prisma.conversationTurn.deleteMany({
+      where: { id: withdrawTurnId, sessionId, kind: 'withdraw', status: 'PENDING' },
+    });
+    throw new ServiceUnavailableException({
+      code: STEER_WITHDRAW_ERRORS.NO_ANSWER,
+      message: "The runner didn't answer in time, so the message was not withdrawn.",
+    });
+  }
+
+  /**
+   * Send a message queued for the next turn into the turn running now: the tray's Steer.
+   *
+   * The row becomes the CURRENT_WORK steer it would have been had it been sent that way — the same
+   * row, seq, words and attachments, aimed at the live engine turn. It is asked createTurn's
+   * CURRENT_WORK questions, in that order and under the same Session lock: an engine turn on a live
+   * lease, nobody stopping it, a runtime and runner that take an exact-target steer, and that lease
+   * asked again on the database clock. So a steer made here is one createTurn would have filed, and
+   * the inbox hands it over the same way: at once, ahead of the messages still queued, which wait
+   * for the turn's result while a steer waits for nothing.
+   *
+   * Only a message the reader typed, still PENDING behind the running turn: a `!cmd` has no turn
+   * to join, a turn Orbit wrote or another session sent is not the reader's to redirect, and one a
+   * runner already took has started. A refusal leaves the message queued and carries createTurn's
+   * CURRENT_WORK_UNAVAILABLE reasons, so a client reads both doors alike. A second press — or a
+   * retry whose answer was lost — finds the steer the first one made and answers with it.
+   */
+  async steerQueuedTurn(ownerId: string, id: string, turnId: string) {
+    // Retried whole: a compare-and-set against a row still queued. An attempt the server discarded
+    // changed nothing, so a re-run finds the message still queued, or the steer the winner made.
+    const steer = await withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      if (session.deletedAt) {
+        throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
+      }
+      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+        throw new SessionNotSendable('the session has ended');
+      }
+      const turn = await tx.conversationTurn.findFirst({
+        where: { id: turnId, sessionId: id },
+        select: {
+          id: true,
+          seq: true,
+          kind: true,
+          status: true,
+          sendIntent: true,
+          targetTurnId: true,
+          clientTurnId: true,
+          senderSessionId: true,
+        },
+      });
+      if (turn?.kind === 'steer' && turn.sendIntent === 'CURRENT_WORK') return turn;
+      if (
+        !turn
+        || turn.kind !== 'message'
+        || turn.status !== 'PENDING'
+        || turn.clientTurnId === SessionsService.initialTurnClientId(id)
+      ) {
+        throw new ConflictException('message already started or not found');
+      }
+      if (turn.senderSessionId || isOrbitAuthoredTurn(turn.clientTurnId)) {
+        throw new ConflictException('Only a message you typed can be sent into the current turn.');
+      }
+      const live = await this.liveEngineTurn(tx, id);
+      if (!live) {
+        throw currentWorkUnavailable('NO_CURRENT_WORK', 'there is no live message turn to receive CURRENT_WORK');
+      }
+      if (await stopOvertookTarget(tx, id, live.seq)) {
+        throw currentWorkUnavailable(
+          'NO_CURRENT_WORK',
+          'the current turn is being stopped, so there is no live message turn to receive CURRENT_WORK',
+        );
+      }
+      if (!(await this.runtimeTakesSteer(tx, session))) {
+        throw currentWorkUnavailable(
+          'STEER_UNSUPPORTED',
+          'this runtime or runner does not support acknowledged CURRENT_WORK delivery',
+        );
+      }
+      if (!(await this.liveEngineTurn(tx, id, live.id))) {
+        throw currentWorkUnavailable(
+          'TARGET_LEASE_EXPIRED',
+          'the current turn lease expired before this message could enter it',
+        );
+      }
+      // All three columns in one statement: the row constraint accepts a CURRENT_WORK row only as a
+      // steer naming its target, and a NEXT_TURN one only without a target.
+      const moved = await tx.conversationTurn.updateMany({
+        where: { id: turnId, sessionId: id, kind: 'message', status: 'PENDING' },
+        data: { kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: live.id },
+      });
+      if (moved.count === 0) throw new ConflictException('message already started or not found');
+      return { ...turn, kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: live.id };
+    }, loggedRetry(this.logger, 'sessions.steerQueuedTurn'));
+    this.realtime.notifyInbox(id);
+    this.realtime.publishQueuedTurnsChanged(id);
+    return {
+      turnId: steer.id,
+      seq: steer.seq,
+      kind: steer.kind,
+      placement: 'steer' as const,
+      ...(steer.targetTurnId ? { targetTurnId: steer.targetTurnId } : {}),
+    };
   }
 
   /** End a live session (closes the runner's claude process). */
@@ -7694,6 +7935,20 @@ export class SessionsService {
       });
       // The engine it revives on is its own, whichever credential it now takes.
       const resumeRuntime = next.engine;
+      if (resumeRuntime === AgentProvider.CURSOR) {
+        if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:cursor')) {
+          throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
+        }
+        // D5, as on a live switch (updateConfig): revived on another key or sign-in, a conversation it
+        // has would have to go with it.
+        const refusal = next.changed ? cursorMoveRefusal(current, current.assignedRunner) : null;
+        if (refusal) throw new ConflictException(refusal);
+        normalizeBuiltinPermissionMode(
+          resumeRuntime,
+          next.model ?? current.model ?? '',
+          resolvePermissionMode(dto.permissionMode ?? current.permissionMode, null),
+        );
+      }
       if (resumeRuntime === AgentProvider.DSH) {
         if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:dsh')) {
           throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
@@ -8043,7 +8298,7 @@ export class SessionsService {
       next.changed && next.providerBuiltin && isAccountEngine(next.provider) ? next.provider : null;
     if (account !== undefined && !engine) {
       throw new BadRequestException(
-        "an account goes with a switch onto the built-in Codex, Claude, Antigravity or Kimi engine — a session already there moves with PATCH /sessions/:id/account",
+        "an account goes with a switch onto the built-in Codex, Claude, Antigravity, Kimi or Cursor CLI engine — a session already there moves with PATCH /sessions/:id/account",
       );
     }
     if (!engine) return {};
@@ -8058,7 +8313,12 @@ export class SessionsService {
         claudeAccountPinned: true,
         antigravityAccountPinned: true,
         kimiAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+        cursorAccountPinned: true,
+        workspace: {
+          select: {
+            env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+          },
+        },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
@@ -8202,6 +8462,12 @@ export class SessionsService {
         provider: dto.provider,
         model: dto.model,
       });
+      // D5: a Cursor CLI session that has talked moves to another key, or between a key and the runner's
+      // sign-in, only on a runner that carries its conversation there — none does yet.
+      if (next.changed && next.engine === AgentProvider.CURSOR) {
+        const refusal = cursorMoveRefusal(session, session.assignedRunner);
+        if (refusal) throw new ConflictException(refusal);
+      }
       const accounts = await this.accountOnProviderSwitch(tx, id, next, dto.account);
       const poolRuntime = next.credential?.kind === 'pool' ? next.credential.engine : null;
       // Resolved on the session's own engine: the switch moved the credential, not the CLI.
@@ -8226,11 +8492,16 @@ export class SessionsService {
         antigravityAccount:
           accounts.antigravityAccount ?? session.antigravityAccount ?? session.workspace?.antigravityAccount,
         kimiAccount: accounts.kimiAccount ?? session.kimiAccount ?? session.workspace?.kimiAccount,
+        cursorAccount: accounts.cursorAccount ?? session.cursorAccount ?? session.workspace?.cursorAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
         !session.assignedRunner.capabilities?.includes('provider:dsh'))) {
         throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      }
+      if (exec.provider === AgentProvider.CURSOR && (!session.assignedRunner?.capabilitiesReportedAt ||
+        !session.assignedRunner.capabilities?.includes('provider:cursor'))) {
+        throw new ConflictException(CURSOR_RUNNER_UPGRADE_ERROR);
       }
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
@@ -8419,9 +8690,11 @@ export class SessionsService {
    * A move is spawn-only, as a provider is: the account IS the engine's environment. On a live session
    * a `reload` naming the engine re-spawns it on the new account once no turn is in flight, and the
    * runner carries the conversation across (CODEX_ACCOUNT_MOVE_V1, CLAUDE_ACCOUNT_MOVE_V1); a runner
-   * that declares neither is refused the move, since it would resume where the conversation is. An
-   * ended or unclaimed one just stores it, for the claim that runs it next — at once, if it was waiting
-   * out the old account's reset. The next engine start says so in the transcript.
+   * that declares neither is refused the move, since it would resume where the conversation is. A
+   * Cursor CLI session is refused only once it has talked (cursorMoveRefusal): before that it has no
+   * conversation to carry. An ended or unclaimed one just stores it, for the claim that runs it next —
+   * at once, if it was waiting out the old account's reset. The next engine start says so in the
+   * transcript.
    */
   async switchAccount(ownerId: string, id: string, account: unknown) {
     if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
@@ -8441,6 +8714,10 @@ export class SessionsService {
           provider: true,
           providerBuiltin: true,
           retryAt: true,
+          // Whether a Cursor CLI session has a conversation to carry (cursorMoveRefusal).
+          numTurns: true,
+          runtimeSessionId: true,
+          engineTurnActive: true,
           codexAccount: true,
           codexAccountPinned: true,
           claudeAccount: true,
@@ -8449,7 +8726,13 @@ export class SessionsService {
           antigravityAccountPinned: true,
           kimiAccount: true,
           kimiAccountPinned: true,
-          workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
+          cursorAccount: true,
+          cursorAccountPinned: true,
+          workspace: {
+            select: {
+              env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+            },
+          },
           assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
         },
       });
@@ -8463,7 +8746,7 @@ export class SessionsService {
         !session.assignedRunner
       ) {
         throw new BadRequestException(
-          "only a session on the built-in Codex, Claude, Antigravity or Kimi engine runs on one of its runner's accounts",
+          "only a session on the built-in Codex, Claude, Antigravity, Kimi or Cursor CLI engine runs on one of its runner's accounts",
         );
       }
       const runner = session.assignedRunner;
@@ -8501,7 +8784,11 @@ export class SessionsService {
         if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner)}`;
       }
       const moves = to !== current;
-      if (moves && !runnerCarriesAccounts(runner, engine)) {
+      // A Cursor CLI session that has not talked has no conversation to carry, so it moves on any runner;
+      // one that has, only on a runner that carries it (D5).
+      const cursorRefusal = moves && engine === AgentProvider.CURSOR ? cursorMoveRefusal(session, runner) : null;
+      if (cursorRefusal) throw new ConflictException(cursorRefusal);
+      if (moves && engine !== AgentProvider.CURSOR && !runnerCarriesAccounts(runner, engine)) {
         throw new ConflictException(
           "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
         );
@@ -8868,6 +9155,7 @@ export class SessionsService {
     claudeAccount: true,
     codexAccount: true,
     kimiAccount: true,
+    cursorAccount: true,
     // At most one, by the unique index behind Project.coordinatorSessionId. Nothing in the database
     // keeps a coordinator in its workspace since 0164, so the move is what has to.
     coordinatorForProject: { select: { id: true } },
@@ -8886,7 +9174,10 @@ export class SessionsService {
       },
     },
     workspace: {
-      select: { env: true, claudeAccount: true, codexAccount: true, kimiAccount: true, enableWorktree: true, defaultMergeTarget: true },
+      select: {
+        env: true, claudeAccount: true, codexAccount: true, kimiAccount: true, cursorAccount: true, enableWorktree: true,
+        defaultMergeTarget: true,
+      },
     },
     assignedRunner: { select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true } },
   } satisfies Prisma.SessionSelect;

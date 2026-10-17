@@ -18,6 +18,15 @@ class EngineTitleTest : ComposerShellTest() {
         assertTrue(dialogLines().none { it.startsWith("Current:") })
     }
 
+    /** On the split the session's recorded engine names the menu, whatever key it spends: a DeepSeek key on OpenCode says OpenCode. */
+    @Test fun theRecordedEngineNamesTheMenuWhateverKeyItSpends() {
+        ComposerShell.providers = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],
+            "models":[{"value":"deepseek-chat","label":"DeepSeek Chat"}]}]"""
+        ComposerShell.session = mapOf("engine" to JsonPrimitive("opencode"), "provider" to JsonPrimitive("deepseek"), "model" to JsonPrimitive("deepseek-chat"))
+        signIn(); openSession(); openModelMenu()
+        compose.onNodeWithTag("composer-engine-title").assertTextEquals("OpenCode")
+    }
+
     @Test fun aCodexSessionSaysCodex() {
         ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"))
         signIn(); openSession(); openModelMenu()

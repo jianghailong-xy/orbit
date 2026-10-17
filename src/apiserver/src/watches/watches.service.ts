@@ -29,6 +29,7 @@ import {
   type WatchState,
   type WatchTargetKind,
   type WatchTargetStatusView,
+  type WatchTargetTaskView,
 } from '@orbit/shared';
 import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -131,6 +132,7 @@ type NamedWatchRow = Omit<WatchRow, 'targets'> & {
   targets: (WatchRow['targets'][number] & {
     targetTitle: string | null;
     targetStatus: WatchTargetStatusView | null;
+    targetTask: WatchTargetTaskView | null;
   })[];
 };
 
@@ -398,6 +400,12 @@ export class WatchesService {
    * session's composer can say what it waits on is doing without a read per target: a task in the task
    * list's words — its status with the `running`/`queued` overlays, derived as `TasksService.withRunning`
    * derives them — and a session by its run state. Not read at all, it is null with the title.
+   *
+   * A session target also names the task its session runs (`targetTask`), so a task and its run session
+   * can be drawn as one: `sessions.task_id`, never the `context_task_id` of a conversation an @-mention
+   * opened about a task it does not run. That task is read with the TASK targets and stands as they do,
+   * so the sessions are read first, for their task ids: three reads for the whole answer, however many
+   * targets it names. A task this account cannot read is not named, and the session target names none.
    */
   private async named(ownerId: string, watches: WatchRow[]): Promise<NamedWatchRow[]> {
     const idsOf = (kind: WatchTargetKind): string[] => [
@@ -406,14 +414,14 @@ export class WatchesService {
       ),
     ];
     const sessionIds = idsOf('SESSION');
-    const taskIds = idsOf('TASK');
-    const [sessions, tasks, carriers] = await Promise.all([
-      sessionIds.length === 0
-        ? []
-        : this.prisma.session.findMany({
-            where: { id: { in: sessionIds }, ownerId },
-            select: { id: true, title: true, status: true, endReason: true },
-          }),
+    const sessions = sessionIds.length === 0
+      ? []
+      : await this.prisma.session.findMany({
+          where: { id: { in: sessionIds }, ownerId },
+          select: { id: true, title: true, status: true, endReason: true, taskId: true },
+        });
+    const taskIds = [...new Set([...idsOf('TASK'), ...sessions.flatMap((row) => (row.taskId ? [row.taskId] : []))])];
+    const [tasks, carriers] = await Promise.all([
       taskIds.length === 0
         ? []
         : this.prisma.task.findMany({
@@ -428,7 +436,12 @@ export class WatchesService {
               AND carrier."task_id" IN (${Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`))})`,
           ),
     ]);
-    const read = new Map<string, { title: string | null; status: WatchTargetStatusView }>();
+    const taskById = new Map<string, WatchTargetTaskView>();
+    for (const row of tasks) {
+      const { running, queued } = taskRunOverlay(carriers.get(row.id));
+      taskById.set(row.id, { id: row.id, title: row.title, status: { status: row.status, running, queued } });
+    }
+    const read = new Map<string, { title: string | null; status: WatchTargetStatusView; task: WatchTargetTaskView | null }>();
     for (const row of sessions) {
       const state = deriveSessionRunState({ status: row.status, endReason: row.endReason });
       read.set(`SESSION:${row.id}`, {
@@ -438,20 +451,22 @@ export class WatchesService {
           running: state === SessionRunState.RUNNING,
           queued: state === SessionRunState.QUEUED,
         },
+        task: row.taskId ? taskById.get(row.taskId) ?? null : null,
       });
     }
-    for (const row of tasks) {
-      const { running, queued } = taskRunOverlay(carriers.get(row.id));
-      read.set(`TASK:${row.id}`, {
-        title: row.title,
-        status: { status: row.status, running, queued },
-      });
+    for (const task of taskById.values()) {
+      read.set(`TASK:${task.id}`, { title: task.title, status: task.status, task: null });
     }
     return watches.map((watch) => ({
       ...watch,
       targets: watch.targets.map((target) => {
         const row = read.get(`${target.targetKind}:${target.targetResourceId}`);
-        return { ...target, targetTitle: row?.title ?? null, targetStatus: row?.status ?? null };
+        return {
+          ...target,
+          targetTitle: row?.title ?? null,
+          targetStatus: row?.status ?? null,
+          targetTask: row?.task ?? null,
+        };
       }),
     }));
   }

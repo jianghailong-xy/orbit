@@ -10,6 +10,10 @@ export interface MergeRecoveryCommit {
   merge?: boolean;
 }
 export interface MergeRecovery {
+  /** ALREADY_LANDED: every one of this session's own commits (the non-merge commits since its fork point)
+   *  is already on origin/<target> — as itself, or as a commit with the same `git patch-id --stable`, such
+   *  as a rebase copy or a cherry-pick. Nothing was pushed, no branch moved and there is no candidate; the
+   *  local target's own commits are not part of this session. Clients that predate it show their generic title. */
   code: string;
   targetBranch: string;
   repoRoot?: string;
@@ -28,6 +32,9 @@ export interface MergeRecovery {
   remoteCommits?: MergeRecoveryCommit[];
   /** Exactly what the push adds to origin/<target>, newest first. Absent from older runners and past the commit cap. */
   pushCommits?: MergeRecoveryCommit[];
+  /** ALREADY_LANDED: the commit on origin/<target> carrying each of this session's commits (sourceSha), newest
+   *  first. Its date is when it was committed onto origin — for a rebase copy, when it merged. */
+  landedCommits?: Array<MergeRecoveryCommit & { sourceSha: string }>;
   patch?: string;
   addsMergeCommit?: boolean;
   checkedAt?: string;
@@ -43,11 +50,12 @@ export function readMergeRecovery(value: unknown): MergeRecovery | null {
     if (r[key] !== undefined && typeof r[key] !== 'string') return null;
   }
   if (r.conflicts !== undefined && (!Array.isArray(r.conflicts) || !r.conflicts.every((p) => typeof p === 'string'))) return null;
-  for (const commits of [r.localCommits, r.remoteCommits, r.pushCommits]) {
+  for (const commits of [r.localCommits, r.remoteCommits, r.pushCommits, r.landedCommits]) {
     if (commits !== undefined && (!Array.isArray(commits) || !commits.every((c) => c &&
       ['sha', 'subject', 'author', 'date'].every((k) => typeof c[k as keyof MergeRecoveryCommit] === 'string') &&
       (c.merge === undefined || typeof c.merge === 'boolean')))) return null;
   }
+  if (r.landedCommits !== undefined && !r.landedCommits.every((c) => typeof c.sourceSha === 'string')) return null;
   if (r.addsMergeCommit !== undefined && typeof r.addsMergeCommit !== 'boolean') return null;
   if (r.check !== undefined && (!r.check || !['passed', 'failed', 'unconfigured'].includes(r.check.status) ||
       (r.check.output !== undefined && typeof r.check.output !== 'string') ||

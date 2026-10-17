@@ -28,8 +28,8 @@ describe('the background-process status glyph', () => {
     expect(html).toContain('status-glyph-active');
     expect(html).toContain('anticon-code');
     // The words are the same ones the still case says — only the motion is new, and the tooltip
-    // that carries them is rendered by antd at runtime rather than in static markup, so they are
-    // asserted through `statusLabel`, which is the same branching the tooltip reads.
+    // that carries them is rendered at runtime, on a hover, rather than in static markup, so they
+    // are asserted through `statusLabel`, which is the same branching the tooltip reads.
     expect(statusLabel({ ...parked, runningBgCount: 2, runningBgJobCount: 1 })).toBe(
       '2 background processes running',
     );

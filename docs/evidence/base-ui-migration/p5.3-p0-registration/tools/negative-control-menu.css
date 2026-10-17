@@ -1,0 +1,6 @@
+
+/* Scratch negative control of the P5.3 P0 registration (34dTUdzY6mgNk4CGh7ZHl), never delivered: on a phone the
+   attachment menu's icons move 1px to the right, so only session-attachment-menu changes on the four phones. */
+@media (max-width: 600px) {
+  .orbit-menu[data-variant='attachment'] .orbit-menu-icon { position: relative; left: 1px; }
+}

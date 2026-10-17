@@ -1184,7 +1184,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	case "provider_create":
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "label", "runtime", "baseUrl", "apiKey", "models", "defaultModel")
-		for _, required := range []string{"label", "baseUrl", "apiKey", "models"} {
+		for _, required := range providerCreateRequired(body) {
 			if _, ok := body[required]; !ok {
 				return toolResult(required+" is required", true)
 			}
@@ -1958,6 +1958,9 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 		Title       string `json:"title"`
 		Integration struct {
 			MergeCheckCommand string `json:"mergeCheckCommand"`
+			// The project's main branch by name, which the card's note says every merge into is
+			// still checked; null with no repository bound.
+			UpstreamRef *string `json:"upstreamRef"`
 		} `json:"integration"`
 	}
 	if err := json.Unmarshal(projectRaw, &project); err != nil {
@@ -2032,6 +2035,7 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 		"failure":      summary,
 		"generation":   landing.Generation,
 		"reason":       reason,
+		"mainBranch":   project.Integration.UpstreamRef,
 	}, nil
 }
 
@@ -2422,7 +2426,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	engineProp := map[string]interface{}{
 		"type": []string{"string", "null"},
 		"enum": nullableEngineEnum(),
-		"description": "Pin the CLI this task's runs use: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode) or \"dsh\" (DeepSeek Harness). " +
+		"description": "Pin the CLI this task's runs use: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode), \"dsh\" (DeepSeek Harness) or \"cursor\" (Cursor CLI). " +
 			"With `provider` the two must be a pair that runs: a provider can run only the engines provider_list names for it, and any other is refused PROVIDER_ENGINE_INCOMPATIBLE. " +
 			"Alone it keeps the task's provider pin, which then has to run on it; with no provider pin the run uses that engine's own credential — its sign-in on the runner, OpenCode's own configuration, or for \"dsh\" the owner's first enabled DeepSeek key (refused DEEPSEEK_KEY_REQUIRED without one). " +
 			"Omit to leave the engine to the provider pin or, with neither, to where the assignee's project last started; on task_update and task_batch_pin null clears only the engine pin.",
@@ -2740,17 +2744,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// The fields provider_create and provider_update both write.
 	providerRuntimeProp := map[string]interface{}{
 		"type": "string",
-		"enum": []string{"claude", "codex", "kimi", "antigravity"},
+		"enum": providerProtocols,
 		"description": "The protocol the endpoint speaks (the field keeps its old name): claude (the default; the " +
-			"Anthropic Messages API, e.g. vLLM's /v1/messages), codex (the OpenAI Responses API), kimi (Moonshot's API) " +
-			"or antigravity (the Gemini API). It decides which engines can run the key rather than naming one: the " +
-			"protocol's own CLI and OpenCode, DeepSeek Harness too for a DeepSeek key, and only Claude Code for a Claude " +
-			"subscription token (provider_list's `engines`).",
+			"Anthropic Messages API, e.g. vLLM's /v1/messages), codex (the OpenAI Responses API), kimi (Moonshot's API), " +
+			"antigravity (the Gemini API) or cursor (a Cursor User API Key, which needs no baseUrl or models: it goes in " +
+			"under the Cursor preset, on Cursor's own API, and its models are Cursor CLI's own on each runner). It decides " +
+			"which engines can run the key rather than naming one: the protocol's own CLI and OpenCode, DeepSeek Harness " +
+			"too for a DeepSeek key, only Claude Code for a Claude subscription token, and only Cursor CLI for a Cursor " +
+			"key (provider_list's `engines`).",
 	}
 	providerBaseURLProp := map[string]interface{}{
 		"type": "string",
 		"description": "The endpoint as an engine running on the key will call it, e.g. http://127.0.0.1:8000 — resolved on " +
-			"the machine the session runs on.",
+			"the machine the session runs on. Required on create, but for a Cursor key, which is on Cursor's own API.",
 	}
 	providerAPIKeyProp := map[string]interface{}{
 		"type":        "string",
@@ -2758,7 +2764,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	}
 	providerModelsProp := map[string]interface{}{
 		"type":        "array",
-		"description": "The models it serves; on update this replaces the whole list.",
+		"description": "The models it serves; on update this replaces the whole list. Required on create, but for a Cursor key.",
 		"items": obj(map[string]interface{}{
 			"value": map[string]interface{}{"type": "string", "description": "The model id the endpoint serves, passed to the engine as its model (e.g. qwen3.8-27b-fp8)."},
 			"label": str,
@@ -2848,6 +2854,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"A time already past is started by the next scan. " +
 		"task_start ignores runAt and starts the task immediately, and that run clears runAt as well."
 	runAtProp := map[string]interface{}{"type": "string", "description": runAtDescription}
+	// What autoRunWhenReady never does, stated once for task_create, every task_create_batch item and
+	// task_update. No automatic starter selects a task in no project that has no prerequisites — the
+	// dependency sweep wants an edge, the independent release a project — and "all of its zero
+	// prerequisites are DONE" reads as ready to anybody who has not been told (2026-10-16: two such
+	// tasks, left on the default true, sat OPEN for 12 minutes and 4 hours until somebody started them).
+	autoRunUnfiledNoPrerequisites := "A task in no project that has no prerequisites is never started by this flag, however ready it looks: start it with task_start, or give it a runAt."
 	updateRunAtProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
 		"description": "Omit to leave the schedule as it is, null to cancel it, a date-time to set or move it. " + runAtDescription,
@@ -2964,7 +2976,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			"autoRunWhenReady": map[string]interface{}{
 				"type":        "boolean",
-				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. For a task in no project it only matters when there are prerequisites.",
+				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. " + autoRunUnfiledNoPrerequisites + " Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start.",
 			},
 			"completionPolicy": map[string]interface{}{
 				"type":        "string",
@@ -3537,6 +3549,18 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "With PROJECT_BRANCH only: the branch as a full ref (refs/heads/…). " +
 						"Leave it out for refs/heads/project/<project id>.",
 				},
+				"upstreamRef": map[string]interface{}{
+					"type": "string",
+					"description": "The project's main branch, as a full ref (refs/heads/…): the branch its " +
+						"tasks start from and its finished work is finally merged into, with either line. " +
+						"Leave it out when project_get's integration.lastMainBranch has a value: the account " +
+						"owner has already chosen one for this repository. When it is null, run `git " +
+						"symbolic-ref --short refs/remotes/origin/HEAD` in your checkout and send the name it " +
+						"prints after origin/ as refs/heads/<name> (origin/master becomes refs/heads/master); if " +
+						"that fails, leave it out. It is only a suggestion: the owner's card puts their own " +
+						"last choice for this repository ahead of it, and nothing is written until they press " +
+						"Start.",
+				},
 				"automatic": map[string]interface{}{
 					"type": "boolean",
 					"description": "Whether you run the project for the owner: you decide when each task is " +
@@ -3556,6 +3580,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The command run on the combined tree before anything lands — on the " +
 						"project branch and again before main. Leave it out for none; with Automatic on a " +
 						"project branch that is a warning, since the branch would merge into main untested.",
+				},
+				"mergeCheckTimeoutSeconds": map[string]interface{}{
+					"type":    "integer",
+					"minimum": 1,
+					"description": "That check's budget in seconds — how long it may run on the combined " +
+						"tree before the landing is stopped. Leave it out for the one-hour default. A " +
+						"suggestion like the command: the owner's card opens with what you send and may " +
+						"change it before pressing Start.",
 				},
 				"why": map[string]interface{}{
 					"type": "string",
@@ -3941,7 +3973,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"autoRunWhenReady": map[string]interface{}{
 					"type":        "boolean",
-					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
+					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner. " + autoRunUnfiledNoPrerequisites,
 				},
 				"priority": map[string]interface{}{
 					"type":        []string{"integer", "null"},
@@ -4124,7 +4156,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"is resolved on the machine each session runs on, so http://127.0.0.1:8000 is that runner's own port — " +
 				"run the session on an agent whose runner hosts the endpoint. The key is stored encrypted and no read " +
 				"returns it, this tool's answer included (`hasApiKey`); like every tool input it is recorded in this " +
-				"conversation, so for a real secret prefer `orbit provider create --api-key-file -`.",
+				"conversation, so for a real secret prefer `orbit provider create --api-key-file -`. A Cursor User API Key " +
+				"(`runtime` cursor) takes only `label` and `apiKey`, and runs on Cursor CLI alone.",
 			"inputSchema": obj(map[string]interface{}{
 				"label":        map[string]interface{}{"type": "string", "description": "Display name; the slug is derived from it."},
 				"runtime":      providerRuntimeProp,
@@ -4132,7 +4165,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"apiKey":       providerAPIKeyProp,
 				"models":       providerModelsProp,
 				"defaultModel": map[string]interface{}{"type": "string", "description": "The model a session that names none runs on; defaults to the first of `models`."},
-			}, "label", "baseUrl", "apiKey", "models"),
+			}, "label", "apiKey"),
 		},
 		{
 			"name": "provider_update",
@@ -4240,7 +4273,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"engine": map[string]interface{}{
 						"type": "string",
 						"enum": append([]string{}, engineNames...),
-						"description": "The CLI that runs the session: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode) or \"dsh\" (DeepSeek Harness). It is the session's for life: a session never changes engine, so another engine means another session. " +
+						"description": "The CLI that runs the session: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode), \"dsh\" (DeepSeek Harness) or \"cursor\" (Cursor CLI). It is the session's for life: a session never changes engine, so another engine means another session. " +
 							"With `provider` the two must be a pair that runs: a provider can run only the engines provider_list names for it, and any other is refused PROVIDER_ENGINE_INCOMPATIBLE. " +
 							"Alone, it runs on that engine's own credential — its sign-in on the runner, OpenCode's own configuration, or for \"dsh\" the owner's first enabled DeepSeek key (refused DEEPSEEK_KEY_REQUIRED without one). " +
 							"Omit it to run on the engine `provider` runs on by default, or with neither, where the target agent's project last started.",

@@ -1133,6 +1133,48 @@ test('settling one task answers its item and leaves another task\'s item OPEN',
     }
   });
 
+test('the owner’s own run-again press picks a FAILED task up, and answers its failure item RETRIED',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'run-again', 'PARKED');
+      const a = await attempt(stack, w, 'run-again', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.FAILED);
+      const item = await onlyItemFor(stack.db, w, a.taskId, 'the failed attempt');
+      assert.equal(item.state, 'OPEN', 'the failure is owed until something answers it');
+
+      // The press a FAILED task's Retry makes (`taskFailureDoors` names `/tasks/:id/execute`): the
+      // owner's own door — the very route Run now presses — and NOT the integration retry, which
+      // this task can never survive. `decideIntegrationRetry` refuses anything that is not DONE,
+      // deliberately: a landing delivers a finished task's work, and this is the task that failed.
+      const press = await stack.tasks.execute(w.ownerId, a.taskId, undefined, randomUUID());
+      assert.equal(press.ok, true, `the owner's run-again press was refused: ${JSON.stringify(press)}`);
+
+      // A run is away on the task again: the failure is cleared, and the live run holds the task.
+      assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.IN_PROGRESS);
+      const started = press as { sessionId: string };
+      const run = await stack.db.session.findUniqueOrThrow({
+        where: { id: started.sessionId },
+        select: { taskId: true, startsTaskWork: true, status: true },
+      });
+      assert.equal(run.taskId, a.taskId);
+      assert.equal(run.startsTaskWork, true, 'the press starts run work, not a conversation');
+      assert.ok(['PENDING', 'RUNNING'].includes(run.status), `the run is live: ${run.status}`);
+      assert.notEqual(started.sessionId, a.sessionId, 'a fresh run, not the attempt that failed');
+
+      // And the failure item is answered by that fact (§4.2's fourth fact, `resolveByFact`): a run
+      // is away, so what the item was owed has happened. Nothing is left standing behind the press.
+      const answered = await onlyItemFor(stack.db, w, a.taskId, 'the run-again press');
+      assert.equal(answered.state, 'RESOLVED');
+      assert.equal(answered.resolution, 'RETRIED');
+      assert.equal(answered.resolvedBy, 'PLATFORM');
+      assert.ok(answered.resolvedAt, 'an answered item carries when it was answered');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('a merge conflict opens one item owned by the coordinator, and queues it on the coordinator',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -1642,7 +1684,7 @@ test('the message an integration item is delivered as carries what its payload k
       const [reported] = await itemTurns(stack.db, checked.coordinatorSessionId!);
       assert.ok(reported, 'the item was not queued on the coordinator');
       assert.ok(
-        reported.content?.includes('MERGE_CHECK 的退出码是 2'),
+        reported.content?.includes('MERGE_CHECK exited with code 2'),
         `the message does not say which check failed and what it returned — ${reported.content}`,
       );
       assert.ok(

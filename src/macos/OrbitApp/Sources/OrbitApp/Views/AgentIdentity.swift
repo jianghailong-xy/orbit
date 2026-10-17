@@ -60,16 +60,17 @@ struct ProviderMark: View {
 }
 
 /// Engine picker opened from the new-session hero — which CLI runs this session, as opposed to the
-/// agent switcher (where it runs). One row per engine, landing on the provider of it the draft would
-/// spend (`SessionProviderChoices.engines`), which it does not name: which provider and which
-/// account is the composer's Provider menu's question, as on a session already running. Each row previews the model it would switch to, so the
-/// consequence is visible before the tap (web's `NewSessionProviderHero`).
+/// agent switcher (where it runs). One row per engine, by its CLI's name (board iOS 4 ①), landing on
+/// the credential of it the draft would spend (`SessionProviderChoices.engines`), which it does not
+/// name: which provider and which account is the composer's Provider menu's question, as on a session
+/// already running. Each row previews the model it would switch to, so the consequence is visible
+/// before the tap (web's `NewSessionProviderHero`).
 struct EngineSwitchSheet: View {
     let engines: [EngineChoice]
     let current: EngineChoice
     let agentName: String
-    /// An engine was picked: the provider of it to start on (`EngineChoice.provider`).
-    let onSelect: (String) -> Void
+    /// An engine was picked: the engine, and the credential of it to start on (`EngineChoice.provider`).
+    let onSelect: (_ engine: String, _ provider: String) -> Void
     /// Where to send a row this machine can't run: the runner whose Engines section holds its
     /// install / Sign in. Nil leaves such a row inert, which is all an unknown runner allows.
     var onFixRunner: ((String) -> Void)?
@@ -130,14 +131,28 @@ struct EngineSwitchSheet: View {
             // (or install) that would make it one, so go where that lives instead.
             if engine.unavailable != nil {
                 if !greyed { onFixRunner?(engine.fixEngine ?? engine.slug) }
-            } else if engine.provider.slug != current.provider.slug {
-                onSelect(engine.provider.slug)
+            } else if let provider = engine.provider,
+                      engine.slug != current.slug || provider.slug != current.provider?.slug {
+                onSelect(engine.slug, provider.slug)
             }
         } label: {
             HStack(spacing: 12) {
                 Group {
                     ProviderMark(provider: engine.slug, size: 28, brandKey: engine.brandKey, label: engine.label)
-                    Text(engine.label).foregroundStyle(.primary).lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(engine.label).foregroundStyle(.primary).lineLimit(1)
+                        // DeepSeek Harness with no DeepSeek key to run on: the way to one goes under its
+                        // name, since the row's end has no room for it (board iOS 4 ②).
+                        if engine.provider == nil, let reason = engine.unavailable {
+                            Text("\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine))")
+                                .font(.orbitListSubtitle)
+                                .foregroundStyle(Color.accentColor)
+                                .lineLimit(1)
+                        }
+                    }
+                    // The engine's name is the row: "DeepSeek Harness" keeps its width, and the model
+                    // beside it gives way first (board iOS 4 ①).
+                    .layoutPriority(1)
                 }
                 .opacity(greyed ? 0.5 : 1)
                 Spacer(minLength: 8)
@@ -149,6 +164,7 @@ struct EngineSwitchSheet: View {
                     .foregroundStyle(engine.unavailable == nil || greyed ? AnyShapeStyle(.secondary)
                                                                          : AnyShapeStyle(Color.accentColor))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 if engine.slug == current.slug {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
@@ -161,7 +177,8 @@ struct EngineSwitchSheet: View {
     }
 
     private func trailing(_ engine: EngineChoice, greyed: Bool) -> String {
-        guard let reason = engine.unavailable else { return engine.provider.note ?? engine.provider.modelLabel }
+        guard let provider = engine.provider else { return "" }
+        guard let reason = engine.unavailable else { return provider.note ?? provider.modelLabel }
         return greyed ? reason : "\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine))"
     }
 }
@@ -250,8 +267,9 @@ struct AgentSwitchSheet: View {
                         ProviderMark(provider: agent.defaultProvider, size: 38)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(agent.name).foregroundStyle(.primary).lineLimit(1)
-                            Text(AgentDefaults.providerName(
-                                agent.defaultProvider, configured: configuredProviders))
+                            Text(SessionProviderChoices.engineVia(
+                                engine: agent.defaultEngine(configured: configuredProviders),
+                                provider: agent.defaultProvider, configured: configuredProviders))
                                 .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer(minLength: 8)

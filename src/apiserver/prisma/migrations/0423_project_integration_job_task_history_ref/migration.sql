@@ -1,0 +1,65 @@
+-- 0423 — a landing's task id is a HISTORY REFERENCE, not a foreign key
+-- (docs/project-integration-line-contract.md §2.1 revision 12; docs/landing-session-design.md §9 item 2).
+--
+-- WHAT IT DOES
+-- ============
+-- Drops `project_integration_job_task_fkey` (0281), the `task_id → task(id) ON DELETE SET NULL` key.
+-- The column stays exactly as it is: nullable, written at enqueue, and now nobody's foreign key.
+--
+-- WHY: THE KEY AND THE GUARD ARE CONTRADICTORY
+-- ============================================
+-- 0281 gave this table both halves of one rule and they cannot both hold:
+--   * J4 — `project_integration_job_terminal_guard`, a BEFORE UPDATE trigger that refuses ANY update
+--     of a row that is no longer QUEUED or RUNNING ("a finished integration job is final").
+--   * The key's `ON DELETE SET NULL`, which is not a delete: deleting a task makes PostgreSQL UPDATE
+--     every job of that task to `task_id = NULL`, and a finished row may not be updated. The guard
+--     raises `P0001 PROJECT_INTEGRATION_JOB_TERMINAL`, the DELETE rolls back whole, and the API
+--     answers 500 — deleting a task that ever landed anything was impossible. On a QUEUED or RUNNING
+--     job the update gets past the guard and is refused by `project_integration_job_land_task_chk`
+--     instead (a LAND_TASK row must name its task), so the delete failed there too, as SQLSTATE
+--     23514. Reproduced from the services in
+--     `src/apiserver/src/tasks/task-delete-integration-job.pg.spec.ts`.
+--
+--   Neither half is the one to drop. A finished job IS the audit of what the platform pushed (J4's
+--   reason), the task id it carries is part of that audit, and `land_task_chk` is the schema saying a
+--   landing must be able to write its receipt. So the row keeps its task id and stops being rewritten
+--   on any task's delete: the key goes, and `task_id` becomes what `retry_of_job_id` (0344) already
+--   is on this same table — "a history reference with no foreign key", whose own comment gives the
+--   reason. §2.1 revision 12 requires exactly this for `task_id` and `session_id`, and
+--   `landing-session-design.md` §9 item 2 lists the whole defect (task delete, session delete, Trash
+--   purge) with the same fix, naming "let the guard through" as not viable.
+--
+-- WHAT IT BUYS AND WHAT IT COSTS
+-- ==============================
+--   * Deleting a task no longer writes a single byte of its integration jobs: state, shas, checks,
+--     conflicts, `receipt_ids`, `session_id` and `task_id` all survive it. That is what the task's
+--     delete path was asked for — the facts are the record, and the record outlives the row that
+--     asked for the work (0281's own words for why this key was SET NULL and not CASCADE).
+--   * A job row can now name a task that does not exist. Nothing reads the column expecting a row
+--     behind it — every reader already treats it as "which task this was about", and a promotion job
+--     (`CHECK_PROMOTION` / `LAND_PROMOTION`, 0293) has always had none — but a JOIN that assumed the
+--     row was there would now find nothing, and PostgreSQL no longer refuses a `task_id` that names
+--     nobody. That is the price of the trace, and it is the one §2.1 chose.
+--
+--   `session_id` is deliberately NOT touched here: it carries the same contradiction on the session
+--   delete and Trash-purge paths (§9 item 2, same fix), and `project_promotion`'s pair (§3.2) carries
+--   it too. Those are one change on their own; this one is the task-delete path the fixture project
+--   is stuck on.
+--
+-- CATALOG-ONLY, AND RE-RUNNABLE
+-- =============================
+-- One DROP CONSTRAINT, `IF EXISTS`. No row is read, written or backfilled: every stored row satisfies
+-- the schema it leaves behind, because dropping a foreign key removes a rule rather than adding one.
+-- No column, index, CHECK, function or trigger is created, replaced or dropped — in particular
+-- `project_integration_job_terminal_guard` and `project_integration_job_land_task_chk` stand as they
+-- are. `project_integration_job_task_idx` (0281) stays: it is the index for "which jobs were about
+-- this task", which is now the only way to ask.
+--
+-- LOCK
+-- ====
+-- ACCESS EXCLUSIVE on `project_integration_job` for the length of one catalog write. The table is
+-- small and its writers are the queue's own transactions, which take this table's rows (rank 60) and
+-- never hold it against a DDL window.
+
+ALTER TABLE "project_integration_job"
+  DROP CONSTRAINT IF EXISTS "project_integration_job_task_fkey";

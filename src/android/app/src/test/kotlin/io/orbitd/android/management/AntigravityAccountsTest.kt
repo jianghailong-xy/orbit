@@ -66,7 +66,8 @@ class AntigravityAccountsTest {
             assertFalse(RunnerPage.antigravityCanSignIn(runner))
             assertEquals("Update this runner to sign in with Google.", RunnerPage.signInHint(runner, "antigravity"))
         }
-        assertEquals("Antigravity", RunnerPage.engineName("antigravity"))
+        // Every engine by its CLI's name (ENGINE_CLI_NAMES; the owner's call on the provider/engine boards, 2026-10-09).
+        assertEquals("Antigravity CLI", RunnerPage.engineName("antigravity"))
     }
 
     @Test fun aMacOSRunnerWithAnEnvironmentKeyKeepsTheKeyAndTheUnsupportedHint() {
@@ -320,11 +321,11 @@ class AntigravityAccountsTest {
         assertEquals("antigravity", out.first().action?.engine)
     }
 
-    /** The Providers page's "N of M signed in" counts Antigravity only where the runner can sign it in with Google. */
-    @Test fun providersCountAntigravityOnlyWhereGoogleSignInIsOffered() {
-        val google = fixture("google")
-        assertEquals("1 of 4 signed in", ProviderPools.runnerSummary(google))
-        assertEquals("0 of 3 signed in", ProviderPools.runnerSummary(fixture("macos")))
-        assertEquals("0 of 3 signed in", ProviderPools.runnerSummary(fixture("old")))
+    /** A machine's line on Infrastructure ("N of M signed in") counts Antigravity only where the runner can sign it in with Google. */
+    @Test fun infrastructureCountsAntigravityOnlyWhereGoogleSignInIsOffered() {
+        val now = System.currentTimeMillis()
+        assertEquals("1 of 4 signed in", Infrastructure.summary(fixture("google"), now))
+        assertEquals("0 of 3 signed in", Infrastructure.summary(fixture("macos"), now))
+        assertEquals("0 of 3 signed in", Infrastructure.summary(fixture("old"), now))
     }
 }

@@ -3,7 +3,7 @@ import { codexAccountSnapshot, withEnginePlanUsage } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
 import { engineKeepsAccounts, runsOnEnvKey } from './engineAccounts';
 import { planUsageRows, planUsageSnapshotForProvider, type PlanUsageDisplayRow } from './planUsage';
-import { ago, ENGINE_CLI_NAME, updateNoteOf } from './runnerEngines';
+import { ago, ENGINE_CLI_NAME, updateNoteOf, webShowsEngine } from './runnerEngines';
 import {
   ATTENTION_CANT_UPDATE_ITSELF,
   ATTENTION_CHECKOUT_DETAIL,
@@ -186,9 +186,10 @@ const LOGIN_NAME: Record<LoginEngine, string> = {
   codex: RUNNER_LOGIN_CODEX,
   kimi: RUNNER_LOGIN_KIMI,
   antigravity: 'Antigravity',
+  cursor: ENGINE_CLI_NAME.cursor,
 };
 /** Every engine a runner reports on, in the order its page lists them. */
-const REPORTED_ENGINES = Object.keys(ENGINE_CLI_NAME) as ReportedEngine[];
+const REPORTED_ENGINES = (Object.keys(ENGINE_CLI_NAME) as ReportedEngine[]).filter(webShowsEngine);
 
 /** The RunnerRepoHealth states that block every merge into the checkout, and what it is stuck in.
  *  `dirty` is not one: a stray edit still lets merges fast-forward around it. */

@@ -8,6 +8,19 @@
 
 服务于 [P1.1 接入 Base UI 与 Orbit 主题基础](orbit-task:34Za38yCyTgCjo2t8Bmi4)，起点为 `6bbf3ecc3`（项目分支已有 P0 交付）。开工读取了完整任务、历史评论（空）、项目目标/作业指导/验收以及 P0.1/P0.2 交付。项目 P1 原文：**P1：Orbit 公共基础组件使用现有设计变量与主题机制，呈现与当前控件基准一致。** 本任务负责依赖与主题基础；完整基础控件及状态矩阵由 P1.2 继续交付。
 
+## 交付提交（2026-10-11 补记）
+
+本节由收尾并入任务 [34drbkA2TPuREKzGS0FUh](orbit-task:34drbkA2TPuREKzGS0FUh) 补上，回应 [P7.2 复核](orbit-task:34Za39UxopXFSlSSCGBZG)「缺口与遗留」第 3 条：本 README 此前只写了起点，没有写交付提交的 SHA。
+
+| | |
+| --- | --- |
+| 交付提交（任务分支） | `703b8f6ce4c75d8975ed867e9808f0f0198716f8`，`feat(web): add Base UI theme foundations and coexistence checks`，2026-10-04 04:41:43 +0800 |
+| 所在分支 | `orbit/p1-1-base-ui-orbit-8c2c1b`（tip） |
+| 父提交 | `6bbf3ecc3`，即本 README 开头写的起点（项目分支的 P0.2 交付） |
+| 项目线落地提交 | `5bea0a3f6a4e51997cba50c9da90be7cfd16f3b8`，提交信息相同；`docs/evidence/base-ui-migration/p1.1` 的 tree 两处逐字节相同（都是 `2b0fdd03087acff2d3bdfbaa5b4de40597f67322`） |
+
+**依据**：任务记录把 `703b8f6ce…` 写作 P1.1 的交付提交（评论 `34ZnF2k8ZifrHaPM1UEl3` 与进度报告 revision 5）；该提交是任务分支 `orbit/p1-1-base-ui-orbit-8c2c1b` 的 tip，父提交等于本 README 开头写的起点 `6bbf3ecc3`。落地时它被重写为项目线上的 `5bea0a3f6`：提交信息相同，改动的文件清单与增删行数也相同（369 个文件，+258,964/−1），`docs/evidence/base-ui-migration/p1.1` 的 tree 逐字节相同。`5bea0a3f6` 现在是 `origin/main` 的祖先；`703b8f6ce…` 本身不在项目分支/main 的历史里，只在任务分支上——引用这个 SHA 时以任务分支为准，引用落地结果用 `5bea0a3f6`。
+
 ## 依赖与生产改动
 
 2026-10-04（Asia/Shanghai）核实 [Base UI 官方 1.8.0 发布记录](https://base-ui.com/react/overview/releases/v1-8-0) 与 npm registry 的 latest：`@base-ui/react@1.8.0`，正式版本，发布于 2026-09-04。其 React/ReactDOM peer 支持 17/18/19，适用于当前 React 19.3.0；日期库 peer 是 optional，本次没有引入日期控件。registry 原始版本/完整性信息见 [base-ui-version.json](base-ui-version.json)。Web manifest 精确锁定 `1.8.0`，根 lockfile 保留 tarball 与完整性 hash。

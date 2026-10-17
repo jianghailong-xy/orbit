@@ -100,13 +100,29 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         assertSays(web, "export const landingNoReportFor = (minutes: number): string => `No report for ${minutes}m`;",
                    in: Self.panorama)
         assertSays(web, "export const LANDING_NO_REPORT_YET = '\(ProjectPage.landingNoReportYet)';", in: Self.panorama)
-        assertSays(web, ">\(ProjectPage.landingWaitLabel) <span className=\"project-landing-wait\">", in: Self.panorama)
         XCTAssertEqual(ProjectPage.landingNoReportFor(11), "No report for 11m")
+        // The card the landing is drawn as (owner decision 2026-10-11, docs/mocks/project-landing-card)
+        // says the row's words and three of its own; both ends write those three here.
+        assertSays(web, "export const landingOnto = (ref: string): string => `onto ${ref}`;", in: Self.panorama)
+        assertSays(web, "export const LANDING_NOTHING_TO_DO = '\(ProjectPage.landingNothingToDo)';",
+                   in: Self.panorama)
+        assertSays(web, "export const LANDING_ALL_JOBS = '\(ProjectPage.landingAllJobs)';", in: Self.panorama)
+        // The head's title is the row's name slot with the word in front of it: "Landing 2 jobs",
+        // and the count is the one the row already counts.
+        assertSays(web, "title: several && line.what ? `${line.word} ${line.what}` : line.word,",
+                   in: Self.panorama)
+        // The head both cards wear since 2026-10-11 (board docs/mocks/project-merge-check-row): one
+        // new word, and one composition the two ends run — `ProjectPage.landingHead` /
+        // `landingHead`, which the merge check card and the landing card each read.
+        assertSays(web, "export const LANDING_WAITED = '\(ProjectPage.landingWaited)';", in: Self.panorama)
+        assertSays(web, "export function landingHead(", in: Self.panorama)
     }
 
     func testTheCoordinatorCardsWords() throws {
         let web = try source(Self.coordinator)
-        assertSays(web, "'Open coordinator' : 'Reply to coordinator'", in: Self.coordinator)
+        assertSays(web, "? 'Open coordinator'", in: Self.coordinator)
+        assertSays(web, ": `Review ${session.pendingApprovals} request${session.pendingApprovals === 1 ? '' : 's'}`",
+                   in: Self.coordinator)
         assertSays(web, "'Open work' : 'Manual dispatch'", in: Self.coordinator)
         for text in ["Open tasks are coordinated from this conversation.", "No open tasks remain.",
                      "A completed conversation is told nothing new, and this project still points at it.",

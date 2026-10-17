@@ -4,14 +4,19 @@ import androidx.compose.runtime.*
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.ComposerCatalog
 import io.orbitd.android.composer.ComposerModel
-import io.orbitd.android.composer.ProviderChoices
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.ProviderOption
+import io.orbitd.android.composer.threeTries
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.serialization.json.*
 
 /**
@@ -37,16 +42,38 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val runnerName get() = runner?.let(RunnerPage::displayName)?.takeIf { it.isNotEmpty() }
         ?: (detail?.get("assignedRunner") as? JsonObject)?.let { it.string("displayName") ?: it.string("name") }
     val runnerVersion get() = runner?.string("version") ?: (detail?.get("assignedRunner") as? JsonObject)?.string("version")
-    /** The CLI that runs this session is Antigravity: its own provider, or a key that borrows it. */
-    val executesAntigravity get() = ProviderChoices.executingRuntime(provider, providers) == "antigravity"
+    /** The engine this session runs on for good: the one it records, else the one its provider ran on before engines were. */
+    val engine get() = ProviderEngines.sessionEngine(detail?.string("engine"), provider, providers)
+    /** The key this session runs on, as a card about a key its vendor rejected names it (iOS `sessionKeyName`): `the DeepSeek key
+     * “DeepSeek 2”`. The session's own — the credential that failed, never a pick held for its next turn; null on a sign-in, OpenCode's
+     * own configuration, or a key the account no longer lists. */
+    val sessionKeyName get() = provider.takeIf { it.isNotEmpty() && it !in ProviderEngines.LOGIN_ENGINES && it != ProviderEngines.OPENCODE }
+        ?.let { slug -> providers.firstOrNull { it.string("slug") == slug } }?.let(ProviderEngines::keyName)
+    /** The CLI that runs this session is Antigravity: on its own sign-in, or on a key it runs. */
+    val executesAntigravity get() = engine == ProviderEngines.ANTIGRAVITY
+    val executesDsh get() = engine == DshRuntime.ENGINE
 
-    /** Re-read the runner and the providers: on a card's first appearance, and back from the page that fixes it. */
+    /** A card has asked for the runner: what the minute's re-read keeps up to date. */
+    private var asked = false
+
+    /** Re-read the runner and the providers: on a card's first appearance, and back from the page that fixes it — each read tried
+     * three times, as a page's opening reads are (A07-18). A read that fails keeps what is on screen. */
     fun refresh() { scope.launch { reload() } }
-    suspend fun reload() {
+    suspend fun reload() { asked = true; read { threeTries(it) } }
+
+    /** This session's runner row again (A07-18, iOS bc790273c `refreshRunner`), on every reconnect and once a minute while the
+     * session streams: for the cards, once one has asked for it, and for the composer's catalogue. Read once; a read that fails keeps
+     * what is on screen. */
+    suspend fun refreshRunner() {
+        if (asked) read { it() }
+        composer.refreshCatalog()
+    }
+
+    private suspend fun read(attempts: suspend (suspend () -> JsonElement) -> JsonElement) {
         try {
             val id = runnerId
-            runner = (management.get("runners") as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { ObjectId.same(it.string("id"), id) }
-            providers = (management.get("providers") as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
+            runner = (attempts { management.get("runners") } as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { ObjectId.same(it.string("id"), id) }
+            providers = (attempts { management.get("providers") } as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
     }
 
@@ -61,16 +88,18 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val googleSignIn get() = runner?.let(RunnerPage::antigravityCanSignIn) == true
     val googleSignInHint get() = RunnerPage.antigravityLoginHint(antigravity?.string("googleLogin"))
 
-    fun installAntigravity() {
+    fun installAntigravity() { if (canInstallAntigravity) install("antigravity", "Antigravity CLI") }
+
+    /** The pinned CLI of [engine] onto this session's runner, through its one install relay; the relay's state comes back. */
+    private fun install(engine: String, name: String) {
         val id = runnerId ?: return
-        if (!canInstallAntigravity) return
         installing = true; error = null
         scope.launch {
             try {
-                val state = management.post("runners/$id/install", buildJsonObject { put("engine", "antigravity") }) as? JsonObject
+                val state = management.post("runners/$id/install", buildJsonObject { put("engine", engine) }) as? JsonObject
                 runner = runner?.let { JsonObject(it + ("install" to (state ?: JsonObject(emptyMap())))) }
             } catch (cancel: CancellationException) { throw cancel }
-            catch (e: Exception) { error = "Couldn't install Antigravity CLI — ${directoryError(e)}." }
+            catch (e: Exception) { error = "Couldn't install $name — ${directoryError(e)}." }
             finally { installing = false }
         }
     }
@@ -83,23 +112,44 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
         return if (key != null) "$origin/providers/$key" else "$origin/providers/new/gemini"
     }
 
-    /** The account's Gemini key on Antigravity this session may move to now: same CLI, runnable here. */
+    /** The account's Gemini key this session may move to now: one its engine runs, runnable here. */
     val geminiSwitch: ProviderOption? get() {
         val runner = runner ?: return null
         val catalog = ComposerCatalog(runner, providers)
-        val choices = catalog.sameRuntime(provider, catalog.choices(detail?.let(catalog::antigravityKeyAvailable) ?: false))
-        return choices.firstOrNull { choice ->
+        return catalog.credentials(engine, detail?.let(catalog::antigravityKeyAvailable) ?: false).firstOrNull { choice ->
             val row = providers.firstOrNull { it.string("slug") == choice.id }
             choice.id != provider && choice.unavailable == null && row?.string("presetSlug") == "gemini" && row.string("runtime") == "antigravity"
         }
     }
 
+    /** Onto [choice], on the engine the session already runs (contract §3.5). */
     fun switchTo(choice: ProviderOption) = composer.config(buildJsonObject {
-        put("provider", choice.id); put("model", choice.models.firstOrNull()?.get("value")?.jsonPrimitive?.contentOrNull ?: ""); put("effort", "")
+        put("provider", choice.id); put("engine", engine)
+        put("model", choice.models.firstOrNull()?.get("value")?.jsonPrimitive?.contentOrNull ?: ""); put("effort", "")
     })
 
     /** The failed message again, now that what stopped it is fixed — on the provider picked in the composer, if any (A07-8). */
     fun retry() = composer.retryFailed()
+
+    // MARK: DeepSeek Harness (iOS e789ce3dc)
+
+    /** Harness can go onto this session's runner from here: online, a release that runs it, and no install already under way. */
+    val canInstallDsh get() = runner?.let { runner -> !RunnerPage.isOffline(runner, System.currentTimeMillis()) &&
+        (runner["capabilities"] as? JsonArray)?.any { (it as? JsonPrimitive)?.contentOrNull == DshRuntime.RUNNER_CAPABILITY } == true } == true &&
+        !installing && !installInFlight
+    /** The install relay is carrying Harness's install. */
+    val dshInstallInFlight get() = installInFlight && (runner?.get("install") as? JsonObject)?.string("engine") == DshRuntime.ENGINE
+
+    fun installDsh() { if (canInstallDsh) install(DshRuntime.ENGINE, "DeepSeek Harness") }
+
+    /** Where Update the API key goes, on the web (`onEditDshKey`): the page of the DeepSeek key this session runs on, else
+     * Infrastructure's API keys, where one is connected or turned back on — every DeepSeek key runs Harness, so no other key's page
+     * stands in for the session's. These clients don't edit keys themselves. */
+    suspend fun dshKeyUrl(): String {
+        val origin = handle.account.server.trimEnd('/')
+        val mine = runCatching { (management.get("providers/mine") as? JsonArray)?.filterIsInstance<JsonObject>() }.getOrNull().orEmpty()
+        return mine.firstOrNull { it.string("slug") == provider }?.string("id")?.let { "$origin/providers/$it" } ?: "$origin/infrastructure#keys"
+    }
 
     // MARK: auto-retry (iOS `AutoRetryCardView`'s reads and presses on `ConsoleModel`)
 
@@ -172,3 +222,14 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
 }
 
 internal val LocalSessionConsole = staticCompositionLocalOf<SessionConsole?> { null }
+
+/** A07-18 (iOS bc790273c: `runnerPollTask` and the reconnect's `refreshRunner`): [refresh] on every reconnect of the session's
+ * stream — its first connect is the page opening, whose reads are its own — and once a minute for as long as it stays connected. */
+internal suspend fun refreshWhileStreaming(connected: Flow<Boolean>, refresh: suspend () -> Unit, minute: Long = 60_000) {
+    var connects = 0
+    connected.distinctUntilChanged().collectLatest { up ->
+        if (!up) return@collectLatest
+        if (connects++ > 0) refresh()
+        while (true) { delay(minute); refresh() }
+    }
+}

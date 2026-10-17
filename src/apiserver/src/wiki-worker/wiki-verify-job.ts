@@ -1,8 +1,11 @@
 import { NotFoundException } from '@nestjs/common';
 import { WIKI_REVIEW_RULES, type WikiVerificationItem } from '@orbit/shared';
+import type { PrismaService } from '../prisma/prisma.service';
 import { WikiRefusalError, type WikiPrincipal, type WikiService } from '../wiki/wiki.service';
 import { stripNul } from '../runner-api/strip-nul';
 import { WikiJobContentError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
+import { readWikiJobCarry, wikiJobCarryWriter } from './wiki-jobs';
+import { wikiJobModelCalls } from './wiki-model-queue';
 import {
   WIKI_VERIFY_SYSTEM_PROMPT,
   parseWikiVerdict,
@@ -35,6 +38,12 @@ import {
  * runner door applies — and its writes say `system`, because the server made them on its own account. The
  * second pass over what a first pass left without a verdict, and the adoption of ended sessions' ops
  * (`verification.adoption`), are {@link verifyWikiOps}'s options: P8's maintenance run calls this with them.
+ *
+ * THE REPORT IS THE WHOLE JOB'S (contract `jobs.carry`). An op that has its verdict waits no longer, so the list a replay
+ * reads — after a stop handed the job back, or a failure of the platform — no longer holds the ops an earlier attempt
+ * verified. Each verdict is carried on the job's row as soon as it is recorded, and the report counts the carried ones
+ * with the replay's; its usage is the job's own requests, each once. An op left without a verdict is not carried: it
+ * still waits, and the replay asks about it again.
  */
 
 /** What the verify job is, in the numbers one call and one page take. */
@@ -73,7 +82,8 @@ export interface WikiVerifyTarget {
   jobId?: string | null;
   /**
    * The adoption door (contract `reviewModes.verification.adoption`, P8): the ops of the space's *ended*
-   * sessions, whose proposing session nobody is left to run a verifier in.
+   * sessions, whose proposing session nobody is left to run a verifier in — and, the server's maintenance run
+   * adopting as its job, of the space's ended jobs other than its own. Its verdicts are reported as adopted.
    */
   adopt?: boolean;
   /** Verify at most this many ops; 0 or undefined is every one of them. */
@@ -81,9 +91,16 @@ export interface WikiVerifyTarget {
   /**
    * Why the model's answer about an op was not a verdict in an earlier pass, by op id: the pass asks about
    * those ops again with the prompt saying so and the numbers duplicateOf may be (contract
-   * `maintenance.job.run.steps`, verify).
+   * `maintenance.job.run.steps`, verify). A pass given it is that second pass, and asks each op under a unit
+   * of its own, `<opId>#retry` (`maintenance.job.server.verify`): the first pass's unit holds the first asking,
+   * and the queue would refuse it asked again with another prompt.
    */
   refused?: ReadonlyMap<string, string> | null;
+  /**
+   * Told of each verdict the server recorded, as soon as it is: what a job carries to its replay (contract
+   * `jobs.carry`), since the replay's list no longer holds the op. Awaited before the pass goes on.
+   */
+  recorded?: (verdict: string) => Promise<void>;
 }
 
 /** What one pass did, as the job's report holds it (the runner's own summary, `--json`'s shape). */
@@ -156,7 +173,8 @@ export async function verifyWikiOps(
     for (const item of page.items) {
       if (max > 0 && report.looked >= max) return report;
       report.looked += 1;
-      const stop = await verifyOneOp(context, wiki, principal, model, item, target.refused?.get(item.opId) ?? '', report);
+      const unit = target.refused ? `${item.opId}#retry` : item.opId;
+      const stop = await verifyOneOp(context, wiki, principal, model, item, unit, target.refused?.get(item.opId) ?? '', report, target.adopt === true, target.recorded);
       if (stop) return report;
     }
     if (page.next === null) return report;
@@ -165,9 +183,10 @@ export async function verifyWikiOps(
 }
 
 /**
- * Ask about one op and report what the model said. `refused` is why its last answer was not a verdict, when an
- * earlier pass asked: the prompt says so, and names the numbers a duplicate may give. Answers whether the pass
- * must stop — the server says the space left Automatic, and nothing after that would be recorded.
+ * Ask about one op, under `unit`, and report what the model said. `refused` is why its last answer was not a verdict,
+ * when an earlier pass asked: the prompt says so, and names the numbers a duplicate may give. `adopt` reports the verdict
+ * of an op the adoption list gave as adopted, which is what lets the server find it. Answers whether the pass must stop
+ * — the server says the space left Automatic, and nothing after that would be recorded.
  */
 async function verifyOneOp(
   context: WikiJobContext,
@@ -175,8 +194,11 @@ async function verifyOneOp(
   principal: WikiPrincipal,
   model: string,
   item: WikiVerificationItem,
+  unit: string,
   refused: string,
   report: WikiVerifyReport,
+  adopt: boolean,
+  recorded?: (verdict: string) => Promise<void>,
 ): Promise<boolean> {
   const candidates = wikiVerifyCandidates(item);
   let prompt = wikiVerifyPrompt(item, candidates);
@@ -188,7 +210,7 @@ async function verifyOneOp(
   };
   let answer: string;
   try {
-    const settled = await context.ask(WIKI_VERIFY_JOB.step, item.opId, {
+    const settled = await context.ask(WIKI_VERIFY_JOB.step, unit, {
       system: WIKI_VERIFY_SYSTEM_PROMPT,
       prompt,
       maxTokens: WIKI_VERIFY_JOB.maxTokens,
@@ -215,7 +237,7 @@ async function verifyOneOp(
     model,
     ...(parsed.verdict.duplicateOf === null ? {} : { duplicateOf: parsed.verdict.duplicateOf }),
   };
-  const done = await writeVerdict(wiki, principal, context.job.spaceId, verdict);
+  const done = await writeVerdict(wiki, principal, context.job.spaceId, verdict, adopt);
   const outcome = done.outcomes[0];
   if (!outcome) {
     fail('the server recorded nothing for it');
@@ -235,6 +257,7 @@ async function verifyOneOp(
   }
   report.verified += 1;
   countVerdict(report, parsed.verdict.verdict);
+  await recorded?.(parsed.verdict.verdict);
   context.log(`op ${item.opId} (${item.entry.title}): ${verdict.verdict} — ${describeWikiVerdictOutcome(outcome, parsed.verdict)}`);
   if (done.mode !== 'automatic') {
     // This verdict was the one that sent the space back to Tiered: nothing after it is recorded.
@@ -262,17 +285,21 @@ async function readPage(
   }
 }
 
-/** Record one verdict through the server's own writer, and answer what it did. */
+/**
+ * Record one verdict through the server's own writer, and answer what it did. An adopted op's is reported as adopted
+ * (`verification.adoption`): it is none of the caller's own, and the writer finds it among what the caller may adopt.
+ */
 async function writeVerdict(
   wiki: WikiService,
   principal: WikiPrincipal,
   spaceId: string,
   verdict: Record<string, unknown>,
+  adopt: boolean,
 ): Promise<Awaited<ReturnType<WikiService['recordVerifications']>>> {
   try {
     // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
     // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
-    return await wiki.recordVerifications(principal, spaceId, [stripNul(verdict)]);
+    return await wiki.recordVerifications(principal, spaceId, [stripNul(verdict)], { adopt });
   } catch (error) {
     throw asContent(error, 'the verdict could not be recorded');
   }
@@ -286,8 +313,8 @@ function asContent(error: unknown, what: string): Error {
   return error as Error;
 }
 
-/** One verdict, counted into the report's own tallies. */
-function countVerdict(report: WikiVerifyReport, verdict: string): void {
+/** One verdict, counted into the report's own tallies (or a carry's). */
+function countVerdict(report: Pick<WikiVerifyReport, 'supported' | 'partial' | 'unsupported' | 'duplicate'>, verdict: string): void {
   switch (verdict) {
     case 'supported':
       report.supported += 1;
@@ -342,14 +369,56 @@ interface WikiVerificationOutcomeLike {
   reinforced?: boolean;
 }
 
-/** Run one `verify` job: the session its input names, one pass, the report the row ends with. */
-export async function runWikiVerifyJob(context: WikiJobContext, wiki: WikiService, model: string): Promise<Record<string, unknown>> {
+/**
+ * The verdicts an attempt carries to the job's replay (contract `jobs.carry.kinds.verify`): those the server recorded,
+ * counted by what they said. Each is an op the replay's list no longer holds.
+ */
+type WikiVerifyCarry = Pick<WikiVerifyReport, 'verified' | 'supported' | 'partial' | 'unsupported' | 'duplicate'>;
+
+/** The carry as the job's row holds it: a job nothing was carried for reads as one with nothing in it. */
+function verifyCarryOf(raw: Record<string, unknown> | null): WikiVerifyCarry {
+  const count = (key: keyof WikiVerifyCarry): number => (typeof raw?.[key] === 'number' ? (raw[key] as number) : 0);
+  return { verified: count('verified'), supported: count('supported'), partial: count('partial'), unsupported: count('unsupported'), duplicate: count('duplicate') };
+}
+
+/**
+ * Run one `verify` job: the session its input names, one pass, and the report the row ends with — the whole job's
+ * (contract `jobs.carry`): the verdicts earlier attempts recorded counted with this pass's, and the usage of every
+ * request the job made, each once.
+ */
+export async function runWikiVerifyJob(
+  context: WikiJobContext,
+  wiki: WikiService,
+  model: string,
+  prisma: PrismaService,
+): Promise<Record<string, unknown>> {
   const input = wikiVerifyJobInput(context.job.input);
-  const report = await verifyWikiOps(context, wiki, model, { sessionId: input.sessionId });
-  return { kind: 'verify', ...report };
+  const earlier = verifyCarryOf((await readWikiJobCarry(prisma, context.job.id)).carry);
+  const carry: WikiVerifyCarry = { ...earlier };
+  const keep = wikiJobCarryWriter(prisma, context.job, () => ({ ...carry }));
+  const report = await verifyWikiOps(context, wiki, model, {
+    sessionId: input.sessionId,
+    recorded: async (verdict) => {
+      carry.verified += 1;
+      countVerdict(carry, verdict);
+      await keep();
+    },
+  });
+  const spent = await wikiJobModelCalls(prisma, { jobId: context.job.id });
+  return {
+    kind: 'verify',
+    ...report,
+    looked: report.looked + earlier.verified,
+    verified: report.verified + earlier.verified,
+    supported: report.supported + earlier.supported,
+    partial: report.partial + earlier.partial,
+    unsupported: report.unsupported + earlier.unsupported,
+    duplicate: report.duplicate + earlier.duplicate,
+    usage: { inputTokens: spent.inputTokens, outputTokens: spent.outputTokens },
+  };
 }
 
 /** The kind's runner, with the services the pipelines use and the System model's name. */
-export function wikiVerifyJobRunner(wiki: WikiService, model: string | null): WikiJobRunner {
-  return (context: WikiJobContext) => runWikiVerifyJob(context, wiki, model ?? '');
+export function wikiVerifyJobRunner(wiki: WikiService, model: string | null, prisma: PrismaService): WikiJobRunner {
+  return (context: WikiJobContext) => runWikiVerifyJob(context, wiki, model ?? '', prisma);
 }

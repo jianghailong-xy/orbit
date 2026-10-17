@@ -1,12 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Drawer, Popover } from 'antd';
 import { ClockCircleOutlined, RightOutlined } from '@ant-design/icons';
 import { WikiEmpty } from './WikiCards';
 import { WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiTrustBadge } from './WikiMarks';
 import { WikiTopicGroup, WikiTopicPage } from './WikiTopicPage';
+import { Button } from './ui/Button';
+import { Drawer } from './ui/Drawer';
+import { Popover } from './ui/Popover';
 import { wikiArticleQuery, wikiEntryQuery } from '../lib/queries';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -246,15 +248,16 @@ function WikiArticleText({
                         <Popover
                           key={n}
                           open={on}
-                          trigger="click"
-                          placement="bottomLeft"
-                          arrow={{ pointAtCenter: true }}
+                          side="bottom"
+                          align="start"
+                          pointAtCenter
+                          title={null}
                           onOpenChange={(visible) => {
                             if (!visible && on) setOpen(null);
                           }}
-                          content={note ? <WikiFootnoteCard note={note} spaceSlug={spaceSlug} back={back} /> : null}
+                          trigger={marker}
                         >
-                          {marker}
+                          {note ? <WikiFootnoteCard note={note} spaceSlug={spaceSlug} back={back} /> : null}
                         </Popover>
                       );
                     })}
@@ -270,10 +273,10 @@ function WikiArticleText({
           placement="bottom"
           open={openNote !== null}
           onClose={() => setOpen(null)}
-          size="auto"
+          height="auto"
           closable={false}
-          rootClassName="wk-fnsheet"
-          styles={{ body: { padding: 0 } }}
+          title={null}
+          className="wk-fnsheet"
         >
           {openNote && <WikiFootnoteCard note={openNote} spaceSlug={spaceSlug} back={back} sheet />}
         </Drawer>
@@ -327,7 +330,7 @@ export function WikiFootnoteCard({
             )}
           </div>
           {sheet && (
-            <Button type="primary" block size="large" className="wk-fncard-open" onClick={open}>
+            <Button variant="primary" size="large" className="wk-fncard-open" onClick={open}>
               {WIKI_ACTION_OPEN}
             </Button>
           )}

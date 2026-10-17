@@ -1,0 +1,51 @@
+# git merge-tree dry run of the delivery against the newest origin/main, before submitting (project rule: after the final round,
+# re-follow only on a conflict or when main changed this batch's files; global layers -> temporary merge tree; otherwise record).
+# 2026-10-10T14:21:44Z
+
+delivery:      01713ca80794e84e570378824d1632c5076ee314
+final round base (origin/main then): 9274d5242868693710d3676de16bd501acec809b
+origin/main now: 65fc7b41f8742e01437965a50efae0a0dc79d6da
+project tip now: f1e5383b2c1ae3420d26c5c7d36b7147ddf0bea0 (in origin/main: yes)
+
+$ git merge-tree --write-tree --name-only --messages origin/main HEAD
+b86dc50417209aaac499a01744c236f8d09a0106
+
+exit=0 (0 = clean, no conflicts)
+
+## main's commits since the final round's base: 36; files changed: 290
+## of them under src/web, src/shared/src and src/macos/OrbitKit:
+ src/macos/OrbitKit/Sources/OrbitKit/Transcript/ReferencedTask.swift |  24 ++-
+ src/macos/OrbitKit/Tests/OrbitKitTests/ReferencedTaskFixtures.swift |  23 ++-
+ src/macos/OrbitKit/Tests/OrbitKitTests/ReferencedTaskTests.swift    |  36 +++-
+ src/macos/OrbitKit/Tests/OrbitKitTests/TaskStartTests.swift         |  34 ++-
+ src/shared/src/project-progress.ts                                  |  44 ++++
+ src/shared/src/project-start.spec.ts                                |   7 +
+ src/shared/src/project-start.ts                                     |  14 +-
+ src/shared/src/wiki-article-writer.fixture.json                     |  36 ++--
+ src/shared/src/wiki-docs-build.fixture.json                         | 481 ++++++++++++++++++++++++++++++++++++-------
+ src/shared/src/wiki-maintain-proposal.fixture.json                  |  64 +++---
+ src/shared/src/wiki-plan.fixture.json                               | 944 +++++++++++++++++++++++++++++++++++++++++++-----------------------------------------
+ src/shared/src/wikiArticles.ts                                      |  40 ++--
+ src/shared/src/wikiContract.spec.ts                                 |   3 +
+ src/shared/src/wikiPlan.ts                                          |   5 +-
+ src/web/src/components/TaskStartCard.test.tsx                       |  29 ++-
+ src/web/src/components/Transcript.referencedTask.test.tsx           |  35 +++-
+ src/web/src/copyLanguage.test.ts                                    |  38 ----
+ src/web/src/lib/referencedTask.fixtures.ts                          |  25 ++-
+ src/web/src/lib/referencedTask.test.ts                              |  39 +++-
+ src/web/src/lib/referencedTask.ts                                   |  26 +--
+ 20 files changed, 1262 insertions(+), 685 deletions(-)
+
+## this batch's files (Image.tsx, Image.css, ImagePreview.test.tsx, ui/README.md, WorkspaceView.tsx, WorkspaceView.composerThumbnail.test.tsx) changed by main:
+  (none listed above = none)
+
+## main's src/web commits since the base:
+66f3e9469 Merge the project line's tip into the wiki copy work
+c0d9e9eae fix(wiki): the server's wiki plans, writes and parses English
+c06dc9302 Merge orbit/copy-the-coordinator-s-opening-its-open-81eee4 into the project line's tip
+124593bd3 Merge remote-tracking branch 'origin/project/34cq4x8pFLbPT4YieZIMq' into orbit/copy-the-task-brief-and-the-notes-delive-f5bf24
+2321e7fbc fix(copy): the task brief and the notes delivered into sessions are English
+980c308c7 Merge refs/heads/project/34cq4x8pFLbPT4YieZIMq into orbit/copy-the-coordinator-s-opening-its-open-81eee4
+ed56192c8 fix(copy): the coordinator's opening, its open items and wake dispositions are English
+77e1f9585 fix(copy): the coordinator's judgment turn and the messages delivered to it are English
+42cc94e15 fix(apiserver): the system's own titles, comments and list notes are English

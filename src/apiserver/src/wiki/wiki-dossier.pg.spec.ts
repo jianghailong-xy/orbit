@@ -1202,7 +1202,9 @@ test('every line goes back to its record: the words at its spans, redacted, are 
 
   const work = await task(h, owner.id, { title: 'Place every line', status: 'FAILED', assigneeId: ws, acceptance: 'Every line has its place.' });
   const talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, taskId: work, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20) });
-  const prompt = 'Place every line of the dossier 🎯.\n\nPositions count in code points, not in UTF-16 units.\n\n请按以下步骤进行：\n1. read\n2. write';
+  // The brief's step list under its English heading; the first dossier above keeps the Chinese one older
+  // transcripts hold, and both are cut.
+  const prompt = 'Place every line of the dossier 🎯.\n\nPositions count in code points, not in UTF-16 units.\n\nFollow these steps:\n1. read\n2. write';
   const opening = await turn(h, talk, prompt, { clientTurnId: `initial-${randomUUID()}`, sendIntent: null, at: at(59) });
   const retried = await turn(h, talk, prompt, { clientTurnId: `initial-${randomUUID()}`, sendIntent: null, at: at(58) });
   const long = await turn(h, talk, `Keep 🎯 the budget at 8k, never 16k: ${token} ${literal} ${'the reason is recall, measured. '.repeat(220)}`, { at: at(57) });
@@ -1313,6 +1315,7 @@ test('every line goes back to its record: the words at its spans, redacted, are 
   const opened = bySource(opening, 'turn');
   assert.deepEqual(texts(opened), ['Place every line of the dossier 🎯.\n\nPositions count in code points, not in UTF-16 units.'],
     'the opening prompt without the step list every task ends with');
+  assert.doesNotMatch(dossier.text, /Follow these steps/, 'the step list is cut under its English heading too');
   const repeated = bySource(retried, 'turn');
   assert.equal(lineOf.get(repeated.ref), `${repeated.ref} taskprompt: (the same opening prompt again)`);
   assert.deepEqual(texts(repeated), texts(opened), 'a repeated prompt points at the prompt it stands for');

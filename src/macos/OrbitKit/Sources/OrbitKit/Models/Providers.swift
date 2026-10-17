@@ -20,19 +20,21 @@ public struct ConfiguredProviderModel: Codable, Equatable, Sendable, Identifiabl
     }
 }
 
-/// A control-plane–configured provider (GET /api/providers): a custom identity (its own slug,
-/// label and model list) that borrows a built-in runtime for execution. Its slug lands in an
-/// agent/session's `provider` field just like a built-in, so `AgentDefaults` merges it into the
-/// pickers alongside claude/codex. The payload is de-sensitized (enabled providers only, no
-/// key/baseUrl). Mirrors web's `ConfiguredProvider` (lib/agentDefaults.ts).
+/// A control-plane–configured provider (GET /api/providers): a key — its own slug, label and model
+/// list — that one or more engines run on (docs/provider-engine-contract.md §2.1). Its slug lands in a
+/// session's `provider` beside the engine that runs it, as an engine's own sign-in does. The account
+/// pools ride the same shape (`ProviderPools.asProviders`), each running on its own engine alone. The
+/// payload is de-sensitized (enabled providers only, no key/baseUrl). Mirrors web's
+/// `ConfiguredProvider` (lib/workspaceDefaults.ts).
 public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// The configured row's id, used to open its key editor in the web app.
     public var providerID: String? = nil
     public let slug: String
     public let label: String
-    /// The built-in runtime the provider borrows: "claude", "codex", "kimi" or "antigravity".
-    /// Optional so a future server shape still decodes; anything else reads as "claude", as on the
-    /// server (`AgentDefaults.runtime(for:configured:)`).
+    /// The protocol the key's endpoint speaks, named by the engine that speaks it natively: "claude"
+    /// (Anthropic Messages), "codex" (OpenAI Responses), "kimi" (Moonshot) or "antigravity" (Gemini).
+    /// Not the engine: which engines run the key is `engines` (`ProviderEngines.of`). Optional so a
+    /// future server shape still decodes; nil reads as "claude", as on the server.
     public let runtime: String?
     public let models: [ConfiguredProviderModel]
     public let defaultModel: String?

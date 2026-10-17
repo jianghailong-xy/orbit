@@ -45,6 +45,34 @@ final class SessionTaskCardTests: XCTestCase {
         XCTAssertEqual(try summary([fresh]).taskStaleLines(now: now), [])
     }
 
+    /// A watch the Watching card keeps for a session that runs no task lists a task's run session in
+    /// it as that task, once — by the task's title and pill, opening the task — as its line counts it.
+    func testAWatchingCardListsARunSessionAsItsTask() throws {
+        var child = F.target("S9", kind: "SESSION")
+        child["targetTitle"] = "Deploy main"
+        child["targetTask"] = NSNull()
+        var run = F.target("S1", kind: "SESSION")
+        run["targetTitle"] = "Task: Ship it"
+        run["targetStatus"] = ["status": "AWAITING_INPUT", "running": false, "queued": false]
+        run["targetTask"] = ["id": "T1", "title": "Ship it",
+                             "status": ["status": "IN_PROGRESS", "running": false, "queued": false]]
+        var task = F.target("T1")
+        task["targetTitle"] = "Ship it"
+        let mixed = F.watch(id: "W1", predicate: ["kind": "ANY_OF", "operands": [F.all("SESSION_TURN_SETTLED"),
+                                                                                   F.all("TASK_TERMINAL")]],
+                            targets: [child, run, task])
+        let watching = try XCTUnwrap(try summary([mixed]).beyondTasks, "the child keeps the Watching card")
+        let listed = WatchProjection.stripTargets(of: watching.watches[0])
+        XCTAssertEqual(listed.map(\.targetResourceId), ["S9", "T1"])
+        XCTAssertEqual(listed.map(\.targetKind), [.session, .task])
+        XCTAssertEqual(listed[1].targetTitle, "Ship it")
+        XCTAssertNotNil(WatchProjection.stripPill(listed[1]), "the task's own pill")
+        XCTAssertNil(WatchProjection.stripGlyph(listed[1]), "not its run session's glyph")
+        // The line counts the same two: a session, and a task that is not done while its run waits.
+        XCTAssertEqual(watching.lineTargetWord, "all 2 targets")
+        XCTAssertEqual(watching.lineParts.map(\.text), ["0/2 done"])
+    }
+
     func testOneTaskIsNamedAndTheEyeCountsTheWatchedRows() throws {
         let row = SessionCreatedTaskRow(id: "T1", title: "Only", status: "OPEN", running: true, queued: false,
                                         createdAt: "2026-09-14T09:00:00Z", projectId: nil, replaces: nil)

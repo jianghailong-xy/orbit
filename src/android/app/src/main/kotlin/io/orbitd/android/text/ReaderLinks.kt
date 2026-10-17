@@ -36,8 +36,7 @@ class ReaderResources(val auth: AuthSession, val handle: SessionHandle, val sess
                 require(source.length <= MAX_BYTES * 2)
                 Base64.getDecoder().decode(source.substringAfter(','))
             } else {
-                val uri = URI(source)
-                require(uri.scheme == "https" && uri.host != null && uri.userInfo == null)
+                require(externalImage(source))
                 external.newCall(Request.Builder().url(source).build()).execute().use { response ->
                     check(response.isSuccessful)
                     val body = response.body ?: error("No image")
@@ -69,6 +68,13 @@ internal fun resourceRequest(source: String, sessionId: String?): ApiRequest? {
     if (!ObjectId.same(match.groupValues[1], sessionId) || match.groupValues[2].split('/').any { it == ".." }) return null
     return ApiRequest(listOf("sessions", sessionId!!, "artifacts"), query = listOf("path" to path), maxResponseBytes = 25L * 1024 * 1024)
 }
+
+/** An image on the open web, which only the bare client fetches: the two schemes iOS's `MarkdownImageView.remoteURL` takes. */
+internal fun externalImage(source: String): Boolean = runCatching {
+    val uri = URI(source)
+    // http as well as https, as on iOS: the account owner's decision of 2026-10-15 (card 34g6JcZwpKTUcwc5WvuVx).
+    uri.scheme in setOf("https", "http") && uri.host != null && uri.userInfo == null
+}.getOrDefault(false)
 
 val LocalReaderResources = staticCompositionLocalOf<ReaderResources?> { null }
 

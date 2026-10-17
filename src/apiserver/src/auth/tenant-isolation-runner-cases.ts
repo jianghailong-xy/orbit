@@ -109,6 +109,12 @@ export interface RunnerObjects {
   /** Open items of the project assigned to its coordinator: one to resolve, one to hand over. */
   coordinatorItemId: string;
   handOverItemId: string;
+  /**
+   * The task both items are failures of: one of the project's own that nothing is attempting, so that
+   * both stay owed (`openItemOwed`) and the escalation tick's backstop leaves them open. No case names
+   * it; it is here so that the write trap counts it among A's ids.
+   */
+  failedTaskId: string;
   /** A watch `callingSessionId` observes. */
   watchId: string;
   /** The account's own model providers, by the slug the runner door names them by. */
@@ -318,6 +324,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   'POST /runner/sessions/:id/naming': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { replaces: 'not its title', title: 'named by the census' } }),
+  },
+  // A session not on a Cursor key: its own runner is answered `recorded: false`, and nothing is written.
+  'POST /runner/sessions/:id/cursor-key-check': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { state: 'INVALID', keyFingerprint: '0123456789abcdef' } }),
+  },
+  'POST /runner/sessions/:id/turns/:turnId/suggestion': {
+    as: RUNNER,
+    request: (of) => ({ params: { id: of.runner.turnSessionId, turnId: of.runner.shellTurnId } }),
+    nested: ['turnId'],
   },
   'POST /runner/sessions/:id/turn-complete': {
     as: RUNNER,
@@ -1258,7 +1274,7 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
  */
 const PLAN_USAGE_IDS = ['limitId', 'rateLimits[].limitId', 'rateLimitReset.rateLimitResetCredits.credits[].id', 'buckets[].id'];
 const planUsageReadings = Object.fromEntries(
-  ['planUsage.', 'planUsage.claude.', 'planUsage.codex.', 'planUsage.kimi.', 'planUsage.antigravity.', 'engines[].planUsage.']
+  ['planUsage.', 'planUsage.claude.', 'planUsage.codex.', 'planUsage.kimi.', 'planUsage.cursor.', 'planUsage.antigravity.', 'engines[].planUsage.']
     .flatMap((at) => PLAN_USAGE_IDS.map((id) => [
       `POST /runner/heartbeat body ${at}${id}`,
       'a provider\'s own name for one of its rate-limit buckets or credits, not an Orbit row: stored as the reporting '
@@ -1295,6 +1311,9 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'plan usage (codex-reset-relay.ts:211)',
   'POST /runner/claude-history-result body transcripts[].claudeSessionId':
     'a transcript file on the reporting machine, stored as that machine\'s own history scan (runner-api.controller.ts:1707)',
+  'POST /runner/cursor-key-check-result body checkId':
+    'the token this process minted for one Cursor key check it handed the reporting machine, held in memory beside '
+    + 'that machine: an answer naming a check handed to any other settles nothing (cursor-key-check-relay.ts:129)',
   'POST /runner/sessions/:id/approvals body toolUseId':
     'the engine\'s id for one tool call, a key only within the session the path names (runner-api.controller.ts:3867)',
   'POST /runner/sessions/:id/approvals body backgroundJobId':

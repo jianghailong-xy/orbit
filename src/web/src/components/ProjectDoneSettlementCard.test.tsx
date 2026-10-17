@@ -5,10 +5,18 @@ import type { DoneRequest } from '@orbit/shared';
 import { ProjectDoneCard, ProjectWhyNotDoneCard } from './ProjectSettlementCard';
 import {
   PROJECT_DONE_COPY,
+  WHY_NOT_DONE_NEEDS_CALL_DETAIL,
+  WHY_NOT_DONE_ON_MAIN,
+  WHY_NOT_DONE_WAITING_DETAIL,
+  landedOn,
+  landingReasonLabel,
   projectDoneCardTally,
   projectDoneReceiptTally,
   projectDoneTally,
   projectWhyNotDoneTally,
+  whyNotDoneNeedsCallDetail,
+  whyNotDoneOn,
+  whyNotDoneWaitingDetail,
 } from '../lib/projectDone';
 
 const project = {
@@ -148,5 +156,72 @@ describe('owner project settlement card', () => {
     );
     expect(html).toContain(PROJECT_DONE_COPY.waitingOnWork);
     expect(html).not.toContain(PROJECT_DONE_COPY.thisProjectIsDone);
+  });
+});
+
+describe('the done cards, by the project’s main branch', () => {
+  // Met work in each lane the cards name: on the main branch, in flight, and merged outside Orbit.
+  const lanes = {
+    ...project,
+    derivedDone: {
+      ...project.derivedDone,
+      criteria: [
+        { definitionId: 'c1', satisfied: true, landing: 'LANDED' as const, landingReason: null },
+        { definitionId: 'c2', satisfied: true, landing: 'ON_INTEGRATION_LINE' as const, landingReason: 'IN_FLIGHT' as const },
+        { definitionId: 'c3', satisfied: true, landing: 'UNKNOWN' as const, landingReason: 'NO_RECEIPT' as const },
+      ],
+      counts: {
+        criteria: 3, met: 3, landed: 1, onMain: 1,
+        byReason: { IN_FLIGHT: 1, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 1, CODELESS: 0 },
+      },
+    },
+    acceptanceCriteriaItems: [
+      ...project.acceptanceCriteriaItems,
+      { id: 'c3', ordinal: 3, text: 'The hotfix is merged' },
+    ],
+  };
+  const on = (upstreamRef: string) => ({ ...lanes, integration: { upstreamRef } });
+
+  it('says main word for word as before for a project on main', () => {
+    expect([whyNotDoneOn(), whyNotDoneOn('main')]).toEqual(['on main', WHY_NOT_DONE_ON_MAIN]);
+    expect([whyNotDoneWaitingDetail(), whyNotDoneWaitingDetail('main')])
+      .toEqual(['Goes to main after the merge check — the coordinator is handling it.', WHY_NOT_DONE_WAITING_DETAIL]);
+    expect([whyNotDoneNeedsCallDetail(), whyNotDoneNeedsCallDetail('main')]).toEqual([
+      'Orbit saw no merge for it. The coordinator checked main has it and asked you to record the project done.',
+      WHY_NOT_DONE_NEEDS_CALL_DETAIL,
+    ]);
+    expect([landedOn(), landedOn('main')]).toEqual(['landed on main', PROJECT_DONE_COPY.landedOnMain]);
+    expect(landingReasonLabel(null)).toBe('Landed on main');
+    for (const doc of [lanes, on('main')]) {
+      const card = renderToStaticMarkup(<ProjectDoneCard project={doc} onRecordDone={() => {}} onNotYet={() => {}} />);
+      expect(card).toContain('3 met · 1 landed on main · 0 nothing to land');
+      expect(card).toContain('Orbit cannot prove this criterion is on main: Merged outside Orbit.');
+      const why = renderToStaticMarkup(<ProjectWhyNotDoneCard project={doc} />);
+      expect(why).toContain('3 criteria · 1 on main · 1 in flight · 1 merged outside Orbit');
+      expect(why).toContain('Goes to main after the merge check — the coordinator is handling it.');
+      expect(why).toContain('Orbit saw no merge for it. The coordinator checked main has it and asked you to record the project done.');
+    }
+  });
+
+  it('names master in the tallies, the reasons and the details for a project on master', () => {
+    const counts = lanes.derivedDone.counts;
+    expect(projectDoneTally(counts, 'master')).toBe('3 criteria · 3 met · 1 landed on master · 1 in flight · 1 merged outside Orbit');
+    expect(projectDoneCardTally(counts, 'master')).toBe('3 met · 1 landed on master · 0 nothing to land');
+    expect(projectDoneReceiptTally(counts, 2, 'master')).toBe('3 criteria met · 1 landed on master · 0 nothing to land · 2 gaps accepted');
+    expect(projectWhyNotDoneTally(lanes.derivedDone, 'master')).toBe('3 criteria · 1 on master · 1 in flight · 1 merged outside Orbit');
+    expect(landingReasonLabel(null, 'master')).toBe('Landed on master');
+    expect(landingReasonLabel('IN_FLIGHT', 'master')).toBe('In flight');
+    const card = renderToStaticMarkup(<ProjectDoneCard project={on('master')} onRecordDone={() => {}} onNotYet={() => {}} />);
+    expect(card).toContain('3 met · 1 landed on master · 0 nothing to land');
+    expect(card).toContain('Orbit cannot prove this criterion is on master: Merged outside Orbit.');
+    expect(card).not.toContain('on main');
+    const receipt = renderToStaticMarkup(<ProjectDoneCard project={{ ...on('master'), status: 'DONE', doneBy: 'OWNER' }} />);
+    expect(receipt).toContain('3 criteria met · 1 landed on master · 0 nothing to land · 0 gaps accepted');
+    const why = renderToStaticMarkup(<ProjectWhyNotDoneCard project={on('master')} />);
+    expect(why).toContain('3 criteria · 1 on master · 1 in flight · 1 merged outside Orbit');
+    expect(why).toContain('Goes to master after the merge check — the coordinator is handling it.');
+    expect(why).toContain('Orbit saw no merge for it. The coordinator checked master has it and asked you to record the project done.');
+    expect(renderToStaticMarkup(<ProjectWhyNotDoneCard project={{ ...on('master'), status: 'DONE' }} />))
+      .toContain('3 criteria · 1 on master · 1 in flight · 1 merged outside Orbit');
   });
 });

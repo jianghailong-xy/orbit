@@ -1,0 +1,62 @@
+argv: bash -c cd ../.. && npm run test:ui-controls -w @orbit/web
+tree: /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del
+head: f4ec61864e53a13aa35cbff25b5ea1ae03c99453
+uncommitted:
+load: 24.18 29.21 32.95 25/5646 313571
+mem: 4756M available
+disk: / 11405M available, TMPDIR /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/tmp
+started: 2026-10-09T22:53:47Z
+
+
+> @orbit/web@0.1.0 pretest:ui-controls
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-controls
+> playwright test --config ui-migration/controls.config.mjs
+
+P0 expected screenshots: 87 P0.2 originals, 143 main drift references, 22 accepted migration differences.
+
+Running 32 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/controls.browser.mjs:103:1 › fixed control states match AntD geometry, typography and surfaces (7.8s)
+  ✓   2 [chromium-light-desktop] › ui-migration/controls.browser.mjs:213:1 › hover and keyboard focus preserve visible control feedback (7.2s)
+  ✓   3 [chromium-light-desktop] › ui-migration/controls.browser.mjs:248:1 › keyboard, labels, loading, disabled and native form values work (2.3s)
+  ✓   4 [chromium-light-desktop] › ui-migration/controls.browser.mjs:331:1 › a focused field under the pointer and the 601–960px font size match AntD (3.5s)
+  ✓   5 [chromium-light-phone] › ui-migration/controls.browser.mjs:103:1 › fixed control states match AntD geometry, typography and surfaces (7.3s)
+  ✓   6 [chromium-light-phone] › ui-migration/controls.browser.mjs:213:1 › hover and keyboard focus preserve visible control feedback (7.0s)
+  ✓   7 [chromium-light-phone] › ui-migration/controls.browser.mjs:248:1 › keyboard, labels, loading, disabled and native form values work (2.1s)
+  ✓   8 [chromium-light-phone] › ui-migration/controls.browser.mjs:331:1 › a focused field under the pointer and the 601–960px font size match AntD (2.8s)
+  ✓   9 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:103:1 › fixed control states match AntD geometry, typography and surfaces (7.5s)
+  ✓  10 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:213:1 › hover and keyboard focus preserve visible control feedback (7.0s)
+  ✓  11 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:248:1 › keyboard, labels, loading, disabled and native form values work (2.2s)
+  ✓  12 [chromium-dark-desktop] › ui-migration/controls.browser.mjs:331:1 › a focused field under the pointer and the 601–960px font size match AntD (3.6s)
+  ✓  13 [chromium-dark-phone] › ui-migration/controls.browser.mjs:103:1 › fixed control states match AntD geometry, typography and surfaces (7.0s)
+  ✓  14 [chromium-dark-phone] › ui-migration/controls.browser.mjs:213:1 › hover and keyboard focus preserve visible control feedback (6.8s)
+  ✓  15 [chromium-dark-phone] › ui-migration/controls.browser.mjs:248:1 › keyboard, labels, loading, disabled and native form values work (2.2s)
+  ✓  16 [chromium-dark-phone] › ui-migration/controls.browser.mjs:331:1 › a focused field under the pointer and the 601–960px font size match AntD (2.8s)
+  ✓  17 [webkit-light-desktop] › ui-migration/controls.browser.mjs:103:1 › fixed control states match AntD geometry, typography and surfaces (13.8s)
+  ✓  18 [webkit-light-desktop] › ui-migration/controls.browser.mjs:213:1 › hover and keyboard focus preserve visible control feedback (9.9s)
+  ✓  19 [webkit-light-desktop] › ui-migration/controls.browser.mjs:248:1 › keyboard, labels, loading, disabled and native form values work (3.8s)
+  ✓  20 [webkit-light-desktop] › ui-migration/controls.browser.mjs:331:1 › a focused field under the pointer and the 601–960px font size match AntD (4.4s)
+  ✓  21 [webkit-light-phone] › ui-migration/controls.browser.mjs:103:1 › fixed control states match AntD geometry, typography and surfaces (12.5s)
+  ✓  22 [webkit-light-phone] › ui-migration/controls.browser.mjs:213:1 › hover and keyboard focus preserve visible control feedback (8.4s)
+  ✓  23 [webkit-light-phone] › ui-migration/controls.browser.mjs:248:1 › keyboard, labels, loading, disabled and native form values work (3.0s)
+  ✓  24 [webkit-light-phone] › ui-migration/controls.browser.mjs:331:1 › a focused field under the pointer and the 601–960px font size match AntD (3.0s)
+  ✓  25 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:103:1 › fixed control states match AntD geometry, typography and surfaces (20.5s)
+  ✓  26 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:213:1 › hover and keyboard focus preserve visible control feedback (8.8s)
+  ✓  27 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:248:1 › keyboard, labels, loading, disabled and native form values work (4.0s)
+  ✓  28 [webkit-dark-desktop] › ui-migration/controls.browser.mjs:331:1 › a focused field under the pointer and the 601–960px font size match AntD (5.0s)
+  ✓  29 [webkit-dark-phone] › ui-migration/controls.browser.mjs:103:1 › fixed control states match AntD geometry, typography and surfaces (19.6s)
+  ✓  30 [webkit-dark-phone] › ui-migration/controls.browser.mjs:213:1 › hover and keyboard focus preserve visible control feedback (10.8s)
+  ✓  31 [webkit-dark-phone] › ui-migration/controls.browser.mjs:248:1 › keyboard, labels, loading, disabled and native form values work (5.6s)
+  ✓  32 [webkit-dark-phone] › ui-migration/controls.browser.mjs:331:1 › a focused field under the pointer and the 601–960px font size match AntD (4.3s)
+
+  32 passed (3.8m)
+exit=0
+load: 34.86 28.48 31.55 46/5846 348026
+ended: 2026-10-09T22:57:38Z

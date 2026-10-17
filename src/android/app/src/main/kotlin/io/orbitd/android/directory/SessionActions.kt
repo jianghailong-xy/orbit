@@ -1,5 +1,6 @@
 package io.orbitd.android.directory
 
+import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.projects.failureReason
 import io.orbitd.android.toast.OrbitToasts
@@ -8,6 +9,7 @@ import io.orbitd.android.toast.ToastTone
 import io.orbitd.android.toast.toastTitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -18,9 +20,14 @@ import kotlinx.serialization.json.contentOrNull
  * `deleteSession`, `renameSession`, `moveSession`; A05-4): the request, then a toast naming the session — "Session
  * completed" or "Moved to Trash" with Undo, "Moved to Open", where a folder move went — or a pinned "Couldn't …" with
  * the server's words. Shared by the list's row menu, the session page's menu and a toast's Undo. [scope] outlives the
- * menu that asked; [changed] re-reads the lists once a write went through.
+ * menu that asked; [changed] re-reads the lists once a write went through. A move to Trash holds its session out of every list
+ * in [trashing] until [reread] — the directory read again behind the move — has landed.
  */
-internal class SessionActions(private val api: DirectoryApi, private val scope: CoroutineScope, private val changed: () -> Unit) {
+internal class SessionActions(private val api: DirectoryApi, private val scope: CoroutineScope, private val trashing: TrashingSessions,
+    private val reread: suspend () -> Unit, private val changed: () -> Unit) {
+    constructor(api: DirectoryApi, app: OrbitApplication, changed: () -> Unit) :
+        this(api, app.processScope, app.trashing, app.realtime::rereadDirectory, changed)
+
     /** [done] once it is: the session page asking takes itself away (iOS `dropIfOpen`). */
     fun complete(id: String, title: String?, done: () -> Unit = {}) = act(id, title, "Couldn't complete the session") {
         api.complete(id)
@@ -28,16 +35,38 @@ internal class SessionActions(private val api: DirectoryApi, private val scope: 
         OrbitToasts.show("Session completed", toastTitle(title), id, canUndo = true)
     }
 
-    /** Also every Undo: the server's `restore` clears both completion and trash. */
-    fun restore(id: String, title: String?) = act(id, title, "Couldn't move to Open") {
-        api.restore(id)
-        OrbitToasts.show("Moved to Open", toastTitle(title), id, tone = ToastTone.INFO)
+    /** Also every Undo: the server's `restore` clears both completion and trash. An Undo can come while the move to Trash is still
+     * reading the lists again; the row is coming back, so nothing may keep it out now (iOS `moveSessionToOpen`). */
+    fun restore(id: String, title: String?): Job {
+        trashing.reveal(id)
+        return act(id, title, "Couldn't move to Open") {
+            api.restore(id)
+            OrbitToasts.show("Moved to Open", toastTitle(title), id, tone = ToastTone.INFO)
+        }
     }
 
-    fun trash(id: String, title: String?, done: () -> Unit = {}) = act(id, title, "Couldn't move to Trash") {
-        api.delete(id, false)
-        done()
-        OrbitToasts.show("Moved to Trash", toastTitle(title), id, tone = ToastTone.NEUTRAL, glyph = ToastGlyph.TRASH, canUndo = true)
+    /**
+     * The row leaves every list on the tap, and [left] takes the session page away with it, before the request goes (iOS
+     * `deleteSession`, 62b7009ca). The toast comes as soon as the server has the move; the row stays held out until the directory
+     * read behind the move has landed, since a read that left before it would bring the row back. A refusal lets it back at once,
+     * says why, and reads the lists again.
+     */
+    fun trash(id: String, title: String?, left: () -> Unit = {}): Job {
+        trashing.hide(id)
+        left()
+        return scope.launch {
+            try { api.delete(id, false) }
+            catch (cancel: CancellationException) { trashing.reveal(id); throw cancel }
+            catch (failure: Exception) {
+                trashing.reveal(id)
+                OrbitToasts.show("Couldn't move to Trash", toastTitle(title), id, toastDetail(failure), ToastTone.ERROR)
+                changed()
+                return@launch
+            }
+            OrbitToasts.show("Moved to Trash", toastTitle(title), id, tone = ToastTone.NEUTRAL, glyph = ToastGlyph.TRASH, canUndo = true)
+            changed()
+            try { reread() } finally { trashing.reveal(id) }
+        }
     }
 
     /** Pinned or not, with no toast either way, as iOS's: the row moves, or stays where it was. */

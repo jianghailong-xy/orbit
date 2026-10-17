@@ -33,6 +33,40 @@ class StartProjectTest {
         return DependencyGraph(marks, edges, if (folded) 900 else 5, false, null)
     }
 
+    // MARK: the plan as the task graph (iOS d91a0dd48's StartProjectTests; docs/mocks/start-card-web-width board 02)
+
+    /** The mock's plan is two tasks wide at its widest: laid out top to bottom it is 376 units, so it is drawn while the card has at
+     * least 0.7 of that — and never enlarged past its own size. */
+    @Test fun thePlanIsTheTaskGraphWhileItFitsAtSevenTenths() {
+        val drawn = StartProjectCopy.planGraph(graph(), 300.0)!!
+        assertEquals(ProjectGraphLayout.Direction.TOP_TO_BOTTOM, drawn.layout.direction)
+        assertEquals(376.0, drawn.layout.width, 0.001); assertEquals(300.0 / 376, drawn.scale, 0.0001)
+        assertEquals(listOf("task-a", "task-b", "task-c", "task-d", "task-e"), drawn.layout.placements.map { it.mark.id })
+        assertNotNull("264 dp: 0.702", StartProjectCopy.planGraph(graph(), 264.0))
+        assertNull("262 dp: 0.697 lists the levels", StartProjectCopy.planGraph(graph(), 262.0))
+        assertEquals(1.0, StartProjectCopy.planGraph(graph(), 1_200.0)!!.scale, 0.0)
+        assertEquals(0.7, StartProjectCopy.planGraphMinFit, 0.0)
+    }
+
+    /** On a 360–412 dp phone the plan's panel is under 390 dp wide: three tasks side by side need 556, which none of them draws at
+     * 0.7, so most plans get their levels and the graph a press away — by the same 0.7 rule, which a wider card passes. */
+    @Test fun threeTasksSideBySideDoNotFitAPhone() {
+        val wide = DependencyGraph(listOf("a", "b", "c", "d").map { GraphMark(MarkKind.TASK, it, it.uppercase(), taskId = it, status = "OPEN") },
+            listOf("a" to "b", "a" to "c", "a" to "d").map { GraphEdge(it.first, it.second) }, 4, false, null)
+        listOf(296.0, 336.0, 364.0, 388.0).forEach { assertNull("$it dp", StartProjectCopy.planGraph(wide, it)) }
+        assertNotNull("a card 390 dp wide draws it at 0.701", StartProjectCopy.planGraph(wide, 390.0))
+    }
+
+    /** A plan the read folded or cut short, none read at all, or no room yet measured: never a picture, whose marks would stand for
+     * more tasks than it shows. */
+    @Test fun aFoldedOrTruncatedPlanIsNeverDrawn() {
+        assertNull(StartProjectCopy.planGraph(graph(folded = true), 1_200.0))
+        assertNull(StartProjectCopy.planGraph(graph().copy(truncated = true), 1_200.0))
+        assertNull(StartProjectCopy.planGraph(null, 1_200.0))
+        assertNull(StartProjectCopy.planGraph(graph(), 0.0))
+        assertNull(StartProjectCopy.planGraph(DependencyGraph(emptyList(), emptyList(), 0, false, null), 1_200.0))
+    }
+
     // MARK: the plan, by level
 
     @Test fun aTaskIsNamedByTheMarkerItsTitleOpensWith() {

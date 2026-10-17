@@ -46,10 +46,11 @@ private fun JsonObject.flag(key: String) = (get(key) as? JsonPrimitive)?.takeIf 
  * work lives on — a coordinator's project integration line (A06-8) — with its `+/−` summary opening the
  * changed files, and the git-state-driven action on the right: Commit while the tree is dirty, Merge once
  * it is clean, then the runner's answer (Merging…, ✓ Merged, ✓ In main, Resolve in session, Retry merge).
- * A session whose directory is not a git repository gets the amber "not isolated" nudge instead.
+ * A session whose directory is not a git repository gets the amber "not isolated" nudge instead. [sending] is the composer's
+ * message on its way, which holds Merge back before the record says the turn is queued (A06-14).
  */
 @Composable
-internal fun WorktreeBar(model: WorktreeModel, open: (String) -> Unit) {
+internal fun WorktreeBar(model: WorktreeModel, sending: Boolean = false, open: (String) -> Unit) {
     val state by model.state.collectAsState()
     val d = state.detail ?: return
     val files = ChangedFile.of(d)
@@ -60,14 +61,14 @@ internal fun WorktreeBar(model: WorktreeModel, open: (String) -> Unit) {
             .clip(RoundedCornerShape(8.dp)).background(LocalOrbitColors.current.needsYou.copy(alpha = 0.12f))
             .border(1.dp, LocalOrbitColors.current.needsYou.copy(alpha = 0.4f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
             color = LocalOrbitColors.current.needsYou, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-        WorktreeBarLogic.Mode.WORKTREE -> Pill(model, state, d, d.string("branch")!!, files, recovery, open)
+        WorktreeBarLogic.Mode.WORKTREE -> Pill(model, state, d, d.string("branch")!!, files, recovery, sending, open)
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, branch: String, files: List<ChangedFile>,
-    recovery: MergeRecovery?, open: (String) -> Unit) {
+    recovery: MergeRecovery?, sending: Boolean, open: (String) -> Unit) {
     val clipboard = LocalClipboardManager.current
     var sheet by rememberSaveable { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
@@ -77,7 +78,8 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
     val runStatus = d.string("runStatus") ?: d.string("status")
     val committed = runStatus !in setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED")
     // The session's authoritative run status gates Commit and Merge: a clean mid-turn tree is a checkpoint, not finished work.
-    val turnActive = runStatus == "RUNNING"
+    // A queued turn, a message on its way and a parked session's running sub-agents count too; the recovery review reads the same gate.
+    val turnActive = WorktreeBarLogic.turnActive(runStatus, WorktreeBarLogic.runningSubagents(d), sending)
     val primary = WorktreeBarLogic.primary(d.flag("worktreeDirty"), committed, turnActive)
     val add = files.sumOf { maxOf(0, it.additions) }
     val del = files.sumOf { maxOf(0, it.deletions) }
@@ -122,7 +124,7 @@ private fun Pill(model: WorktreeModel, state: WorktreeState, d: JsonObject, bran
     when (sheet) {
         "diff" -> WorktreeChanges(model, displayBranch) { sheet = null }
         // Once the recovery is gone — merged, or cleared — its review closes itself.
-        "recovery" -> if (recovery != null) MergeRecoveryReview(model, d, recovery, open) { sheet = null } else LaunchedEffect(Unit) { sheet = null }
+        "recovery" -> if (recovery != null) MergeRecoveryReview(model, d, recovery, turnActive, open) { sheet = null } else LaunchedEffect(Unit) { sheet = null }
     }
 }
 

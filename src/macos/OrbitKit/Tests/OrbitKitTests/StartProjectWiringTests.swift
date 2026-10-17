@@ -81,6 +81,16 @@ final class StartProjectWiringTests: XCTestCase {
                        "and not off Automatic, which is how a started project runs")
         XCTAssertTrue(console.contains("projectEscalationSeconds = document.exceptionEscalationSeconds ?? projectEscalationSeconds"),
                       "the escalation window the card quotes is read off the same document")
+        // The main branch is read before the card is delivered, so it never opens on main and then
+        // moves to the branch the read names (web's card waits for the same read).
+        let read = try XCTUnwrap(refresh.range(of: "startIntegration = integration"))
+        let adopted = try XCTUnwrap(refresh.range(of: "adoptStartRequest()"))
+        XCTAssertLessThan(read.lowerBound, adopted.lowerBound)
+        XCTAssertTrue(refresh.contains("if StartProject.live(openItems: openItems, started: projectStarted) != nil,"),
+                      "and only while a start is asked for")
+        let draft = code(try section(console, from: "func startDraft(for row: ProjectOpenItemRow) -> StartSettingsDraft {",
+                                     to: "\n    func setStartDraft("))
+        XCTAssertTrue(draft.contains("return StartSettingsDraft(request.settings, standing: startIntegration)"))
     }
 
     func testTheChangeCardIsDeliveredForAStartedProjectWhoseServerSaysWhatMoved() throws {
@@ -176,8 +186,25 @@ final class StartProjectWiringTests: XCTestCase {
         XCTAssertTrue(start.contains("Menu {"), "Tasks land on is picked from a menu")
         XCTAssertTrue(start.contains("Toggle(isOn: lineBinding(.projectBranch, draft))"))
         XCTAssertTrue(start.contains("Toggle(isOn: lineBinding(.main, draft))"))
+        XCTAssertTrue(start.contains("Text(RunSettings.lineMain(draft.main))"),
+                      "Directly into the main branch on the card")
+        // Main branch (board ① ② ⑥ ⑦): under the line, only with a branch to name, picked on the
+        // shared sheet, saying where its branch came from while it is the repository's last choice.
+        XCTAssertTrue(start.contains("if let upstream = draft.upstream {"))
+        XCTAssertTrue(start.contains("mainBranchRow(upstream, editable: editable)"))
+        XCTAssertTrue(start.contains("RunSettings.lastChoiceNote(upstream: upstream, lastMainBranch: lastMainBranch)"))
+        XCTAssertTrue(start.contains("MainBranchPicker(current: upstream, branches: branches,"))
+        XCTAssertTrue(start.contains("update { $0.upstream = name }"))
+        XCTAssertTrue(start.contains("branches: console.startIntegration?.branches,"),
+                      "the conversation's card offers the branches the integration read reported")
+        XCTAssertTrue(start.contains("lastMainBranch: console.startIntegration?.lastMainBranch,"))
         XCTAssertTrue(start.contains("Text(RunSettings.automaticSays(automatic: draft.automatic, line: draft.line,"),
                       "the Automatic sentence follows the switch and the line chosen")
+        XCTAssertTrue(start.contains("hasMergeCheck: draft.hasMergeCheck, main: draft.main))"),
+                      "and names the main branch on the card")
+        XCTAssertTrue(start.contains("escalationSeconds: escalationSeconds, main: draft.main)"),
+                      "and so does what still comes to the owner")
+        XCTAssertTrue(start.contains("Text(RunSettings.mergeCheckHint(draft.main))"))
         XCTAssertTrue(start.contains("let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,"),
                       "what still comes to the owner is listed under the switch, off the same draft")
         XCTAssertTrue(start.contains("private var opensCoordinator: Bool { draft.automatic && !hasCoordinator }"),

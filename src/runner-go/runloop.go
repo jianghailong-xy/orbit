@@ -201,6 +201,9 @@ var catalogRuntimes = []catalogRuntime{
 	// agy lists the models built into its binary: the same on every machine and for every key.
 	{providerAntigravity, antigravityCLIAvailable, fetchAntigravityModelCatalog},
 	{providerDsh, dshCLIAvailable, fetchDshModelCatalog},
+	// ACP's own list, with each model's parameters, read with the Default account's sign-in: it can
+	// differ by account, and there is none while that account is signed out (cursor_models.go).
+	{providerCursor, cursorCLIAvailable, fetchCursorModelCatalog},
 }
 
 // models is where c keeps engine's list.
@@ -218,6 +221,8 @@ func (c *ModelCatalog) models(engine string) *[]ModelInfo {
 		return &c.Antigravity
 	case providerDsh:
 		return &c.Dsh
+	case providerCursor:
+		return &c.Cursor
 	}
 	return nil
 }
@@ -266,7 +271,7 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 // carrying over must not keep. A first round that read nothing reports nothing, as before.
 func mergeModelCatalog(prev, next *ModelCatalog, signedOut map[string]bool) *ModelCatalog {
 	if prev == nil && len(next.Codex) == 0 && len(next.Claude) == 0 && len(next.Kimi) == 0 &&
-		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 && len(next.Dsh) == 0 {
+		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 && len(next.Dsh) == 0 && len(next.Cursor) == 0 {
 		return nil
 	}
 	merged := carryOverModelCatalog(prev, next)
@@ -304,6 +309,9 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 	}
 	if len(next.Dsh) == 0 {
 		next.Dsh = prev.Dsh
+	}
+	if len(next.Cursor) == 0 {
+		next.Cursor = prev.Cursor
 	}
 	return next
 }
@@ -1041,6 +1049,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	kimiActive := func() int { return activeProviderCount(providerKimi) }
 	kimiIdle := idleUsage(providerKimi, providerConfigured, engineHealth)
 	go kimiUsage.run(loopCtx, kimiActive, kimiIdle)
+	// Cursor CLI keeps one snapshot per account too, each read with that account's own sign-in, with the
+	// usage limit its sessions met (cursor_usage.go).
+	cursorUsage := newCursorAccountUsage()
+	cursorActive := func() int { return activeProviderCount(providerCursor) }
+	cursorIdle := idleUsage(providerCursor, providerConfigured, engineHealth)
+	go cursorUsage.run(loopCtx, cursorActive, cursorIdle)
 
 	// Runtime model catalogs and effective defaults, reported by the runtimes themselves. Catalogs
 	// change rarely and are expensive to discover; defaults are cheap config reads that users may
@@ -1240,7 +1254,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
 				Commands: cmds, Skills: skills,
-				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot(), kimiUsage.snapshot()),
+				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot(), kimiUsage.snapshot(), cursorUsage.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
@@ -1673,7 +1687,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("account-remove: unknown engine", rr.Engine)
 				} else {
 					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
+					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
 						res.Status, res.Message = "failed", firstLine(err.Error())
 					} else {
 						// Re-probe this engine and beat at once, so the account leaves the page's list
@@ -1689,7 +1703,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
 				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
 					res.Status, res.Message = "failed", firstLine(err.Error())
 				} else {
 					go func() {
@@ -1716,6 +1730,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 				}(ch.WorkDir)
 			}
+			// Check the Cursor API keys somebody is waiting on (cursor_key_check.go), off this goroutine for
+			// the reason the history scan is.
+			startCursorKeyChecks(resp.CursorKeyChecks, &heartbeatOps, t.cursorKeyCheckResult)
 		})
 	}()
 

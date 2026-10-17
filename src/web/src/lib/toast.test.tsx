@@ -120,7 +120,7 @@ describe('a toast says what happened to what', () => {
   });
 
   it("hands nothing back for a mutation's onError to wait on", () => {
-    // AntD's handle settled only when the toast closed, and an error toast never closes on its own:
+    // The replaced library's handle settled only when the toast closed, and an error toast never closes on its own:
     // returned from `onError: (e) => toast.error(…)`, TanStack Query waited on it and the mutation's
     // button span until someone clicked ×.
     expect(toast.error("Couldn't rename the runner", 'name taken')).toBeUndefined();

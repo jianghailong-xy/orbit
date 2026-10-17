@@ -118,19 +118,22 @@ final class AgentsModel {
         return runnerModelCatalog[id]
     }
 
-    /// The default used to seed a new-session draft. Configured providers keep their own model
-    /// space/default; built-in providers use the owning runner's Runtime heartbeat snapshot.
+    /// The default used to seed a new-session draft: what the workspace last ran on, engine and
+    /// provider. A key keeps its own model space/default on every engine that runs it; an engine's own
+    /// sign-in uses the owning runner's Runtime heartbeat snapshot.
     func effectiveDefaultModel(for agent: Agent) -> String {
-        return effectiveDefaultModel(for: agent.defaultProvider, runnerId: agent.runnerId)
+        let configured = configuredProviders + ProviderPools.asProviders(allPools)
+        return effectiveDefaultModel(engine: agent.defaultEngine(configured: configured),
+                                     provider: agent.defaultProvider, runnerId: agent.runnerId)
     }
 
-    /// The same resolver for an in-progress Agent edit, whose Runtime may differ from the saved
-    /// Agent. This keeps model-dependent controls (notably Auto permission mode) aligned with the
+    /// The same resolver for an in-progress Agent edit, whose engine may differ from the saved
+    /// Agent's. This keeps model-dependent controls (notably Auto permission mode) aligned with the
     /// model that new Sessions will actually inherit.
-    func effectiveDefaultModel(for provider: String, runnerId: String?) -> String {
+    func effectiveDefaultModel(engine: String, provider: String, runnerId: String?) -> String {
         let catalog = modelCatalog(for: runnerId)
-        return AgentDefaults.effectiveDefaultModel(
-            for: provider, catalog: catalog,
+        return AgentDefaults.defaultModel(
+            engine: engine, provider: provider, catalog: catalog,
             configured: configuredProviders + ProviderPools.asProviders(allPools),
             runtimeDefaults: runnerId.flatMap { runnerRuntimeDefaultModels[$0] })
     }
@@ -401,6 +404,11 @@ final class AgentsModel {
         // revalidates in place. Compare before overwriting `lastSessionQuery` with the new query.
         let sameList = lastSessionQuery.map { $0.agentID == agentID && $0.view == view } ?? false
         lastSessionQuery = (agentID, view)
+        // Switching workspace or view doesn't stop a fetch already on the wire (the transport is
+        // callback-based; task cancellation doesn't reach URLSession), so its late reply lands here
+        // after the switch. Only the load still named by `lastSessionQuery` may write — an older
+        // one returns without touching the list, the spinner, or the error of its replacement.
+        let isCurrent = { self.lastSessionQuery.map { $0.agentID == agentID && $0.view == view } ?? false }
         if reset && !sameList {
             // With the app's Open snapshot in hand an Open list has its rows already: show them and
             // let the fetch below refresh them in place.
@@ -411,22 +419,23 @@ final class AgentsModel {
                 sessionsLoading = true
             }
         }
-        defer { sessionsLoading = false }
+        defer { if isCurrent() { sessionsLoading = false } }
         // The app already keeps the Open list: refresh it through the app's one fetch rather than
         // a second of the same list beside it. A failed one falls through to this list's own, which
         // says what went wrong.
         if view == .open, let refreshOpen, let all = await refreshOpen() {
-            adoptOpen(all, agentID: agentID)
+            if isCurrent() { adoptOpen(all, agentID: agentID) }
             return
         }
         do {
             let read = try await api.listSessions(view: view)
+            guard isCurrent() else { return }
             let all = SessionFilter.removing(trashing, from: read)
             #if os(iOS)
             allSessions = all
             #endif
             agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
-        } catch { errorText = friendly(error) }
+        } catch { if isCurrent() { errorText = friendly(error) } }
     }
 
     /// Silently refresh the currently-shown session list (after a pin/complete/delete row action).

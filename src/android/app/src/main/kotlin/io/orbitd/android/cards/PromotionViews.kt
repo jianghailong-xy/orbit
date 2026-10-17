@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.directory.ProjectMergeCard
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
@@ -102,7 +103,7 @@ internal fun PromotionReceiptSheet(promotion: JsonObject, close: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Provenance()
                 PromotionRow("Commit", PromotionCards.mergedLine(promotion))
-                PromotionTasksRow("Now on main", PromotionCards.nowOnMainLine(promotion), PromotionCards.allTaskTitles(promotion))
+                PromotionTasksRow(PromotionCards.nowOn(PromotionCards.mainBranch(promotion)), PromotionCards.nowOnMainLine(promotion), PromotionCards.allTaskTitles(promotion))
                 PromotionRow("Checks", PromotionCards.checksLine(promotion))
                 PromotionRow("Landed", PromotionCards.landsLine(promotion))
                 PromotionCards.changesLine(promotion)?.let { PromotionRow("Changes", it) }
@@ -126,11 +127,13 @@ internal fun SheetHead(title: String, tag: String, close: () -> Unit) {
  * The merge review (iOS `PromotionReviewSheet`'s page and its presses), whichever host opened it: the coordinator conversation's line
  * or the sessions page's Details. What it says is the candidate as the host last read it — nothing at all once that candidate is no
  * longer on offer — and its presses are the host's: confirm and decline while it asks, cancel while it merges and its job has not
- * reached the push, and for a blocked one a press that reads who has it. [tag] prefixes the presses' tags.
+ * reached the push, and for a blocked one a press that reads who has it. A blocked one also says who is in front of it, [blockedBy]
+ * (`ProjectMergeCard.blockedByLine`, off the host's landing read), when the project's own line is busy. [tag] prefixes the presses' tags.
  */
 @Composable
 internal fun PromotionReview(view: JsonObject?, criteriaMet: Pair<Int, Int>?, holder: PromotionHolder, acting: Boolean, error: String?,
-    tag: String, confirm: () -> Unit, decline: () -> Unit, cancel: () -> Unit, enabled: Boolean = true, now: Instant = Instant.now()) {
+    tag: String, confirm: () -> Unit, decline: () -> Unit, cancel: () -> Unit, enabled: Boolean = true, now: Instant = Instant.now(),
+    blockedBy: String? = null) {
     val pressable = enabled && !acting
     val stage = PromotionCards.stage(view)
     Column(Modifier.fillMaxSize().testTag("promotion-review")) {
@@ -162,10 +165,13 @@ internal fun PromotionReview(view: JsonObject?, criteriaMet: Pair<Int, Int>?, ho
                         }
                         PromotionStage.MERGED -> {
                             PromotionRow("Commit", PromotionCards.mergedLine(view, now))
-                            PromotionTasksRow("Now on main", PromotionCards.nowOnMainLine(view), PromotionCards.allTaskTitles(view))
+                            PromotionTasksRow(PromotionCards.nowOn(PromotionCards.mainBranch(view)), PromotionCards.nowOnMainLine(view), PromotionCards.allTaskTitles(view))
                             PromotionCards.revertLine(view)?.let { PromotionRow("Undo", it) }
                         }
-                        PromotionStage.BLOCKED -> PromotionRow("Why", PromotionCards.blockedLine(view))
+                        PromotionStage.BLOCKED -> {
+                            PromotionRow("Why", PromotionCards.blockedLine(view))
+                            blockedBy?.let { PromotionRow(ProjectMergeCard.blockedByLabel, it, Modifier.testTag("$tag:blocked-by")) }
+                        }
                     }
                 }
             }
@@ -183,7 +189,8 @@ internal fun PromotionReview(view: JsonObject?, criteriaMet: Pair<Int, Int>?, ho
                 when (stage) {
                     PromotionStage.ASKING_YOU -> {
                         Button(onClick = confirm, enabled = pressable && PromotionCards.confirmable(view),
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:CONFIRM_MERGE")) { Text(PromotionCards.mergeToMain) }
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:CONFIRM_MERGE")) {
+                            Text(view?.let { PromotionCards.mergeTo(PromotionCards.mainBranch(it)) } ?: PromotionCards.mergeToMain) }
                         OutlinedButton(onClick = decline, enabled = pressable,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:DECLINE_MERGE")) { Text(PromotionCards.notNow) }
                     }
@@ -217,8 +224,8 @@ private fun Provenance() = Text(PromotionCards.provenance, style = MaterialTheme
 
 /** One row of the review or the receipt: its label over its value (iOS `CardRow`). */
 @Composable
-internal fun PromotionRow(label: String, value: String) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+internal fun PromotionRow(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyLarge)
     }

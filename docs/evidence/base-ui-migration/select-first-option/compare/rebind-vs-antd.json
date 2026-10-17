@@ -1,0 +1,332 @@
+{
+ "chromium-dark-desktop": {
+  "region": [
+   400,
+   264,
+   880,
+   312
+  ],
+  "p43a antd vs p43a orbit": {
+   "class": "beyond",
+   "differing": 14765,
+   "over2": 14639,
+   "max": 15,
+   "box": [
+    8,
+    8,
+    472,
+    40
+   ]
+  },
+  "delivery vs p43a antd": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "reference vs p43a orbit": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "delivery vs reference": {
+   "class": "beyond",
+   "differing": 14765,
+   "over2": 14639,
+   "max": 15,
+   "box": [
+    8,
+    8,
+    472,
+    40
+   ]
+  }
+ },
+ "chromium-dark-phone": {
+  "region": [
+   28,
+   272,
+   362,
+   320
+  ],
+  "p43a antd vs p43a orbit": {
+   "class": "beyond",
+   "differing": 10093,
+   "over2": 9967,
+   "max": 15,
+   "box": [
+    8,
+    8,
+    326,
+    40
+   ]
+  },
+  "delivery vs p43a antd": {
+   "class": "anti-aliasing",
+   "differing": 298,
+   "over2": 0,
+   "max": 1
+  },
+  "reference vs p43a orbit": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "delivery vs reference": {
+   "class": "beyond",
+   "differing": 10059,
+   "over2": 9963,
+   "max": 16,
+   "box": [
+    8,
+    8,
+    326,
+    40
+   ]
+  }
+ },
+ "chromium-light-desktop": {
+  "region": [
+   400,
+   264,
+   880,
+   312
+  ],
+  "p43a antd vs p43a orbit": {
+   "class": "beyond",
+   "differing": 14721,
+   "over2": 14564,
+   "max": 10,
+   "box": [
+    8,
+    8,
+    472,
+    40
+   ]
+  },
+  "delivery vs p43a antd": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "reference vs p43a orbit": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "delivery vs reference": {
+   "class": "beyond",
+   "differing": 14721,
+   "over2": 14564,
+   "max": 10,
+   "box": [
+    8,
+    8,
+    472,
+    40
+   ]
+  }
+ },
+ "chromium-light-phone": {
+  "region": [
+   10,
+   272,
+   380,
+   346
+  ],
+  "p43a antd vs p43a orbit": {
+   "class": "beyond",
+   "differing": 10505,
+   "over2": 9900,
+   "max": 10,
+   "box": [
+    8,
+    8,
+    362,
+    66
+   ]
+  },
+  "delivery vs p43a antd": {
+   "class": "beyond",
+   "differing": 818,
+   "over2": 8,
+   "max": 3,
+   "box": [
+    8,
+    64,
+    362,
+    66
+   ]
+  },
+  "reference vs p43a orbit": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "delivery vs reference": {
+   "class": "beyond",
+   "differing": 10037,
+   "over2": 9876,
+   "max": 10,
+   "box": [
+    26,
+    8,
+    344,
+    40
+   ]
+  }
+ },
+ "webkit-dark-desktop": {
+  "region": [
+   400,
+   264,
+   880,
+   312
+  ],
+  "p43a antd vs p43a orbit": {
+   "class": "beyond",
+   "differing": 14776,
+   "over2": 14649,
+   "max": 15,
+   "box": [
+    8,
+    8,
+    472,
+    40
+   ]
+  },
+  "delivery vs p43a antd": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "reference vs p43a orbit": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "delivery vs reference": {
+   "class": "beyond",
+   "differing": 14776,
+   "over2": 14649,
+   "max": 15,
+   "box": [
+    8,
+    8,
+    472,
+    40
+   ]
+  }
+ },
+ "webkit-dark-phone": {
+  "region": [
+   28,
+   272,
+   362,
+   320
+  ],
+  "p43a antd vs p43a orbit": {
+   "class": "beyond",
+   "differing": 10104,
+   "over2": 9977,
+   "max": 15,
+   "box": [
+    8,
+    8,
+    326,
+    40
+   ]
+  },
+  "delivery vs p43a antd": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "reference vs p43a orbit": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "delivery vs reference": {
+   "class": "beyond",
+   "differing": 10104,
+   "over2": 9977,
+   "max": 15,
+   "box": [
+    8,
+    8,
+    326,
+    40
+   ]
+  }
+ },
+ "webkit-light-desktop": {
+  "region": [
+   400,
+   264,
+   880,
+   312
+  ],
+  "p43a antd vs p43a orbit": {
+   "class": "beyond",
+   "differing": 14703,
+   "over2": 14558,
+   "max": 10,
+   "box": [
+    8,
+    8,
+    472,
+    40
+   ]
+  },
+  "delivery vs p43a antd": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "reference vs p43a orbit": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "delivery vs reference": {
+   "class": "beyond",
+   "differing": 14703,
+   "over2": 14558,
+   "max": 10,
+   "box": [
+    8,
+    8,
+    472,
+    40
+   ]
+  }
+ },
+ "webkit-light-phone": {
+  "region": [
+   28,
+   272,
+   362,
+   320
+  ],
+  "p43a antd vs p43a orbit": {
+   "class": "beyond",
+   "differing": 10031,
+   "over2": 9886,
+   "max": 10,
+   "box": [
+    8,
+    8,
+    326,
+    40
+   ]
+  },
+  "delivery vs p43a antd": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "reference vs p43a orbit": {
+   "class": "pixel-identical",
+   "differing": 0
+  },
+  "delivery vs reference": {
+   "class": "beyond",
+   "differing": 10031,
+   "over2": 9886,
+   "max": 10,
+   "box": [
+    8,
+    8,
+    326,
+    40
+   ]
+  }
+ }
+}

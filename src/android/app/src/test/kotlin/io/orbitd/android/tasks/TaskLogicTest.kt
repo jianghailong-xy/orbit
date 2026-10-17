@@ -93,6 +93,20 @@ class TaskLogicTest {
             task(""","completionPolicy":"VERIFICATION_PASSED","verificationState":"RUNNING""""), true))
     }
 
+    @Test fun aRunThatIsTheTasksOnlyStartSaysNothingElseStartsIt() {
+        // Auto-run never picks up an OPEN task in no project that has no prerequisites, so the press is its only start.
+        assertEquals("Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither.",
+            TaskDetailLogic.runNowHint(task(""","projectId":null,"runAt":null,"dependsOn":[]""")))
+        // A project or a prerequisite is something that can start it, and so is a schedule.
+        assertNull(TaskDetailLogic.runNowHint(task(""","projectId":"p","dependsOn":[]""")))
+        assertNull(TaskDetailLogic.runNowHint(task(""","dependsOn":[{"dependsOnTask":{"id":"a","status":"DONE"}}]""")))
+        assertNull(TaskDetailLogic.runNowHint(task(""","runAt":"2026-10-18T09:00:00.000Z","dependsOn":[]""")))
+        // A task that is not OPEN is waiting for no press, and a row without its prerequisites is told nothing new.
+        for (status in listOf("IN_PROGRESS", "DONE", "FAILED", "CANCELLED"))
+            assertNull(status, TaskDetailLogic.runNowHint(task(""","status":"$status","dependsOn":[]""")))
+        assertNull(TaskDetailLogic.runNowHint(task()))
+    }
+
     @Test fun ownerConfirmationIsOnePlaceToAnswer() {
         val owned = task(""","completionCriterion":"OWNER_CONFIRMED"""")
         assertEquals(OwnerPanelAction.Pointer("run"), OwnerConfirmations.panelAction(json("""{"waiting":{"sessionId":"run","requestId":"r"}}"""), owned))
@@ -234,5 +248,27 @@ class TaskLogicTest {
         assertEquals(TaskDetailCopy.scheduleHintUnreadable, TaskDetailLogic.scheduleHint("not a time"))
         assertEquals(listOf("ws1"), mentionedWorkspaceIds("hi @Ada", listOf(json("""{"id":"ws1","name":"ada"}"""), json("""{"id":"ws2","name":"Adam"}"""))))
         assertEquals(emptyList<String>(), mentionedWorkspaceIds("mail@Ada", listOf(json("""{"id":"ws1","name":"Ada"}"""))))
+    }
+
+    /** A task's run pins (board 6; docs/provider-engine-contract.md §1.2, §3.5): the Engine row pins an engine, keeping a pinned
+     * credential only where the new engine runs it; the Provider row pins a credential with the engine it runs on here, or takes
+     * it back to the engine's default; Assignee's takes every pin back. The model pin goes with every move. */
+    @Test fun theEnginePinComesFirstAndAProviderIsPinnedWithItsEngine() {
+        val deepSeek = listOf("claude", "opencode", "dsh")
+        assertEquals(TaskPin(TaskPin.Pin("dsh")), TaskPins.engine("dsh", null, null, emptyList()))
+        assertEquals("a DeepSeek key Harness runs stays pinned", TaskPin(TaskPin.Pin("dsh")), TaskPins.engine("dsh", "claude", "deepseek", deepSeek))
+        assertEquals("a GLM key Harness can't run gives way to the engine's default",
+            TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin(null)), TaskPins.engine("dsh", "claude", "glm", listOf("claude", "opencode")))
+        assertEquals(TaskPin(TaskPin.Pin(null), TaskPin.Pin(null)), TaskPins.engine(null, "dsh", "deepseek", deepSeek))
+        assertNull(TaskPins.engine("dsh", "dsh", "deepseek", deepSeek))
+        assertNull(TaskPins.engine(null, null, null, emptyList()))
+        assertEquals(TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin("deepseek-2")), TaskPins.provider("deepseek-2", "deepseek", "dsh"))
+        assertEquals("Engine default", TaskPin(provider = TaskPin.Pin(null)), TaskPins.provider(null, "deepseek-2", "dsh"))
+        assertNull(TaskPins.provider(null, null, "dsh"))
+        assertNull(TaskPins.provider("deepseek-2", "deepseek-2", "dsh"))
+        // On the wire: a pin left out stays, null takes it back, and the model always goes.
+        assertEquals(json("""{"engine":"dsh","provider":null,"model":null}"""), TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin(null)).request())
+        assertEquals(json("""{"engine":"dsh","model":null}"""), TaskPin(TaskPin.Pin("dsh")).request())
+        assertEquals(json("""{"provider":null,"model":null}"""), TaskPin(provider = TaskPin.Pin(null)).request())
     }
 }

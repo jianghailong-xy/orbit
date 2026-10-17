@@ -56,9 +56,9 @@ import {
   deliveryReviewDetailLine,
   markOpenItemsHandling,
   openItemActions,
+  openItemChat,
   openItemRequiredAction,
   primaryAction,
-  openItemChat,
   openItemFacts,
   type LandedFix,
   openItemMessage,
@@ -72,6 +72,7 @@ import {
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
+import { mainBranchOf } from './project-criterion-landing';
 import {
   RetryableLandingFailureClass,
   SkippedMergeCheckRecord,
@@ -384,6 +385,8 @@ export interface ProjectOpenItems {
   doneRequest: OpenItemRow | null;
   settled: OpenItemRow[];
   closedQuestions: ProjectClosedQuestion<Date>[];
+  /** The main branch a row's merge into main goes into; null with no repository bound. */
+  mainBranch: string | null;
 }
 
 /** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
@@ -832,7 +835,9 @@ export class ProjectOpenItemService {
    * payload carries none, which is also what the two clients draw from.
    *
    * Automatic left out is on: the owner's card opens with it on whatever is sent, and a coordinator
-   * that would keep it off says so in `why`.
+   * that would keep it off says so in `why`. A main branch (`upstreamRef`) is kept as suggested, and
+   * left out suggests none: the card then opens on this project's own choice, or this account's last
+   * for the repository, or main (L6).
    */
   async requestStart(
     ownerId: string,
@@ -845,6 +850,9 @@ export class ProjectOpenItemService {
         'a project that lands directly into main has no project branch to name',
       );
     }
+    if (body.projectBranchName != null && body.projectBranchName === body.upstreamRef) {
+      throw new BadRequestException('a project branch cannot be the upstream it integrates into');
+    }
     const why = body.why?.trim();
     if (!why) {
       throw new BadRequestException(
@@ -854,9 +862,16 @@ export class ProjectOpenItemService {
     const settings: ProjectStartSettings = {
       line: body.line,
       ...(body.projectBranchName != null ? { projectBranchName: body.projectBranchName } : {}),
+      ...(body.upstreamRef != null ? { upstreamRef: body.upstreamRef } : {}),
       automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
+      // Named or not named, never defaulted: a suggestion of the one-hour default and no suggestion
+      // at all read the same on the card — an empty box says "one hour unless set" — so inventing
+      // the number here would put a setting on the request that nobody chose.
+      ...(body.mergeCheckTimeoutSeconds !== undefined
+        ? { mergeCheckTimeoutSeconds: body.mergeCheckTimeoutSeconds }
+        : {}),
     };
     const asking = actingSessionId?.trim();
     return withTransactionRetry(this.prisma, async (tx) => {
@@ -2465,7 +2480,9 @@ export class ProjectOpenItemService {
    * attempted again does not answer one either: the task being carried to a new commit is not the
    * new generation §4.2 names, and an item that closed on every retry would close on the way to the
    * landing that is supposed to answer it. Cancelled and replaced are the two that do — nobody is
-   * going to land a task that is gone.
+   * going to land a task that is gone — and they name the fact they saw the way the item's own door
+   * table names it: `SUCCESSOR_FILED` when a successor took the task over (`taskRepair`'s
+   * `task_create`), `TASK_CLOSED` when it was cancelled (`task_update`'s cancel).
    */
   async resolveByFact(taskIds: ReadonlyArray<string | null | undefined>): Promise<void> {
     const ids = unique(taskIds);
@@ -2498,7 +2515,9 @@ export class ProjectOpenItemService {
       await this.prisma.$executeRaw(Prisma.sql`
         UPDATE "project_open_item" i
            SET "state" = 'RESOLVED',
-               "resolution" = 'TASK_CLOSED',
+               "resolution" = CASE
+                 WHEN t."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                 ELSE 'TASK_CLOSED' END,
                "resolved_at" = now(),
                "resolved_by" = 'PLATFORM',
                "updated_at" = now()
@@ -2708,6 +2727,7 @@ export class ProjectOpenItemService {
     const deliveredAt = new Map(
       turns.map((turn) => [`${turn.sessionId}:${turn.clientTurnId}`, turn.deliveredAt]),
     );
+    const mainBranch = mainBranchOf(await readProjectCodebase(this.prisma, projectId));
     const view = rows.map((row): OpenItemRow => {
       const [sent] = row.deliveries;
       const handed = sent ? deliveredAt.get(`${sent.sessionId}:${sent.clientTurnId}`) ?? null : null;
@@ -2789,6 +2809,7 @@ export class ProjectOpenItemService {
           state: 'OPEN',
           handledBy: handledBy.get(row.id) ?? [],
           handoverNote: row.handoverNote,
+          mainBranch,
         }),
         primaryAction: primaryAction({
           kind: row.kind,
@@ -2881,6 +2902,7 @@ export class ProjectOpenItemService {
       doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
       closedQuestions: await this.closedQuestions(projectId),
+      mainBranch,
     };
   }
 

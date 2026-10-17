@@ -5,6 +5,7 @@ import { Logger } from '@nestjs/common';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ManagedKubeClient } from './kube-client';
+import { KubernetesBackend } from './kubernetes-backend';
 import { ManagedRunnerManager } from './managed-runner-manager';
 import { loadManagedRunnerProfile, type ManagedRunnerProfile } from './managed-runner-profile';
 import { ManagedRunnerWorker } from './managed-runner-worker';
@@ -26,10 +27,12 @@ export type ManagedRunnerRuntime =
   | { available: false; problems: string[] };
 
 /**
- * Build the enabled runtime: the profile from its explicit path, then the Kubernetes client for it.
- * Anything missing leaves the managed service unavailable — logged here, reported to owners as
- * MANAGED_RUNNER_UNAVAILABLE — and nothing is reconciled; the rest of the server is unaffected.
- * Called only when the gate is on.
+ * Build the enabled runtime: the profile from its explicit path, then its run backend — the
+ * Kubernetes client for it, under KubernetesBackend, the one backend implemented. Anything missing
+ * leaves the managed service unavailable — logged here, reported to owners as
+ * MANAGED_RUNNER_UNAVAILABLE — and nothing is reconciled; the rest of the server is unaffected. A
+ * profile choosing a backend this server does not implement (`docker`) is one of those: its loader
+ * refuses it, and nothing is built for Kubernetes instead. Called only when the gate is on.
  */
 export function createManagedRunnerRuntime(deps: {
   profilePath: string | undefined;
@@ -51,7 +54,7 @@ export function createManagedRunnerRuntime(deps: {
     log.error(`managed runners are enabled but unavailable: ${problem}`);
     return { available: false, problems: [problem] };
   }
-  const manager = new ManagedRunnerManager(deps.prisma, kube, loaded.profile, {
+  const manager = new ManagedRunnerManager(deps.prisma, new KubernetesBackend(kube, loaded.profile), loaded.profile, {
     holder: `${hostname()}/${process.pid}/${randomUUID()}`,
   });
   const worker = new ManagedRunnerWorker(manager, loaded.profile.lifecycle.pollIntervalSeconds * 1000);

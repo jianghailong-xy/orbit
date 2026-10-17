@@ -29,6 +29,13 @@ final class ProjectDoneCopyParityTests: XCTestCase {
     private static let shared = "src/shared/src/project-done.ts"
     private static let progress = "src/shared/src/project-progress.ts"
 
+    /// One of this end's sentences about main, as the browser writes it for whichever branch is the
+    /// project's main branch: each `main` put back as the template's `${main}`. A project on main then
+    /// reads the same sentence at both ends.
+    private static func onMainBranch(_ sentence: String) -> String {
+        sentence.replacingOccurrences(of: "\\bmain\\b", with: "${main}", options: .regularExpression)
+    }
+
     /// Sentinels that occur in no sentence: counts with digits the copy never uses together.
     private static let criteria = 23
     private static let met = 19
@@ -205,7 +212,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
             (.noReceipt, "case 'NO_RECEIPT': return PROJECT_DONE_COPY.mergedOutsideOrbit;"),
             (.nothingToLand, "case 'NOTHING_TO_LAND': return PROJECT_DONE_COPY.nothingToLand;"),
             (.codeless, "case 'CODELESS': return 'No code to land';"),
-            (nil, "default: return 'Landed on main';"),
+            // Landed on the project's main branch, by name: main, on a project on main.
+            (nil, "default: return `\(Self.onMainBranch(ProjectDone.landingReasonLabel(nil)))`;"),
         ]
         for (reason, line) in rows {
             XCTAssertTrue(web.contains(line), "landingReasonLabel no longer says \(line)")
@@ -232,14 +240,20 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.whyNotDoneTally(answers()),
                        "23 criteria · 13 on main · 1 in flight · 2 merged outside Orbit"
                            + " · 3 no code to land · 4 not met")
+        // Where work landed is said of the project's main branch (`landedOn(main)`, `whyNotDoneOn(main)`):
+        // this end's words, on a project on main.
+        XCTAssertTrue(web.contains("return `\(Self.onMainBranch(ProjectDone.landedOnMain))`;"),
+                      "the tally's landed-on words are no longer said of the project's main branch")
+        XCTAssertTrue(web.contains("return `\(Self.onMainBranch(ProjectDone.onMain))`;"),
+                      "the Why-not-done tally's on-main words are no longer said of the project's main branch")
         for part in [
-            "`${counts.criteria} criteria`,\n    `${counts.met} met`,\n    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,\n    ...reasonParts(counts),",
-            "`${counts.met} met`,\n    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,\n    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,",
+            "`${counts.criteria} criteria`,\n    `${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    ...reasonParts(counts),",
+            "`${counts.met} met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,",
             "if (!counts) return `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`;",
-            "`${counts.criteria} criteria met`,\n    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,\n    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,\n    `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`,",
+            "`${counts.criteria} criteria met`,\n    `${counts.onMain} ${landedOn(main)}`,\n    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,\n    `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`,",
             "const met = derivedDone.criteria.filter((criterion) => criterion.satisfied);\n  const notMet = derivedDone.criteria.length - met.length;",
             "met.filter((criterion) => criterion.landingReason === reason).length,",
-            "`${derivedDone.criteria.length} criteria`,\n    `${met.filter((criterion) => criterion.landingReason == null).length} ${PROJECT_DONE_COPY.onMain}`,\n    ...reasonParts({ byReason }),\n    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),",
+            "`${derivedDone.criteria.length} criteria`,\n    `${met.filter((criterion) => criterion.landingReason == null).length} ${whyNotDoneOn(main)}`,\n    ...reasonParts({ byReason }),\n    ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),",
             "return count > 0 ? [`${count} ${REASON_LABELS[reason]}`] : [];",
             "return (counts.byReason?.NOTHING_TO_LAND ?? 0) + (counts.byReason?.CODELESS ?? 0);",
         ] {
@@ -291,8 +305,10 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ] {
             XCTAssertTrue(card.contains(part), "the Orbit checked line drifted: no \(part.debugDescription)")
         }
-        // A card nobody asked for carries Orbit's own gaps, in these two sentences.
-        XCTAssertTrue(card.contains("? `Orbit cannot prove this criterion is on main: ${reason}.`"))
+        // A card nobody asked for carries Orbit's own gaps, in these two sentences — the first said of
+        // the project's main branch, main on a project on main.
+        XCTAssertTrue(card.contains("? `Orbit cannot prove this criterion is on ${main}: ${reason}.`"))
+        XCTAssertTrue(card.contains("const reason = landingReasonLabel(criterion.landingReason, main);"))
         XCTAssertTrue(card.contains(": 'Orbit cannot prove this criterion is met by its work yet.',"))
         // The section heads, the toggle, the gap's checked line and the record press.
         XCTAssertEqual(ProjectDone.doneWhenHead(Self.criteria), "Done when · 23 criteria")
@@ -307,7 +323,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(ProjectDone.checkedLine(AcceptedGap(criterionKey: "c", coordinatorChecked: "main has it",
                                                            evidenceRefs: ["a", "b"])),
                        "main has it · evidence a, b")
-        XCTAssertTrue(card.contains("{criterion.satisfied ? 'met' : 'not met'} · {landingReasonLabel(criterion.landingReason)}"))
+        XCTAssertTrue(card.contains("{criterion.satisfied ? 'met' : 'not met'} · {landingReasonLabel(criterion.landingReason, main)}"))
         XCTAssertTrue(card.contains(
             "counts && counts.met < counts.criteria ? PROJECT_DONE_COPY.recordAsDoneAnyway : DONE_CARD_RECORD"))
         XCTAssertEqual(ProjectDone.recordLabel(counts()), ProjectDone.recordAsDoneAnyway)
@@ -344,7 +360,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the owner's receipt line drifted")
         XCTAssertTrue(card.contains(": `${PROJECT_DONE_COPY.thisProjectIsDone} · ${PROJECT_DONE_COPY.recordedByOrbit}`}"),
                       "Orbit's receipt line drifted")
-        XCTAssertTrue(card.contains("{projectDoneReceiptTally(counts, accepted.length)}"))
+        XCTAssertTrue(card.contains("{projectDoneReceiptTally(counts, accepted.length, mainBranchName(project.integration?.upstreamRef))}"))
         XCTAssertTrue(card.contains("<summary>{DONE_CARD_SEE_ACCEPTED}</summary>"))
         XCTAssertTrue(card.contains("{DONE_CARD_REOPEN}"))
 
@@ -379,10 +395,11 @@ final class ProjectDoneCopyParityTests: XCTestCase {
             "{group(PROJECT_DONE_COPY.needsYourCall, needsCall, false)}",
             "<span className=\"project-why-who\">● {PROJECT_DONE_COPY.coordinatorIsOnIt}</span>",
             "{[PROJECT_DONE_COPY.openItemsDoneRequest.toLowerCase(), doneRequestWaiting(openItems.doneRequest.waitingSince, now)].filter(Boolean).join(' · ')}",
-            "{criterion.satisfied ? landingReasonLabel(criterion.landingReason) : PROJECT_DONE_COPY.notMetYet}",
-            "{!criterion.satisfied\n                    ? PROJECT_DONE_COPY.notMetDetail\n                    : waitingGroup ? PROJECT_DONE_COPY.waitingDetail : PROJECT_DONE_COPY.needsCallDetail}",
+            "{criterion.satisfied ? landingReasonLabel(criterion.landingReason, main) : PROJECT_DONE_COPY.notMetYet}",
+            "{!criterion.satisfied\n                    ? PROJECT_DONE_COPY.notMetDetail\n                    : waitingGroup ? whyNotDoneWaitingDetail(main) : whyNotDoneNeedsCallDetail(main)}",
             "{item?.ordinal ?? '•'}",
-            "{projectWhyNotDoneTally(project.derivedDone)}",
+            "{projectWhyNotDoneTally(project.derivedDone, main)}",
+            "const main = mainBranchName(project.integration?.upstreamRef);",
             "{PROJECT_DONE_COPY.reviewDoneRequest}",
             "waiting.length > 0 && !coordinatorOnIt && onAskCoordinator ?",
             "{PROJECT_DONE_COPY.askCoordinator}",
@@ -390,6 +407,13 @@ final class ProjectDoneCopyParityTests: XCTestCase {
             "{project.doneBy === 'OWNER' ? PROJECT_DONE_COPY.recordedByYou : PROJECT_DONE_COPY.recordedByOrbit}",
         ] {
             XCTAssertTrue(card.contains(part), "the Why-not-done card drifted: no \(part.debugDescription)")
+        }
+        // The two details say where the work goes and what the coordinator checked of the project's
+        // main branch: this end's sentences, on a project on main.
+        let words = try flat(Self.words)
+        for detail in [ProjectDone.waitingDetail, ProjectDone.needsCallDetail] {
+            XCTAssertTrue(words.contains("return `\(Self.onMainBranch(detail))`;"),
+                          "the web no longer says \(detail.debugDescription) of the project's main branch")
         }
         XCTAssertEqual(ProjectDone.askedAside(waiting: "waiting 4m"), "the coordinator asked · waiting 4m")
         let unmet = ProjectDoneCriterion(definitionId: "c", satisfied: false, landingReason: .noReceipt)

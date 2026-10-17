@@ -762,14 +762,16 @@ const (
 	kimiQuotaSentence = "You've hit your usage limit on this Kimi Code account — 429 You exceeded your current token quota: 0 1000000, please check your account balance"
 )
 
-// Kimi answers a turn it ended on the account's usage limit the way it answers one that went well —
-// end_turn, and not a word of why — so the turn's own records say it: the main agent's turn.ended for
-// the turn that opened past where the wire stood when it was prompted, failed on
-// APIProviderQuotaExhaustedError. The sentence it is reported with opens with the words the control
-// plane and the clients read as a spent quota. A turn that ended well, one that failed for another
-// reason, and the late end of the turn before are none of that; an end that reaches the wire a moment
-// after the answer is waited for; one that never does is given up on.
-func TestKimiTurnUsageLimitIsReadFromTheTurnsOwnRecord(t *testing.T) {
+// Kimi answers a failed turn the way it answers one that went well — end_turn, and not a word of why —
+// so the turn's own records say it: the main agent's turn.ended for the turn that opened past where the
+// wire stood when it was prompted. A turn that failed on the account's usage limit is reported in the
+// words the control plane and the clients read as a spent quota; every other failure is reported as a
+// failure too, in Kimi's own name and message, because a failure reported as a turn that completed with
+// nothing to say is one the control plane owes an answer to and delivers again, unbacked-off, for as
+// long as the provider keeps failing (2026-10-10: 67 redeliveries in three minutes). A prompt answered
+// with no turn on the wire at all is the third case: no turn ran, and nothing was read. A turn that
+// ended well is none of those; an end that reaches the wire a moment after the answer is waited for.
+func TestKimiTurnOutcomeIsReadFromTheTurnsOwnRecord(t *testing.T) {
 	start := time.Now().Add(-time.Hour)
 	wireWith := func(t *testing.T, after string) (string, int64) {
 		t.Helper()
@@ -794,8 +796,8 @@ func TestKimiTurnUsageLimitIsReadFromTheTurnsOwnRecord(t *testing.T) {
 	ctx := context.Background()
 
 	wire, from := wireWith(t, kimiQuotaTurnRecords)
-	if got := kimiTurnUsageLimit(ctx, wire, from); got != kimiQuotaSentence {
-		t.Fatalf("a turn ended on the usage limit is reported as %q, want %q", got, kimiQuotaSentence)
+	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence}) {
+		t.Fatalf("a turn ended on the usage limit is reported as %+v", got)
 	}
 	if !strings.HasPrefix(strings.ToLower(kimiQuotaSentence), "you've hit your usage limit") {
 		t.Fatal("the sentence does not open with the words read as a spent quota")
@@ -809,20 +811,37 @@ func TestKimiTurnUsageLimitIsReadFromTheTurnsOwnRecord(t *testing.T) {
 		t.Fatalf("kimi-usage-limit-switch.pg.spec.ts does not report the turn as the runner does: %q", kimiQuotaSentence)
 	}
 
-	for name, after := range map[string]string{
-		"a turn that went well": `{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":1}` + "\n" +
-			`{"type":"turn.ended","agentId":"main","turnId":1,"reason":"completed","durationMs":58,"time":2}` + "\n",
-		"a turn a provider refused for another reason": kimiRefusedTurnRecords,
-		// The turn before ended on the limit, its record late enough to land past where this turn's
-		// prompt found the wire; this turn went well.
-		"the late end of the turn before": `{"type":"turn.ended","agentId":"main","turnId":0,"reason":"failed","error":{"name":"APIProviderQuotaExhaustedError","message":"429 quota"},"time":1}` + "\n" +
-			`{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":2}` + "\n" +
-			`{"type":"turn.ended","agentId":"main","turnId":1,"reason":"completed","time":3}` + "\n",
-	} {
-		wire, from := wireWith(t, after)
-		if got := kimiTurnUsageLimit(ctx, wire, from); got != "" {
-			t.Errorf("%s is reported as %q", name, got)
-		}
+	// A provider that refused the turn for something other than the account's quota: the same shape,
+	// and the one the runner used to report as a turn that completed with nothing to say.
+	wire, from = wireWith(t, kimiRefusedTurnRecords)
+	want := "Kimi Code failed this turn (APIStatusError): 400 Invalid request: the prompt is malformed"
+	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true, failure: want}) {
+		t.Fatalf("a refused turn is reported as %+v, want %q", got, want)
+	}
+	if strings.Contains(strings.ToLower(want), "hit your usage limit") {
+		t.Fatal("a refusal is reported in the words read as a spent quota")
+	}
+
+	// A turn that went well.
+	wire, from = wireWith(t, `{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":1}`+"\n"+
+		`{"type":"turn.ended","agentId":"main","turnId":1,"reason":"completed","durationMs":58,"time":2}`+"\n")
+	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true}) {
+		t.Fatalf("a turn that went well is reported as %+v", got)
+	}
+
+	// The turn before ended on the limit, its record late enough to land past where this turn's prompt
+	// found the wire; this turn went well.
+	wire, from = wireWith(t, `{"type":"turn.ended","agentId":"main","turnId":0,"reason":"failed","error":{"name":"APIProviderQuotaExhaustedError","message":"429 quota"},"time":1}`+"\n"+
+		`{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":2}`+"\n"+
+		`{"type":"turn.ended","agentId":"main","turnId":1,"reason":"completed","time":3}`+"\n")
+	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true}) {
+		t.Fatalf("the late end of the turn before: %+v", got)
+	}
+	// A turn.ended with no error object at all still failed: reported without an invented name.
+	wire, from = wireWith(t, `{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":1}`+"\n"+
+		`{"type":"turn.ended","agentId":"main","turnId":1,"reason":"failed","durationMs":58,"time":2}`+"\n")
+	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true, failure: "Kimi Code failed this turn"}) {
+		t.Fatalf("a failed turn with no error record is reported as %+v", got)
 	}
 
 	// The end reaches the wire a moment after the answer — half of its line first.
@@ -835,18 +854,29 @@ func TestKimiTurnUsageLimitIsReadFromTheTurnsOwnRecord(t *testing.T) {
 			_ = f.Close()
 		}
 	}()
-	if got := kimiTurnUsageLimit(ctx, wire, from); got != kimiQuotaSentence {
-		t.Fatalf("an end written after the answer is reported as %q", got)
+	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true, ran: true, failure: kimiQuotaSentence}) {
+		t.Fatalf("an end written after the answer is reported as %+v", got)
 	}
 
-	// It never does: given up on after kimiTurnOutcomeWait, and the turn stands as answered.
+	// It never does, and the prompt was answered: no turn opened for it at all. Waited out, never
+	// guessed at early — the answer is what says there is nothing more to wait for.
 	wire, from = wireWith(t, `{"type":"turn.prompt","agentId":"main","turnId":1,"input":[{"type":"text","text":"x"}],"time":2}`+"\n")
+	// (the record above is turn.prompt with no end: the turn never reached one, same as no record at all)
 	began := time.Now()
-	if got := kimiTurnUsageLimit(ctx, wire, from); got != "" || time.Since(began) < kimiTurnOutcomeWait {
-		t.Fatalf("an end never written: %q after %v", got, time.Since(began))
+	if got := readKimiTurnOutcome(ctx, wire, from); got != (kimiTurnOutcome{read: true}) || time.Since(began) < kimiTurnOutcomeWait {
+		t.Fatalf("a prompt with no turn: %+v after %v", got, time.Since(began))
 	}
-	if got := kimiTurnUsageLimit(ctx, "", 0); got != "" {
-		t.Fatalf("no wire found for the session: %q", got)
+
+	// No wire found for the session, or a shutdown mid-read: nothing is knowable, and the turn stands
+	// as the runner has always reported it.
+	if got := readKimiTurnOutcome(ctx, "", 0); got != (kimiTurnOutcome{}) {
+		t.Fatalf("no wire found for the session: %+v", got)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	wire, from = wireWith(t, "")
+	if got := readKimiTurnOutcome(cancelled, wire, from); got != (kimiTurnOutcome{}) {
+		t.Fatalf("a cancelled read: %+v", got)
 	}
 }
 
@@ -857,7 +887,9 @@ func TestKimiTurnUsageLimitIsReadFromTheTurnsOwnRecord(t *testing.T) {
 // runs it: it starts on Default, is moved to Work, back to Default and to Work again, and every time
 // the model is sent every turn said before it, on whichever account it was said. Work's own kimi
 // lists the session by id. A turn the endpoint then refuses for a spent quota is reported failed on
-// the account's usage limit, in the words the control plane moves a session on.
+// the account's usage limit, in the words the control plane moves a session on; one it refuses for
+// any other reason is reported failed too, in Kimi's own words, since a failed turn nobody can read
+// is a message the control plane delivers again and again.
 func TestRealKimiConversationFollowsTheSessionBetweenAccounts(t *testing.T) {
 	if os.Getenv("ORBIT_REAL_KIMI") != "1" {
 		t.Skip("set ORBIT_REAL_KIMI=1 to move a session between Kimi accounts with the real CLI")
@@ -926,6 +958,12 @@ func TestRealKimiConversationFollowsTheSessionBetweenAccounts(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = w.Write([]byte(`{"error":{"message":"You exceeded your current token quota: 0 1000000, please check your account balance","type":"exceeded_current_quota_error"}}`))
+			return
+		}
+		if strings.Contains(last, "BADREQ") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"Invalid request: the prompt is malformed","type":"invalid_request_error"}}`))
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -1097,9 +1135,29 @@ func TestRealKimiConversationFollowsTheSessionBetweenAccounts(t *testing.T) {
 		t.Fatalf("Work's index lines for the session name %q, want its directory in Work once", indexed)
 	}
 
-	// The endpoint refuses the next turn for a spent quota: Kimi answers it as ended, and the runner
-	// reports it failed on the account's usage limit.
-	refused := stint(work.Dir, "and now we hit the QUOTA")
+	// The endpoint refuses the next turn for a request it will not take at all. Kimi answers a failed
+	// turn as ended and says nothing of why — so this is the turn the runner used to report as one
+	// that completed with nothing to say, which the control plane owes the person an answer to and
+	// redelivers, unbacked-off, for as long as the provider keeps refusing (2026-10-10: 67
+	// redeliveries in three minutes, and not one word about why). It is reported failed instead, in
+	// Kimi's own words, and NOT as a spent quota: nothing here moves the session's account.
+	//
+	// Before the quota turn, deliberately. A turn that fails leaves its message unfinished in the
+	// engine; the next prompt is then answered from that one re-run with the new message appended
+	// (measured against 2.1.1, 2026-10-13 — one `session/prompt` whose message is both), so a refusal
+	// driven by words in the new message would be answered with whatever the older one still says.
+	refused := stint(work.Dir, "and now a BADREQ turn")
+	if len(refused) != 1 || refused[0].Status != stFailed || refused[0].NumTurns != 1 ||
+		!strings.Contains(refused[0].Error, "Invalid request: the prompt is malformed") {
+		t.Fatalf("the turn the provider refused = %+v", refused)
+	}
+	if strings.Contains(strings.ToLower(refused[0].Error), "hit your usage limit") {
+		t.Fatalf("a refusal is reported as a spent quota: %q", refused[0].Error)
+	}
+
+	// And the endpoint refuses the next turn for a spent quota: Kimi answers it as ended, and the
+	// runner reports it failed on the account's usage limit.
+	refused = stint(work.Dir, "and now we hit the QUOTA")
 	if len(refused) != 1 || refused[0].Status != stFailed || !strings.HasPrefix(refused[0].Error, "You've hit your usage limit on this Kimi Code account") ||
 		!strings.Contains(refused[0].Error, "exceeded your current token quota") {
 		t.Fatalf("the turn the quota stopped = %+v", refused)

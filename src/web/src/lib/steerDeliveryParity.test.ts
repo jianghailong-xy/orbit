@@ -8,7 +8,7 @@ import { steerDeliveryState } from './steerDelivery';
  *
  * A mid-turn message produces no reply of its own — the running turn's is the answer — so how far
  * it got IS the whole visible outcome. Two people watching the same session from a browser and a
- * phone are watching the same message; if one says "Delivering…" while the other says something
+ * phone are watching the same message; if one says "Waiting to be read" while the other says something
  * else, one of them is being told a different story about the same fact.
  *
  * Swift cannot import the TypeScript, so the table exists twice. This is what keeps the second
@@ -36,6 +36,32 @@ describe('steer delivery labels, web vs OrbitKit', () => {
         SWIFT.includes(`label: "${label}", tone: .${tone}`),
         `OrbitKit shows "${label}" in a different tone than web's ${tone}`,
       ).toBe(true);
+    }
+  });
+
+  it('says the same words about the tray above the composer', () => {
+    // docs/mocks/steer-tray: the same message, waiting in the same tray, on every client watching it.
+    const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
+    const web = read('../components/PendingTray.tsx') + read('../components/WorkspaceView.tsx');
+    const native =
+      SWIFT
+      + read('../../../macos/OrbitKit/Sources/OrbitKit/Transcript/PendingTray.swift')
+      + read('../../../macos/OrbitApp/Sources/OrbitApp/Views/Console/PendingTrayView.swift')
+      + read('../../../macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift')
+      + read('../../../macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift');
+    for (const words of [
+      'Queued for next turn',
+      'Withdrawing…',
+      'Steer',
+      'Send into the current turn now',
+      'Withdraw — back to the composer',
+      'Queue for next turn',
+      "Couldn't send it into this turn",
+      "This agent can't take a message mid-turn. It stays queued for the next turn.",
+      'The turn is over or being stopped. It stays queued for the next turn.',
+    ]) {
+      expect(web.includes(words), `web has no "${words}"`).toBe(true);
+      expect(native.includes(words), `the native clients have no "${words}"`).toBe(true);
     }
   });
 

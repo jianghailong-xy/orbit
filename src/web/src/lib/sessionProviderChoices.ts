@@ -12,6 +12,7 @@ import type { CodexLogin } from './codexLogin';
 import { DSH_CONNECT_HREF, DSH_PRESET_SLUG, DSH_STATE_LABEL, dshRunnerState, type DshRunnerFacts } from './dshRuntime';
 import { accountNameOf, accountPlanUsage, runsOnEnvKey } from './engineAccounts';
 import { encodeId } from './idCodec';
+import { webShowsEngine } from './runnerEngines';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
 import type { SharedPool } from './sharedPools';
 import {
@@ -596,6 +597,7 @@ function landingOf(engine: AgentProvider, providers: ProviderChoice[], preferred
  */
 export function engineChoices(sources: ChoiceSources, preferred: readonly EnginePick[] = []): EngineChoice[] {
   return ALL_ENGINES.flatMap((engine): EngineChoice[] => {
+    if (!webShowsEngine(engine)) return [];
     const providers = engineProviders(engine, sources);
     if (providers.length > 0) return [engineLanding(engine, providers, landingOf(engine, providers, preferred))];
     if (engine === AgentProvider.DSH && sources.dshRunner && dshRunnerState(sources.dshRunner) !== 'updateRunner') {

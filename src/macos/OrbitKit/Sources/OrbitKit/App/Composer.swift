@@ -197,20 +197,20 @@ public enum ComposerLogic {
     }
 
     /// Whether the composer's single primary button shows STOP (interrupt the turn) instead of SEND.
-    /// A 1:1 port of web's `showStop`: the session is authoritatively RUNNING *and* there's nothing
-    /// staged to send — empty text, no attachments, not replying to a question — so the moment the
-    /// user types a follow-up the button morphs back to Send and can still queue mid-turn.
+    /// A 1:1 port of web's `showStop`: there is something to stop — see `hasSomethingToStop` — *and*
+    /// nothing staged to send (empty text, no attachments, not replying to a question), so the moment
+    /// the user types a follow-up the button morphs back to Send and can still queue mid-turn.
     ///
-    /// The running check keys off the session's AUTHORITATIVE lifecycle status (`session` — the live
-    /// control-plane record the nav-bar title also reads, web's `selected?.status`), NOT the
-    /// stream-derived reducer status: that never reliably reaches `.running` on a cold open of an
-    /// already-running session (no durable "running" event is replayed — only `turn_end`/`status`
+    /// The stop check keys off the session's AUTHORITATIVE record (`session` — the live control-plane
+    /// row the nav-bar title and the status glyph also read, web's `selectedSession ?? selected`),
+    /// NOT the stream-derived reducer status: that never reliably reaches `.running` on a cold open of
+    /// an already-running session (no durable "running" event is replayed — only `turn_end`/`status`
     /// transitions move it), so the button used to never appear there. `stream` is the fallback only
-    /// when no session record is loaded yet (a fresh deep link).
-    public static func showsInterrupt(session: RunStatus?, stream: RunStatus,
+    /// when no session record is loaded yet (a fresh deep link), where nothing but its status is known.
+    public static func showsInterrupt(session: Session?, stream: RunStatus,
                                       hasText: Bool, hasAttachments: Bool, replying: Bool) -> Bool {
         guard !hasText, !hasAttachments, !replying else { return false }
-        return (session ?? stream) == .running
+        return hasSomethingToStop(session: session, stream: stream)
     }
 
     /// The engine's guess at the next message (`TranscriptState.promptSuggestion`), if the composer
@@ -240,7 +240,31 @@ public enum ComposerLogic {
         return parked ? suggestion : nil
     }
 
-    /// Whether to offer "Stop & send" beside Send. A 1:1 port of web's `offersInterruptAndSend`.
+    /// Whether the session has something for the composer's Stop to interrupt: it is generating —
+    /// the dispatched turn, or one the engine started for itself — or it still has work it started
+    /// running behind a parked turn. The first clause of web's `showStop`
+    /// (`isGenerating(...) || outlivingSessionWork(...) !== null`), shared by Stop and "Stop & send"
+    /// so the two controls can never disagree about whether there is anything to stop.
+    ///
+    /// A turn the engine started for itself (`Session.isGenerating`: AWAITING_INPUT with
+    /// `engineTurnActive`) is exactly the case the runner asks the engine to interrupt for
+    /// unconditionally — "those are the ones somebody reaches for stop over", and gating on the
+    /// runtime's own phase would leave them unstoppable (src/runner-go/session.go, the `interrupt`
+    /// control request). Reading the raw `.running` status alone, as this did, left those turns with
+    /// no way to reach them at all.
+    ///
+    /// Counting work that outlives a parked turn is DELIBERATE, not an oversight: a session parked
+    /// with a sub-agent, workflow or background process still at work also gets a Stop (the owner's
+    /// call). Making the press stop that work too is separate, later work; until it lands the stop
+    /// still reaches the engine and what it found is written into the transcript. Do not narrow this
+    /// back to "generating".
+    public static func hasSomethingToStop(session: Session?, stream: RunStatus) -> Bool {
+        guard let session else { return stream == .running }
+        return session.isGenerating || session.hasOutlivingWork
+    }
+
+    /// Whether to offer "Stop & send" beside Send — the macOS-only second control (web has no
+    /// equivalent; its composer keeps the single morphing button).
     ///
     /// While a turn generates, Send steers — the message joins the turn that is running. "Stop this
     /// and do THIS instead" is the other intent people have at that moment, and there is no way to
@@ -250,11 +274,14 @@ public enum ComposerLogic {
     /// upload, an offline runner), and it stays out of the way of a reply to a blocking question. A
     /// `!cmd` runs on the runner beside the engine, so it is not something the engine is stopped
     /// for — and this path can only send message text.
-    public static func offersInterruptAndSend(session: RunStatus?, stream: RunStatus,
+    ///
+    /// It reads the same `hasSomethingToStop` as Stop itself — engine-driven turns and outliving
+    /// work included — so the desktop's two interrupt controls agree with the primary button.
+    public static func offersInterruptAndSend(session: Session?, stream: RunStatus,
                                               canSend: Bool, ordinaryDraft: Bool,
                                               replying: Bool, busy: Bool) -> Bool {
         guard canSend, ordinaryDraft, !replying, !busy else { return false }
-        return (session ?? stream) == .running
+        return hasSomethingToStop(session: session, stream: stream)
     }
 
     /// Whether an outgoing send will be **queued** behind an in-flight turn (→ a "Queued" bubble the
@@ -341,12 +368,16 @@ public enum ComposerLogic {
         return trimmed
     }
 
+    /// `queueForNextTurn` sends it the other way while a turn runs — queued for the next turn
+    /// instead of into this one (the Send button's menu, decided 2026-10-16). Otherwise no intent
+    /// goes out and the server places the message as it always has.
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
-                                attachmentIds: [String]) -> SessionTurnRequest {
+                                attachmentIds: [String], queueForNextTurn: Bool = false) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,
                            content: text,
                            kind: shell ? "shell" : "message",
-                           attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds)
+                           attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
+                           intent: queueForNextTurn ? "NEXT_TURN" : nil)
     }
 
     /// Split a composer draft into the text to send and whether it's a raw shell command. A
@@ -384,6 +415,9 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
     public let sessionTitle: String?
     public let sessionStatus: String?
     public let agentName: String?
+    /// The CLI the session runs on, by its name.
+    public let engine: String?
+    /// The credential it spends — a key on any of the engines that run it, an engine's own sign-in.
     public let provider: String?
     public let model: String?
     public let permissionMode: String?
@@ -398,7 +432,7 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
     public let planUsagePercent: Int?
 
     public init(surface: String, sessionTitle: String? = nil, sessionStatus: String? = nil,
-                agentName: String? = nil, provider: String? = nil, model: String? = nil,
+                agentName: String? = nil, engine: String? = nil, provider: String? = nil, model: String? = nil,
                 permissionMode: String? = nil, effort: String? = nil, fastMode: Bool? = nil,
                 contextTokens: Int? = nil, contextWindow: Int? = nil,
                 planUsageLabel: String? = nil, planUsagePercent: Int? = nil) {
@@ -406,6 +440,7 @@ public struct ComposerStatusSnapshot: Equatable, Sendable {
         self.sessionTitle = sessionTitle
         self.sessionStatus = sessionStatus
         self.agentName = agentName
+        self.engine = engine
         self.provider = provider
         self.model = model
         self.permissionMode = permissionMode
@@ -467,6 +502,9 @@ public enum ComposerHostCommand {
         }
         if let agent = s.agentName, !agent.isEmpty {
             rows.append(ComposerStatusRow(label: "Workspace", value: agent))
+        }
+        if let engine = s.engine, !engine.isEmpty {
+            rows.append(ComposerStatusRow(label: "Engine", value: engine))
         }
         if let provider = s.provider, !provider.isEmpty {
             rows.append(ComposerStatusRow(label: "Provider", value: provider))
@@ -536,16 +574,18 @@ public enum ComposerSlash {
         items.filter { ($0.agentId ?? "").isEmpty || $0.agentId == agentID }
     }
 
-    /// Restrict runtime-owned slash assets to the active runtime. Older runners omit `provider`
-    /// for Claude entries, so nil remains Claude-compatible. Codex, OpenCode, Antigravity and DeepSeek
-    /// Harness take
-    /// slash-prefixed text as runtime input and have no slash registry (agy is started with
-    /// `--disable-slash-commands`, since its own command handler ends a stream-json session), so
-    /// they keep only Orbit's local commands; local commands are available under every provider.
-    public static func forProvider(items: [SlashCommandInfo], provider: String?) -> [SlashCommandInfo] {
+    /// Restrict runtime-owned slash assets to the session's engine — the item's `provider` is the
+    /// engine that owns it, as the runner reports it. Older runners omit it for Claude entries, so nil
+    /// remains Claude Code's. Codex, OpenCode, Antigravity and DeepSeek Harness take slash-prefixed text
+    /// as runtime input and have no slash registry (agy is started with `--disable-slash-commands`,
+    /// since its own command handler ends a stream-json session), so they keep only Orbit's local
+    /// commands; local commands are available on every engine. Asked of the session's engine, never of
+    /// its provider: a key on Codex's protocol runs on Codex, and a DeepSeek key on Claude Code has
+    /// Claude Code's commands (web `slashAssetMatchesEngine`).
+    public static func forEngine(items: [SlashCommandInfo], engine: String?) -> [SlashCommandInfo] {
         items.filter { item in
             if item.type == "local" { return true }
-            switch provider {
+            switch engine {
             case "codex", "opencode", "antigravity", "dsh": return false
             case "kimi":  return item.provider == "kimi"
             default:      return item.provider == nil || item.provider == "claude"

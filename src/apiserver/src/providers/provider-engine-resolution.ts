@@ -11,9 +11,16 @@
  * pool with no key of its own; the migration touches none.
  */
 import { createHash } from 'node:crypto';
-import { AgentProvider, keyDialect, openCodeBaseUrl, openCodeKeyOf } from '@orbit/shared';
+import { AgentProvider, openCodeBaseUrl, openCodeDialect, openCodeKeyOf } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
-import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec, type ModelProviderRow } from './custom-provider';
+import {
+  accountPoolRuntime,
+  CURSOR_KEY_VAR,
+  isBuiltinProvider,
+  openCodeKeyRows,
+  resolveProviderExec,
+  type ModelProviderRow,
+} from './custom-provider';
 import { dispatchKeyRow, keyRowForSlug } from './engine-provider';
 import { decryptSecret } from './provider-crypto';
 import { legacySessionEngine, recordedEngine } from './session-engine';
@@ -83,13 +90,15 @@ function bareModel(model: string | null | undefined): string | null {
   return openCodeKeyOf(model)?.model ?? model;
 }
 
-/** The variables each engine reads its key and endpoint from (custom-provider.ts injectedEnv). */
-const KEY_VARIABLES: Partial<Record<AgentProvider, [key: string, endpoint: string]>> = {
+/** The variables each engine reads its key and endpoint from (custom-provider.ts injectedEnv). Cursor CLI
+ *  is handed the key alone: it trades it for a token at Cursor's own API. */
+const KEY_VARIABLES: Partial<Record<AgentProvider, [key: string, endpoint: string | null]>> = {
   [AgentProvider.CLAUDE]: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'],
   [AgentProvider.DSH]: ['ORBIT_DSH_API_KEY', 'ORBIT_DSH_BASE_URL'],
   [AgentProvider.CODEX]: ['OPENAI_API_KEY', 'OPENAI_BASE_URL'],
   [AgentProvider.KIMI]: ['KIMI_MODEL_API_KEY', 'KIMI_MODEL_BASE_URL'],
   [AgentProvider.ANTIGRAVITY]: ['GEMINI_API_KEY', 'GOOGLE_GEMINI_BASE_URL'],
+  [AgentProvider.CURSOR]: [CURSOR_KEY_VAR, null],
 };
 
 /** The key and endpoint a built run hands its engine: in that engine's variables, or for OpenCode in the
@@ -115,7 +124,7 @@ function handedOver(
   }
   const variables = KEY_VARIABLES[engine];
   if (!variables || !env) return { key: null, endpoint: null };
-  return { key: env[variables[0]] ?? null, endpoint: env[variables[1]] ?? null };
+  return { key: env[variables[0]] ?? null, endpoint: variables[1] ? env[variables[1]] ?? null : null };
 }
 
 /** The key and endpoint a credential row would hand `engine`, for a run dispatch refuses to build. */
@@ -126,8 +135,10 @@ function rowHandsOver(engine: AgentProvider, row: ModelProviderRow): { key: stri
   } catch {
     key = null;
   }
-  const dialect = keyDialect(row.runtime);
-  const endpoint = engine === AgentProvider.OPENCODE && dialect ? openCodeBaseUrl(dialect, row.baseUrl) : row.baseUrl;
+  const dialect = openCodeDialect(row.runtime);
+  const endpoint = engine === AgentProvider.CURSOR
+    ? null
+    : engine === AgentProvider.OPENCODE && dialect ? openCodeBaseUrl(dialect, row.baseUrl) : row.baseUrl;
   return { key, endpoint };
 }
 

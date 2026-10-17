@@ -352,7 +352,8 @@ var wikiPlanEntryNames = map[string]bool{
 // directory with its source files — tests and fixtures left out (the sample's repo.md, for any repository).
 func (r *wikiPlanRepo) layoutText(maxChars int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# 仓库结构（origin/main %s，提交时间 %s）\n\n只列源文件（去掉测试与夹具），路径相对仓库根。\n\n## 顶层\n\n", shortWikiHash(r.sha), r.date)
+	fmt.Fprintf(&b, "# Repository structure (origin/main %s, committed %s)\n\nSource files only (tests and fixtures left out); paths are relative "+
+		"to the repository root.\n\n## Top level\n\n", shortWikiHash(r.sha), r.date)
 	top := map[string]int{}
 	var topFiles []string
 	for _, file := range r.files {
@@ -368,10 +369,10 @@ func (r *wikiPlanRepo) layoutText(maxChars int) string {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		fmt.Fprintf(&b, "- `%s/`（%d 个文件）\n", name, top[name])
+		fmt.Fprintf(&b, "- `%s/` (%s)\n", name, wikiCount(top[name], "file", "files"))
 	}
 	if len(topFiles) > 0 {
-		fmt.Fprintf(&b, "- 顶层文件：%s\n", strings.Join(topFiles, ", "))
+		fmt.Fprintf(&b, "- Top-level files: %s\n", strings.Join(topFiles, ", "))
 	}
 	packages := map[string][]string{}
 	entries := map[string][]string{}
@@ -389,15 +390,15 @@ func (r *wikiPlanRepo) layoutText(maxChars int) string {
 		pkgs = append(pkgs, pkg)
 	}
 	sort.Strings(pkgs)
-	b.WriteString("\n## 各包与入口\n\n")
+	b.WriteString("\n## Packages and entry points\n\n")
 	for _, pkg := range pkgs {
-		line := fmt.Sprintf("- `%s`（%d 个源文件）", pkg, len(packages[pkg]))
+		line := fmt.Sprintf("- `%s` (%s)", pkg, wikiCount(len(packages[pkg]), "source file", "source files"))
 		if len(entries[pkg]) > 0 {
-			line += "；入口与装配：" + strings.Join(entries[pkg], "、")
+			line += "; entry points and wiring: " + strings.Join(entries[pkg], ", ")
 		}
 		b.WriteString(line + "\n")
 	}
-	b.WriteString("\n## 各目录的源文件\n")
+	b.WriteString("\n## Source files by directory\n")
 	for _, pkg := range pkgs {
 		fmt.Fprintf(&b, "\n### %s\n", pkg)
 		byDir := map[string][]string{}
@@ -412,7 +413,7 @@ func (r *wikiPlanRepo) layoutText(maxChars int) string {
 		for _, dir := range dirs {
 			files := byDir[dir]
 			if len(files) <= 40 {
-				fmt.Fprintf(&b, "- %s/（%d）: %s\n", dir, len(files), strings.Join(files, ", "))
+				fmt.Fprintf(&b, "- %s/ (%d): %s\n", dir, len(files), strings.Join(files, ", "))
 				continue
 			}
 			// A flat directory of many files, as a Go package is: grouped by the prefix of their names.
@@ -435,7 +436,7 @@ func (r *wikiPlanRepo) layoutText(maxChars int) string {
 				}
 				return prefixes[i] < prefixes[j]
 			})
-			fmt.Fprintf(&b, "- %s/（%d，按文件名前缀）:\n", dir, len(files))
+			fmt.Fprintf(&b, "- %s/ (%d, by file name prefix):\n", dir, len(files))
 			for _, prefix := range prefixes {
 				fmt.Fprintf(&b, "  - %s: %s\n", prefix, strings.Join(groups[prefix], ", "))
 			}
@@ -452,7 +453,7 @@ func (r *wikiPlanRepo) layoutText(maxChars int) string {
 			names = append(names, m[1])
 		}
 		if len(names) > 0 {
-			fmt.Fprintf(&b, "\n## 数据模型（%s）\n\n模型 %d 个：%s\n", file, len(names), strings.Join(names, ", "))
+			fmt.Fprintf(&b, "\n## Data model (%s)\n\n%s: %s\n", file, wikiCount(len(names), "model", "models"), strings.Join(names, ", "))
 		}
 	}
 	return wikiPlanCut(b.String(), maxChars)
@@ -491,8 +492,9 @@ func (r *wikiPlanRepo) docFiles() []string {
 // docsTreeText is every document with its title and its second- and third-level headings (docs-tree.md).
 func (r *wikiPlanRepo) docsTreeText(maxChars int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# 文档标题树（origin/main %s）\n\n范围：docs/ 下的设计、契约与运维文档（不含 docs/mocks、docs/evidence），以及仓库里其他说明文件。"+
-		"每篇列出 H1 标题与二、三级标题；[大小] 是字节数。\n\n", shortWikiHash(r.sha))
+	fmt.Fprintf(&b, "# Document heading tree (origin/main %s)\n\nScope: the design, contract and operations documents under docs/ "+
+		"(not docs/mocks or docs/evidence), and the repository's other Markdown files. Each document lists its H1 title and its second- "+
+		"and third-level headings; [size] is in bytes.\n\n", shortWikiHash(r.sha))
 	for _, file := range r.docFiles() {
 		b.WriteString(r.docBlock(file, 3))
 	}
@@ -546,14 +548,14 @@ func (r *wikiPlanRepo) docIndexText() string {
 // contractsText is the contracts/ inventory: each file with its top-level keys (contracts.md).
 func (r *wikiPlanRepo) contractsText() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# contracts/ 清单（origin/main %s）\n\n", shortWikiHash(r.sha))
+	fmt.Fprintf(&b, "# contracts/ inventory (origin/main %s)\n\n", shortWikiHash(r.sha))
 	n := 0
 	for _, file := range r.files {
 		if !strings.HasPrefix(file, "contracts/") {
 			continue
 		}
 		n++
-		desc := "（非 JSON）"
+		desc := "(not JSON)"
 		var value interface{}
 		if json.Unmarshal([]byte(r.blobOf(file)), &value) == nil {
 			switch v := value.(type) {
@@ -566,15 +568,15 @@ func (r *wikiPlanRepo) contractsText() string {
 				if len(keys) > 14 {
 					keys = append(keys[:14], "…")
 				}
-				desc = "顶层键：" + strings.Join(keys, ", ")
+				desc = "top-level keys: " + strings.Join(keys, ", ")
 			case []interface{}:
-				desc = fmt.Sprintf("数组，%d 项", len(v))
+				desc = "an array of " + wikiCount(len(v), "item", "items")
 			}
 		}
 		fmt.Fprintf(&b, "- `%s` [%d] %s\n", file, r.sizes[file], desc)
 	}
 	if n == 0 {
-		b.WriteString("（这个仓库没有 contracts/）\n")
+		b.WriteString("(this repository has no contracts/)\n")
 	}
 	return b.String()
 }
@@ -585,11 +587,11 @@ func (r *wikiPlanRepo) overviewText(maxChars int) string {
 	var parts []string
 	for _, file := range []string{"docs/README.md", "docs/architecture.md"} {
 		if r.fileSet[file] {
-			parts = append(parts, fmt.Sprintf("<%s 全文>\n%s\n</%s>", file, strings.TrimSpace(r.blobOf(file)), file))
+			parts = append(parts, fmt.Sprintf("<%s full text>\n%s\n</%s>", file, strings.TrimSpace(r.blobOf(file)), file))
 		}
 	}
 	if len(parts) == 0 && r.fileSet["README.md"] {
-		parts = append(parts, fmt.Sprintf("<README.md 全文>\n%s\n</README.md>", strings.TrimSpace(r.blobOf("README.md"))))
+		parts = append(parts, fmt.Sprintf("<README.md full text>\n%s\n</README.md>", strings.TrimSpace(r.blobOf("README.md"))))
 	}
 	return wikiPlanCut(strings.Join(parts, "\n\n"), maxChars)
 }
@@ -628,13 +630,13 @@ func (r *wikiPlanRepo) codeExcerpt(patterns []string, maxChars int) string {
 		}
 		line := file + ": " + strings.Join(symbols, ", ") + "\n"
 		if b.Len()+len(line) > maxChars {
-			fmt.Fprintf(&b, "…（另有 %d 个文件略去）\n", len(files)-i)
+			fmt.Fprintf(&b, "… (%s left out)\n", wikiCount(len(files)-i, "more file", "more files"))
 			break
 		}
 		b.WriteString(line)
 	}
 	if b.Len() == 0 {
-		return "（没有匹配到带符号的源文件）\n"
+		return "(no source file with symbols matched)\n"
 	}
 	return b.String()
 }
@@ -643,7 +645,7 @@ func wikiPlanCut(text string, maxChars int) string {
 	if maxChars <= 0 || len([]rune(text)) <= maxChars {
 		return text
 	}
-	return string([]rune(text)[:maxChars]) + "\n…（后略）\n"
+	return string([]rune(text)[:maxChars]) + "\n… (rest omitted)\n"
 }
 
 // ── The references ──────────────────────────────────────────────────────────────────────────────

@@ -55,13 +55,24 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
         }
     }
 
+    /// One of this end's sentences about main, as the browser writes it for whichever branch is the
+    /// project's main branch: each `main` put back as the template's `${main}`. A project on main then
+    /// reads the same sentence at both ends.
+    private static func onMainBranch(_ sentence: String) -> String {
+        sentence.replacingOccurrences(of: "\\bmain\\b", with: "${main}", options: .regularExpression)
+    }
+
     func testOwnerItemChipsAreTheWebsOwn() throws {
         let web = try web()
         func item(_ kind: OwnerItemKind, _ count: Int) -> ProjectListOwnerItem {
             ProjectListOwnerItem(kind: kind, count: count, oldestWaitingSince: "2026-01-01T00:00:00Z")
         }
+        // The merge approval names the project's main branch, which the row carries (`mainBranch`).
         XCTAssertTrue(web.contains(
-            "PROMOTION_APPROVAL: () => '\(ProjectAttention.ownerItemSays(item(.promotionApproval, 1))!)',"))
+            "PROMOTION_APPROVAL: (_item, main) => `\(Self.onMainBranch(ProjectAttention.ownerItemSays(item(.promotionApproval, 1))!))`,"),
+                      "the merge approval's chip drifted")
+        XCTAssertTrue(web.contains("const says = OWNER_ITEM_SAYS[item.kind](item, mainBranchName(project.mainBranch));"),
+                      "the chip no longer takes the main branch off the row")
         XCTAssertTrue(web.contains(
             "FUSE_PAUSED: () => '\(ProjectAttention.ownerItemSays(item(.fusePaused, 1))!)',"))
 

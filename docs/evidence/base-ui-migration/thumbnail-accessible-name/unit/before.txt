@@ -1,0 +1,91 @@
+tree: /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref
+head: 8b245fb695cd53a5a498f5e57edf69cf2af8aebd
+uncommitted:
+ M src/web/src/components/ui/ImagePreview.test.tsx
+?? src/web/src/components/WorkspaceView.composerThumbnail.test.tsx
+source under test: 5aff1c52314b Image.tsx, 0 PREVIEW_IMAGE_LABEL lines in WorkspaceView.tsx
+tests: f8766daf9666 b87335e42983 
+
+
+ RUN  v5.0.2 /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web
+
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > opens on the picture asked for, named by it, with focus on Close and the position under it 104ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > pages with the arrows and with ←/→, and stops at either end 51ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > shows a single picture with neither the position nor the arrows, and ←/→ do nothing 18ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > zooms with the buttons, the wheel and a double click, and never below its own size 46ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > turns and flips the picture 45ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > shows the next picture at its own size, at once 31ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > moves with a drag and settles back in the middle when it fits the window 26ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > closes on Esc, on Close and on the mask — not on the picture — and focus goes back where it was 64ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > comes back at its own size after it was closed zoomed 39ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > draws nothing while closed 6ms
+ ✓ src/components/ui/ImagePreview.test.tsx > Image > is a button named by the picture, holding the picture and the cover drawn over it 6ms
+ × src/components/ui/ImagePreview.test.tsx > Image > is named by its label when the picture is decorative, and the picture stays so 8ms
+   → expected '' to be 'screenshot.png' // Object.is equality
+ ✓ src/components/ui/ImagePreview.test.tsx > Image > opens the picture on its own on a press, on Enter and on Space 66ms
+ ✓ src/components/ui/ImagePreview.test.tsx > Image > grows the viewer from the middle of what was pressed 16ms
+ × src/components/WorkspaceView.composerThumbnail.test.tsx > the thumbnail of a staged picture > is a button named by its file, or "Preview image" when the file has no name, over a decorative picture 229ms
+   → expected [ [ 'button', +0, '' ], …(1) ] to deeply equal [ …(2) ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/WorkspaceView.composerThumbnail.test.tsx > the thumbnail of a staged picture > is a button named by its file, or "Preview image" when the file has no name, over a decorative picture
+AssertionError: expected [ [ 'button', +0, '' ], …(1) ] to deeply equal [ …(2) ]
+
+- Expected
++ Received
+
+  [
+    [
+      "button",
+      0,
+-     "screenshot.png",
++     "",
+    ],
+    [
+      "button",
+      0,
+-     "Preview image",
++     "",
+    ],
+  ]
+
+ ❯ src/components/WorkspaceView.composerThumbnail.test.tsx:208:121
+    206|     });
+    207|
+    208|     expect(thumbnails().map((thumb) => [thumb.getAttribute('role'), th…
+       |                                                                                                                         ^
+    209|       ['button', 0, 'screenshot.png'],
+    210|       ['button', 0, 'Preview image'],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/components/ui/ImagePreview.test.tsx > Image > is named by its label when the picture is decorative, and the picture stays so
+AssertionError: expected '' to be 'screenshot.png' // Object.is equality
+
+- Expected
++ Received
+
+- screenshot.png
+
+ ❯ src/components/ui/ImagePreview.test.tsx:276:48
+    274|     await render(<Image src="blob:shot" alt="" label="screenshot.png" …
+    275|     const wrapper = container!.querySelector<HTMLElement>('[role="butt…
+    276|     expect(wrapper.getAttribute('aria-label')).toBe('screenshot.png');
+       |                                                ^
+    277|     expect(wrapper.querySelector('img')!.getAttribute('alt')).toBe('');
+    278|     // The label names the thumbnail only: the viewer it opens is stil…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 13 passed (15)
+   Start at  21:38:21
+   Duration  3.48s (transform 42%, import 25%, environment 18%, tests 15%)
+
+  Transform  transforming modules took 2.12s · 42% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+exit=1

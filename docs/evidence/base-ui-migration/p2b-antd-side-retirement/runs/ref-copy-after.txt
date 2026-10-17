@@ -1,0 +1,8 @@
+argv: cp /root/.orbit/worktrees/9492e7a5-a50c-5c6e-bd00-33a8246c5b34/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs /mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/v/ref-743d21ab2/docs/evidence/base-ui-migration/p2-keyboard-window-2/keyboard-window-2.browser.mjs
+tree: /mnt/data/tmp/34dq7m9wxKsEaWbvtNqk2/v/ref-743d21ab2 HEAD 743d21ab293caafe6c35325369d4d20eeaf7250d
+uncommitted: 
+start: 2026-10-11T06:32:33Z load: 8.83 8.41 8.02
+mem: 6890M available, swap 22367M free
+disk: / 62988M available
+end: 2026-10-11T06:32:33Z load: 8.83 8.41 8.02
+exit=0

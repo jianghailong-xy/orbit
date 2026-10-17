@@ -50,6 +50,8 @@ export class ClientVersionInterceptor implements NestInterceptor {
     const userId = req?.user?.userId;
     const raw = req?.headers?.[HEADER];
     if (!userId || typeof raw !== 'string') return;
+    // An administrator viewing Orbit as this account is not one of its clients.
+    if (req?.user?.credential?.kind === 'IMPERSONATION') return;
 
     const slash = raw.indexOf('/');
     if (slash < 0) return;

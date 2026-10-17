@@ -19,11 +19,13 @@ import kotlinx.serialization.json.*
 import java.time.Instant
 import java.time.ZoneId
 
+/** [recorded]: drawn in a review as the record this window's press made of it — what the press made past is left out. */
 @Composable
-internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: OwnerForm? = null, reopen: (() -> Unit)? = null) {
+internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: OwnerForm? = null, reopen: (() -> Unit)? = null,
+    recorded: Boolean = false) {
     val row = card.source
     // The owner-confirmation card draws its question, its receipt and a reviewer's return itself (A08-1).
-    if (card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") != null) { OwnerCardBody(card, open, owner, reopen); return }
+    if (card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") != null) { OwnerCardBody(card, open, owner, reopen, recorded); return }
     if (card.key.startsWith("receipt:")) {
         CardFields(row, listOf("title", "decision", "decidedAt", "decidedByType", "note", "report", "review", "answers", "reason", "problems", "resultingSeal"), open)
         return
@@ -84,7 +86,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let { CardFields(it, listOf("refusal", "requiredAction"), open) }
             row.obj("independence")?.takeIf { !it.flag("independent") }?.let { CardFields(it, listOf("disqualification", "requiredAction"), open) }
         }
-        CardFamily.OWNER_CONFIRMATION -> OwnerCardBody(card, open, owner, reopen)
+        CardFamily.OWNER_CONFIRMATION -> OwnerCardBody(card, open, owner, reopen, recorded)
         CardFamily.CRITERIA_CHANGE -> {
             CardFields(row, listOf("filedAt", "baselineSeal", "currentSeal"), open)
             row.obj("diff")?.objects("entries")?.forEach { entry ->
@@ -117,7 +119,8 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             }
             row.obj("currentVersion")?.text("digest")?.let { Text("Seal ${it.take(8)}", style = MaterialTheme.typography.labelMedium) }
             CardFields(row, listOf("changesSinceConfirmed"), open)
-            row.obj("confirmation")?.let { recorded ->
+            // The confirmation before this one is not what its record says.
+            if (!recorded) row.obj("confirmation")?.let { recorded ->
                 Field("Confirmed at", recorded["confirmedAt"], open)
                 DetailFold("confirmed criteria") { CardFields(recorded, listOf("criteriaMaterial", "startedWith"), open) }
             }
@@ -128,13 +131,8 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             CardFields(row, listOf("detailLine", "waitingSince"), open)
             row.obj("question")?.let { CardFields(it, listOf("blocksTaskIds", "ifUnanswered"), open) }
         }
-        CardFamily.EXCEPTION -> {
-            CardFields(row, listOf("detailLine", "assigneeReason", "waitingSince", "escalatedAt", "facts"), open)
-            val offered = row.strings("actions")
-            if ("OPEN_TASK_SESSION" in offered) row.text("sessionId")?.let { LinkButton("Open task session", "orbit-session:$it", open) }
-            if ("OPEN_COORDINATOR" in offered) row.obj("delivery")?.text("sessionId")?.let { LinkButton("Open coordinator", "orbit-session:$it", open) }
-            if (row.text("sessionId") == null && "OPEN_TASK_SESSION" in offered) Text("Task details are not connected yet.", style = MaterialTheme.typography.bodySmall)
-        }
+        CardFamily.EXCEPTION -> Unit // Drawn whole by the exception card (`ExceptionCard`, A08-17).
+        CardFamily.QUESTION_RECORD -> Unit // Drawn whole by the record card and its replay (`QuestionRecordCard`, A08-13).
         CardFamily.PROMOTION -> CardFields(row, listOf("state", "sourceRef", "sourceSha", "upstreamRef", "commitsAhead", "filesChanged", "tasks", "checks", "conflicts", "recheck", "execution", "merged"), open)
         CardFamily.WIKI -> CardFields(row, listOf("op", "entryId", "baseRevision", "payload", "similar", "tainted", "decision", "reason", "change", "facts", "version", "categories", "docs", "gate", "sources", "summary", "fields", "trust", "revert"), open)
         CardFamily.BACKGROUND -> CardFields(row, listOf("state", "predicate", "targets", "matches", "expiryDeliveries", "expiresAt"), open)

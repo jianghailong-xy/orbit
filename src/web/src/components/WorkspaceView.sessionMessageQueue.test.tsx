@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionMessageCard as Card } from '@orbit/shared';
@@ -241,9 +240,7 @@ async function mountSession(): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -292,10 +289,12 @@ describe('another session’s message, waiting in the queue', { timeout: 60_000 
       'the other session’s words are drawn as the reader’s message',
     ).toBe(false);
 
-    // The negative control: the message the reader typed behind it is drawn as it always was.
-    const bubbles = mounted().querySelectorAll<HTMLElement>('.chat-msg.chat-user.chat-queued');
-    expect(bubbles).toHaveLength(1);
-    expect(bubbles[0].querySelector('.md')?.textContent?.trim()).toBe(TYPED);
+    // The negative control: the message the reader typed behind it is theirs, waiting in the tray
+    // above the composer.
+    expect(mounted().querySelectorAll('.chat-msg.chat-user.chat-queued')).toHaveLength(0);
+    const rows = mounted().querySelectorAll<HTMLElement>('.pending-tray-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector('.pending-tray-text')?.textContent).toBe(TYPED);
   });
 
   it('is withdrawn without putting any of its words in the reader’s composer', async () => {
@@ -308,9 +307,9 @@ describe('another session’s message, waiting in the queue', { timeout: 60_000 
     });
     expect(composer()?.value).toBe('');
 
-    // The same Cancel on the message the reader typed still hands it back, so the empty composer above
-    // is the rule and not a Cancel that restores nothing.
-    await click(cancelIn(mounted().querySelector('.chat-queued')));
+    // Withdrawing the message the reader typed still hands it back, so the empty composer above is the
+    // rule and not a Cancel that restores nothing.
+    await click(mounted().querySelector('.pending-tray-row [aria-label="Withdraw"]')!);
     await waitForUi(() => expect(composer()?.value).toBe(TYPED));
   });
 
@@ -325,7 +324,11 @@ describe('another session’s message, waiting in the queue', { timeout: 60_000 
     await click(stop!);
 
     await waitForUi(() => {
-      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC);
+      // The composer's Stop: this session, no follow-up, and the explicit ask that its
+      // background work ends with the turn (see WorkspaceView.stopBackgroundWork.test.tsx).
+      expect(interruptMock).toHaveBeenCalledWith(SESSION_PUBLIC, undefined, {
+        stopBackgroundWork: true,
+      });
       // What the reader typed comes back to be edited and resent; the other session's words do not.
       expect(composer()?.value).toBe(TYPED);
     });

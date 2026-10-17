@@ -546,7 +546,7 @@ struct AntigravityRepairCardView: View {
             .font(.orbitLabel)
         }
         .padding(10)
-        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .composerBandWash(.orange, opacity: 0.08)
         .task { await console.refreshAntigravityRepairContext() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await console.refreshAntigravityRepairContext() } }
@@ -587,7 +587,9 @@ struct DshRepairCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange).font(.orbitProse.bold())
-            Text(repair.detail)
+            // A rejected key is named — `the DeepSeek key “DeepSeek 2”` — since one DeepSeek key runs on
+            // Claude Code, OpenCode and DeepSeek Harness alike, and there can be several (board 8).
+            Text(repair.detail(keyName: console.sessionKeyName))
                 .font(.orbitLabel).foregroundStyle(.secondary)
             HStack {
                 if repair.isKeyProblem {
@@ -607,7 +609,7 @@ struct DshRepairCardView: View {
             .font(.orbitLabel)
         }
         .padding(10)
-        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .composerBandWash(.orange, opacity: 0.08)
         .accessibilityIdentifier("dsh-repair-\(repair.rawValue)")
     }
 }

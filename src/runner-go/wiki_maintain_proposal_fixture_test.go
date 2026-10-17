@@ -35,7 +35,9 @@ type wikiMaintainProposalFixture struct {
 	Files map[string]string                 `json:"files"`
 	Plan  json.RawMessage                   `json:"plan"`
 	Items []wikiMaintainProposalFixtureItem `json:"items"`
-	Cases []wikiMaintainProposalFixtureCase `json:"cases"`
+	// The space's topics, as GET …/maintenance/docs hands them to the run.
+	Topics []wikiPlanTopic                   `json:"topics"`
+	Cases  []wikiMaintainProposalFixtureCase `json:"cases"`
 }
 
 type wikiMaintainProposalFixtureItem struct {
@@ -86,7 +88,7 @@ func wikiMaintainProposalFixtureRun(t *testing.T, f wikiMaintainProposalFixture)
 	out.Cases = nil
 	for _, c := range f.Cases {
 		answer := parseWikiProposal(c.Answer)
-		request, problems := assembleWikiProposal(plan, answer, items, repo)
+		request, problems := assembleWikiProposal(plan, answer, items, repo, f.Topics)
 		got := wikiMaintainProposalFixtureCase{Name: c.Name, Answer: c.Answer, Problems: append([]string{}, problems...)}
 		sections := request.Change.Doc.Sections
 		if len(sections) >= len(answer.Sections) {

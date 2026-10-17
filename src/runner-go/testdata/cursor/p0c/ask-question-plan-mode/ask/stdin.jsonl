@@ -1,0 +1,4 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[]}}
+{"jsonrpc":"2.0","id":3,"method":"session/set_mode","params":{"sessionId":"<UUID_1>","modeId":"plan"}}
+{"jsonrpc":"2.0","id":4,"method":"session/prompt","params":{"sessionId":"<UUID_1>","prompt":[{"type":"text","text":"Use your ask-question tool twice, one question per tool call, and wait for each answer: first ask \"Pick a fruit\" with the options apple and banana; after that answer arrives, ask \"Pick a color\" with the options red and blue. Then reply with exactly: fruit=<answer>, color=<answer>."}]}}

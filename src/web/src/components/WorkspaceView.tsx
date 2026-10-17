@@ -63,18 +63,20 @@ import {
   RECORD_FLASH_MS,
   RECORD_NOT_FOUND,
   RECORD_PARAM,
+  itemAtOf,
+  sessionItemHref,
   recordAtOf,
   recordScrollDelta,
 } from '../lib/transcriptDeepLink';
 import { memoizeEventFull } from '../lib/eventFull';
 import { plainPreview } from '../lib/plainPreview';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
   Fragment,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  type RefObject,
   type TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
@@ -249,6 +251,7 @@ import {
   completeSession,
   cancelAutoRetry,
   cancelQueuedTurn,
+  steerQueuedTurn,
   adoptSessionBranch,
   commitSession,
   createMergeRepairSession,
@@ -297,7 +300,8 @@ import {
   type NeverStartedSession,
 } from './RunNeverStartedCard';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnAttachmentRef, type TurnImage, UndeliveredCtx, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
@@ -308,6 +312,7 @@ import {
   REVIEW_CARD_REVEALED,
   revealOpenItemCard,
   revealSettlementCard,
+  revealOwnerItemCard,
   type PendingDecisionRow,
 } from './DecisionRail';
 import {
@@ -334,8 +339,9 @@ import {
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
-import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { landingCard } from './ProjectPanoramaHeader';
 import { LandingJobsSheet } from './LandingJobsSheet';
+import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
@@ -374,7 +380,9 @@ import {
   START_PROJECT_INTENT,
   START_ROW_OWN,
   confirmedChangesProjectKey,
+  mainBranchName,
   projectStarted,
+  startMainBranch,
   startPageRow,
   type SettlementQuestion,
   type StartPageRow,
@@ -404,6 +412,15 @@ import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
+import { Button } from './ui/Button';
+import { useConfirm } from './ui/ConfirmDialog';
+import { Image } from './ui/Image';
+import { Menu, type MenuItem } from './ui/Menu';
+import { Popover } from './ui/Popover';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
+import { Textarea } from './ui/Textarea';
+import { Tooltip } from './ui/Tooltip';
 import type {
   SessionTurnIntent,
   SessionTurnPlacement,
@@ -420,6 +437,8 @@ import {
   isAccountEngine,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
+  runtimeTakesMidTurnSteer,
+  STEER_WITHDRAW_ERRORS,
   TRASH_RETENTION_DAYS,
   withEnginePlanUsage,
   type AccountEngine,
@@ -442,7 +461,7 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { deliveryFailureExplanation, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
+import { deliveryFailureExplanation, offersSteerWithdraw, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
 import { streamAnchorAfter } from '../lib/streamAnchor';
 import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
@@ -630,6 +649,9 @@ interface ComposerSendVars {
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+// What a staged picture's thumbnail is called when its file has no name. The thumbnail is the button that opens the
+// picture in the viewer and is named by the file; the picture itself stays decorative (`alt=""`).
+const PREVIEW_IMAGE_LABEL = 'Preview image';
 
 // Compact byte size for a staged file chip ("12 KB", "3.4 MB").
 const fmtBytes = (n: number): string => {
@@ -672,6 +694,7 @@ const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
   claude: 'claude-account-move/v1',
   antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY,
   kimi: 'kimi-account-move/v1',
+  cursor: 'cursor-account-move/v1',
 };
 /** Where a session, and its workspace, keep the account each engine runs on — and whether a session's
  *  was picked by hand. */
@@ -680,12 +703,14 @@ const ACCOUNT_FIELD = {
   claude: 'claudeAccount',
   antigravity: 'antigravityAccount',
   kimi: 'kimiAccount',
+  cursor: 'cursorAccount',
 } as const satisfies Record<AccountEngine, string>;
 const ACCOUNT_PINNED_FIELD = {
   codex: 'codexAccountPinned',
   claude: 'claudeAccountPinned',
   antigravity: 'antigravityAccountPinned',
   kimi: 'kimiAccountPinned',
+  cursor: 'cursorAccountPinned',
 } as const satisfies Record<AccountEngine, string>;
 /** What the composer sends to put a session back on Automatic (PATCH /sessions/:id/account). */
 const AUTOMATIC_ACCOUNT = 'automatic';
@@ -806,20 +831,30 @@ function ContextWindowIndicator({
   );
   const tier = pct >= 90 ? 'danger' : pct >= 75 ? 'warn' : 'neutral';
   return (
-    <Popover content={pop} title="Context" placement="topRight" trigger={['hover', 'click']}>
-      <span
-        className="composer-pill composer-usage"
-        aria-label={
-          !known
-            ? 'Context window not reported yet'
-            : sized
-              ? `Context window ${pct}%`
-              : `Context ${fmtTokens(tokens)} tokens, window not reported`
-        }
-      >
-        <ContextRing pct={pct} tier={tier} />
-        <span className="composer-usage-pct">{headline}</span>
-      </span>
+    <Popover
+      title="Context"
+      side="top"
+      align="end"
+      openOnHover
+      // The pill stays the span it was drawn as; the popover makes it a button for the keyboard.
+      nativeButton={false}
+      trigger={
+        <span
+          className="composer-pill composer-usage"
+          aria-label={
+            !known
+              ? 'Context window not reported yet'
+              : sized
+                ? `Context window ${pct}%`
+                : `Context ${fmtTokens(tokens)} tokens, window not reported`
+          }
+        >
+          <ContextRing pct={pct} tier={tier} />
+          <span className="composer-usage-pct">{headline}</span>
+        </span>
+      }
+    >
+      {pop}
     </Popover>
   );
 }
@@ -849,9 +884,6 @@ const SESSION_COL_DEFAULT = 320;
 // Whether the session list's Pinned section is folded to its heading, persisted across reloads.
 const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
 
-// Set by the first double-tap that takes a suggestion on this device: from then on a touch screen's
-// grey line is the guess alone, without "Double-tap to use" after it (prompt-suggestions-design §4.3).
-const SUGGESTION_TAP_LEARNED_KEY = 'orbit.suggestionDoubleTapLearned';
 // Two taps on the composer this close in time and place are one double-tap (the platforms' own
 // double-tap window).
 const DOUBLE_TAP_MS = 300;
@@ -1059,7 +1091,9 @@ const sentLine = (text: string): SessionLine => ({
 // banner and card say these same words, and `OwnerItemCardsTests` holds the two ends to each other.
 const OWNER_ITEM_APPROVE_MERGE = 'Approve merge to main';
 const OWNER_ITEM_COORDINATOR_QUESTION = 'Question from coordinator';
-const OWNER_ITEM_ESCALATED = 'Escalated to you';
+// Keep this literal declaration: native parity tests read the web source directly.
+export const OWNER_ITEM_ESCALATED = 'Escalated to you';
+export const OWNER_ITEM_NEED_SEPARATOR = ' · ';
 const OWNER_ITEM_PAUSED = 'Paused';
 
 /** The kinds this row can name, and the words it says for each. A kind missing here — one this
@@ -1071,6 +1105,11 @@ const OWNER_ITEM_WORDS: Record<string, string> = {
   FUSE_PAUSED: OWNER_ITEM_PAUSED,
 };
 
+/** The words above for an item whose project's main branch is `main` by name (the item's
+ *  `mainBranch`): a merge approval names the branch it merges into. */
+const ownerItemWords = (main: string): Record<string, string> =>
+  ({ ...OWNER_ITEM_WORDS, PROMOTION_APPROVAL: `Approve merge to ${main}` });
+
 /**
  * The item a row names: the oldest one it can name, which is the same item the needs-you bar above
  * the list points at. Mirrors `NeedsYouLogic.oldestItemWord` — an unparseable instant sorts last
@@ -1079,7 +1118,9 @@ const OWNER_ITEM_WORDS: Record<string, string> = {
 const ownerItemWord = (s: any): string | null => {
   let oldest: { word: string; at: number } | null = null;
   for (const item of s.ownerItems ?? []) {
-    const word = OWNER_ITEM_WORDS[item?.kind];
+    const word = item?.kind === 'ESCALATED' && item?.need
+      ? `${OWNER_ITEM_ESCALATED}${OWNER_ITEM_NEED_SEPARATOR}${item.need}`
+      : ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];
     if (!word) continue;
     const at = Date.parse(item?.since ?? '');
     const key = Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at;
@@ -1217,8 +1258,7 @@ export function SessionTitleRow({
       <div className="session-title">{s.title}</div>
       {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
         <Tooltip
-          title={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}
-          placement="top"
+          content={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}
           open={hoverTipOpen}
         >
           <span className="session-merge-badge">⚠</span>
@@ -1302,6 +1342,10 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
   const [open, setOpen] = useState(false);
   const asked = start.kind === 'asked' ? start.row : null;
   const settings = asked?.startRequest?.settings ?? null;
+  // The integration read the landing line beside it holds (one query key): what the suggestion's
+  // Directly into names is the main branch the start card opens with.
+  const integration = useQuery(projectIntegrationQuery(projectId));
+  const standing = integration.data && typeof integration.data === 'object' ? integration.data : null;
   return (
     <div className="session-project-start">
       {asked ? (
@@ -1314,7 +1358,9 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
             </span>
           </div>
           {settings ? (
-            <div className="session-project-start-suggestion">{SESSION_PROJECT_COPY.startSuggestion(settings)}</div>
+            <div className="session-project-start-suggestion">
+              {SESSION_PROJECT_COPY.startSuggestion(settings, startMainBranch(settings.upstreamRef, standing))}
+            </div>
           ) : null}
         </div>
       ) : (
@@ -1336,11 +1382,13 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
   );
 }
 
-/** The landing line inside the progress card while a task lands on the project branch (iOS
- *  `SessionProjectPage.landingLine`): the project page's own row, ticking once a second, and a press
- *  that lists every job in flight (`LandingJobsSheet`) — or, from a server that does not list them,
- *  opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
- *  component, so the second hand redraws this line and not the console around it. */
+/** The landing card of a project's sessions page, under the progress card and before the merge card
+ *  (iOS `SessionProjectPage.landingCard`; owner decision 2026-10-11, docs/mocks/project-landing-card):
+ *  the card `landingCard` builds off the project page's own read, ticking once a second while a task
+ *  lands, and a press that lists every job in flight (`LandingJobsSheet`) — or, from a server that
+ *  does not list them, opens the project page. A merge job's is the merge card's
+ *  (`ProjectMergeStrip`). Its own component, so the second hand redraws this card and not the
+ *  console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
   const integration = useQuery(projectIntegrationQuery(projectId));
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
@@ -1354,19 +1402,16 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, [live]);
-  const line = live && view
-    ? landingLine(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
+  const card = live && view
+    ? landingCard(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
   return (
     <>
-      {line ? (
-        <button type="button" className="session-project-page-landing" aria-haspopup={listed ? 'dialog' : undefined}
-          onClick={listed ? () => setJobsOpen(true) : onOpen}>
-          <LandingRow line={line} />
-          <RightOutlined className="session-project-page-landing-chev" aria-hidden />
-        </button>
+      {card ? (
+        <ProjectLandingCard projectId={projectId} card={card} dialog={listed}
+          onPress={listed ? () => setJobsOpen(true) : onOpen} />
       ) : null}
-      {/* Portalled out of the card, and kept while open even if the line goes, so a list being read
+      {/* Portalled out of the card, and kept while open even if the card goes, so a list being read
           does not vanish under the reader when its last job lands. */}
       {listed || jobsOpen ? (
         <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
@@ -1389,7 +1434,7 @@ export function SessionProjectListRow({
   project: SessionProjectRow<any>;
   active: boolean;
   onOpen: () => void;
-  menu: MenuProps;
+  menu: MenuItem[];
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
   swipe?: {
@@ -1481,11 +1526,18 @@ export function SessionProjectListRow({
       </div>
       <div className="session-right">
         <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-          <Dropdown trigger={['click']} placement="bottomRight" menu={menu} open={menuOpen} onOpenChange={onMenuOpenChange}>
-            <button type="button" className="session-kebab" aria-label="Project actions" aria-haspopup="menu" aria-expanded={menuOpen}>
-              <MoreOutlined />
-            </button>
-          </Dropdown>
+          <Menu
+            side="bottom"
+            align="end"
+            items={menu}
+            open={menuOpen}
+            onOpenChange={onMenuOpenChange}
+            trigger={
+              <button type="button" className="session-kebab" aria-label="Project actions">
+                <MoreOutlined />
+              </button>
+            }
+          />
         </div>
       </div>
     </div>
@@ -1510,7 +1562,7 @@ export function SessionTagChips({
 
   return (
     <>
-      <Tooltip title={names} placement="top" open={tooltipOpen}>
+      <Tooltip content={names} open={tooltipOpen}>
         <span className="session-tag-chips" aria-hidden="true">
           <span className="session-tag-named">
             <span
@@ -1620,9 +1672,10 @@ export function statusGlyphMotion(session: any, watching?: string | null): 'spin
 export const sessionNeedsYou = (session: any): boolean =>
   (session.pendingApprovals ?? 0) > 0 && session.waitingKind !== 'START_REQUEST';
 
+// The spinner turns, and so does its box: its tip is placed once, as the replaced tip was, instead of bobbing with it.
 function RunningStatusIcon() {
   return (
-    <Tooltip title="Running">
+    <Tooltip content="Running" trackTrigger={false}>
       <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize: 16 }} />
     </Tooltip>
   );
@@ -1646,20 +1699,20 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
   // the same order on purpose: they are read together on one row.
   if ((session.pendingApprovals ?? 0) > 0)
     return (
-      <Tooltip title={waitingLabel(session)}>
+      <Tooltip content={waitingLabel(session)}>
         <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />
       </Tooltip>
     );
   // Under review: a clock in the neutral tone, beside the row's line in the same place (§5 N3).
   if (session.confirmationUnderReview)
     return (
-      <Tooltip title={UNDER_REVIEW}>
+      <Tooltip content={UNDER_REVIEW}>
         <ClockCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   if (state === 'SUCCEEDED')
     return (
-      <Tooltip title="Succeeded">
+      <Tooltip content="Succeeded">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
@@ -1667,7 +1720,7 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
   // glyph would read as a fourth outcome for what is still work in progress.
   if (waitingNoticeFor(session))
     return (
-      <Tooltip title={startingTitle(session)}>
+      <Tooltip content={startingTitle(session)} trackTrigger={false}>
         <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
       </Tooltip>
     );
@@ -1690,13 +1743,13 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
     // The strip's eye, still, because nothing here is running.
     if (watching && work?.kind !== 'subagent')
       return (
-        <Tooltip title={watching}>
+        <Tooltip content={watching}>
           <EyeOutlined style={{ color: 'var(--text-3)', fontSize }} />
         </Tooltip>
       );
     if (work)
       return (
-        <Tooltip title={work.text}>
+        <Tooltip content={work.text} trackTrigger={work.kind !== 'subagent'}>
           {work.kind === 'subagent' ? (
             <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
           ) : (
@@ -1708,7 +1761,7 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
         </Tooltip>
       );
     return (
-      <Tooltip title="Waiting for your reply">
+      <Tooltip content="Waiting for your reply">
         <MessageOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
@@ -1720,26 +1773,26 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
     // for the 30 seconds before it fixes itself.
     if (sessionRetryPending(session))
       return (
-        <Tooltip title="Retrying — the run resumes on its own">
+        <Tooltip content="Retrying — the run resumes on its own">
           <ClockCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
         </Tooltip>
       );
     const err: string = typeof session.error === 'string' ? session.error : '';
     if (err.toLowerCase().includes('offline'))
       return (
-        <Tooltip title="Disconnected — runner went offline">
+        <Tooltip content="Disconnected — runner went offline">
           <DisconnectOutlined style={{ color: 'var(--text-3)', fontSize }} />
         </Tooltip>
       );
     return (
-      <Tooltip title={err || 'Failed'}>
+      <Tooltip content={err || 'Failed'}>
         <CloseCircleFilled style={{ color: 'var(--error)', fontSize }} />
       </Tooltip>
     );
   }
   if (state === 'INTERRUPTED')
     return (
-      <Tooltip title="Interrupted">
+      <Tooltip content="Interrupted">
         <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
@@ -1748,13 +1801,13 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
   // rather than three because resume eligibility never depended on which act ended it.
   if (state === 'ENDED')
     return (
-      <Tooltip title="Ended">
+      <Tooltip content="Ended">
         <CheckCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   // PENDING — waiting for an active turn slot
   return (
-    <Tooltip title={queuedTitle(session)}>
+    <Tooltip content={queuedTitle(session)}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
@@ -1876,6 +1929,30 @@ function StopSquareIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Whether a row of the queue waits in the tray above the composer rather than at the transcript's
+ * tail: the reader's own words (`returnsToComposer`) still on their way — queued for the next turn,
+ * or a steer no runner has taken yet. A message whose delivery settled undelivered has an outcome,
+ * and stays in the conversation with it.
+ */
+export function inPendingTray(turn: QueuedTurn): boolean {
+  return turn.delivery == null && returnsToComposer(turn);
+}
+
+/** What a tray row shows of a message's attachments: this tab's previews, else the pictures' ids. */
+function trayPictures(
+  previews: readonly TurnImage[] | undefined,
+  refs: readonly { id: string; mime?: string }[] | undefined,
+): Pick<PendingTrayRow, 'previews' | 'imageIds' | 'files'> {
+  const all = refs ?? [];
+  const files = all.filter((r) => r.mime && !r.mime.startsWith('image/')).length;
+  if (previews?.length) return { previews: [...previews], imageIds: [], files };
+  return { previews: [], imageIds: all.filter((r) => !r.mime || r.mime.startsWith('image/')).map((r) => r.id), files };
+}
+
+/** How long Send is held before it offers to queue the message instead (a phone has no ⌥Enter). */
+const QUEUE_OFFER_HOLD_MS = 450;
+
 /** What withdrawing a queued wake costs, said when the action asks to confirm. */
 const WAKE_WITHDRAW_CONSEQUENCE =
   "If withdrawn, this session is not woken this time, and the watch won't send it again.";
@@ -1884,11 +1961,11 @@ const WAKE_WITHDRAW_CONSEQUENCE =
  * The line under a message in the queued tail — the one thing that says which of the two kinds
  * the server filed it as, and where the way out of it is offered.
  *
- * A queued message is waiting for its own turn: nothing has read it, so it can still be taken
- * back. A steer is already on its way into the turn in progress, and the engine may be reading it
- * as we ask — the server refuses to withdraw one (409, "being written into the running turn"), so
- * offering Cancel would be offering a button that always fails. `placement` is the server receipt,
- * never a local guess.
+ * The reader's own messages still on their way are not here: the tray above the composer holds
+ * them, with their way back (`inPendingTray`). What this line is under is what Orbit queued — a turn
+ * nobody typed, waiting for its own turn and still cancellable, or one on its way into the running
+ * turn — and a message whose delivery settled. `placement` is the server receipt, never a local
+ * guess.
  *
  * Once delivery has settled undelivered, both of those stop being true. Nothing read the message
  * and nothing will; the row is a durable statement about a boundary that has passed. So it is the
@@ -1921,7 +1998,7 @@ export function QueuedTurnMeta({
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
-      ? 'Delivery could not be confirmed'
+      ? steerDeliveryState('unconfirmed').label
     : placement === 'steer'
       ? steerDeliveryState(undefined).label
       : 'Queued for next turn';
@@ -1953,7 +2030,8 @@ export function WorkspaceView({
   /** The managed runner, when this console's runner is it (WorkspaceConsole decides). */
   managed?: ManagedRunner | null;
 }) {
-  const { modal } = AntApp.useApp();
+  // The confirmations this view asks, drawn by the holder at the foot of the view.
+  const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -2008,6 +2086,10 @@ export function WorkspaceView({
   const recordAt = recordAtOf(searchParams);
   const recordAtRef = useRef(recordAt);
   recordAtRef.current = recordAt;
+  // The owner-item card a list/banner deep link should reveal after the open-items read and its
+  // transcript insert have rendered. Kept separate from `at`, because an item is not a transcript
+  // record and must not reseed the transcript window.
+  const itemAt = itemAtOf(searchParams);
   // Inline header-title rename: double-click swaps the title for an input. `editingTitle`
   // gates the editor, `titleDraft` holds the in-progress text, `cancelTitleEdit` lets
   // Escape skip the blur-commit. Switching sessions closes any open editor (effect below).
@@ -2133,6 +2215,8 @@ export function WorkspaceView({
     localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
   };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
+  // Each session row's ⋯ by session id: where focus goes back to when a confirmation its menu opened closes.
+  const rowKebabs = useRef(new Map<string, HTMLButtonElement>());
   // The session row whose Rename… field is open (SessionRowRename), from its ⋯ or a held press.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   // Touch swipe actions for session rows: on mobile the row's actions sit behind a swipe,
@@ -2183,14 +2267,33 @@ export function WorkspaceView({
     saving: boolean;
   } | null>(null);
   const [folderMenuOpenId, setFolderMenuOpenId] = useState<string | null>(null);
+  // The folder page's ⋯, where focus goes back to when Delete Folder…'s confirmation closes.
+  const folderHeadMore = useRef<HTMLSpanElement>(null);
   // The field's latest state for its handlers: a blur fired as Return or Esc unmounts the field
   // reads it closed and saves nothing, and a second Return can't race the first save.
   const folderEditRef = useRef(folderEdit);
   folderEditRef.current = folderEdit;
   const folderSaving = useRef(false);
-  // Controlled because the multi-select tag items stay open after a choice; ordinary actions
-  // close it explicitly (Ant Dropdown otherwise keeps every item open in multiple-select mode).
+  // A pick that opens a field of its own (Rename…, New Folder…, Find) opens it once its menu has handed focus back
+  // to the menu's button: opened any sooner, the field can mount in the commit that removes the menu, whose focus
+  // return then still lands on the button and blurs (so closes) the field — in WebKit, as P4.2 found for Rename. A
+  // pick made before focus entered the menu leaves the button focused, so it is blurred first and the return is a
+  // real move. Without a button that takes focus back (a folder row's ⋯, hidden as its menu closes; a held press's
+  // point, gone with its menu) nothing comes back to race the field, and it opens on the next task.
+  const afterMenu = (button: HTMLElement | null | undefined, action: () => void): void => {
+    if (!button) {
+      window.setTimeout(action, 0);
+      return;
+    }
+    if (document.activeElement === button) button.blur();
+    button.addEventListener('focus', action, { once: true });
+  };
+  // The list's scope menu's trigger, which New Folder… waits on (above).
+  const scopeTrigger = useRef<HTMLSpanElement>(null);
+  // Controlled because the tag items stay open after a choice; ordinary actions close it explicitly.
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  // The header's ⋯, where focus goes back to when a confirmation its menu opened closes.
+  const headerMore = useRef<HTMLButtonElement>(null);
   // React Query publishes isPending through a batched render; this synchronous lock closes the
   // small window where a second full-selection PUT could otherwise start before items disable.
   const tagSaveInFlight = useRef(false);
@@ -2322,6 +2425,7 @@ export function WorkspaceView({
   const [recordTick, setRecordTick] = useState(0);
   // The `?at=` already followed (`<session> <record>`), so one link is followed once, not on every render.
   const followedRecordRef = useRef<string | null>(null);
+  const followedItemRef = useRef<string | null>(null);
   // Set by the session effect, which owns the stream: open a record of the session already open, join
   // the live stream once a detached window reaches the latest event, and trade a detached window for
   // the tail.
@@ -3217,10 +3321,21 @@ export function WorkspaceView({
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
       effectiveView, listByTag, runner.online, watchingBySession, selectedSession, recapsEnabled],
   );
+  // A project's entry stands for its coordinator only in the workspace the coordinator runs in.
+  // Elsewhere it holds that workspace's own members, as a folder row holds its sessions: the arrow keys
+  // pass over it and a landing never picks it, because opening the coordinator would swap this list for
+  // the coordinator's workspace. A click still opens the project's sessions page (owner 10-17,
+  // docs/mocks/project-row-other-workspace).
+  const entrySession = useCallback(
+    (entry: { coordinator: SessionListItem | null }): SessionListItem[] =>
+      entry.coordinator && (!resolvedWorkspaceId || entry.coordinator.workspace?.id === resolvedWorkspaceId)
+        ? [entry.coordinator] : [],
+    [resolvedWorkspaceId],
+  );
   const listedSessions = useMemo(
     () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
-      ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
-    [folderListing, openProjectId, projectMembers],
+      ? entrySession(entry) : [entry]),
+    [folderListing, openProjectId, projectMembers, entrySession],
   );
   // Where a session opened from this list lives. On a folder's page the page goes along, so the
   // list stays on it while the conversations it lists are opened one after another.
@@ -3228,6 +3343,17 @@ export function WorkspaceView({
   const listSearch = openProjectId
     ? `?project=${encodeId(openProjectId)}${effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : folderSearch;
   const sessionPath = useCallback((id: string) => `/sessions/${encodeId(id)}${listSearch}`, [listSearch]);
+  const sessionItemPath = useCallback((session: { id: string; ownerItems?: Array<{ itemId?: string; since?: string }> }) => {
+    const item = [...(session.ownerItems ?? [])]
+      .filter((candidate) => candidate.itemId)
+      .sort((a, b) => {
+        const at = Date.parse(a.since ?? '');
+        const bt = Date.parse(b.since ?? '');
+        return (Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at)
+          - (Number.isNaN(bt) ? Number.MAX_SAFE_INTEGER : bt);
+      })[0];
+    return item?.itemId ? sessionItemHref(session.id, item.itemId) : sessionPath(session.id);
+  }, [sessionPath]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
@@ -3307,8 +3433,8 @@ export function WorkspaceView({
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
-    entry.kind === 'merge' ? [] : entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
-  )), [sections]);
+    entry.kind === 'merge' ? [] : entry.kind === 'project' ? entrySession(entry) : [entry],
+  )), [sections, entrySession]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/workspaces/<id>/new),
@@ -3355,7 +3481,7 @@ export function WorkspaceView({
     if (foldersQ.isPending) return;
     const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
     const target = listedSessions.find((s) => s.id === remembered) ?? listedSessions[0];
-    if (target) navigate(sessionPath(target.id), { replace: true });
+    if (target) navigate(sessionItemPath(target), { replace: true });
   }, [
     isMobile,
     openProjectId,
@@ -3367,7 +3493,7 @@ export function WorkspaceView({
     listedSessions,
     scopeWorkspaceId,
     navigate,
-    sessionPath,
+    sessionItemPath,
   ]);
 
   // Step the open session up/down the visible list, for the window-level Up/Down handler
@@ -3385,10 +3511,10 @@ export function WorkspaceView({
         next = cur + dir;
         if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(sessionPath(orderedSessions[next].id));
+      navigate(sessionItemPath(orderedSessions[next]));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionPath],
+    [orderedSessions, selectedId, view, navigate, sessionItemPath],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -4013,10 +4139,21 @@ export function WorkspaceView({
     () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
     [scopedQueuedTurns, transcriptEvents],
   );
-  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be.
+  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be. Only
+  // the rows the tray does not hold (`inPendingTray`): what Orbit queued, and a message whose
+  // delivery settled undelivered, which is part of the conversation's record.
   const queuedTailEvents = useMemo(
-    () => visibleQueuedTurns.map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
+    () =>
+      visibleQueuedTurns
+        .filter((turn) => !inPendingTray(turn))
+        .map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
     [visibleQueuedTurns],
+  );
+  // The reader's steers the engine has not read yet: the transcript leaves them out, and the tray
+  // above the composer holds them (Transcript `UnreadSteer`).
+  const unreadSteers = useMemo(
+    () => unreadSteersOf(transcriptEvents, turnImages),
+    [transcriptEvents, turnImages],
   );
   // The render-time filter above removes duplication in the same frame the SSE event lands. Trim
   // the acknowledged copy afterwards so landed turns do not accumulate in memory.
@@ -5318,11 +5455,14 @@ export function WorkspaceView({
   // presses no door: the coordinator reads it and acts with the doors it has, and the card's own
   // presses stay where they were.
   const chatProjectTitle = selectedSession?.projectTitle ?? null;
+  // The project's main branch, which an item's re-check of the merge into main names: the open-items
+  // read its rows come from carries it.
+  const chatMain = mainBranchName(openItems.data?.mainBranch);
   // The card's facts as they read at `now`: at the press, for the bar, and again at the send.
   const coordinatorChatContext = useCallback(
     (subject: CoordinatorChatSubject, projectId: string, now: number): string =>
       subject.kind === 'item'
-        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now })
+        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now, main: chatMain })
         : promotionChatContext({
             projectTitle: chatProjectTitle,
             projectId,
@@ -5330,7 +5470,7 @@ export function WorkspaceView({
             item: subject.item,
             now,
           }),
-    [chatProjectTitle],
+    [chatMain, chatProjectTitle],
   );
   const startCoordinatorChat = useCallback(
     (subject: CoordinatorChatSubject) => {
@@ -5365,6 +5505,12 @@ export function WorkspaceView({
     [navigate, selectedId, startCoordinatorChat],
   );
 
+  // The project's main branch, which a card's rerun of a merge check names: the two promotion reads
+  // above carry it — the candidate on offer, else the newest merge.
+  const coordinatedMain = mainBranchName(
+    currentPromotion.data?.upstreamRef ?? mergedPromotions.data?.[0]?.upstreamRef,
+  );
+
   // The exceptions this project still owes somebody, drawn into the transcript at the moment each
   // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
   // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
@@ -5385,10 +5531,26 @@ export function WorkspaceView({
           anchor,
           moment: row.escalatedAt ?? row.waitingSince,
           key: `open-item:${row.itemId}`,
-          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} onChat={chatAboutThis} />,
+          element: (
+            <ItemAsCard
+              projectId={coordinatedProjectId}
+              row={row}
+              now={Date.now()}
+              currentPromotionId={currentPromotion.data?.promotionId ?? null}
+              onChat={chatAboutThis}
+              main={coordinatedMain} />
+          ),
         }];
       }),
-    [chatAboutThis, coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
+    [
+      chatAboutThis,
+      coordinatedMain,
+      coordinatedProjectId,
+      currentPromotion.data?.promotionId,
+      openItems.data,
+      openItems.dataUpdatedAt,
+      transcriptEvents,
+    ],
   );
 
   // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
@@ -5480,6 +5642,23 @@ export function WorkspaceView({
     () => [...decisionReceipts, ...questionRecords, ...blockedPromotionCard, ...exceptionCards],
     [decisionReceipts, questionRecords, blockedPromotionCard, exceptionCards],
   );
+
+  // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
+  // same helper handles pause cards (`fuse-` ids), so list rows and the pinned strip share one jump.
+  useEffect(() => {
+    if (!selectedId || !itemAt) {
+      followedItemRef.current = null;
+      return;
+    }
+    const key = `${selectedId} ${itemAt}`;
+    if (followedItemRef.current === key) return;
+    const frame = requestAnimationFrame(() => {
+      if (revealOwnerItemCard(itemAt, scrollRef.current ?? document)) {
+        followedItemRef.current = key;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, itemAt, transcriptInserts, ownerExceptionIds]);
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
   // delivered and put down are the card's own state, so the strip is told rather than left to work
@@ -6159,7 +6338,11 @@ export function WorkspaceView({
     }
   };
   const control = useMutation({
-    mutationFn: (id: string) => interruptSession(id),
+    // The composer's Stop. It ends the session's background work along with the turn — the dev
+    // server or build the stopped turn left running is what the person pointing at Stop can still
+    // see running — and it is the ONLY caller that asks for that: every other interrupt keeps a
+    // plain interrupt's semantics (nothing killed; the engine and its conversation stay).
+    mutationFn: (id: string) => interruptSession(id, undefined, { stopBackgroundWork: true }),
     onSuccess: () => {
       // Interrupt drops queued follow-ups server-side. Rather than silently lose what the
       // user typed, fold their queued text back into the composer so it can be edited and
@@ -6194,17 +6377,12 @@ export function WorkspaceView({
       // Withdrawing shouldn't silently eat what the user typed (interrupt parity): fold the
       // message back into the composer so it can be edited and resent. Only restored once the
       // DELETE succeeds — a rejected withdraw means the runner already leased it, so it lands
-      // in the transcript and restoring would duplicate it. Unlike Stop (offered only with an
-      // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
-      // read through textRef, since the awaited gap may have outdated this render's `text`.
-      // Nor does a turn nobody typed come back (`returnsToComposer`).
+      // in the transcript and restoring would duplicate it. Withdrawn from the tray it comes back
+      // as a withdrawn steer does (decided 2026-10-16, docs/mocks/steer-tray): an explicit press,
+      // so a draft keeps its place above the words rather than losing them to it. Nor does a turn
+      // nobody typed come back (`returnsToComposer`).
       const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
-      if (body && !textRef.current.trim()) {
-        setText(withdrawn?.shell ? `!${body}` : body);
-        // The files follow the words: restoring them under a draft that kept its place would stage
-        // one message's images against another's text.
-        stageRestored(withdrawn?.attachments);
-      }
+      if (body) restoreUndelivered?.(withdrawn?.shell ? `!${body}` : body, withdrawn?.attachments);
     } catch {
       message.info('This message is already being processed and cannot be withdrawn');
     }
@@ -6215,13 +6393,13 @@ export function WorkspaceView({
   const withdrawWake = (turnId: string): void => {
     const sessionId = selectedId;
     if (!sessionId) return;
-    modal.confirm({
+    void confirm({
       title: 'Withdraw this wake?',
-      content: WAKE_WITHDRAW_CONSEQUENCE,
-      okText: 'Withdraw wake',
-      okButtonProps: { danger: true },
+      description: WAKE_WITHDRAW_CONSEQUENCE,
+      confirmText: 'Withdraw wake',
+      danger: true,
       cancelText: 'Keep it queued',
-      onOk: async () => {
+      onConfirm: async () => {
         setQueued((q) => q.filter((x) => x.turnId !== turnId));
         try {
           await cancelQueuedTurn(sessionId, turnId);
@@ -6416,21 +6594,22 @@ export function WorkspaceView({
   // Trash pauses a public link rather than ending it (docs/share-links-design.md §3). That is worth
   // saying before the move: whoever has the link loses it now, and has it again if the session is
   // restored. A session nobody shared moves straight to Trash, with its Undo, as before.
-  const requestTrash = (session: any): void => {
+  const requestTrash = (session: any, returnFocus?: RefObject<HTMLElement | null>): void => {
     const target = { id: session.id, title: session.title, projectId: session.projectMembership?.projectId };
     const shared = session.id === selectedId ? selectedShared : session.shared === true;
     if (!shared) {
       deleteMut.mutate(target);
       return;
     }
-    modal.confirm({
+    void confirm({
       title: 'Move to Trash?',
-      content:
+      description:
         'Its public link is paused while the session is in Trash. Restoring the session turns the link back on.',
-      okText: 'Move to Trash',
-      okButtonProps: { danger: true },
+      confirmText: 'Move to Trash',
+      danger: true,
       cancelText: 'Cancel',
-      onOk: () => deleteMut.mutate(target),
+      onConfirm: () => deleteMut.mutate(target),
+      returnFocus,
     });
   };
   // Download HTML, from the session's own menu: the whole transcript through the owner's routes
@@ -6489,15 +6668,16 @@ export function WorkspaceView({
         tone: 'error',
       }),
   });
-  const confirmPurge = (session: SessionToastTarget): void => {
-    modal.confirm({
+  const confirmPurge = (session: SessionToastTarget, returnFocus?: RefObject<HTMLElement | null>): void => {
+    void confirm({
       title: 'Delete permanently?',
-      content:
+      description:
         'This session and its full transcript will be permanently deleted. This cannot be undone.',
-      okText: 'Delete permanently',
-      okButtonProps: { danger: true },
+      confirmText: 'Delete permanently',
+      danger: true,
       cancelText: 'Cancel',
-      onOk: () => purgeMut.mutate(session),
+      onConfirm: () => purgeMut.mutate(session),
+      returnFocus,
     });
   };
   // Double-click the header title (or Rename… in a ⋯) to rename. Optimistically patch the title into
@@ -6542,15 +6722,16 @@ export function WorkspaceView({
   });
   // A tapped swipe button (or a full swipe) runs the same request as the row's menu
   // action; the row settles closed either way.
-  const runSwipeAction = (action: SwipeAction, s: any): void => {
+  // `returnFocus`: the ⋯ the action was picked from, which a confirmation it opens hands focus back to.
+  const runSwipeAction = (action: SwipeAction, s: any, returnFocus?: RefObject<HTMLElement | null>): void => {
     setSwipeOpen(null);
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt, projectId: s.projectMembership?.projectId });
     else if (action === 'share') setShareRowId(s.id);
     else if (action === 'move') openMove(s);
-    else if (action === 'delete') requestTrash(s);
-    else confirmPurge({ id: s.id, title: s.title });
+    else if (action === 'delete') requestTrash(s, returnFocus);
+    else confirmPurge({ id: s.id, title: s.title }, returnFocus);
   };
   // Apply the menu's complete selection in one write. Optimistically patch every list scope so the
   // checkmarks, row dots and tag grouping move immediately; the server response restores its order.
@@ -6594,16 +6775,16 @@ export function WorkspaceView({
     onError: (e: Error) => message.error("Couldn't enable worktree isolation", e.message),
   });
   const askEnableIsolation = (workspaceId: string) =>
-    modal.confirm({
+    void confirm({
       title: 'Enable worktree isolation?',
-      content:
+      description:
         "This initializes a git repo in the workspace's working directory (a default .gitignore" +
         ' + a baseline commit of the existing files) on its next run, so concurrent sessions' +
         ' each get their own branch instead of sharing the directory.',
-      okText: 'Enable',
-      // Swallow a rejected enable (onError already toasts) so confirm() closes cleanly
-      // instead of leaving an unhandled promise rejection.
-      onOk: () => enableIsoMut.mutateAsync(workspaceId).catch(() => {}),
+      confirmText: 'Enable',
+      // Swallow a rejected enable (onError already toasts) so the confirmation closes cleanly
+      // instead of holding its own copy of the error.
+      onConfirm: () => enableIsoMut.mutateAsync(workspaceId).catch(() => {}),
     });
   // Repair the machine's shared checkout when the runner reports it stuck mid-merge (which blocks
   // every session's merge there). Async like the others: the runner does it on its next heartbeat,
@@ -6616,11 +6797,15 @@ export function WorkspaceView({
     },
     onError: (e: Error) => message.error("Couldn't clean up the checkout", e.message),
   });
-  const askCleanUpRepo = (workspaceId: string, root: string) =>
-    modal.confirm({
-      ...repoCleanupConfirm(root),
-      onOk: () => repoCleanupMut.mutateAsync(workspaceId).catch(() => {}),
+  const askCleanUpRepo = (workspaceId: string, root: string) => {
+    const cleanup = repoCleanupConfirm(root);
+    void confirm({
+      title: cleanup.title,
+      description: cleanup.content,
+      confirmText: cleanup.okText,
+      onConfirm: () => repoCleanupMut.mutateAsync(workspaceId).catch(() => {}),
     });
+  };
   // Merge this session's worktree branch into main on the runner that ran it. Async: the
   // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
   // (the status bar polls while pending). Invalidate detail so 'pending' shows immediately.
@@ -7263,16 +7448,81 @@ export function WorkspaceView({
       !sameSessionSendBlocked &&
       !selectedMissing &&
       !loadingSession;
-  // The single send button morphs into a Stop while a turn is generating AND the composer
-  // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
+  // The single send button morphs into a Stop while the session has something to stop AND the
+  // composer is empty — interrupting it. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
   // and the reaper recycles an idle/finished session's slot on its own.
+  //
+  // "Something to stop" reads the same two predicates the header draws the session with, off the
+  // same row (`selectedSession ?? selected`), so the glyph and this button cannot disagree:
+  //
+  //   - `isGenerating` — the dispatched turn (RUNNING), or a turn the engine started for itself
+  //     (AWAITING_INPUT + engineTurnActive: a background task reporting in, a scheduled wake-up).
+  //     The latter never reaches /turn-complete, so the status stays parked for its whole
+  //     duration while the engine streams; the runner asks the engine to interrupt
+  //     unconditionally for exactly this case (src/runner-go/session.go), so a predicate reading
+  //     the raw status left it unstoppable — no Stop, and no other way to reach the turn.
+  //   - `outlivingSessionWork` — a sub-agent or background process still running under a parked
+  //     turn. DELIBERATE, and the reason this is not a "generating" predicate: a session parked
+  //     with only that work left also gets a Stop. Making the press stop the background work as
+  //     well is a separate piece of work; until it lands, the stop still reaches the engine and
+  //     what it found is reported in the transcript. Do not narrow this back as though the
+  //     background case were an oversight.
+  //
+  // Only a genuinely idle session — nothing generating, nothing left running — keeps Send.
+  //
+  // This deliberately loosens the review fix in docs/interactive-claude-runner-design.md
+  // ("disable Stop the moment turn_end arrives to close the race"): that kept Stop off a parked
+  // session because a Stop clicked as the turn ended could file a stale interrupt onto it, where
+  // it might land on the NEXT turn. The server holds that race itself now, which is why the
+  // button can stay: `interrupt` drops every queued message/shell/steer turn in the same
+  // transaction that files the interrupt (src/apiserver/src/sessions/sessions.service.ts), so
+  // nothing queued is left to fire behind the stop; the interrupt takes its place in the turn
+  // order, so a message sent after it is delivered after it; and the runner asks the engine and
+  // waits for that request's answer (src/runner-go/session.go), so a stop is never left pending
+  // for whatever turn comes next: what the engine answered — confirmed, or nothing to interrupt —
+  // is written into the transcript.
   const showStop =
     !!selected &&
-    sessionRunStatusOf(selectedSession ?? selected) === 'RUNNING' &&
+    (isGenerating(selectedSession ?? selected, sessionRunStateOf(selectedSession ?? selected)) ||
+      outlivingSessionWork(selectedSession ?? selected) !== null) &&
     !text.trim() &&
     readyImages.length === 0 &&
     !replyTo;
+
+  // Holding Send while a turn runs offers the other way to send the message — queued for the next
+  // turn instead of into this one — which ⌥Enter does from a keyboard (decided 2026-10-16,
+  // docs/mocks/steer-tray). A phone has no ⌥.
+  const queueOffered = defaultSendIntent === 'CURRENT_WORK' && !showStop && runtimeTakesMidTurnSteer(selectedEngine);
+  const [queueOffer, setQueueOffer] = useState(false);
+  const queueOfferRef = useRef<HTMLDivElement>(null);
+  // The press now on Send, and whether it was held long enough to open the offer instead of sending.
+  const sendHold = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
+  const releaseSendHold = () => {
+    const hold = sendHold.current;
+    if (hold && !hold.fired) {
+      clearTimeout(hold.timer);
+      sendHold.current = null;
+    }
+  };
+  useEffect(() => {
+    if (!queueOffer) return undefined;
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !queueOfferRef.current?.contains(event.target as Element | null)) {
+        setQueueOffer(false);
+      }
+    };
+    document.addEventListener('pointerdown', close, true);
+    document.addEventListener('keydown', close, true);
+    return () => {
+      document.removeEventListener('pointerdown', close, true);
+      document.removeEventListener('keydown', close, true);
+    };
+  }, [queueOffer]);
+  // Nothing to send that way any more (sent, emptied, the turn ended): the offer goes too.
+  useEffect(() => {
+    if (!queueOffered) setQueueOffer(false);
+  }, [queueOffered]);
 
   // ── `/` command, skill, and local command autocomplete ─────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
@@ -7280,11 +7530,8 @@ export function WorkspaceView({
   // at the start of input or right after whitespace/newline, like the Claude Code TUI;
   // picking one replaces just that token with `/<name> ` (the trailing space drops the
   // regex match, so the menu auto-hides).
-  const taRef = useRef<any>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const suggestionHintId = useId();
-  const [suggestionTapLearned, setSuggestionTapLearned] = useState(
-    () => localStorage.getItem(SUGGESTION_TAP_LEARNED_KEY) === '1',
-  );
   // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
   // timer that hands a held first tap on as the box's focus.
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
@@ -7297,7 +7544,7 @@ export function WorkspaceView({
   // clamped so it can't collapse away or swallow the transcript.
   const startComposerResize = useCallback((e: ReactMouseEvent): void => {
     e.preventDefault();
-    const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+    const ta = taRef.current;
     const startY = e.clientY;
     const startH = ta?.offsetHeight ?? composerHeight ?? 120;
     const onMove = (ev: MouseEvent): void => {
@@ -7318,9 +7565,9 @@ export function WorkspaceView({
   // manual height changes (a double-click reset drops us back to auto-grow).
   const [composerCapped, setComposerCapped] = useState(false);
   useEffect(() => {
-    const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+    const ta = taRef.current;
     if (!ta) return;
-    // Measure on the next frame, after rc-textarea's autoSize pass settles this value's height.
+    // Measure on the next frame: the Textarea's autoSize pass has set this value's height before paint.
     const id = requestAnimationFrame(() => {
       setComposerCapped(ta.scrollHeight > ta.clientHeight + 1);
     });
@@ -7684,6 +7931,7 @@ export function WorkspaceView({
           claudeAccount?: string | null;
           antigravityAccount?: string | null;
           kimiAccount?: string | null;
+          cursorAccount?: string | null;
         }
       | null
       | undefined,
@@ -7950,6 +8198,153 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing],
   );
+  // Steers asked for back and not yet answered — drawn "Withdrawing…" — and those the server has
+  // confirmed, hidden before the runner's own `withdrawn` delivery reaches the transcript.
+  const [withdrawingSteers, setWithdrawingSteers] = useState<ReadonlySet<string>>(() => new Set());
+  const [withdrawnSteers, setWithdrawnSteers] = useState<ReadonlySet<string>>(() => new Set());
+  // Take back a message sent into the running turn while nothing has read it (lib/steerDelivery).
+  // Only the engine's word that it dropped the message unread removes it, so nothing is hidden or
+  // handed back until the server says so. Then the words and their files go back into the composer
+  // the way "Put back in the composer" puts them: an explicit press, so a draft keeps its place
+  // above them instead of winning over them.
+  const withdrawSteer = async (
+    turnId: string,
+    text: string,
+    attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
+  ): Promise<void> => {
+    const sessionId = selectedId;
+    if (!sessionId || withdrawingSteers.has(turnId)) return;
+    setWithdrawingSteers((s) => new Set(s).add(turnId));
+    try {
+      await cancelQueuedTurn(sessionId, turnId);
+      setWithdrawnSteers((s) => new Set(s).add(turnId));
+      setQueued((q) => q.filter((x) => x.turnId !== turnId));
+      restoreUndelivered?.(text, attachments);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === STEER_WITHDRAW_ERRORS.ALREADY_READ) {
+        // Said in the reader's terms; the server's longer sentence is for the API's own callers.
+        const reader =
+          shownEngine === AgentProvider.CODEX ? 'Codex' : shownEngine === AgentProvider.CLAUDE ? 'Claude' : 'The agent';
+        message.info('Too late to withdraw', `${reader} has already read it.`);
+      } else {
+        message.error("Couldn't withdraw the message", e instanceof Error ? e.message : undefined);
+      }
+    } finally {
+      setWithdrawingSteers((s) => {
+        const next = new Set(s);
+        next.delete(turnId);
+        return next;
+      });
+    }
+  };
+  const withdrawSteerRef = useRef(withdrawSteer);
+  withdrawSteerRef.current = withdrawSteer;
+  // What the transcript's steers offer (SteerWithdrawCtx). Kept stable between the sets' changes, so
+  // a streaming reply does not redraw every bubble; nothing to take back where nothing can be sent.
+  const steerWithdrawal: SteerWithdrawHandle | null = useMemo(
+    () =>
+      selectedTrashed || selectedMissing
+        ? null
+        : {
+            withdraw: (turnId, text, attachments) => void withdrawSteerRef.current(turnId, text, attachments),
+            withdrawing: withdrawingSteers,
+            withdrawn: withdrawnSteers,
+          },
+    [selectedTrashed, selectedMissing, withdrawingSteers, withdrawnSteers],
+  );
+  // Queued messages a Steer is out for: drawn as on their way into the turn until the server answers.
+  const [steeringTurns, setSteeringTurns] = useState<ReadonlySet<string>>(() => new Set());
+  // The tray's Steer: send a message queued for the next turn into the one running now. The server
+  // makes it the steer it would have been (POST …/steer), and the row moves on from there as a steer
+  // does; with no turn left to join it stays queued, and is told so.
+  const steerQueued = async (turnId: string): Promise<void> => {
+    const sessionId = selectedId;
+    if (!sessionId || steeringTurns.has(turnId)) return;
+    setSteeringTurns((s) => new Set(s).add(turnId));
+    try {
+      const res = await steerQueuedTurn(sessionId, turnId);
+      setQueued((current) =>
+        current.map((turn) =>
+          turn.turnId === turnId
+            ? { ...turn, placement: 'steer', ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}) }
+            : turn,
+        ),
+      );
+    } catch (e) {
+      if (isCurrentWorkUnavailable(e)) {
+        const reason = e instanceof ApiError ? e.body?.reason : undefined;
+        message.info(
+          "Couldn't send it into this turn",
+          reason === 'STEER_UNSUPPORTED'
+            ? "This agent can't take a message mid-turn. It stays queued for the next turn."
+            : 'The turn is over or being stopped. It stays queued for the next turn.',
+        );
+      } else {
+        message.error("Couldn't send it into this turn", e instanceof Error ? e.message : undefined);
+      }
+    } finally {
+      setSteeringTurns((s) => {
+        const next = new Set(s);
+        next.delete(turnId);
+        return next;
+      });
+    }
+  };
+  // Steer is offered while a turn runs on an engine that can take a message into one (the server
+  // still asks the runner, and refuses one too old).
+  const steerOffered = !!live && selectedRunStatus === 'RUNNING' && runtimeTakesMidTurnSteer(selectedEngine);
+  // The tray's rows, in the order they were sent: the reader's steers nothing has read (from the
+  // transcript's events) and their messages still on the queue (`inPendingTray`).
+  const pendingTrayRows = ((): PendingTrayRow[] => {
+    if (selectedTrashed || selectedMissing) return [];
+    const steerRow = (steer: UnreadSteer): PendingTrayRow => {
+      // Missed the turn it was aimed at and handed back to run as the next turn: queued now, and
+      // shortly the message that opens that turn.
+      const requeued = steer.delivery === 'requeued';
+      const withdrawing = withdrawingSteers.has(steer.turnId);
+      return {
+        key: steer.turnId,
+        heading: requeued ? 'next' : 'current',
+        text: steer.text,
+        ...trayPictures(steer.images, steer.attachmentRefs),
+        state: withdrawing ? 'Withdrawing…' : requeued ? 'Queued for next turn' : steerDeliveryState(steer.delivery).label,
+        busy: withdrawing,
+        onWithdraw:
+          !requeued && steerWithdrawal && offersSteerWithdraw(steer.delivery, steer.withdrawable)
+            ? () => steerWithdrawal.withdraw(steer.turnId, steer.text, steer.attachmentRefs)
+            : undefined,
+      };
+    };
+    const queuedRow = (turn: QueuedTurn): PendingTrayRow => {
+      const steering = steeringTurns.has(turn.turnId);
+      const intoTurn = turn.placement === 'steer' || steering;
+      const withdrawing = withdrawingSteers.has(turn.turnId);
+      const refs: TurnAttachmentRef[] | undefined = turn.attachments?.map((a) => ({ id: a.id, mime: a.mimeType || undefined }));
+      return {
+        key: turn.turnId,
+        heading: intoTurn ? 'current' : 'next',
+        text: turn.content,
+        shell: turn.shell,
+        ...trayPictures(turnImages[turn.turnId], refs),
+        state: withdrawing ? 'Withdrawing…' : intoTurn ? steerDeliveryState(undefined).label : 'Queued for next turn',
+        busy: withdrawing || steering,
+        // Not handed to a runner yet, either way: the server takes it back alone.
+        onWithdraw: turn.placement === 'steer'
+          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.content, refs) : undefined
+          : () => void cancelQueued(turn.turnId),
+        onSteer: !intoTurn && !turn.shell && steerOffered ? () => void steerQueued(turn.turnId) : undefined,
+      };
+    };
+    return [
+      ...unreadSteers
+        .filter((steer) => !withdrawnSteers.has(steer.turnId))
+        .map((steer) => ({ at: steer.ts, row: steerRow(steer) })),
+      ...visibleQueuedTurns.filter(inPendingTray).map((turn) => ({ at: turn.createdAt, row: queuedRow(turn) })),
+    ]
+      // A row this tab just sent has no receipt time yet: it is the newest.
+      .sort((a, b) => (a.at ?? '\uffff').localeCompare(b.at ?? '\uffff'))
+      .map(({ row }) => row);
+  })();
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
   // does (appended, never overwriting a draft), then discard the row so the pane stops carrying a
@@ -8247,14 +8642,15 @@ export function WorkspaceView({
     }
   };
   // Delete Folder…: only the folder goes. Its sessions are back in the list, none of them deleted.
-  const confirmDeleteFolder = (folder: SessionFolder): void => {
-    modal.confirm({
+  const confirmDeleteFolder = (folder: SessionFolder, returnFocus?: RefObject<HTMLElement | null>): void => {
+    void confirm({
       title: FOLDER_COPY.deleteTitle(folder.name),
-      content: FOLDER_COPY.deleteMessage,
-      okText: FOLDER_COPY.deleteConfirm,
-      okButtonProps: { danger: true },
+      description: FOLDER_COPY.deleteMessage,
+      confirmText: FOLDER_COPY.deleteConfirm,
+      danger: true,
       cancelText: 'Cancel',
-      onOk: async () => {
+      returnFocus,
+      onConfirm: async () => {
         try {
           await deleteSessionFolder(folder.id);
         } catch (error) {
@@ -8272,15 +8668,15 @@ export function WorkspaceView({
     });
   };
   // A folder's two management entries — its row's ⋯ and its page's ⋯ offer the same pair.
-  const folderMenuItems = (folder: SessionFolder): MenuProps['items'] => [
+  // The menu stops its own clicks before they reach the row, which would open the folder.
+  const folderMenuItems = (folder: SessionFolder, returnFocus?: RefObject<HTMLElement | null>): MenuItem[] => [
     {
       key: 'rename',
       icon: <EditOutlined />,
       label: FOLDER_COPY.rename,
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
+      onSelect: () => {
         setFolderMenuOpenId(null);
-        setFolderEdit({ id: folder.id, draft: folder.name, error: null, saving: false });
+        afterMenu(returnFocus?.current, () => setFolderEdit({ id: folder.id, draft: folder.name, error: null, saving: false }));
       },
     },
     {
@@ -8288,10 +8684,9 @@ export function WorkspaceView({
       icon: <DeleteOutlined />,
       label: FOLDER_COPY.delete,
       danger: true,
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
+      onSelect: () => {
         setFolderMenuOpenId(null);
-        confirmDeleteFolder(folder);
+        confirmDeleteFolder(folder, returnFocus);
       },
     },
   ];
@@ -8340,23 +8735,25 @@ export function WorkspaceView({
         <span className="session-folder-count">{row.sessionCount}</span>
         <span className="session-folder-end">
           <RightOutlined className="session-folder-chev" />
-          <Dropdown
-            trigger={['click']}
-            placement="bottomRight"
+          <Menu
+            side="bottom"
+            align="end"
+            // The ⋯ stays the span it is drawn as (see `.session-folder-more`); the menu makes it a button.
+            nativeButton={false}
             open={folderMenuOpenId === row.folder.id}
             onOpenChange={(open) => setFolderMenuOpenId(open ? row.folder.id : null)}
-            menu={{ items: folderMenuItems(row.folder) }}
-          >
-            <span
-              className="session-kebab session-folder-more"
-              role="button"
-              aria-label={FOLDER_COPY.more}
-              title={FOLDER_COPY.more}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreOutlined />
-            </span>
-          </Dropdown>
+            items={folderMenuItems(row.folder)}
+            trigger={
+              <span
+                className="session-kebab session-folder-more"
+                role="button"
+                aria-label={FOLDER_COPY.more}
+                title={FOLDER_COPY.more}
+              >
+                <MoreOutlined />
+              </span>
+            }
+          />
         </span>
       </div>
     );
@@ -8757,7 +9154,7 @@ export function WorkspaceView({
   // session is on, those are the ones it moves between (switchAccount); on a session spending a key
   // or a pool of the same engine, the ones a switch onto the sign-in lands on (pickProvider with the
   // account).
-  const providerRows = (choice: ProviderChoice): NonNullable<MenuProps['items']> => {
+  const providerRows = (choice: ProviderChoice): MenuItem[] => {
     // Carry the reason on the row itself, where it answers the question being asked ("why can't I
     // pick Claude?"). It stays pickable rather than greyed because picking it does something useful
     // — it goes where the fix is (see pickProvider), which is the New Session hero's behaviour for
@@ -8779,7 +9176,7 @@ export function WorkspaceView({
     };
     // An engine's own sign-in with more than one account is its accounts: the sign-in row itself
     // would name nothing they do not.
-    const rows: NonNullable<MenuProps['items']> =
+    const rows: MenuItem[] =
       accounts.length > 0
         ? []
         : [
@@ -8798,7 +9195,7 @@ export function WorkspaceView({
                   {checkSlot(choice.slug === shownProvider)}
                 </span>
               ),
-              onClick: () => pickProvider(choice.slug),
+              onSelect: () => pickProvider(choice.slug),
             },
           ];
     return [
@@ -8815,7 +9212,7 @@ export function WorkspaceView({
                   {checkSlot(here && sessionAutomatic)}
                 </span>
               ),
-              onClick: () => pick(AUTOMATIC_ACCOUNT, false),
+              onSelect: () => pick(AUTOMATIC_ACCOUNT, false),
             },
           ]
         : []),
@@ -8833,14 +9230,14 @@ export function WorkspaceView({
             {checkSlot(here && account.id === shownAccount && !sessionAutomatic)}
           </span>
         ),
-        onClick: () => pick(account.id, !!account.unavailable),
+        onSelect: () => pick(account.id, !!account.unavailable),
       })),
     ];
   };
   // The session's own provider when its engine no longer lists it — a key turned off or deleted, the
   // legacy built-in `dsh` — first, under its own heading, saying what became of it: a turned-off key
   // opens its page, where it is turned back on; a deleted one is no choice at all (board 5 ④).
-  const sessionKeyRow = (choice: ProviderChoice): NonNullable<MenuProps['items']>[number] => ({
+  const sessionKeyRow = (choice: ProviderChoice): MenuItem => ({
     key: `provider:${choice.slug}`,
     disabled: shownKeyGone?.status === 'Key deleted',
     className: shownKeyGone ? 'composer-provider-gone' : undefined,
@@ -8860,12 +9257,12 @@ export function WorkspaceView({
         )}
       </span>
     ),
-    onClick: () => (shownKeyGone?.href ? navigate(shownKeyGone.href) : undefined),
+    onSelect: () => (shownKeyGone?.href ? navigate(shownKeyGone.href) : undefined),
   });
   // The submenu, grouped by where a credential comes from (board 4 ④): the runner's own sign-in (or
   // OpenCode's own configuration on it), the account pools, the keys — only what the session's engine
   // runs (the compatibility table), never another engine's.
-  const providerGroup = (key: string, label: string, choices: ProviderChoice[]): NonNullable<MenuProps['items']> =>
+  const providerGroup = (key: string, label: string, choices: ProviderChoice[]): MenuItem[] =>
     choices.length === 0
       ? []
       : [{ key: `provider-group:${key}`, type: 'group' as const, label, children: choices.flatMap(providerRows) }];
@@ -8881,7 +9278,7 @@ export function WorkspaceView({
           (p) => p.runtime === AgentProvider.CLAUDE && p.engines?.length === 1 && p.engines[0] === AgentProvider.CLAUDE,
         )
       : [];
-  const providerMenuGroups: NonNullable<MenuProps['items']> = [
+  const providerMenuGroups: MenuItem[] = [
     ...(!shownProviderListed && providerSwitchChoices[0]
       ? [{ key: 'provider-group:session', type: 'group' as const, label: "This session's key", children: [sessionKeyRow(providerSwitchChoices[0])] }]
       : []),
@@ -8907,7 +9304,7 @@ export function WorkspaceView({
         ]
       : []),
   ];
-  const modelMenuItems: MenuProps['items'] = [
+  const modelMenuItems: MenuItem[] = [
     // The menu's own title, and not a control: the one fact none of the rows below states is which
     // CLI executes at all. It is never picked here — a run keeps its engine for its whole life, and
     // moving it is the Provider row's job — so the row carries no onClick, no chevron, and the
@@ -8954,7 +9351,7 @@ export function WorkspaceView({
               </div>
             ),
           },
-          { key: 'smart-route-divider', type: 'divider' as const },
+          { key: 'smart-route-divider', type: 'separator' as const },
         ]
       : []),
     // Only when there is somewhere to go: another credential the session's engine runs — a key, a
@@ -8979,7 +9376,7 @@ export function WorkspaceView({
             ),
             children: providerMenuGroups,
           },
-          { key: 'provider-divider', type: 'divider' as const },
+          { key: 'provider-divider', type: 'separator' as const },
         ]
       : []),
     ...shownModelOptions.map((option) => ({
@@ -8991,9 +9388,9 @@ export function WorkspaceView({
           {checkSlot(option.value === shownModel)}
         </span>
       ),
-      onClick: () => pickModel(option.value),
+      onSelect: () => pickModel(option.value),
     })),
-    { key: 'effort-divider', type: 'divider' as const },
+    { key: 'effort-divider', type: 'separator' as const },
     {
       key: 'effort',
       label: (
@@ -9010,7 +9407,7 @@ export function WorkspaceView({
             {checkSlot(option.value === shownEffort)}
           </span>
         ),
-        onClick: () => pickEffort(option.value),
+        onSelect: () => pickEffort(option.value),
       })),
     },
     // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast" tier
@@ -9040,18 +9437,18 @@ export function WorkspaceView({
                   {checkSlot(option.value === shownFastMode)}
                 </span>
               ),
-              onClick: () => pickFastMode(option.value),
+              onSelect: () => pickFastMode(option.value),
             })),
           },
         ]
       : []),
     ...(smartRoute
       ? [
-          { key: 'smart-route-open-divider', type: 'divider' as const },
+          { key: 'smart-route-open-divider', type: 'separator' as const },
           {
             key: 'open-task',
             label: <span className="composer-route-open">Open task ›</span>,
-            onClick: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
+            onSelect: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
           },
         ]
       : []),
@@ -9072,12 +9469,20 @@ export function WorkspaceView({
       tagIds: selectedKeys.filter((id) => available.has(id)),
     });
   };
+  // A tag item adds its tag or takes it off; the whole selection is then written in one go.
+  const toggleTag = (key: string): void =>
+    setTagsFromMenu({
+      key,
+      selectedKeys: selectedSessionTagIds.includes(key)
+        ? selectedSessionTagIds.filter((id) => id !== key)
+        : [...selectedSessionTagIds, key],
+    });
   // One menu for everything that scopes the list: which slice (exclusive), then — below a
   // divider — the tag narrowing and sectioning. Tag entries only appear once the owner has
   // tags; the view entries always do, so Trash is reachable without ever having made one.
   // No group headings: the trigger already names the axis, and the shared check column is
   // what marks the three views as a mutually exclusive set.
-  const scopeItems: MenuProps['items'] = [
+  const scopeItems: MenuItem[] = [
     ...SESSION_VIEWS.map((v) => ({
       key: v.value,
       label: (
@@ -9086,11 +9491,11 @@ export function WorkspaceView({
           {checkSlot(shownView === v.value)}
         </span>
       ),
-      onClick: () => switchView(v.value),
+      onSelect: () => switchView(v.value),
     })),
     ...(sessionTags.length > 0
       ? [
-          { key: 'tag-divider', type: 'divider' as const },
+          { key: 'tag-divider', type: 'separator' as const },
           {
             key: 'filter',
             label: (
@@ -9118,7 +9523,7 @@ export function WorkspaceView({
                     {checkSlot(tagFilter === null)}
                   </span>
                 ),
-                onClick: () => setTagFilter(null),
+                onSelect: () => setTagFilter(null),
               },
               // Colour is how a tag is identified everywhere else (the row dots, the
               // "Group by Tag" headings), so carry the swatch here too.
@@ -9133,7 +9538,7 @@ export function WorkspaceView({
                     {checkSlot(tagFilter === t.id)}
                   </span>
                 ),
-                onClick: () => setTagFilter(tagFilter === t.id ? null : t.id),
+                onSelect: () => setTagFilter(tagFilter === t.id ? null : t.id),
               })),
             ],
           },
@@ -9145,7 +9550,7 @@ export function WorkspaceView({
                 {checkSlot(groupByTag)}
               </span>
             ),
-            onClick: () => setGroupByTag((g) => !g),
+            onSelect: () => setGroupByTag((g) => !g),
           },
         ]
       : []),
@@ -9153,11 +9558,11 @@ export function WorkspaceView({
     // narrowed to or grouped by a tag, or Trash, would have nowhere to draw the new one.
     ...(scopeWorkspaceId && listShowsFolders(shownView, listByTag)
       ? [
-          { key: 'folder-divider', type: 'divider' as const },
+          { key: 'folder-divider', type: 'separator' as const },
           {
             key: 'new-folder',
             label: <span className="scope-menu-row">{FOLDER_COPY.newFolder}</span>,
-            onClick: startNewFolder,
+            onSelect: () => afterMenu(scopeTrigger.current, startNewFolder),
           },
         ]
       : []),
@@ -9231,7 +9636,7 @@ export function WorkspaceView({
     setText(offeredSuggestion);
     if (histIdx !== -1) setHistIdx(-1);
     setTimeout(() => {
-      const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+      const ta = taRef.current;
       if (!ta) return;
       ta.focus();
       ta.selectionStart = ta.selectionEnd = ta.value.length;
@@ -9260,10 +9665,6 @@ export function WorkspaceView({
       lastComposerTap.current = null;
       e.preventDefault();
       acceptSuggestion();
-      if (!suggestionTapLearned) {
-        setSuggestionTapLearned(true);
-        localStorage.setItem(SUGGESTION_TAP_LEARNED_KEY, '1');
-      }
       return;
     }
     const box = e.currentTarget;
@@ -9332,11 +9733,17 @@ export function WorkspaceView({
               )}
               <span className="session-folder-workspace">{headWorkspaceName}</span>
             </span>
-            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: folderMenuItems(openFolder) }}>
-              <span className="session-kebab session-folder-head-more" role="button" aria-label={FOLDER_COPY.more}>
-                <MoreOutlined />
-              </span>
-            </Dropdown>
+            <Menu
+              side="bottom"
+              align="end"
+              nativeButton={false}
+              items={folderMenuItems(openFolder, folderHeadMore)}
+              trigger={
+                <span ref={folderHeadMore} className="session-kebab session-folder-head-more" role="button" aria-label={FOLDER_COPY.more}>
+                  <MoreOutlined />
+                </span>
+              }
+            />
           </div>
         ) : (
           <div className="session-col-head">
@@ -9346,15 +9753,23 @@ export function WorkspaceView({
                 chip row — both read as clutter in a narrow column, and Open is nearly always
                 the answer. The trigger names the current view so a list scoped to
                 Completed/Trash always explains itself. (The native clients still tab.) */}
-            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
-              <span
-                className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
-                title="Switch view, filter and group"
-              >
-                {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
-                <DownOutlined />
-              </span>
-            </Dropdown>
+            <Menu
+              side="bottom"
+              align="end"
+              nativeButton={false}
+              popupClassName="session-scope-popup"
+              items={scopeItems}
+              trigger={
+                <span
+                  ref={scopeTrigger}
+                  className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
+                  title="Switch view, filter and group"
+                >
+                  {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
+                  <DownOutlined />
+                </span>
+              }
+            />
           </div>
         )}
         {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
@@ -9398,23 +9813,27 @@ export function WorkspaceView({
             <ProjectWhyNotDoneCard project={pageSettledDoc} />
           )}
           {openProjectId && !pageSettledDoc && (
-            <div className="session-project-page-card">
-              <div className="session-project-page-progress">
-                {pageTaskCounts ? (
-                  <>
-                    <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
-                    <span>
-                      {pageNotStarted
-                        ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
-                        : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
-                    </span>
-                  </>
-                ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+            <>
+              <div className="session-project-page-card">
+                <div className="session-project-page-progress">
+                  {pageTaskCounts ? (
+                    <>
+                      <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
+                      <span>
+                        {pageNotStarted
+                          ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
+                          : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
+                      </span>
+                    </>
+                  ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+                </div>
+                {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
               </div>
-              {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
+              {/* The landing left the progress card on 2026-10-11: it is a card of its own under it
+                  (docs/mocks/project-landing-card), ahead of the merge card in the same list. */}
               <SessionProjectLanding projectId={openProjectId}
                 onOpen={() => navigate(`/projects/${encodeId(openProjectId)}`)} />
-            </div>
+            </>
           )}
           {openProjectId && (
             <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
@@ -9504,7 +9923,7 @@ export function WorkspaceView({
                     setMenuOpenId(null);
                     if (s.target.kind === 'project') enterProjectSessions(s.target.id);
                     else navigateWithPaneSlide('push', () =>
-                      navigate(sessionPath(s.target.id), { state: stampFromList() }));
+                      navigate(sessionItemPath(s.target), { state: stampFromList() }));
                   };
                   const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                   const offset = drag?.dx ?? restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null,
@@ -9529,24 +9948,20 @@ export function WorkspaceView({
                         onMove: onRowTouchMove, onEnd: onRowTouchEnd, onCancel: onRowTouchCancel,
                         onAction: (action) => runSwipeAction(action, coordinator),
                       } : undefined}
-                      menu={{
-                        items: [
-                          { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session' },
-                          { key: 'sessions', label: SESSION_PROJECT_COPY.sessions },
-                          { key: 'project', label: SESSION_PROJECT_COPY.openProject },
-                          { type: 'divider' as const },
-                          { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator },
-                          { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator },
-                        ],
-                        onClick: ({ key, domEvent }) => {
-                          domEvent.stopPropagation();
-                          setMenuOpenId(null);
-                          if (key === 'session') openTarget();
-                          else if (key === 'sessions') enterProjectSessions(s.projectId);
-                          else if (key === 'project') navigate(`/projects/${encodeId(s.projectId)}`);
-                          else if (coordinator) runSwipeAction(key as SwipeAction, coordinator);
-                        },
-                      }}
+                      // The menu stops its own clicks before they reach the row, which would open it.
+                      menu={[
+                        { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session',
+                          onSelect: () => { setMenuOpenId(null); openTarget(); } },
+                        { key: 'sessions', label: SESSION_PROJECT_COPY.sessions,
+                          onSelect: () => { setMenuOpenId(null); enterProjectSessions(s.projectId); } },
+                        { key: 'project', label: SESSION_PROJECT_COPY.openProject,
+                          onSelect: () => { setMenuOpenId(null); navigate(`/projects/${encodeId(s.projectId)}`); } },
+                        { key: 'divider', type: 'separator' },
+                        { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator,
+                          onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('pin', coordinator); } },
+                        { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator,
+                          onSelect: () => { setMenuOpenId(null); if (coordinator) runSwipeAction('move', coordinator); } },
+                      ]}
                     />
                   );
                 }
@@ -9582,7 +9997,9 @@ export function WorkspaceView({
                   delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
                   purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
                 };
-                const menuItem = (action: SwipeAction) => ({
+                // `close` closes the menu the item is in: the row's ⋯ menu or the one a held press opens;
+                // `kebab` reads that ⋯ when the item is picked.
+                const menuItem = (action: SwipeAction, close: () => void, kebab?: () => HTMLElement | null): MenuItem => ({
                   key: action,
                   icon: swipeButtons[action].icon,
                   disabled: swipeButtons[action].disabled,
@@ -9600,25 +10017,30 @@ export function WorkspaceView({
                     ? !canCompleteRow ? 'Complete unavailable right now'
                       : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
                     : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
+                  // The menu stops its own clicks before they reach the row, which would open it.
+                  onSelect: () => {
+                    close();
+                    runSwipeAction(action, s, kebab && { current: kebab() });
+                  },
                 });
                 // Rename… opens a field rather than acting, so it is no swipe action (as on iOS) and
                 // sits with the other … items. A trashed session's title isn't edited (the header's
                 // isn't either).
-                const menuItems: MenuProps['items'] = memberView === 'trash'
-                  ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
-                  : [
-                      ...swipeActions.leading.map(menuItem),
-                      { type: 'divider' },
-                      { key: 'rename', icon: <EditOutlined />, label: 'Rename…' },
-                      menuItem('share'),
-                      ...(movable ? [menuItem('move')] : []),
-                      { type: 'divider' },
-                      menuItem('delete'),
-                    ];
-                const runMenuAction = (key: string): void => {
-                  if (key === 'rename') setRenamingId(s.id);
-                  else runSwipeAction(key as SwipeAction, s);
-                };
+                const menuItems = (close: () => void, kebab?: () => HTMLElement | null): MenuItem[] =>
+                  memberView === 'trash'
+                    ? [menuItem('restore', close), { key: 'divider', type: 'separator' }, menuItem('purge', close, kebab)]
+                    : [
+                        ...swipeActions.leading.map((action) => menuItem(action, close, kebab)),
+                        { key: 'divider', type: 'separator' },
+                        { key: 'rename', icon: <EditOutlined />, label: 'Rename…', onSelect: () => {
+                          close();
+                          afterMenu(kebab?.(), () => setRenamingId(s.id));
+                        } },
+                        menuItem('share', close),
+                        ...(movable ? [menuItem('move', close)] : []),
+                        { key: 'divider-delete', type: 'separator' },
+                        menuItem('delete', close, kebab),
+                      ];
                 const renaming = renamingId === s.id;
                 return (
                   <div
@@ -9642,7 +10064,7 @@ export function WorkspaceView({
                       setMenuOpenId(null);
                       if (openable)
                         navigateWithPaneSlide('push', () =>
-                          navigate(sessionPath(s.id), { state: stampFromList() }),
+                          navigate(sessionItemPath(actionSession), { state: stampFromList() }),
                         );
                     }}
                     onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe); }}
@@ -9651,23 +10073,17 @@ export function WorkspaceView({
                     onTouchCancel={onRowTouchCancel}
                   >
                     {isMobile && pressMenu?.id === s.id && (
-                      <Dropdown
+                      <Menu
                         open
-                        trigger={['click']}
-                        placement="bottomLeft"
-                        classNames={{ root: 'session-row-menu' }}
+                        side="bottom"
+                        align="start"
+                        // Where the finger is held: an empty mark the menu is placed against, not a control.
+                        nativeButton={false}
+                        popupClassName="session-row-menu session-press-menu"
                         onOpenChange={(open) => { if (!open) setPressMenu(null); }}
-                        menu={{
-                          items: menuItems,
-                          onClick: ({ key, domEvent }) => {
-                            domEvent.stopPropagation();
-                            setPressMenu(null);
-                            runMenuAction(key);
-                          },
-                        }}
-                      >
-                        <span className="session-press-anchor" style={{ left: pressMenu.x, top: pressMenu.y }} />
-                      </Dropdown>
+                        items={menuItems(() => setPressMenu(null))}
+                        trigger={<span className="session-press-anchor" style={{ left: pressMenu.x, top: pressMenu.y }} />}
+                      />
                     )}
                     {isMobile &&
                       (['leading', 'trailing'] as const).map((side) => (
@@ -9746,42 +10162,30 @@ export function WorkspaceView({
                     </div>
                     <div className="session-right">
                       <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                        <Dropdown
-                          trigger={['click']}
-                          placement="bottomRight"
-                          autoFocus
-                          classNames={{ root: 'session-row-menu' }}
+                        <Menu
+                          side="bottom"
+                          align="end"
+                          popupClassName="session-row-menu"
                           open={menuOpenId === s.id}
                           onOpenChange={(open) => {
                             setMenuOpenId((current) => open ? s.id : current === s.id ? null : current);
                             if (open) setSwipeOpen(null);
                           }}
-                          menu={{
-                            items: menuItems,
-                            onClick: ({ key, domEvent }) => {
-                              domEvent.stopPropagation();
-                              setMenuOpenId(null);
-                              runMenuAction(key);
-                            },
-                          }}
-                        >
-                          <button
-                            type="button"
-                            className="session-kebab"
-                            aria-label="More actions"
-                            aria-haspopup="menu"
-                            aria-expanded={menuOpenId === s.id}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => {
-                              if (e.key !== 'ArrowDown') return;
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setMenuOpenId(s.id);
-                            }}
-                          >
-                            <EllipsisOutlined />
-                          </button>
-                        </Dropdown>
+                          items={menuItems(() => setMenuOpenId(null), () => rowKebabs.current.get(s.id) ?? null)}
+                          trigger={
+                            <button
+                              ref={(node) => {
+                                if (node) rowKebabs.current.set(s.id, node);
+                                else rowKebabs.current.delete(s.id);
+                              }}
+                              type="button"
+                              className="session-kebab"
+                              aria-label="More actions"
+                            >
+                              <EllipsisOutlined />
+                            </button>
+                          }
+                        />
                       </div>
                     </div>
                   </div>
@@ -9794,7 +10198,7 @@ export function WorkspaceView({
               abrupt end of list. */}
           {loadingSessions && (
             <div className="session-list-more">
-              <Spin size="small" />
+              <Spinner size="small" />
             </div>
           )}
         </div>
@@ -9949,38 +10353,34 @@ export function WorkspaceView({
           </div>
           {selected && !composing && (
             <>
-              <Dropdown
-                trigger={['click']}
-                placement="bottomRight"
+              <Menu
+                side="bottom"
+                align="end"
+                popupClassName="workspace-header-menu"
                 open={headerMenuOpen}
                 onOpenChange={setHeaderMenuOpen}
-                menu={{
-                  selectable: !selectedTrashed,
-                  multiple: !selectedTrashed,
-                  selectedKeys: selectedTrashed ? [] : selectedSessionTagIds,
-                  onSelect: selectedTrashed ? undefined : setTagsFromMenu,
-                  onDeselect: selectedTrashed ? undefined : setTagsFromMenu,
-                  items: selectedTrashed
+                items={
+                  selectedTrashed
                     ? [
                         {
                           key: 'restore',
                           icon: <UndoOutlined />,
                           label: 'Restore to Open',
                           disabled: !selectedCanRestore,
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
                             requestRestore(selected);
                           },
                         },
-                        { type: 'divider' },
+                        { key: 'divider-1', type: 'separator' },
                         {
                           key: 'purge',
                           icon: <DeleteOutlined />,
                           danger: true,
                           label: 'Delete permanently',
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
-                            confirmPurge({ id: selected.id, title: selected.title });
+                            confirmPurge({ id: selected.id, title: selected.title }, headerMore);
                           },
                         },
                       ]
@@ -9991,19 +10391,24 @@ export function WorkspaceView({
                           key: 'find',
                           icon: <SearchOutlined />,
                           label: `Find in session · ${FIND_HINT}`,
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
-                            openSessionFind();
+                            afterMenu(headerMore.current, openSessionFind);
                           },
                         },
                         ...(sessionTags.length > 0
                           ? [
                               {
+                                key: 'tags',
                                 type: 'group' as const,
                                 label: 'Tags',
                                 children: sessionTags.map((t) => ({
                                   key: t.id,
                                   disabled: setTagsMut.isPending,
+                                  // A tag is added or taken off, and the menu stays open for the next one.
+                                  selected: selectedSessionTagIds.includes(t.id),
+                                  closeOnSelect: false,
+                                  onSelect: () => toggleTag(t.id),
                                   label: (
                                     <span className="scope-menu-row">
                                       <span className="scope-tag-label">
@@ -10020,7 +10425,7 @@ export function WorkspaceView({
                               },
                             ]
                           : []),
-                        { type: 'divider' as const },
+                        { key: 'divider-2', type: 'separator' as const },
                         // A Completed session is retained, not gone — offer the same move
                         // its row has in Completed, so it can return to Open in place.
                         ...(selectedCompleted
@@ -10030,7 +10435,7 @@ export function WorkspaceView({
                                 icon: <UndoOutlined />,
                                 label: 'Move to Open',
                                 disabled: !selectedCanRestore,
-                                onClick: () => {
+                                onSelect: () => {
                                   setHeaderMenuOpen(false);
                                   requestRestore(selected);
                                 },
@@ -10039,19 +10444,19 @@ export function WorkspaceView({
                                 key: 'rename',
                                 icon: <EditOutlined />,
                                 label: 'Rename…',
-                                onClick: () => {
+                                onSelect: () => {
                                   setHeaderMenuOpen(false);
                                   setTitleDraft(selected.title);
-                                  setEditingTitle(true);
+                                  afterMenu(headerMore.current, () => setEditingTitle(true));
                                 },
                               },
                               {
                                 key: 'move',
                                 icon: <FolderOutlined />,
                                 label: MOVE_COPY.action,
-                                onClick: () => openMove(selectedSession ?? selected),
+                                onSelect: () => openMove(selectedSession ?? selected),
                               },
-                              { type: 'divider' as const },
+                              { key: 'divider-3', type: 'separator' as const },
                             ]
                           : selectedLifecycleState === 'OPEN'
                             ? [
@@ -10060,7 +10465,7 @@ export function WorkspaceView({
                                   icon: <CheckOutlined />,
                                   label: 'Complete',
                                   disabled: !selectedCanComplete,
-                                  onClick: () => {
+                                  onSelect: () => {
                                     setHeaderMenuOpen(false);
                                     requestComplete(selected);
                                   },
@@ -10071,10 +10476,10 @@ export function WorkspaceView({
                                   key: 'rename',
                                   icon: <EditOutlined />,
                                   label: 'Rename…',
-                                  onClick: () => {
+                                  onSelect: () => {
                                     setHeaderMenuOpen(false);
                                     setTitleDraft(selected.title);
-                                    setEditingTitle(true);
+                                    afterMenu(headerMore.current, () => setEditingTitle(true));
                                   },
                                 },
                                 // Filing it, beside the other move it can make (§2).
@@ -10082,9 +10487,9 @@ export function WorkspaceView({
                                   key: 'move',
                                   icon: <FolderOutlined />,
                                   label: MOVE_COPY.action,
-                                  onClick: () => openMove(selectedSession ?? selected),
+                                  onSelect: () => openMove(selectedSession ?? selected),
                                 },
-                                { type: 'divider' as const },
+                                { key: 'divider-4', type: 'separator' as const },
                               ]
                             : []),
                         // Two words for two links (docs/share-links-design.md §8): Copy link is
@@ -10094,7 +10499,7 @@ export function WorkspaceView({
                           key: 'copy-link',
                           icon: <LinkOutlined />,
                           label: 'Copy link',
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
                             copySessionLink(selected);
                           },
@@ -10109,7 +10514,7 @@ export function WorkspaceView({
                           ) : (
                             'Share…'
                           ),
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
                             setShareOpen(true);
                           },
@@ -10119,27 +10524,26 @@ export function WorkspaceView({
                           icon: <DownloadOutlined />,
                           label: downloadingHtml ? 'Preparing HTML…' : 'Download HTML',
                           disabled: downloadingHtml,
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
                             void downloadHtml(selectedSession ?? selected);
                           },
                         },
-                        { type: 'divider' },
+                        { key: 'divider-5', type: 'separator' },
                         {
                           key: 'delete',
                           icon: <DeleteOutlined />,
                           danger: true,
                           label: 'Delete',
-                          onClick: () => {
+                          onSelect: () => {
                             setHeaderMenuOpen(false);
-                            requestTrash(selected);
+                            requestTrash(selected, headerMore);
                           },
                         },
-                      ],
-                }}
-              >
-                <Button type="text" icon={<MoreOutlined />} title="More actions" />
-              </Dropdown>
+                      ]
+                }
+                trigger={<Button ref={headerMore} variant="text" icon={<MoreOutlined />} title="More actions" />}
+              />
             </>
           )}
         </div>
@@ -10194,12 +10598,16 @@ export function WorkspaceView({
             }
             // The exception cards the owner presses, with how long each has been theirs and which
             // side of the reader it sits on now: unlike a question, one can be above.
-            exceptions={ownerExceptionRows.map((row) => ({
+            needsYou={ownerExceptionRows.map((row) => ({
               row,
-              ageSeconds: Math.max(
-                0,
-                Math.floor((Date.now() - Date.parse(row.escalatedAt ?? row.waitingSince)) / 1000),
-              ),
+              need: selectedSession?.ownerItems?.find((item: any) => item.itemId === row.itemId)?.need
+                ?? null,
+              ageSeconds: (() => {
+                const at = Date.parse(row.escalatedAt ?? row.waitingSince);
+                return Number.isFinite(at)
+                  ? Math.max(0, Math.floor((Date.now() - at) / 1000))
+                  : null;
+              })(),
               above: openItemsAbove.split(' ').includes(row.itemId),
             }))}
             // The strip states the fact and this takes the reader to the one place it can be
@@ -10327,6 +10735,7 @@ export function WorkspaceView({
                   <AuthErrorCtx.Provider value={authErrorHelp}>
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <UndeliveredCtx.Provider value={restoreUndelivered}>
+                      <SteerWithdrawCtx.Provider value={steerWithdrawal}>
                         <LiveToolOutputsCtx.Provider value={scopedLiveToolOutputs}>
                           <TaskActivityCtx.Provider value={taskActivity}>
                           <StreamingDraftsCtx.Provider value={streamingDrafts}>
@@ -10350,6 +10759,7 @@ export function WorkspaceView({
                           </StreamingDraftsCtx.Provider>
                           </TaskActivityCtx.Provider>
                         </LiveToolOutputsCtx.Provider>
+                      </SteerWithdrawCtx.Provider>
                       </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
                   </AuthErrorCtx.Provider>
@@ -10527,9 +10937,11 @@ export function WorkspaceView({
                 // queue's own is said here, in the slot each card keeps for it: how the turn stands,
                 // and the way out of it.
                 //
-                // A wake a watch queued is withdrawn rather than cancelled, because nothing sends it
-                // again; and only words the reader typed are put back in the composer
-                // (`returnsToComposer`), as Cancel and Stop hand back only those.
+                // The reader's own messages still on their way wait in the tray instead
+                // (`inPendingTray`); what is left here is what Orbit queued and what settled
+                // undelivered. A wake a watch queued is withdrawn rather than cancelled, because
+                // nothing sends it again; and only words the reader typed are put back in the
+                // composer (`returnsToComposer`), as Cancel and Stop hand back only those.
                 const wake = isQueuedWatchWake(q);
                 return (
                   <QueuedUserTurn
@@ -10823,6 +11235,8 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
+        {/* The reader's messages nothing has read yet, tucked behind the composer's top edge. */}
+        <PendingTray rows={pendingTrayRows} />
         <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
               Only shown once the box has hit its auto-grow cap or the user set a manual
@@ -10941,7 +11355,8 @@ export function WorkspaceView({
                         className="composer-attach-thumb"
                         src={im.previewUrl}
                         alt=""
-                        preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
+                        label={im.name || PREVIEW_IMAGE_LABEL}
+                        cover={<EyeOutlined className="composer-attach-eye" />}
                       />
                     ) : (
                       <AttachmentImage id={im.id as string} variant="chip" />
@@ -10990,7 +11405,7 @@ export function WorkspaceView({
           {/* Behind the input, drawing its chips. Same characters, same metrics — see the
               `.composer-field` block in index.css for why that is not negotiable. */}
           <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} />
-          <Input.TextArea
+          <Textarea
             ref={taRef}
             onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
             onTouchEnd={onComposerTouchEnd}
@@ -11175,7 +11590,9 @@ export function WorkspaceView({
                 // reader is still composing in (the settlement card's Start the project, the
                 // confirmation card's Confirm done).
                 if (text.trim() || readyImages.length > 0 || replyTo) e.stopPropagation();
-                onSend();
+                // ⌥Enter sends it the other way while a turn runs: queued for the next turn instead
+                // of into this one (decided 2026-10-16, docs/mocks/steer-tray).
+                onSend(e.altKey ? 'NEXT_TURN' : undefined);
               }
             }}
           />
@@ -11186,17 +11603,14 @@ export function WorkspaceView({
                 {offeredSuggestion}
               </span>
               {/* The grey line itself says how to take it, and there is no button to see: Tab with a
-                  keyboard, a double-tap on the box on a touch screen (the hint goes once one has
-                  worked on this device). Which shows is CSS's call. Drawn in
+                  keyboard, a double-tap on the box on a touch screen. Which shows is CSS's call. Drawn in
                   docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
               <kbd className="composer-suggestion-key" aria-hidden="true">
                 Tab
               </kbd>
-              {!suggestionTapLearned && (
-                <span className="composer-suggestion-tap" aria-hidden="true">
-                  Double-tap to use
-                </span>
-              )}
+              <span className="composer-suggestion-tap" aria-hidden="true">
+                Double-tap to use
+              </span>
               {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
                   from the eye there, and gone with a keyboard, which has Tab. */}
               <button
@@ -11219,30 +11633,42 @@ export function WorkspaceView({
           )}
           </div>
           <div className="composer-toolbar">
-            {/* In shell mode this stops being a menu: `trigger={[]}` makes the Dropdown an inert
-                wrapper so the button below acts on its own onClick (leave shell mode) instead of
-                opening the attachment menu. Nothing in that menu applies to a raw command anyway —
-                and a mode you can enter needs a visible way out. */}
-            <Dropdown
-              trigger={shellMode ? [] : ['click']}
-              placement="topLeft"
+            {/* In shell mode this stops being a menu: the `❯` below is a button on its own that leaves
+                shell mode, instead of opening the attachment menu. Nothing in that menu applies to a
+                raw command anyway — and a mode you can enter needs a visible way out. */}
+            {shellMode ? (
+              <Button
+                className="composer-attach-btn composer-shell-btn"
+                variant="text"
+                onClick={exitShell}
+                disabled={composerDisabled}
+                aria-label="Leave shell mode"
+                title="Leave shell mode"
+              >
+                ❯
+              </Button>
+            ) : (
+            <Menu
+              side="top"
+              align="start"
               disabled={composerDisabled}
-              menu={{
-                className: 'composer-attach-menu',
-                // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
-                // array's last entry is the one beside the `+` — while the native menu
-                // (ComposerView.swift `addMenu`) hands its items to the system with the first one
-                // nearest the button and gets them back reversed. Hence the native source reads
-                // Command…File and this reads File…Command: both clients put Command under the
-                // thumb and File at the far end, and a divider between the two groups. Pinned by
-                // WorkspaceView.composerMenu.test.tsx, drawn in
-                // docs/mocks/composer-attach-menu-phone.html.
-                items: [
+              // On a phone it takes the native menu's density (`variant="attachment"`, ui/Floating.css).
+              variant="attachment"
+              popupClassName="composer-attach-menu"
+              // Written in the order it is DRAWN, top to bottom. This menu opens upward, so the
+              // array's last entry is the one beside the `+` — while the native menu
+              // (ComposerView.swift `addMenu`) hands its items to the system with the first one
+              // nearest the button and gets them back reversed. Hence the native source reads
+              // Command…File and this reads File…Command: both clients put Command under the
+              // thumb and File at the far end, and a divider between the two groups. Pinned by
+              // WorkspaceView.composerMenu.test.tsx, drawn in
+              // docs/mocks/composer-attach-menu-phone.html.
+              items={[
                   {
                     key: 'file',
                     icon: <PaperClipOutlined />,
                     label: 'File',
-                    onClick: () => fileInputRef.current?.click(),
+                    onSelect: () => fileInputRef.current?.click(),
                   },
                   {
                     key: 'image',
@@ -11251,9 +11677,9 @@ export function WorkspaceView({
                     // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
                     // upload can't work in says so on pick, rather than greying the item out.
                     label: 'Image',
-                    onClick: () => imageInputRef.current?.click(),
+                    onSelect: () => imageInputRef.current?.click(),
                   },
-                  { type: 'divider' },
+                  { key: 'divider', type: 'separator' },
                   {
                     key: 'shell',
                     // The terminal box, as native Shell draws it — not `ConsoleSqlOutlined`, whose
@@ -11269,37 +11695,34 @@ export function WorkspaceView({
                         ? 'Shell (session unavailable)'
                         : 'Shell',
                     disabled: sameSessionSendBlocked || (!!selected && !live && !resumable),
-                    onClick: insertShell,
+                    onSelect: insertShell,
                   },
                   {
                     key: 'skill',
                     icon: <ThunderboltOutlined />,
                     label: 'Skill',
                     disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
-                    onClick: () => insertSlash('skill'),
+                    onSelect: () => insertSlash('skill'),
                   },
                   {
                     key: 'command',
                     icon: <SlashCommandIcon />,
                     label: 'Command',
                     disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
-                    onClick: () => insertSlash('command'),
+                    onSelect: () => insertSlash('command'),
                   },
-                ],
-              }}
-            >
-              <Button
-                className={shellMode ? 'composer-attach-btn composer-shell-btn' : 'composer-attach-btn'}
-                type="text"
-                icon={shellMode ? undefined : <PlusOutlined />}
-                onClick={shellMode ? exitShell : undefined}
-                disabled={composerDisabled}
-                aria-label={shellMode ? 'Leave shell mode' : 'Add attachment'}
-                title={shellMode ? 'Leave shell mode' : undefined}
-              >
-                {shellMode ? '❯' : null}
-              </Button>
-            </Dropdown>
+                ]}
+              trigger={
+                <Button
+                  className="composer-attach-btn"
+                  variant="text"
+                  icon={<PlusOutlined />}
+                  disabled={composerDisabled}
+                  aria-label="Add attachment"
+                />
+              }
+            />
+            )}
             {/* The workspace is only a Select when it can actually be picked (new, unlocked
                 session); once read-only it shows as a static pill left of Model below. */}
             {!workspaceReadOnly && (
@@ -11307,13 +11730,13 @@ export function WorkspaceView({
                 <Select
                   size="small"
                   variant="borderless"
-                  suffixIcon={null}
-                  value={shownWorkspaceId}
-                  onChange={setWorkspaceId}
+                  showArrow={false}
+                  value={shownWorkspaceId ?? null}
+                  onValueChange={(v) => setWorkspaceId(v ?? undefined)}
                   options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
                   placeholder="Default"
                   disabled={live || !!lockedWorkspaceId}
-                  popupMatchSelectWidth={false}
+                  matchTriggerWidth={false}
                 />
               </span>
             )}
@@ -11321,9 +11744,10 @@ export function WorkspaceView({
               <Select
                 size="small"
                 variant="borderless"
-                suffixIcon={null}
+                showArrow={false}
                 value={shownMode}
-                onChange={(v) => {
+                onValueChange={(v) => {
+                  if (v === null) return;
                   if (live) {
                     configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
                   } else {
@@ -11360,7 +11784,7 @@ export function WorkspaceView({
                   };
                 })}
                 disabled={!configEditable}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
               />
             </span>
             <span className="composer-pill-spacer" />
@@ -11372,9 +11796,9 @@ export function WorkspaceView({
                 workspace before its runner was ever ready (`managedDraftBlocked`). */}
             {!managedDraftBlocked && (
               <span className="composer-pill composer-model-pill">
-                <Dropdown
-                  trigger={['click']}
-                  placement="topRight"
+                <Menu
+                  side="top"
+                  align="end"
                   disabled={!configEditable}
                   // Rows that open a level down open on hover where the pointer can hover, the way
                   // the browser's own menus do — and on a tap where it cannot, because a phone has
@@ -11382,41 +11806,34 @@ export function WorkspaceView({
                   // They open to the right — and on a phone, where the control sits near the
                   // right edge, there is no right: shift the level back inside the screen rather
                   // than let it hang off the edge (and widen the page with it).
-                  menu={{
-                    className: 'composer-model-menu',
-                    items: modelMenuItems,
-                    triggerSubMenuAction: canHover ? 'hover' : 'click',
-                    builtinPlacements: {
-                      rightTop: {
-                        points: ['tl', 'tr'],
-                        overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
-                      },
-                    },
-                  }}
-                >
-                  <button
-                    type="button"
-                    className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
-                    disabled={!configEditable}
-                    aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
-                      smartRoute ? ', picked by smart selection' : ''
-                    }`}
-                  >
-                    {smartRoute && (
-                      <span className="composer-model-spark" aria-hidden="true">
-                        ✦
+                  submenuOverflow="slide"
+                  popupClassName="composer-model-menu"
+                  items={modelMenuItems}
+                  trigger={
+                    <button
+                      type="button"
+                      className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+                      disabled={!configEditable}
+                      aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                        smartRoute ? ', picked by smart selection' : ''
+                      }`}
+                    >
+                      {smartRoute && (
+                        <span className="composer-model-spark" aria-hidden="true">
+                          ✦
+                        </span>
+                      )}
+                      <span className="composer-model-name">{shownModelLabel}</span>
+                      <span className="composer-model-effort">
+                        {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
                       </span>
-                    )}
-                    <span className="composer-model-name">{shownModelLabel}</span>
-                    <span className="composer-model-effort">
-                      {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
-                    </span>
-                  </button>
-                </Dropdown>
+                    </button>
+                  }
+                />
               </span>
             )}
             {shownPool && shownPoolAccount && (
-              <Tooltip title={poolAccountHelp(shownPool, shownPoolAccount)}>
+              <Tooltip content={poolAccountHelp(shownPool, shownPoolAccount)}>
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
                   <span className="composer-account-name">{shownPoolAccount.member.label}</span>
                 </span>
@@ -11467,28 +11884,73 @@ export function WorkspaceView({
             {showStop ? (
               <Button
                 className="composer-send"
-                type="primary"
-                shape="circle"
+                variant="primary"
                 icon={<StopSquareIcon />}
                 onClick={() => selected && control.mutate(selected.id)}
                 aria-label="Stop"
               />
             ) : (
-              <Button
-                className="composer-send"
-                type="primary"
-                shape="circle"
-                icon={<ArrowUpOutlined />}
-                disabled={!canSend}
-                loading={send.isPending}
-                onClick={() => onSend()}
-                aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-              />
+              <span className="composer-send-hold">
+                <Button
+                  className="composer-send"
+                  variant="primary"
+                  icon={<ArrowUpOutlined />}
+                  disabled={!canSend}
+                  loading={send.isPending}
+                  onClick={() => {
+                    // The press that opened the offer is not a send as well.
+                    if (sendHold.current?.fired) {
+                      sendHold.current = null;
+                      return;
+                    }
+                    onSend();
+                  }}
+                  onPointerDown={() => {
+                    sendHold.current = null;
+                    if (!queueOffered || !canSend) return;
+                    const hold = {
+                      fired: false,
+                      timer: setTimeout(() => {
+                        hold.fired = true;
+                        setQueueOffer(true);
+                      }, QUEUE_OFFER_HOLD_MS),
+                    };
+                    sendHold.current = hold;
+                  }}
+                  onPointerUp={releaseSendHold}
+                  onPointerLeave={releaseSendHold}
+                  onPointerCancel={releaseSendHold}
+                  onContextMenu={(e) => {
+                    if (queueOffered) e.preventDefault();
+                  }}
+                  aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+                  title={
+                    queueOffered
+                      ? `Send into the current turn · ${IS_MAC ? '⌥' : 'Alt+'}Enter, or hold, to queue it for the next turn`
+                      : undefined
+                  }
+                />
+                {queueOffer && (
+                  <div ref={queueOfferRef} className="composer-queue-offer" role="menu" aria-label="Send">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setQueueOffer(false);
+                        onSend('NEXT_TURN');
+                      }}
+                    >
+                      Queue for next turn
+                    </button>
+                  </div>
+                )}
+              </span>
             )}
           </div>
         </div>
       </div>
       </div>
+      {confirmation}
     </div>
   );
 }

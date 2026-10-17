@@ -1,0 +1,119 @@
+== /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p0-standard-base-out/report.json: 49 failed
+chromium-dark-desktop :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: controlled error › projects error and retry :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: controlled loading › projects loading and release :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: profile :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: projects :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: wiki :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+chromium-dark-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+chromium-light-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: controlled error › projects error and retry :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: controlled loading › projects loading and release :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: profile :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: projects :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: record browser performance baseline :: unhandled: GET /api/auth/capabilities
+chromium-light-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: wiki :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+chromium-light-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: controlled error › projects error and retry :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: controlled loading › projects loading and release :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: profile :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: projects :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: wiki :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+webkit-dark-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+webkit-light-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: controlled error › projects error and retry :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: controlled loading › projects loading and release :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: profile :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: projects :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: wiki :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+webkit-light-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+   40 × Error: expect(page).toHaveScreenshot(expected) failed
+   9 × unhandled: GET /api/auth/capabilities
+== /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p0-standard-out/report.json: 49 failed
+chromium-dark-desktop :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: controlled error › projects error and retry :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: controlled loading › projects loading and release :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: profile :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: projects :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: wiki :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+chromium-dark-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+chromium-light-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: controlled error › projects error and retry :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: controlled loading › projects loading and release :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: profile :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: projects :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: record browser performance baseline :: unhandled: GET /api/auth/capabilities
+chromium-light-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: wiki :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+chromium-light-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: controlled error › projects error and retry :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: controlled loading › projects loading and release :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: profile :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: projects :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: wiki :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+webkit-dark-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+webkit-light-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: controlled error › projects error and retry :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: controlled loading › projects loading and release :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: profile :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: projects :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: wiki :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: P2.3 production notification compatibility :: unhandled: GET /api/auth/capabilities
+webkit-light-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+   40 × Error: expect(page).toHaveScreenshot(expected) failed
+   9 × unhandled: GET /api/auth/capabilities
+
+== diff of the two lists (base < > delivery)
+no difference
+
+== the P0 matrix's failures (reference, strict, delivery)
+== /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p0-ref-out/report.json: 21 failed
+   21 × unhandled: GET /api/auth/capabilities
+== /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p0-strict-out/report.json: 21 failed
+   21 × unhandled: GET /api/auth/capabilities
+== /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p0-del-out/report.json: 21 failed
+   21 × unhandled: GET /api/auth/capabilities
+
+== actual shots of the standard P0's failing cases, base vs delivery
+differs: pages.browser.mjs-projects-chromium-dark-desktop/projects-list-actual.png: 6 pixels, max 2 levels, 0 over 2
+39 of 40 byte-identical

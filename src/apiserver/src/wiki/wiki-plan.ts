@@ -7,6 +7,7 @@ import {
   WIKI_ENTRY_KINDS,
   WIKI_PLAN_JOB_OUTCOMES,
   WIKI_PLAN_JOB_RULES,
+  WIKI_PLAN_REBUILD,
   wikiMaintenanceSettings,
   WIKI_PLAN_FACT_KINDS,
   WIKI_PLAN_GATE_CHECKS,
@@ -33,7 +34,9 @@ import {
   type WikiPlanJobContext,
   type WikiPlanJobOutcome,
   type WikiPlanMaterials,
+  type WikiPlanBuildResult,
   type WikiPlanRedraftResult,
+  type WikiPlanSupportBuildResult,
   type WikiPlanNewField,
   type WikiPlanNewFieldLevel,
   type WikiPlanOrigin,
@@ -45,13 +48,16 @@ import {
   type WikiPlanSectionKind,
   type WikiPlanState,
   type WikiPlanStatus,
+  type WikiPlanTopic,
   type WikiPlanVersion,
   type WikiPlanVersionSummary,
+  type WikiSupportSpaces,
 } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { wikiPlanTopicsBrief } from '../wiki-worker/wiki-plan-materials';
 import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import {
@@ -60,6 +66,7 @@ import {
   progressWikiPlanJob,
   requestWikiPlanBuild,
   requestWikiPlanJob,
+  requestWikiPlanRebuild,
   startWikiPlanJob,
   wikiPlanJobById,
   wikiPlanJobCheck,
@@ -69,6 +76,7 @@ import {
   type WikiPlanJobEnd,
   type WikiPlanJobRow,
 } from './wiki-plan-job';
+import { currentWikiRollout, wikiDisabledError, wikiOnFor } from './wiki-rollout';
 import { WikiRefusalError, type WikiPrincipal } from './wiki.service';
 
 /**
@@ -901,6 +909,29 @@ export async function requireConfirmedPlan(
   return { id: confirmed.id, version: confirmed.version, confirmedAt: confirmed.confirmedAt };
 }
 
+/**
+ * The space's topics, oldest first, each with its active entries (contract `plan.gate.references`): what the gate
+ * takes a session condition's topic from, and lists back with one that is none of them, written as the drafting
+ * job's materials list them (`wikiPlanTopicsBrief`). A maintenance run reads the same (`docs.reads.affected`), and
+ * checks its proposal against it before the gate does.
+ */
+export async function wikiPlanTopics(
+  db: Pick<Prisma.TransactionClient, 'wikiTopic' | '$queryRaw'>,
+  ownerId: string,
+  spaceId: string,
+): Promise<WikiPlanTopic[]> {
+  const [topics, active] = await Promise.all([
+    db.wikiTopic.findMany({ where: { ownerId, spaceId }, orderBy: [{ createdAt: 'asc' }, { slug: 'asc' }], select: { slug: true, title: true } }),
+    db.$queryRaw<Array<{ slug: string; n: number }>>`
+      SELECT tp AS "slug", count(*)::int AS "n"
+        FROM "wiki_entry" e, unnest(e."topics") tp
+       WHERE e."owner_id" = ${ownerId}::uuid AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active'
+       GROUP BY 1`,
+  ]);
+  const counts = new Map(active.map((row) => [row.slug, row.n]));
+  return topics.map((topic) => ({ slug: topic.slug, title: topic.title, active: counts.get(topic.slug) ?? 0 }));
+}
+
 // ── The service ─────────────────────────────────────────────────────────────────────────────────
 
 /** A version about to be written: everything but the number, which is taken under the lock. */
@@ -1249,8 +1280,13 @@ export class WikiPlans {
         ? []
         : (await this.prisma.wikiTopic.findMany({ where: { ownerId, spaceId, slug: { in: slugs } }, select: { slug: true } })).map((t) => t.slug),
     );
-    for (const named of walk.topics) {
-      if (!topics.has(named.value)) walk.fail('references', named.path, `${quoted(named.value)} is not a topic of this space`);
+    const unknown = walk.topics.filter((named) => !topics.has(named.value));
+    if (unknown.length > 0) {
+      // The space's topics go with each one refused, so the next round has them to name: told only that a topic was
+      // none (canary 54755b7b, 10-09; 3b2bd5f2, 10-10, a document's slug), a maintenance run's proposal failed its
+      // last rounds on topics it had made up.
+      const brief = wikiPlanTopicsBrief({ topics: await wikiPlanTopics(this.prisma, ownerId, spaceId) });
+      for (const named of unknown) walk.fail('references', named.path, `${quoted(named.value)} is not a topic of this space: ${brief}`);
     }
     for (const doc of plan.docs) {
       for (const section of doc.sections) {
@@ -1823,6 +1859,115 @@ export class WikiPlans {
   }
 
   /**
+   * The owner asks for the documents of the version in force again (contract `plan.jobs.rebuild`): once its build
+   * failed, or what was written went out of date and no maintenance run came to write it. The owner channel only, as
+   * every route of the plan; only while the server executes the account's wiki — the runner's path is left as it is
+   * until it is deleted (P11) — and only of the version in force, which `version` names, so a page left on an older
+   * version asks for nothing. That version's own build that has not ended answers a second request; otherwise a
+   * build is made as a confirmation's is: the wiki-worker's `docs_build` job, and no task.
+   */
+  async requestBuild(ownerId: string, spaceId: string, version: number, actingSessionId: string | null): Promise<WikiPlanBuildResult> {
+    ownerChannel(actingSessionId, 'asking for the documents of the plan in force');
+    await this.requireSpace(ownerId, spaceId);
+    serverExecutesOnly(ownerId);
+    await this.inForce(ownerId, spaceId, version);
+    const answer = await requestWikiPlanRebuild(this.prisma, {
+      ownerId,
+      spaceId,
+      version,
+      trigger: 'owner',
+      requestedByUserId: ownerId,
+      support: null,
+    });
+    return this.buildAnswer(ownerId, spaceId, answer.jobId, answer.created);
+  }
+
+  /**
+   * An administrator asks for the documents of an account's space again, for support (contract
+   * `plan.jobs.rebuild.support`): its version in force, the same job the owner's request makes, and why — recorded in
+   * the administrator's Activity row in the transaction that answers the job. A space that is nobody's is the plain
+   * 404, and the wiki off for its owner is WIKI_DISABLED, as the owner's own door would answer.
+   */
+  async requestBuildForSupport(administratorId: string, spaceId: string, body: unknown): Promise<WikiPlanSupportBuildResult> {
+    const reason = supportReasonOf(body);
+    const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId }, select: { ownerId: true } });
+    if (!space) throw new NotFoundException('no such wiki space');
+    const rollout = currentWikiRollout();
+    if (!wikiOnFor(rollout, space.ownerId)) throw wikiDisabledError(rollout);
+    serverExecutesOnly(space.ownerId);
+    const { version } = await requireConfirmedPlan(this.prisma, { ownerId: space.ownerId, spaceId });
+    const answer = await requestWikiPlanRebuild(this.prisma, {
+      ownerId: space.ownerId,
+      spaceId,
+      version,
+      trigger: 'support',
+      requestedByUserId: administratorId,
+      support: { reason },
+    });
+    return { ...(await this.buildAnswer(space.ownerId, spaceId, answer.jobId, answer.created)), ownerId: space.ownerId };
+  }
+
+  /**
+   * An account's spaces, as an administrator picks one to build (contract `plan.jobs.rebuild.supportSpaces`): each
+   * one's title, its version in force, how many of that version's documents are written, and whether a build of it
+   * is on its way — nothing the space knows. Oldest first. An account that does not exist is a 404.
+   */
+  async supportSpaces(userId: string): Promise<WikiSupportSpaces> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException('user not found');
+    const spaces = await this.prisma.wikiSpace.findMany({
+      where: { ownerId: userId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, title: true },
+    });
+    const confirmed = await this.prisma.wikiPlan.findMany({
+      where: { ownerId: userId, status: 'confirmed' },
+      select: { spaceId: true, version: true, docs: { select: { slug: true } } },
+    });
+    const written = await this.prisma.wikiDoc.findMany({ where: { ownerId: userId }, select: { spaceId: true, slug: true } });
+    const building = await this.prisma.wikiPlanJob.findMany({
+      where: { ownerId: userId, kind: 'build', state: { in: ['queued', 'held', 'made'] } },
+      select: { spaceId: true },
+    });
+    const inForce = new Map(confirmed.map((plan) => [plan.spaceId, plan]));
+    const busy = new Set(building.map((job) => job.spaceId));
+    return {
+      userId,
+      serverExecutes: wikiExecutorServes(currentWikiExecutorSwitch(), userId),
+      spaces: spaces.map((space) => {
+        const plan = inForce.get(space.id);
+        const slugs = new Set(plan?.docs.map((doc) => doc.slug) ?? []);
+        return {
+          id: space.id,
+          title: space.title,
+          confirmedVersion: plan?.version ?? null,
+          docs: plan ? { written: written.filter((doc) => doc.spaceId === space.id && slugs.has(doc.slug)).length, total: slugs.size } : null,
+          building: busy.has(space.id),
+        };
+      }),
+    };
+  }
+
+  /** `version`, when it is the space's version in force (contract `plan.jobs.rebuild.version`); refused otherwise. */
+  private async inForce(ownerId: string, spaceId: string, version: number): Promise<void> {
+    const row = await this.prisma.wikiPlan.findFirst({ where: { ownerId, spaceId, version }, select: { status: true } });
+    if (!row) throw new NotFoundException('no such version of this plan');
+    if (row.status === 'confirmed') return;
+    const { version: current } = await requireConfirmedPlan(this.prisma, { ownerId, spaceId });
+    throw stale(row.status === 'draft'
+      ? `version ${version} is a draft: its documents are written once it is confirmed. Version ${current} is the plan in force`
+      : `version ${version} is superseded: version ${current} is the plan in force, and its documents are the ones written`);
+  }
+
+  /** A build asked for again, as the plan's read gives it, after the space is announced. */
+  private async buildAnswer(ownerId: string, spaceId: string, jobId: string, created: boolean): Promise<WikiPlanBuildResult> {
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
+    const job = await wikiPlanJobById(this.prisma, ownerId, jobId);
+    if (!job) throw new NotFoundException('no such plan job');
+    return { created, job };
+  }
+
+  /**
    * Where a job's run starts (contract `plan.jobs.context`): the job its maintenance session runs, and the
    * space, its repository and the maintenance workspace's checkout. Records that the run started.
    */
@@ -1983,6 +2128,38 @@ export class WikiPlans {
 /** A malformed request of the plan's jobs. */
 function schemaRefusal(message: string): WikiRefusalError {
   return new WikiRefusalError({ code: 'WIKI_SCHEMA', message });
+}
+
+/**
+ * Refused unless the server executes the account's wiki (contract `plan.jobs.rebuild.when`): on the runner's path a
+ * build is asked for by a confirmation alone, and that path is left as it is until it is deleted (P11).
+ */
+function serverExecutesOnly(ownerId: string): void {
+  const executor = currentWikiExecutorSwitch();
+  if (wikiExecutorServes(executor, ownerId)) return;
+  throw new WikiRefusalError({
+    code: 'WIKI_RUNNER_EXECUTES',
+    message:
+      `this account's wiki runs on its runners (ORBIT_WIKI_EXECUTOR=${executor.mode}): there the documents are written by the build `
+        + 'a confirmation asks for, and maintenance writes what is left. Nothing was asked for: the documents of the plan in force '
+        + 'are asked for again only while the Orbit server executes the wiki.',
+  });
+}
+
+/** An administrator's reason for a support build (contract `plan.jobs.rebuild.support`): `{ reason }`, said in words. */
+function supportReasonOf(body: unknown): string {
+  const raw = body === undefined || body === null ? {} : body;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw schemaRefusal('the body is an object: { reason }');
+  const record = raw as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (key !== 'reason') throw schemaRefusal(`${key} is not a field of a support build: reason`);
+  }
+  const reason = typeof record.reason === 'string' ? record.reason.trim() : '';
+  if (reason === '') {
+    throw schemaRefusal("reason is required: why the space's documents are asked for again — the support request it answers");
+  }
+  if (chars(reason) > WIKI_PLAN_REBUILD.reasonMaxChars) throw schemaRefusal(`reason is at most ${WIKI_PLAN_REBUILD.reasonMaxChars} characters`);
+  return reason;
 }
 
 /** A build's progress as its run said it, checked (contract `plan.jobs.progress`). */

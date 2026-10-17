@@ -1,0 +1,1243 @@
+{
+  "red_failing_tests": [
+    {
+      "name": "antd-confirm dlg-enter burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-enter burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-enter paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-escape burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-escape paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-shift-tab burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-shift-tab paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-space burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-space paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-tab burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-tab paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-tab-enter burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-confirm dlg-enter-tab-enter paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD confirm', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-enter burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-enter paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-escape burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-escape paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-shift-tab burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-shift-tab paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-space burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-space paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-tab burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-tab paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-tab-enter burst sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-dialog dlg-enter-tab-enter paced sample 0",
+      "error": "",
+      "waited_for": "getByRole('button', { name: 'AntD dialog', exact: true }).first()",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-enter-down-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-enter-down-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-enter-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-enter-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-c-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-c-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-down-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-down-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-end-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-end-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-escape burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-escape paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-home-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-home-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-left burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-left paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-shift-tab burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-shift-tab paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-space burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-space paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-tab burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-tab paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-up-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-session sub-right-up-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-enter-down-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-enter-down-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-enter-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-enter-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-c-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-c-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-down-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-down-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-end-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-end-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-escape burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-escape paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-home-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-home-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-left burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-left paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-shift-tab burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-shift-tab paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-space burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-space paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-tab burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-tab paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-up-enter burst sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    },
+    {
+      "name": "antd-submenu sub-right-up-enter paced sample 0",
+      "error": "Error: expect(locator).toBeFocused() failed",
+      "waited_for": "getByRole('menuitem', { name: /^Provider/ })",
+      "pointer": "p2-keyboard-window-2/keyboard-window-2.browser.mjs opening precondition (line 218 for submenus, the field locator for dialogs)"
+    }
+  ],
+  "deleted_targets": {
+    "antd-menu": {
+      "url": "see p2-keyboard-window-2/README.md target table",
+      "sequences": [
+        {
+          "sequence": "menu-down-end-enter",
+          "note": "（对照 `menu-down-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | menu×1 | @button:Add attachment 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-down-end-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-down-enter",
+          "note": "（对照）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | menu×1 | @button:Add attachment 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-down-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter",
+          "note": "（对照）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | menu×1 | @button:Add attachment 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-end-enter",
+          "note": "（对照 `menu-enter-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | none | @button:Add attachment 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-end-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-enter",
+          "note": "（对照）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | none | @button:Add attachment 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-home-enter",
+          "note": "（对照 `menu-enter-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | none | @button:Add attachment 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-home-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-s-enter",
+          "note": "（对照 `menu-enter-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | none | @button:Add attachment 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-s-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-shift-tab",
+          "note": "（对照 `menu-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | menu×1 | @menuitem:File 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-shift-tab」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-shift-tab-enter",
+          "note": "（对照 `menu-enter-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "ran File | none | @body:darkSwitch themeAdd atta 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-shift-tab-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-space",
+          "note": "（对照 `menu-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | none | @button:Add attachment 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-space」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-tab",
+          "note": "（对照 `menu-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | menu×1 | @menuitem:File 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-tab」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-enter-tab-enter",
+          "note": "（对照 `menu-enter-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "ran File | none | @body:darkSwitch themeAdd atta 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-enter-tab-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-space",
+          "note": "（对照）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | menu×1 | @button:Add attachment 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-space」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-space-down-enter",
+          "note": "（对照 `menu-space-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | none | @button:Add attachment 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-space-down-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-space-enter",
+          "note": "（对照 `menu-space`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | none | @button:Add attachment 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-space-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-up-enter",
+          "note": "（对照）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | menu×1 | @button:Add attachment 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-up-enter」的 `antd-menu` 列"
+        },
+        {
+          "sequence": "menu-up-home-enter",
+          "note": "（对照 `menu-up-enter`）",
+          "section": "顶层 Menu",
+          "antd_recorded": "none | menu×1 | @button:Add attachment 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §顶层 Menu 「menu-up-home-enter」的 `antd-menu` 列"
+        }
+      ],
+      "run_dirs": [
+        "baseline-menu-a",
+        "baseline-menu-b",
+        "baseline-menu-c"
+      ],
+      "red_sequences_here": []
+    },
+    "antd-submenu": {
+      "url": "see p2-keyboard-window-2/README.md target table",
+      "sequences": [
+        {
+          "sequence": "sub-enter",
+          "note": "（对照）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×2 | @menuitem:Codex 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-enter」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-enter-down-enter",
+          "note": "（对照 `sub-enter-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "ran Claude | menu×1 | @menuitem:Claude 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-enter-down-enter」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-enter-enter",
+          "note": "（对照 `sub-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "ran Codex | menu×1 | @menuitem:Codex 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-enter-enter」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right",
+          "note": "（对照）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×2 | @menuitem:Codex 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-c-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "ran Codex | menu×1 | @menuitem:Codex 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-c-enter」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-down-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "ran Claude | menu×1 | @menuitem:Claude 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-down-enter」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-end-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "ran Claude | menu×1 | @menuitem:Claude 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-end-enter」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-enter",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "ran Codex | menu×1 | @menuitem:Codex 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-enter」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-escape",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | none | @body:darkSwitch themeAdd atta 20/20； burst 错 20/20（none | menu×1 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-escape」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-home-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "ran Codex | menu×1 | @menuitem:Codex 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-home-enter」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-left",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×1 | @menuitem:Provider 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-left」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-shift-tab",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×1 | @button:Switch theme 20/20； burst 错 20/20（none | menu×1 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-shift-tab」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-space",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×2 | @menuitem:Codex 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-space」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-tab",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×1 | @body:darkSwitch themeAdd atta 20/20； burst 错 20/20（none | menu×1 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-tab」的 `antd-submenu` 列"
+        },
+        {
+          "sequence": "sub-right-up-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "ran Claude | menu×1 | @menuitem:Claude 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-up-enter」的 `antd-submenu` 列"
+        }
+      ],
+      "run_dirs": [
+        "baseline-sub-a",
+        "baseline-sub-b",
+        "baseline-sub-c",
+        "baseline-sub-d"
+      ],
+      "red_sequences_here": [
+        "sub-enter",
+        "sub-enter-down-enter",
+        "sub-enter-enter",
+        "sub-right",
+        "sub-right-c-enter",
+        "sub-right-down-enter",
+        "sub-right-end-enter",
+        "sub-right-enter",
+        "sub-right-escape",
+        "sub-right-home-enter",
+        "sub-right-left",
+        "sub-right-shift-tab",
+        "sub-right-space",
+        "sub-right-tab",
+        "sub-right-up-enter"
+      ]
+    },
+    "antd-session": {
+      "url": "see p2-keyboard-window-2/README.md target table",
+      "sequences": [
+        {
+          "sequence": "sub-enter",
+          "note": "（对照）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×2 | @menuitem:Codex 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-enter」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-enter-down-enter",
+          "note": "（对照 `sub-enter-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "Picked=claude | menu×1 | @menuitem:Claude 20/20； burst 错 20/20（none | menu×2 | @menuitem:Provider×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-enter-down-enter」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-enter-enter",
+          "note": "（对照 `sub-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "Picked=codex | menu×1 | @menuitem:Codex 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-enter-enter」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right",
+          "note": "（对照）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×2 | @menuitem:Codex 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-c-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "Picked=codex | menu×1 | @menuitem:Codex 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-c-enter」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-down-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "Picked=claude | menu×1 | @menuitem:Claude 20/20； burst 错 20/20（none | menu×2 | @menuitem:Provider×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-down-enter」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-end-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "Picked=claude | menu×1 | @menuitem:Claude 20/20； burst 错 20/20（none | menu×2 | @menuitem:Provider×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-end-enter」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-enter",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "Picked=codex | menu×1 | @menuitem:Codex 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-enter」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-escape",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | none | @body:darkSwitch themeSession 20/20； burst 错 20/20（none | menu×1 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-escape」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-home-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "Picked=codex | menu×1 | @menuitem:Codex 20/20； burst 错 20/20（none | menu×2 | @menuitem:Provider×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-home-enter」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-left",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×1 | @menuitem:Provider 20/20； burst 错 20/20（none | menu×2 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-left」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-shift-tab",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×1 | @button:Switch theme 20/20； burst 错 20/20（none | menu×1 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-shift-tab」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-space",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×2 | @menuitem:Codex 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-space」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-tab",
+          "note": "（对照 `sub-right`）",
+          "section": "子菜单",
+          "antd_recorded": "none | menu×1 | @body:darkSwitch themeSession 20/20； burst 错 20/20（none | menu×1 | @menuitem:Codex×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-tab」的 `antd-session` 列"
+        },
+        {
+          "sequence": "sub-right-up-enter",
+          "note": "（对照 `sub-right-enter`）",
+          "section": "子菜单",
+          "antd_recorded": "Picked=claude | menu×1 | @menuitem:Claude 20/20； burst 错 20/20（none | menu×2 | @menuitem:Provider×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §子菜单 「sub-right-up-enter」的 `antd-session` 列"
+        }
+      ],
+      "run_dirs": [
+        "baseline-sub-a",
+        "baseline-sub-b",
+        "baseline-sub-c",
+        "baseline-sub-d"
+      ],
+      "red_sequences_here": [
+        "sub-enter",
+        "sub-enter-down-enter",
+        "sub-enter-enter",
+        "sub-right",
+        "sub-right-c-enter",
+        "sub-right-down-enter",
+        "sub-right-end-enter",
+        "sub-right-enter",
+        "sub-right-escape",
+        "sub-right-home-enter",
+        "sub-right-left",
+        "sub-right-shift-tab",
+        "sub-right-space",
+        "sub-right-tab",
+        "sub-right-up-enter"
+      ]
+    },
+    "antd-sample": {
+      "url": "see p2-keyboard-window-2/README.md target table",
+      "sequences": [
+        {
+          "sequence": "select-down",
+          "note": "（对照）",
+          "section": "Select",
+          "antd_recorded": "Never | list open | listbox×1 | @combobox:Sample choice 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-7-enter",
+          "note": "（对照 `select-down-enter`）",
+          "section": "Select",
+          "antd_recorded": "Never | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-7-enter」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-down",
+          "note": "（对照）",
+          "section": "Select",
+          "antd_recorded": "Never | list open | listbox×1 | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-down」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-down-tab",
+          "note": "（对照 `select-down-down`）",
+          "section": "Select",
+          "antd_recorded": "7 days | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-down-tab」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-end-enter",
+          "note": "（对照 `select-down-enter`）",
+          "section": "Select",
+          "antd_recorded": "Never | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-end-enter」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-enter",
+          "note": "（对照）",
+          "section": "Select",
+          "antd_recorded": "Never | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-enter」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-enter-from-7",
+          "note": "（对照）",
+          "section": "Select",
+          "antd_recorded": "7 days | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-enter-from-7」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-home-enter",
+          "note": "（对照 `select-down-enter-from-7`）",
+          "section": "Select",
+          "antd_recorded": "7 days | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-home-enter」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-n-enter",
+          "note": "（对照 `select-down-enter-from-7`）",
+          "section": "Select",
+          "antd_recorded": "7 days | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-n-enter」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-shift-tab",
+          "note": "（对照 `select-down`）",
+          "section": "Select",
+          "antd_recorded": "Never | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-shift-tab」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-space",
+          "note": "（对照 `select-down`）",
+          "section": "Select",
+          "antd_recorded": "Never | list open | listbox×1 | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-space」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-down-tab",
+          "note": "（对照 `select-down`）",
+          "section": "Select",
+          "antd_recorded": "Never | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-down-tab」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-enter",
+          "note": "（对照）",
+          "section": "Select",
+          "antd_recorded": "Never | list open | listbox×1 | @combobox:Sample choice 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-enter」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-enter-down-enter",
+          "note": "（对照 `select-down-enter`）",
+          "section": "Select",
+          "antd_recorded": "7 days | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-enter-down-enter」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-enter-tab",
+          "note": "（对照 `select-enter`）",
+          "section": "Select",
+          "antd_recorded": "Never | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-enter-tab」的 `antd-sample` 列"
+        },
+        {
+          "sequence": "select-space-down-enter",
+          "note": "（对照 `select-down-enter`）",
+          "section": "Select",
+          "antd_recorded": "7 days | list closed | none | @combobox:Sample choice 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Select 「select-space-down-enter」的 `antd-sample` 列"
+        }
+      ],
+      "run_dirs": [
+        "baseline-select-a",
+        "baseline-select-b",
+        "baseline-select-c"
+      ],
+      "red_sequences_here": []
+    },
+    "antd-popconfirm": {
+      "url": "see p2-keyboard-window-2/README.md target table",
+      "sequences": [
+        {
+          "sequence": "pop-enter",
+          "note": "（对照）",
+          "section": "Popconfirm",
+          "antd_recorded": "none | tooltip:Delete this task?A r | @button:Delete task 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Popconfirm 「pop-enter」的 `antd-popconfirm` 列"
+        },
+        {
+          "sequence": "pop-enter-enter",
+          "note": "（对照 `pop-enter`）",
+          "section": "Popconfirm",
+          "antd_recorded": "none | none | @button:Delete task 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Popconfirm 「pop-enter-enter」的 `antd-popconfirm` 列"
+        },
+        {
+          "sequence": "pop-enter-escape",
+          "note": "（对照 `pop-enter`）",
+          "section": "Popconfirm",
+          "antd_recorded": "none | none | @button:Delete task 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Popconfirm 「pop-enter-escape」的 `antd-popconfirm` 列"
+        },
+        {
+          "sequence": "pop-enter-shift-tab",
+          "note": "（对照 `pop-enter`）",
+          "section": "Popconfirm",
+          "antd_recorded": "none | tooltip:Delete this task?A r | @button:Switch theme 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Popconfirm 「pop-enter-shift-tab」的 `antd-popconfirm` 列"
+        },
+        {
+          "sequence": "pop-enter-space",
+          "note": "（对照 `pop-enter`）",
+          "section": "Popconfirm",
+          "antd_recorded": "none | none | @button:Delete task 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Popconfirm 「pop-enter-space」的 `antd-popconfirm` 列"
+        },
+        {
+          "sequence": "pop-enter-tab",
+          "note": "（对照 `pop-enter`）",
+          "section": "Popconfirm",
+          "antd_recorded": "none | tooltip:Delete this task?A r | @button:Cancel 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Popconfirm 「pop-enter-tab」的 `antd-popconfirm` 列"
+        },
+        {
+          "sequence": "pop-enter-tab-enter",
+          "note": "（对照 `pop-enter-enter`）",
+          "section": "Popconfirm",
+          "antd_recorded": "Answer=cancelled | none | @body:darkSwitch themeDelete t 20/20； burst 错 0/20，窗口 20，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Popconfirm 「pop-enter-tab-enter」的 `antd-popconfirm` 列"
+        }
+      ],
+      "run_dirs": [
+        "baseline-pop"
+      ],
+      "red_sequences_here": []
+    },
+    "antd-dialog": {
+      "url": "see p2-keyboard-window-2/README.md target table",
+      "sequences": [
+        {
+          "sequence": "dlg-enter",
+          "note": "（对照）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | dialog:Edit workspace | @button:Close 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter」的 `antd-dialog` 列"
+        },
+        {
+          "sequence": "dlg-enter-enter",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "ran Close | none | @button:AntD dialog 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-enter」的 `antd-dialog` 列"
+        },
+        {
+          "sequence": "dlg-enter-escape",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | none | @button:AntD dialog 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-escape」的 `antd-dialog` 列"
+        },
+        {
+          "sequence": "dlg-enter-shift-tab",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | dialog:Edit workspace | @button:Save 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-shift-tab」的 `antd-dialog` 列"
+        },
+        {
+          "sequence": "dlg-enter-space",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "ran Close | none | @button:AntD dialog 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-space」的 `antd-dialog` 列"
+        },
+        {
+          "sequence": "dlg-enter-tab",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | dialog:Edit workspace | @input: 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-tab」的 `antd-dialog` 列"
+        },
+        {
+          "sequence": "dlg-enter-tab-enter",
+          "note": "（对照 `dlg-enter-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | dialog:Edit workspace | @input: 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-tab-enter」的 `antd-dialog` 列"
+        }
+      ],
+      "run_dirs": [
+        "baseline-dlg"
+      ],
+      "red_sequences_here": [
+        "dlg-enter",
+        "dlg-enter-enter",
+        "dlg-enter-escape",
+        "dlg-enter-shift-tab",
+        "dlg-enter-space",
+        "dlg-enter-tab",
+        "dlg-enter-tab-enter"
+      ]
+    },
+    "antd-confirm": {
+      "url": "see p2-keyboard-window-2/README.md target table",
+      "sequences": [
+        {
+          "sequence": "dlg-enter",
+          "note": "（对照）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | dialog:Delete runner? | @button:Cancel 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter」的 `antd-confirm` 列"
+        },
+        {
+          "sequence": "dlg-enter-enter",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "ran Cancel | none | @button:AntD confirm 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-enter」的 `antd-confirm` 列"
+        },
+        {
+          "sequence": "dlg-enter-escape",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | none | @button:AntD confirm 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-escape」的 `antd-confirm` 列"
+        },
+        {
+          "sequence": "dlg-enter-shift-tab",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | dialog:Delete runner? | @button:Delete 20/20； burst 错 20/20（none | dialog:Delete runner? | @button:Cancel×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-shift-tab」的 `antd-confirm` 列"
+        },
+        {
+          "sequence": "dlg-enter-space",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "ran Cancel | none | @button:AntD confirm 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-space」的 `antd-confirm` 列"
+        },
+        {
+          "sequence": "dlg-enter-tab",
+          "note": "（对照 `dlg-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "none | dialog:Delete runner? | @button:Delete 20/20； burst 错 20/20（none | dialog:Delete runner? | @button:Cancel×20），窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-tab」的 `antd-confirm` 列"
+        },
+        {
+          "sequence": "dlg-enter-tab-enter",
+          "note": "（对照 `dlg-enter-enter`）",
+          "section": "Dialog / ConfirmDialog",
+          "antd_recorded": "ran Delete | none | @button:AntD confirm 20/20； burst 错 0/20，窗口 0，交接 0",
+          "pointer": "p2-keyboard-window-2/combinations.md §Dialog / ConfirmDialog 「dlg-enter-tab-enter」的 `antd-confirm` 列"
+        }
+      ],
+      "run_dirs": [
+        "baseline-dlg"
+      ],
+      "red_sequences_here": [
+        "dlg-enter",
+        "dlg-enter-enter",
+        "dlg-enter-escape",
+        "dlg-enter-shift-tab",
+        "dlg-enter-space",
+        "dlg-enter-tab",
+        "dlg-enter-tab-enter"
+      ]
+    }
+  }
+}
