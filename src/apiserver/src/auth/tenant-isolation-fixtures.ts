@@ -528,6 +528,9 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
 
     const adminSubject = await account(`${name}-subject`, 'MEMBER');
     const adminSubjectTokenId = (await pats.issue(adminSubject.userId, { name: 'subject token', scopes: ['tasks:read'], expiresInDays: 30, createdVia: 'WEB' })).id;
+    await db.userAvatar.create({
+      data: { userId: adminSubject.userId, mimeType: 'image/png', data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) },
+    });
     const adminProvider = async (label: string) => {
       const id = randomUUID();
       await db.modelProvider.create({

@@ -20,6 +20,8 @@ export const CODEWORDS = {
   agents: 'P0-AGENTS-MANGO', claude: 'P0-CLAUDE-KIWI', claudeLocal: 'P0-CLAUDELOCAL-PLUM', cursorrules: 'P0-CURSORRULES-LIME',
   ruleAlways: 'P0-RULE-ALWAYS-FIG', ruleGlob: 'P0-RULE-GLOB-DATE', ruleAgent: 'P0-RULE-AGENT-PEAR', nestedAgents: 'P0-NESTED-AGENTS-CHERRY',
   skill: 'P0-SKILL-GUAVA', command: 'P0-COMMAND-LYCHEE',
+  // Outside the repository, in the slot (plantSlotConfigs): the CLI's HOME and its config dir.
+  userRule: 'P0-USER-RULE-OLIVE', homeAgents: 'P0-HOME-AGENTS-QUINCE', configDirRule: 'P0-CONFIGDIR-RULE-SAGE',
 };
 
 // The marker script: `mark.sh <source> <event>`; stdin (the hook payload) is kept, truncated.
@@ -72,8 +74,9 @@ export function buildFixtureRepo(repo, { markerLog, mcpLog, toolsDir }) {
     '.cursor/mcp.json': mcpJson('repo-mcp', mcpLog),
     '.cursor/worktrees.json': JSON.stringify({ 'setup-worktree': [`${mark} repo-worktrees-json setup`] }, null, 2),
     '.cursor/environment.json': JSON.stringify({ install: `${mark} repo-environment-json install`, start: `${mark} repo-environment-json start` }, null, 2),
+    // A command of its own (mkdir), so its allow entry and cli.json's (touch) are told apart.
     '.claude/settings.json': JSON.stringify({
-      permissions: { allow: ['Bash(touch:*)'] },
+      permissions: { allow: ['Bash(mkdir:*)'] },
       hooks: {
         SessionStart: [{ hooks: [{ type: 'command', command: `${mark} repo-claude-settings SessionStart` }] }],
         PreToolUse: [{ matcher: '', hooks: [{ type: 'command', command: `${mark} repo-claude-settings PreToolUse` }] }],
@@ -105,6 +108,12 @@ export function plantSlotConfigs(slot, repo, { mark, mcpLog }) {
     writeFileSync(join(dir, 'hooks.json'), hooksJson(mark, `${label}-hooks`));
     writeFileSync(join(dir, 'mcp.json'), mcpJson(`${label}-mcp`, mcpLog));
   }
+  // Rules the CLI might read from its own HOME and config dir rather than from the repository.
+  mkdirSync(join(slot.home, '.cursor', 'rules'), { recursive: true });
+  writeFileSync(join(slot.home, '.cursor', 'rules', 'p0-user.mdc'), `---\ndescription: P0 user rule\nalwaysApply: true\n---\nCodeword: ${CODEWORDS.userRule}.\n`);
+  writeFileSync(join(slot.home, 'AGENTS.md'), `Codeword: ${CODEWORDS.homeAgents}.\n`);
+  mkdirSync(join(slot.config, 'rules'), { recursive: true });
+  writeFileSync(join(slot.config, 'rules', 'p0-config.mdc'), `---\ndescription: P0 config-dir rule\nalwaysApply: true\n---\nCodeword: ${CODEWORDS.configDirRule}.\n`);
   mkdirSync(join(slot.home, '.claude'), { recursive: true });
   writeFileSync(join(slot.home, '.claude', 'settings.json'), JSON.stringify({
     hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `${mark} home-claude-settings SessionStart` }] }] },

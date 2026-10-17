@@ -413,7 +413,7 @@ test('Google linking on PostgreSQL: Connect Google end to end, the confirmation 
     assert.deepEqual(new Set(list.json.map((row: { id: string }) => toUuid(row.id))), new Set(all.map((row) => row.id)), 'every account');
     for (const row of list.json) {
       // §6's other field of a row, disabledAt (§5.5): null, as no account here is disabled.
-      assert.deepEqual(Object.keys(row).sort(), ['createdAt', 'disabledAt', 'email', 'id', 'lastActive', 'name', 'publicId', 'role', 'signInMethods'], row.email);
+      assert.deepEqual(Object.keys(row).sort(), ['avatarUpdatedAt', 'createdAt', 'disabledAt', 'email', 'id', 'lastActive', 'name', 'publicId', 'role', 'signInMethods'], row.email);
       assert.equal(row.disabledAt, null, row.email);
       const truth = all.find((one) => one.id === toUuid(row.id));
       assert.deepEqual(row.signInMethods, { password: truth.password, google: truth.google === null ? null : { email: truth.google } }, row.email);

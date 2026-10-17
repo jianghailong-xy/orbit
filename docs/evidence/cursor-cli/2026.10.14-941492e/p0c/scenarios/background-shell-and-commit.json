@@ -1,0 +1,252 @@
+{
+ "name": "background-shell-and-commit",
+ "runId": "2026-10-17T02-05-13-878Z",
+ "startedAt": "2026-10-17T02:05:13.933Z",
+ "finishedAt": "2026-10-17T02:06:55.790Z",
+ "passed": true,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 5,
+   "at": "2026-10-17T02:05:21.828Z",
+   "note": "commit attribution + background shell"
+  }
+ ],
+ "protocol": "protocol/background-shell-and-commit.ndjson",
+ "protocolLines": 291,
+ "fixtures": [
+  "background-shell-and-commit/background"
+ ],
+ "checks": [
+  {
+   "name": "the commit was made",
+   "ok": true,
+   "detail": "p0 <<EMAIL>>\np0 <<EMAIL>>\np0 attribution probe\n\n"
+  },
+  {
+   "name": "no unsolicited turn after end_turn: no text, thought or tool update in the 40 s after the prompt answered",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "background + commit": {
+   "stopReason": "end_turn",
+   "turnMs": 38908,
+   "bgFileWrittenMsAfterResult": 16911,
+   "updatesAfterResult": [],
+   "permissionRequests": [
+    {
+     "sessionId": "<UUID_1>",
+     "title": "`git status && git diff && git log -5 --oneline`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_2>-1\nfc_<UUID_3>_1",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: git status, git diff, git log"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    },
+    {
+     "sessionId": "<UUID_1>",
+     "title": "`git config user.name; git config user.email; git status; git diff`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_4>-4\nfc_<UUID_5>_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: git config, git status, git diff"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    },
+    {
+     "sessionId": "<UUID_1>",
+     "title": "`git log -1 --format='%an %ae'`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_6>-5\nfc_<UUID_7>_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: git log"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    },
+    {
+     "sessionId": "<UUID_1>",
+     "title": "`git add README.md && git -c user.name=\"p0\" -c user.email=\"<EMAIL>\" commit -m \"$(cat <<'EOF'\np0 attribution probe\n\nEOF\n)\" && git status`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_8>-6\nfc_<UUID_9>_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: cat, git add, git -c, git status"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    },
+    {
+     "sessionId": "<UUID_1>",
+     "title": "`sleep 20 && echo bg-done > bg.txt`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_10>-7\nfc_<UUID_11>_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: echo, sleep"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    }
+   ],
+   "tools": [
+    {
+     "title": "Find `README.md`",
+     "kind": "search",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawInput": {
+      "pattern": "README.md"
+     }
+    },
+    {
+     "title": "`git status && git diff && git log -5 --oneline`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawInput": {
+      "command": "git status && git diff && git log -5 --oneline"
+     }
+    },
+    {
+     "title": "Read README.md",
+     "kind": "read",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawInput": {
+      "path": "<RUN>/work/README.md"
+     }
+    },
+    {
+     "title": "Edit `<RUN>/work/README.md`",
+     "kind": "edit",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawInput": {
+      "path": "<RUN>/work/README.md"
+     }
+    },
+    {
+     "title": "`git config user.name; git config user.email; git status; git diff`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawInput": {
+      "command": "git config user.name; git config user.email; git status; git diff"
+     }
+    },
+    {
+     "title": "`git log -1 --format='%an %ae'`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawInput": {
+      "command": "git log -1 --format='%an %ae'"
+     }
+    },
+    {
+     "title": "`git add README.md && git -c user.name=\"p0\" -c user.email=\"<EMAIL>\" commit -m \"$(cat <<'EOF'\np0 attribution probe\n\nEOF\n)\" && git status`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawInput": {
+      "command": "git add README.md && git -c user.name=\"p0\" -c user.email=\"<EMAIL>\" commit -m \"$(cat <<'EOF'\np0 attribution probe\n\nEOF\n)\" && git status"
+     }
+    },
+    {
+     "title": "`sleep 20 && echo bg-done > bg.txt`",
+     "kind": "execute",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "rawInput": {
+      "command": "sleep 20 && echo bg-done > bg.txt"
+     }
+    }
+   ],
+   "lastCommit": "p0 <<EMAIL>>\np0 <<EMAIL>>\np0 attribution probe\n\n"
+  },
+  "commit attribution (attributeCommitsToAgent default true): trailer lines in the message": [],
+  "whether the prompt waited for the background command": "prompt answered before bg.txt was written"
+ }
+}

@@ -4,8 +4,12 @@
 import { mkdirSync, readFileSync, existsSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const VERSION = '2026.10.14-941492e';
-export const TARBALL_SHA256 = '6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d';
+// The pinned build. CURSOR_P0_VERSION (with CURSOR_P0_TARBALL_SHA256) runs the scenarios against
+// another build, to compare it with the pinned one; the pin itself does not move.
+export const PINNED_VERSION = '2026.10.14-941492e';
+export const PINNED_TARBALL_SHA256 = '6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d';
+export const VERSION = process.env.CURSOR_P0_VERSION ?? PINNED_VERSION;
+export const TARBALL_SHA256 = VERSION === PINNED_VERSION ? PINNED_TARBALL_SHA256 : process.env.CURSOR_P0_TARBALL_SHA256 ?? null;
 export const P0_ROOT = process.env.CURSOR_P0_ROOT ?? '/mnt/data/cursor-p0';
 export const CLI_DIR = process.env.CURSOR_P0_CLI ?? join(P0_ROOT, 'cli', VERSION);
 export const AGENT = join(CLI_DIR, 'cursor-agent');
@@ -58,10 +62,18 @@ export function cursorEnv(slot, { layout = 'full', apiKey = null, store = 'file'
   return env;
 }
 
-// Real prompts spend the owner's Cursor quota. Every session/prompt (and every `agent -p`) sent
-// with real credentials is charged here first; the ledger outlives runs and refuses past the cap.
-export const PROMPT_CAP = 30;
-export const LEDGER = join(P0_ROOT, 'ledger', 'prompts.jsonl');
+// Real prompts spend the owner's Cursor quota, and each task that spends them has a budget of its
+// own: one ledger per task, chosen with CURSOR_P0_LEDGER (default: the current task's). Every
+// session/prompt (and every `agent -p`) sent with real credentials is charged to it first; the
+// ledger outlives runs and refuses past its cap.
+export const LEDGERS = {
+  p0a: { file: 'prompts.jsonl', cap: 30, task: 'P0a 34h05eeSDrtKGW2ret55v' },
+  p0c: { file: 'p0c-prompts.jsonl', cap: 10, task: 'P0c 34h3xGGSqUnA6DTMj1iop' },
+};
+export const LEDGER_NAME = process.env.CURSOR_P0_LEDGER ?? 'p0c';
+if (!LEDGERS[LEDGER_NAME]) throw new Error(`unknown ledger ${LEDGER_NAME}; known: ${Object.keys(LEDGERS).join(', ')}`);
+export const PROMPT_CAP = LEDGERS[LEDGER_NAME].cap;
+export const LEDGER = join(P0_ROOT, 'ledger', LEDGERS[LEDGER_NAME].file);
 
 export function promptsSpent() {
   if (!existsSync(LEDGER)) return [];
@@ -70,10 +82,11 @@ export function promptsSpent() {
 
 export function chargePrompt(runId, scenario, note) {
   if (process.env.CURSOR_P0_SELFTEST === '1') throw new Error('self-test mode never charges real prompts');
+  if (VERSION !== PINNED_VERSION) throw new Error(`real prompts go to the pinned build only; refusing ${scenario} on ${VERSION}`);
   const spent = promptsSpent();
   if (spent.length >= PROMPT_CAP) throw new Error(`real prompt cap ${PROMPT_CAP} reached; refusing ${scenario}`);
   mkdirSync(join(P0_ROOT, 'ledger'), { recursive: true });
-  const entry = { n: spent.length + 1, at: new Date().toISOString(), runId, scenario, note };
+  const entry = { n: spent.length + 1, at: new Date().toISOString(), runId, scenario, note, version: VERSION };
   appendFileSync(LEDGER, JSON.stringify(entry) + '\n');
   return entry;
 }

@@ -2854,6 +2854,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"A time already past is started by the next scan. " +
 		"task_start ignores runAt and starts the task immediately, and that run clears runAt as well."
 	runAtProp := map[string]interface{}{"type": "string", "description": runAtDescription}
+	// What autoRunWhenReady never does, stated once for task_create, every task_create_batch item and
+	// task_update. No automatic starter selects a task in no project that has no prerequisites — the
+	// dependency sweep wants an edge, the independent release a project — and "all of its zero
+	// prerequisites are DONE" reads as ready to anybody who has not been told (2026-10-16: two such
+	// tasks, left on the default true, sat OPEN for 12 minutes and 4 hours until somebody started them).
+	autoRunUnfiledNoPrerequisites := "A task in no project that has no prerequisites is never started by this flag, however ready it looks: start it with task_start, or give it a runAt."
 	updateRunAtProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
 		"description": "Omit to leave the schedule as it is, null to cancel it, a date-time to set or move it. " + runAtDescription,
@@ -2970,7 +2976,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			"autoRunWhenReady": map[string]interface{}{
 				"type":        "boolean",
-				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. For a task in no project it only matters when there are prerequisites.",
+				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. " + autoRunUnfiledNoPrerequisites + " Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start.",
 			},
 			"completionPolicy": map[string]interface{}{
 				"type":        "string",
@@ -3967,7 +3973,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"autoRunWhenReady": map[string]interface{}{
 					"type":        "boolean",
-					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
+					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner. " + autoRunUnfiledNoPrerequisites,
 				},
 				"priority": map[string]interface{}{
 					"type":        []string{"integer", "null"},

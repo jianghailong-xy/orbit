@@ -466,7 +466,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     }
 }
 
-/** The two presses under the title, and the reason a run cannot start when it cannot. */
+/** The two presses under the title, and the reason a run cannot start when it cannot — or, when it can, that it is the task's only start. */
 @Composable
 private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, task: JsonObject, assigneeHasRunner: Boolean,
     open: (OrbitRoute) -> Unit, run: () -> Unit, confirmDone: () -> Unit, reopen: () -> Unit) {
@@ -501,9 +501,9 @@ private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, t
             trailing?.invoke(Modifier.weight(1f), true)
         }
         val trailingKind = row.trailing
-        if (trailingKind != null && trailingKind !is TaskActionRow.Trailing.OpenRun && !canStart)
-            TaskDetailLogic.runDisabledHint(task, assigneeHasRunner)?.let { Text(it, Modifier.testTag("task-run-hint"), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (trailingKind != null && trailingKind !is TaskActionRow.Trailing.OpenRun)
+            (if (canStart) TaskDetailLogic.runNowHint(task) else TaskDetailLogic.runDisabledHint(task, assigneeHasRunner))?.let {
+                Text(it, Modifier.testTag("task-run-hint"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 

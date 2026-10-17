@@ -96,7 +96,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         "thinking" -> "Thinking"
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
         "tool_result" -> "Tool output"
-        "interrupt" -> "Interrupted"
+        // Nobody pressed Stop on a turn the runner tore down while restarting (runner-go's watchShutdownDrain): say what did.
+        "interrupt" -> if (event.fields.string("reason") == "runner_restart") "Interrupted — the runner restarted" else "Interrupted"
         "error", "auth_error" -> "Error"
         "notice" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
@@ -220,6 +221,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) { MarkdownText(text, open = open) }
                 TextButton(onClick = { if (text.length > COPY_TEXT_LIMIT) copyOverflow = text else clipboard.setText(AnnotatedString(text)) }) { Text("Copy message") }
             }
+        } else if (event.type == "interrupt") {
+            // The title is the whole row, as on web and iOS: the payload is the runner's bookkeeping (the request a Stop answered, the
+            // restart's reason), which the body below would print as raw JSON.
         } else {
             cards.forEach { TranscriptCardView(it, open, shown) }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()

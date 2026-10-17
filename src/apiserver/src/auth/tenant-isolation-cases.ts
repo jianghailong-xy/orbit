@@ -111,7 +111,7 @@ export interface Tenant {
   wikiArticlePart: number;
   wikiDocSlug: string;
   wikiTopicSlug: string;
-  /** For /admin/*: a user an administrator acts on, one of its tokens, a global provider. */
+  /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
   adminSubjectTokenId: string;
   adminProviderId: string;
@@ -209,6 +209,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── admin/*: an administrator acts on other accounts by design; a member is refused ─────────────
   'GET /admin/users/:id/access-tokens': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // The subject has a profile photo: the administrator is answered its bytes.
+  'GET /admin/users/:id/avatar': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   // Before the role and disabled cases below: the subject is still an enabled member, whom an administrator may view.
   'POST /admin/users/:id/impersonate': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { reason: 'the census' } }) },
   'DELETE /admin/users/:id/access-tokens/:tokenId': {

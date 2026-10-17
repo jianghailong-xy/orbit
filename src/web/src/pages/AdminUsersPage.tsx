@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { MoreOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WikiPlanSupportBuildResult, WikiSupportSpace, WikiSupportSpaces } from '@orbit/shared';
-import { api, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
+import { api, fetchUserAvatarDataUrl, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
 import { AdminNav } from '../components/AdminNav';
 import { Avatar } from '../components/ui/Avatar';
@@ -39,6 +39,9 @@ interface AdminUser {
   disabledAt?: string | null;
   /** When the account last used Orbit, and through what; null when it never has, absent from a server that predates it. */
   lastActive?: { at: string; via: ActiveVia } | null;
+  /** When the account's profile photo was set — the version it is fetched by; null without one, absent from a
+   *  server that predates the list naming it. */
+  avatarUpdatedAt?: string | null;
 }
 interface CreateResult {
   email: string;
@@ -86,11 +89,19 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** The account as the list names it: its name, or the part of its email before the @ while it has none. */
 const nameOf = (u: AdminUser) => u.name.trim() || u.email.split('@')[0];
 
-/** The account: its photo's place, its name, a mark for you and for an administrator, and its email. */
+/** The account: its photo (its initial while it has none), its name, a mark for you and for an administrator, and its email. */
 function UserCell({ user, you }: { user: AdminUser; you: boolean }) {
+  // By the version the row names, so a new photo is a new key; nothing is fetched while there is none. Under a
+  // key of its own rather than the list's, so refreshing the list does not fetch every photo again.
+  const photo = useQuery({
+    queryKey: ['admin', 'avatar', user.id, user.avatarUpdatedAt ?? null],
+    queryFn: () => fetchUserAvatarDataUrl(user.id),
+    enabled: !!user.avatarUpdatedAt,
+    staleTime: Infinity,
+  });
   return (
     <div className="admin-users-who">
-      <Avatar size={32}>{nameOf(user).charAt(0).toUpperCase()}</Avatar>
+      <Avatar size={32} src={photo.data}>{nameOf(user).charAt(0).toUpperCase()}</Avatar>
       <div className="admin-users-who-text">
         <div className="admin-users-name">
           <span className="admin-users-name-text">{nameOf(user)}</span>

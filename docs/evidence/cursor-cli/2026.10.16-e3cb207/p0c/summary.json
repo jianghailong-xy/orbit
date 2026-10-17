@@ -1,0 +1,178 @@
+{
+ "cli": {
+  "version": "2026.10.16-e3cb207",
+  "pinned": false,
+  "tarballSha256": "3aa3f48cd7a3909a98c9b3f2a4085f0c021088bf826690b22c61f424c843e552",
+  "launcherSha256": "2ccc9a8e167797641448b5e5c936f006ba137a2555f117f38c5eb76a5238a233",
+  "indexJsSha256": "d8e53146370532fce1069aff55efb0df0fa290ce8d53f5f84d1eac1147f8cc29"
+ },
+ "platform": {
+  "os": "linux",
+  "arch": "x64",
+  "kernel": "6.12.107+deb13-amd64",
+  "cpus": 24,
+  "harnessNode": "v26.10.0"
+ },
+ "orbitCommit": "93596417a663ca273433da9c87431dbb7559c573",
+ "lastRunId": "2026-10-17T03-02-40-981Z",
+ "ledger": "p0c",
+ "realPromptsSpent": 7,
+ "realPromptCap": 10,
+ "realPromptsInTheseResults": 0,
+ "realCursorDirsBefore": {
+  "/root/.cursor": null,
+  "/root/.config/cursor": null,
+  "/root/.local/share/cursor-agent": null
+ },
+ "realCursorDirsAfter": {
+  "/root/.cursor": null,
+  "/root/.config/cursor": null,
+  "/root/.local/share/cursor-agent": null
+ },
+ "scenarios": [
+  {
+   "name": "api-key-session-management",
+   "current": true,
+   "passed": false,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:35:28.708Z",
+   "checks": 32,
+   "failedChecks": [
+    "session/new without mcpServers -> -32603 with zod issues"
+   ],
+   "realPrompts": 0
+  },
+  {
+   "name": "credential-stores",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:38:24.296Z",
+   "checks": 10,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "debug-log-location",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:51:22.406Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "directory-variables",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:40:56.245Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "failure-shapes-without-prompt",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-55-37-289Z",
+   "finishedAt": "2026-10-17T02:57:36.986Z",
+   "checks": 17,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "install-and-version",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:34:21.477Z",
+   "checks": 7,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "login-link-and-logout",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:49:49.312Z",
+   "checks": 4,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "mcp-and-hook-sources-at-startup",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:44:46.217Z",
+   "checks": 8,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "parameterized-model-picker",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:36:02.772Z",
+   "checks": 7,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "process-signals",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:53:04.923Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "signed-out-handshake",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:34:42.379Z",
+   "checks": 12,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "startup-processes-and-network",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:49:33.051Z",
+   "checks": 12,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "team-pin",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:42:40.650Z",
+   "checks": 4,
+   "failedChecks": [],
+   "realPrompts": 0
+  },
+  {
+   "name": "usage-api",
+   "current": true,
+   "passed": true,
+   "runId": "2026-10-17T02-34-10-602Z",
+   "finishedAt": "2026-10-17T02:50:15.204Z",
+   "checks": 5,
+   "failedChecks": [],
+   "realPrompts": 0
+  }
+ ],
+ "allPassed": false,
+ "allPassedOrExplained": false
+}
