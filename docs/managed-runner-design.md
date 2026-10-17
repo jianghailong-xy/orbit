@@ -982,7 +982,8 @@ branch at d856cde9b, which carries 198f6d6cc
   database's 428 migrations outlasted the apiserver's health check at its first boot on that disk, which is why
   the install now applies them first.
 - Switched off, a new account's sign-in made nothing (`MANAGED_RUNNER_DISABLED`, ensure 404), and the first
-  account's volume stayed, its container still running.
+  account's volume stayed, its container still running. `/upgrade` of that deployment then rebuilt
+  `docker-channel` with the rest and left `.env` byte for byte as it was.
 - The previous version (c291f9af6) upgraded to 6f51ce21d with `/upgrade` kept `.env` byte for byte and managed
   runners off: three accounts' sign-ins made nothing, and no channel, network, image, container or volume of
   managed runners appeared. `--enable-managed-runners` then switched them on, and the administrator's next
