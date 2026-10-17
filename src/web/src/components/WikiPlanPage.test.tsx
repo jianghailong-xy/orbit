@@ -129,6 +129,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     if (path.endsWith('/decide')) return reply(200, { proposal: SHARED.plan.proposals[0], draft: { ...SHARED.plan.versions.v2, version: 2 } });
     if (/\/plan\/versions\/\d+\/confirm$/.test(path)) return reply(200, { ...SHARED.plan.versions.v2, status: 'confirmed' });
     if (path === `${space}/plan/edits`) return reply(200, { ...SHARED.plan.versions.v2, version: 3 });
+    if (/\/plan\/versions\/\d+\/build$/.test(path)) return reply(200, { created: true, job: SHARED.plan.jobs.writingQueued });
     return reply(404, { message: `${method} ${url} is not in this fixture` });
   }
   if (path === '/api/wiki/spaces') return reply(200, [SPACE]);
@@ -357,6 +358,70 @@ describe('the plan page, by what its job is doing', () => {
     const gate = planPage().querySelector('.wk-pl-check.fail:not(.wk-pl-job)')!;
     expect(text('.wk-pl-ck .n', gate)).toEqual(['Documents', 'Protected documents', 'References', 'Fields']);
     expect(text('.wk-pl-err .at', gate)).toEqual(['2.1 §2', '3.1 §1', '2.1 §2']);
+  });
+});
+
+describe('Update documents: the version in force’s documents asked for again (contract `plan.jobs.rebuild`)', () => {
+  const acts = (): HTMLElement => planPage().querySelector<HTMLElement>('.wk-pl-acts')!;
+
+  it('after the writing stopped short, asks the owner’s door for the documents of the version in force again', async () => {
+    serverExecutes = true;
+    plan = stateOf('writingStopped');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Update documents', acts())?.disabled).toBe(false));
+    // In the head's actions, after Redraft…; the card still says what stopped.
+    expect([...acts().querySelectorAll('button')].map((node) => node.textContent?.trim())).toEqual(['Redraft…', 'Update documents']);
+    expect(jobCard()).toEqual(['Writing documents didn’t finish the run was cut off at 120 turns · Wiki maintenance writes what’s left on its next run View run']);
+    await press(button('Update documents', acts()));
+    expect(writes.map((row) => `${row.method} ${row.path} ${JSON.stringify(row.body)}`)).toEqual([`POST /api/wiki/spaces/${SPACE_ID}/plan/versions/1/build {}`]);
+    // The owner's door only: nothing here speaks for a session.
+    expect(Object.keys(writes[0].headers).filter((name) => /session/i.test(name))).toEqual([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Updating the documents of v1'));
+  });
+
+  it('says so when a build of the version was already on its way, and what refused it otherwise', async () => {
+    serverExecutes = true;
+    plan = stateOf('inForce');
+    answers[`/api/wiki/spaces/${SPACE_ID}/plan/versions/1/build`] = () => reply(200, { created: false, job: SHARED.plan.jobs.writing });
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Update documents', acts())?.disabled).toBe(false));
+    await press(button('Update documents', acts()));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('The documents are already being written'));
+
+    answers[`/api/wiki/spaces/${SPACE_ID}/plan/versions/1/build`] = () =>
+      reply(409, { code: 'WIKI_RUNNER_EXECUTES', message: 'this account’s wiki runs on its runners' });
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Update documents', acts())?.disabled).toBe(false));
+    await press(button('Update documents', acts()));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Couldn’t update the documents'));
+    expect(document.body.textContent).toContain('this account’s wiki runs on its runners');
+  });
+
+  it('is greyed while the version’s build is queued, held or running', async () => {
+    serverExecutes = true;
+    for (const name of ['writingQueued', 'writingHeld', 'writing']) {
+      plan = stateOf(name);
+      await open('/wiki/orbit/plan');
+      await vi.waitFor(() => expect(button('Update documents', acts()), name).toBeTruthy());
+      expect(button('Update documents', acts())?.disabled, name).toBe(true);
+    }
+  });
+
+  it('is drawn only on the version in force, and only while the server executes the account', async () => {
+    // The runner's path: a build is asked for by a confirmation alone (`plan.jobs.rebuild.when`).
+    plan = stateOf('writingStopped');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Redraft…', planPage())).toBeTruthy());
+    expect(button('Update documents', planPage())).toBeUndefined();
+    // A draft, and a draft that failed: not the version in force.
+    serverExecutes = true;
+    for (const name of ['draftReady', 'draftFailed']) {
+      plan = stateOf(name);
+      await open('/wiki/orbit/plan');
+      await vi.waitFor(() => expect(button('Redraft…', planPage()), name).toBeTruthy());
+      expect(button('Update documents', planPage()), name).toBeUndefined();
+    }
+    expect(writes).toEqual([]);
   });
 });
 

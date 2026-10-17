@@ -197,6 +197,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_PLAN_UNCONFIRMED',
   'WIKI_PLAN_NO_JOB',
   'WIKI_DOC_INVALID',
+  'WIKI_RUNNER_EXECUTES',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
 
