@@ -6,14 +6,20 @@
 # http://10.0.2.2:LAB_TEST_FAKE_MODEL_PORT). Everything runs outside the Orbit runner's cgroup with a
 # memory cap, and keeps its data, secrets and logs in LAB_DIR/test-server. It never talks to a
 # production server.
-# Usage: test-server.sh start|stop|status
+# Usage: test-server.sh start [--managed]|stop|status|secrets
 #   start   needs a built apiserver in this checkout (scripts/worktree-overlay.sh, then
 #           npm run build -w @orbit/shared && npm run build -w @orbit/apiserver)
+#   --managed   turn managed runners on (ORBIT_MANAGED_RUNNERS_ENABLED=true) with the manager
+#           profile $S/managed-runner-profile.json, which single-writer.py writes; without it the
+#           switch stays unset. Takes effect when the apiserver unit starts: stop first to change it.
+#   secrets only creates the secrets and the lab CA (for an image that has to trust it)
+# LAB_TEST_SERVER_DIR keeps a task's database, secrets and logs apart (default LAB_DIR/test-server).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
 REPO=$(cd "$LAB_SCRIPTS/../../.." && pwd)
-S=$LAB_DIR/test-server
+S=${LAB_TEST_SERVER_DIR:-$LAB_DIR/test-server}
+MANAGED=0
 PG=orbit-mr-lab-pg
 API=orbit-mr-lab-api
 TLS=orbit-mr-lab-tls
@@ -39,6 +45,11 @@ PATH=/usr/local/bin:/usr/bin:/bin
 LANG=C.UTF-8
 NODE_ENV=production
 EOF
+  if [ "$MANAGED" = 1 ]; then
+    [ -s "$S/managed-runner-profile.json" ] || die "--managed needs $S/managed-runner-profile.json (single-writer.py profile)"
+    printf 'ORBIT_MANAGED_RUNNERS_ENABLED=true\nORBIT_MANAGED_RUNNERS_PROFILE=%s\n' "$S/managed-runner-profile.json" \
+      >> "$S/secrets/api.env"
+  fi
   # A lab-only CA and a server certificate for the address the Pods use (and loopback).
   if [ ! -s "$S/tls/server.pem" ]; then
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 90 \
@@ -121,12 +132,20 @@ status() {
   echo "listening: $(ss -Hltn | awk -v a=":$LAB_TEST_API_PORT" -v b=":$LAB_TEST_TLS_PORT" -v c=":$LAB_TEST_PG_PORT" \
     -v d=":$LAB_TEST_FAKE_MODEL_PORT" '$4 ~ a"$" || $4 ~ b"$" || $4 ~ c"$" || $4 ~ d"$" {print $4}' | sort | xargs)"
   echo "Pods use: https://10.0.2.2:$LAB_TEST_TLS_PORT (CA $S/tls/ca.crt); host API http://127.0.0.1:$LAB_TEST_API_PORT/api"
+  echo "state: $S; managed runners: $(grep -qx 'ORBIT_MANAGED_RUNNERS_ENABLED=true' "$S/secrets/api.env" 2>/dev/null && echo on || echo off)"
 }
 
 require_root
 case "${1:-}" in
-  start) start ;;
+  start)
+    case "${2:-}" in
+      --managed) MANAGED=1 ;;
+      "") ;;
+      *) die "usage: test-server.sh start [--managed]" ;;
+    esac
+    start ;;
   stop) stop ;;
   status) status ;;
-  *) die "usage: test-server.sh start|stop|status" ;;
+  secrets) secrets ;;
+  *) die "usage: test-server.sh start [--managed]|stop|status|secrets" ;;
 esac

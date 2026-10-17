@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 """The single-machine lab's pins and rendered objects (lab/lab.env, lab/render.py), offline."""
 
+import base64
 import importlib.util
+import json
 from pathlib import Path
 import re
 import tempfile
 import unittest
+import urllib.parse
 
 LAB = Path(__file__).resolve().parent / "lab"
+REPO = LAB.parents[2]
 spec = importlib.util.spec_from_file_location("lab_render", LAB / "render.py")
 render = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(render)
+spec = importlib.util.spec_from_file_location("lab_single_writer", LAB / "single-writer.py")
+single_writer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(single_writer)
 FSID = "03082086-c9eb-11f1-8363-525400123456"
 
 
@@ -62,6 +69,67 @@ class LabTest(unittest.TestCase):
         # A shell trace would print the CephX key on its way into the Kubernetes Secret.
         for script in [*LAB.glob("*.sh"), *LAB.glob("guest/*.sh")]:
             self.assertNotRegex(script.read_text(), r"set -[a-z]*x|bash -x", script.name)
+
+
+class SingleWriterLabTest(unittest.TestCase):
+    """lab/single-writer.py's rendered objects (T02a), offline: nothing reaches the lab."""
+
+    def test_webhook_is_the_repository_template_filled_for_the_lab(self):
+        ca = b"-----BEGIN CERTIFICATE-----\nlab\n-----END CERTIFICATE-----\n"
+        config = single_writer.webhook_configuration(ca)
+        hook = config["webhooks"][0]
+        self.assertEqual((hook["failurePolicy"], hook["sideEffects"]), ("Fail", "None"))
+        self.assertEqual(hook["clientConfig"]["url"], "https://10.0.2.2:13711/api/managed-runner/admission")
+        self.assertEqual(base64.b64decode(hook["clientConfig"]["caBundle"]), ca)
+        self.assertEqual(hook["namespaceSelector"], {"matchLabels": {"kubernetes.io/metadata.name": "orbit-mr-test"}})
+        self.assertNotIn("objectSelector", hook)  # every Pod in the namespace, whatever its labels
+        self.assertEqual(hook["rules"][0]["resources"], ["pods", "pods/ephemeralcontainers"])
+        self.assertEqual(hook["rules"][0]["operations"], ["CREATE", "UPDATE"])
+        self.assertNotRegex(json.dumps(config), r"__[A-Z0-9_]+__|REPLACE_ME")
+
+    def test_the_api_server_presents_its_token_to_the_webhook_host_only(self):
+        users = single_writer.webhook_kubeconfig("token")["users"]
+        url = single_writer.webhook_configuration(b"ca")["webhooks"][0]["clientConfig"]["url"]
+        self.assertEqual([user["name"] for user in users], [urllib.parse.urlsplit(url).netloc])
+        plugin = single_writer.admission_configuration()["plugins"][0]
+        self.assertEqual(plugin["name"], "ValidatingAdmissionWebhook")
+        self.assertEqual(plugin["configuration"]["kubeConfigFile"], single_writer.GUEST_ADMISSION_DIR + "/webhook-kubeconfig.json")
+        # Appended to k3s's own list in a drop-in: config.yaml, which provision.sh rewrites, is not touched.
+        self.assertTrue(single_writer.K3S_DROP_IN.startswith("kube-apiserver-arg+:\n"))
+        self.assertIn(f"admission-control-config-file={single_writer.GUEST_ADMISSION_DIR}/admission-configuration.json",
+                      single_writer.K3S_DROP_IN)
+
+    def test_profile_states_every_field_of_the_example(self):
+        def paths(value, prefix=""):
+            if not isinstance(value, dict):
+                return {prefix}
+            return set().union(*(paths(child, f"{prefix}.{key}" if prefix else key) for key, child in value.items()))
+        example = json.loads((REPO / "deploy/managed-runner/manager-profile.example.json").read_text())
+        image = single_writer.IMAGE_NAME + "@sha256:" + "a" * 64
+        profile = single_writer.lab_profile(image, "b" * 64)
+        self.assertEqual(paths(profile) - {"backend"}, paths(example))
+        self.assertNotRegex(json.dumps(profile), r"REPLACE_ME|__[A-Z0-9_]+__")
+        self.assertEqual(profile["valueKind"], "actual")
+        self.assertEqual(profile["runner"]["image"], image)
+        self.assertEqual(profile["runner"]["serverUrl"], "https://10.0.2.2:13711")
+        self.assertEqual(profile["kubernetes"], {"kubeconfig": str(single_writer.MANAGER_KUBECONFIG), "context": "orbit-mr-lab-manager",
+                                                 "apiServer": "https://127.0.0.1:16443", "namespace": "orbit-mr-test"})
+        self.assertEqual(profile["admission"]["managerUsername"], "system:serviceaccount:orbit-mr-test:orbit-mr-manager")
+
+    def test_manager_may_do_what_the_kubernetes_backend_calls_and_nothing_else(self):
+        granted = {}
+        for item in single_writer.manager_objects():
+            for rule in item.get("rules", []):
+                for resource in rule["resources"]:
+                    granted[resource] = sorted(rule["verbs"])
+        self.assertEqual(granted, {"pods": ["create", "delete", "get"], "persistentvolumeclaims": ["create", "get"],
+                                   "secrets": ["create", "delete", "get"], "configmaps": ["get"],
+                                   "persistentvolumes": ["get"], "volumeattachments": ["list"]})
+
+    def test_payload_writes_under_the_runner_home(self):
+        source = single_writer.payload_source()
+        self.assertIn("Path('/var/lib/orbit/home/storage-verification')", source)
+        self.assertNotIn('Path("/var/lib/orbit/storage-verification")', source)
 
 
 if __name__ == "__main__":
