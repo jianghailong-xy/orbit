@@ -86,7 +86,7 @@ final class AcceptedTurnWiringTests: XCTestCase {
         let user = statements(try section(console, from: "struct TranscriptItemView: View {",
                                           to: "case .assistant(let b):"))
         let row = user.filter { $0.contains("UserTurnRow(") }
-        XCTAssertEqual(row, ["UserTurnRow(bubble: b, steer: steerControls(b))"],
+        XCTAssertEqual(row, ["UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))"],
                        "the transcript's user row is handed queued controls, so the accepted head would offer a Cancel")
     }
 }
