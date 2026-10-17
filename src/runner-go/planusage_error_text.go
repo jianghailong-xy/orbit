@@ -12,3 +12,12 @@ func planUsageErrorText(err error) string {
 	}
 	return err.Error()
 }
+
+// cursorUsageLimitText is how a turn Cursor ended on the account's usage limit is reported. Cursor CLI says
+// only `said` ("Upgrade your plan to continue") — the limit, its window and its reset stay in its own
+// debug log (docs/cursor-runtime-contract.md §11, §12) — so the sentence opens with the words the control
+// plane and every client read as a spent quota (@orbit/shared USAGE_LIMIT_ERROR_MARKERS, "hit your usage
+// limit"), the title Cursor's server gave the measured case, and quotes Cursor after them.
+func cursorUsageLimitText(said string) string {
+	return `You've hit your usage limit on Cursor. Cursor said: "` + said + `."`
+}

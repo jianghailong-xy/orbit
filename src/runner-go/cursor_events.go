@@ -21,6 +21,14 @@ package main
 // The title (session_info_update) and the slash commands (available_commands_update) describe the
 // session rather than a turn, and can arrive after the turn they came with has ended (§3.2): neither
 // joins a turn. Cursor reports no usage of any kind (§4.1), so nothing here reads out a context or a cost.
+//
+// A turn Cursor CLI could not finish is not a JSON-RPC error: its prompt handler sends one last
+// agent_message_chunk, "\n\n" and a sentence, and answers end_turn (§12; 6136.index.js@15087). A chunk of
+// that shape is held back from the live stream until the turn ends on it — then it is the turn's failure,
+// never its reply (cursorTurnFailure) — or something else follows and shows it was the agent's own text.
+//
+// session/load replays the whole conversation as session/update before it answers (§3.5): Orbit's
+// transcript already holds it, so nothing that arrives while a load runs is mapped at all.
 
 import (
 	"encoding/json"
@@ -58,6 +66,8 @@ type cursorTurn struct {
 	agents  map[string]*cursorStretch // each sub-agent's open stretch, by its session id
 	spawned []string                  // the sub-agents' session ids, in the order they started
 	plans   int
+	// held is the session's own chunk shaped like Cursor CLI's error sentence, not yet put out.
+	held string
 }
 
 type cursorEventMapper struct {
@@ -71,10 +81,14 @@ type cursorEventMapper struct {
 	// subagents binds each sub-agent of the running turn to the card that launched it, by session id.
 	subagents map[string]string
 	title     string
+	// loading is a session/load in progress, whose replay is dropped.
+	loading bool
 	// onTitle receives each new title Cursor gives the session, onCommands the slash commands it
 	// lists. Both are called without the mapper's lock, from the reader: neither may block.
 	onTitle    func(title string)
 	onCommands func(names []string)
+	// onTool hears a card of a turn open (its tool_use put out) and close (its result), under the lock.
+	onTool func(turnID, toolID string, open bool)
 }
 
 func newCursorEventMapper(emitFor emitTurnFn) *cursorEventMapper {
@@ -87,6 +101,20 @@ func newCursorEventMapper(emitFor emitTurnFn) *cursorEventMapper {
 func (m *cursorEventMapper) bind(sessionID string) {
 	m.mu.Lock()
 	m.sessionID = sessionID
+	m.mu.Unlock()
+}
+
+// load names the session a session/load is about to continue, and drops what it replays until its
+// answer (loaded), which the reader applies before it reads the line after it.
+func (m *cursorEventMapper) load(sessionID string) {
+	m.mu.Lock()
+	m.sessionID, m.loading = sessionID, true
+	m.mu.Unlock()
+}
+
+func (m *cursorEventMapper) loaded() {
+	m.mu.Lock()
+	m.loading = false
 	m.mu.Unlock()
 }
 
@@ -111,6 +139,10 @@ func (m *cursorEventMapper) update(params map[string]interface{}) {
 	session := firstString(params, "sessionId")
 	kind := firstString(update, "sessionUpdate")
 	m.mu.Lock()
+	if m.loading {
+		m.mu.Unlock()
+		return
+	}
 	own := session != "" && session == m.sessionID
 	if !own && m.subagents[session] == "" {
 		m.mu.Unlock()
@@ -148,8 +180,13 @@ func (m *cursorEventMapper) update(params map[string]interface{}) {
 	defer m.mu.Unlock()
 	turn := m.active
 	if turn == nil {
-		return // no turn is running, so this belongs to none
+		// No turn is running, so this belongs to none. Cursor opens no turn of its own — a background
+		// command's follow-up runs inside the prompt that started it (§3.2, unmeasured) — so it is said here.
+		logln("cursor: a", kind, "update arrived outside any turn; it is not shown")
+		return
 	}
+	// Whatever comes next, a chunk held back as an error sentence did not end the turn: it was text.
+	m.release(turn)
 	switch kind {
 	case "agent_message_chunk", "agent_thought_chunk":
 		m.chunk(turn, session, kind, update)
@@ -192,12 +229,28 @@ func (m *cursorEventMapper) chunk(turn *cursorTurn, session, kind string, update
 		stretch.text.WriteString(text)
 		return
 	}
+	if kind == "agent_message_chunk" && cursorTurnFailure(text) != "" {
+		turn.held = text
+		return
+	}
+	m.mainText(turn, event, delta, text)
+}
+
+func (m *cursorEventMapper) mainText(turn *cursorTurn, event, delta, text string) {
 	if turn.main.event != event {
 		m.flushMain(turn)
 		turn.main.event = event
 	}
 	turn.main.text.WriteString(text)
 	m.emitFor(turn.id, delta, map[string]interface{}{"text": text})
+}
+
+// release puts out a held chunk as the agent's own text.
+func (m *cursorEventMapper) release(turn *cursorTurn) {
+	if text := turn.held; text != "" {
+		turn.held = ""
+		m.mainText(turn, evAssistant, evTextDelta, text)
+	}
 }
 
 // flushMain closes the session's own agent's open stretch into its block.
@@ -277,6 +330,9 @@ func (m *cursorEventMapper) emitToolUse(turn *cursorTurn, tool *cursorTool) {
 		return
 	}
 	tool.emitted = true
+	if m.onTool != nil {
+		m.onTool(turn.id, tool.id, true)
+	}
 	if tool.parent == "" {
 		m.flushMain(turn)
 	} else {
@@ -303,6 +359,9 @@ func (m *cursorEventMapper) emitParent(turn *cursorTurn, parent string) {
 
 func (m *cursorEventMapper) emitToolResult(turn *cursorTurn, tool *cursorTool, content string, isError bool) {
 	tool.done = true
+	if m.onTool != nil {
+		m.onTool(turn.id, tool.id, false)
+	}
 	payload := map[string]interface{}{"toolUseId": tool.id, "content": content, "isError": isError}
 	if tool.parent != "" {
 		payload["parentToolUseId"] = tool.parent
@@ -361,16 +420,24 @@ func (m *cursorEventMapper) settle(turnID string, result map[string]interface{},
 	if turn == nil || turn.id != turnID {
 		return TurnCompleteRequest{}, false
 	}
+	stop := firstString(result, "stopReason")
+	// A turn that ended on Cursor CLI's error sentence failed with it; one that ended any other way said it.
+	failure := ""
+	if err == nil && stop == "end_turn" {
+		failure, turn.held = cursorTurnFailure(turn.held), ""
+	}
+	m.release(turn)
 	m.flushMain(turn)
 	for _, session := range turn.spawned {
 		m.flushAgent(turn, session)
 	}
 	request := TurnCompleteRequest{TurnID: turnID, Status: stSucceeded, Subtype: "completed", NumTurns: 1,
 		Result: strings.Join(turn.replies, "\n\n"), RuntimeSessionID: m.sessionID}
-	stop := firstString(result, "stopReason")
 	switch {
 	case err != nil:
 		request.Status, request.Subtype, request.Error = stFailed, "error", err.Error()
+	case stop == "end_turn" && failure != "":
+		request.Status, request.Subtype, request.Error = stFailed, "error", failure
 	case stop == "end_turn":
 	case stop == "cancelled":
 		request.Status, request.Subtype = stInterrupted, "interrupted"
@@ -401,11 +468,63 @@ func (m *cursorEventMapper) settle(turnID string, result map[string]interface{},
 	return request, true
 }
 
+// abandon lets the running turn go unsettled: its session's lease has gone to another owner, which settles
+// it (cursorTurnLedger). Nothing of it goes out from here, and nothing that arrives for it after is mapped.
+func (m *cursorEventMapper) abandon(turnID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	turn := m.active
+	if turn == nil || turn.id != turnID {
+		return
+	}
+	for _, id := range turn.order {
+		m.retired[id] = true
+	}
+	m.active = nil
+	m.settled[turnID] = true
+	m.subagents = map[string]string{}
+}
+
 func cursorUnfinishedTool(status string) string {
 	if status == stInterrupted {
 		return "Interrupted: the turn was stopped before this tool finished; it may have run in part."
 	}
 	return "Cursor CLI ended the turn before this tool reported a result; it may have run."
+}
+
+// cursorTurnFailure is how Orbit reports a turn that ended on chunk, when chunk is the error sentence
+// Cursor CLI's prompt handler ends a failed turn with ("\n\n" and one sentence, §12; 6136.index.js@15087);
+// "" for anything else, which is the agent's own text. The sentences are the pinned build's fixed copy:
+//   - "Upgrade your plan to continue": the account's usage limit, or a rate limit Cursor answers the
+//     same way (measured: the server's error was ERROR_RATE_LIMITED_CHANGEABLE, titled "You've hit your
+//     usage limit"). Reported in the words Orbit reads as a spent quota, so it is waited out, not failed
+//     against a task (cursorUsageLimitText);
+//   - "Please sign in to continue", and "Error: [unauthenticated] …" when Cursor's backend refuses the
+//     credential: a sign-in, in the words Orbit reads as one (isAuthError);
+//   - "Request blocked … usage guidelines …": the model provider refused the request (measured);
+//   - "Add a payment method to continue", "Check your settings to continue": the account needs a change;
+//   - "Error: <what failed>": anything else, a network gone mid-turn among them (unmeasured, §17.1).
+func cursorTurnFailure(chunk string) string {
+	said, ok := strings.CutPrefix(chunk, "\n\n")
+	if !ok {
+		return ""
+	}
+	said = strings.TrimSpace(said)
+	switch {
+	case said == "Upgrade your plan to continue":
+		return cursorUsageLimitText(said)
+	case said == "Please sign in to continue":
+		return `Failed to authenticate: Cursor said: "Please sign in to continue." Sign in to Cursor CLI again, or save a new Cursor API key, then send the message again.`
+	case strings.HasPrefix(said, "Error: [unauthenticated]"):
+		return "Failed to authenticate: Cursor rejected this session's credential (" + strings.TrimPrefix(said, "Error: ") + ")"
+	case strings.HasPrefix(said, "Request blocked ") && strings.Contains(said, "usage guidelines"):
+		return "Cursor's model provider refused this request: " + said
+	case said == "Add a payment method to continue", said == "Check your settings to continue":
+		return `Cursor said: "` + said + `." The Cursor account needs this before the session can go on.`
+	case strings.HasPrefix(said, "Error: "):
+		return "Cursor CLI failed this turn: " + said
+	}
+	return ""
 }
 
 // cursorToolCall names a card after the Orbit tool it is, with that tool's input, the way the clients

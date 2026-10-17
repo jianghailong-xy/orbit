@@ -46,17 +46,30 @@ func (e *cursorEvents) snapshot() []cursorEvent {
 
 type cursorRunOptions struct {
 	recording, session string // the recorded process replayed; the one session of a recording of two
+	// script adjusts how the recording is replayed: how the CLI ends, what `agent models` says.
+	script func(*fakeCursorACPScript)
 	// first is delivered at once; then is asked, after each turn-complete, what to deliver next.
 	first []RunInboxResponse
 	then  func(completed int, last TurnCompleteRequest) []RunInboxResponse
-	env   map[string]string // the session's agent environment; a Cursor API key when nil
-	agent func(*AgentExecConfig)
+	// onEvent is asked, as each event goes out, what to deliver next: a message, a steer or an interrupt
+	// that arrives while a turn runs. It is called from more than one goroutine.
+	onEvent func(event cursorEvent) []RunInboxResponse
+	env     map[string]string // the session's agent environment; a Cursor API key when nil
+	agent   func(*AgentExecConfig)
 	// naming is whether the claim asks the engine to name the session (session_naming.go).
 	naming bool
 	// runtimeSessionID is a conversation the session has already had.
 	runtimeSessionID string
 	blobs            map[string]string // attachments the control plane serves, by id
+	// sameHome runs in the HOME and ORBIT_HOME the test already set up, and execDir in the checkout it
+	// names: a later process of the session finds what an earlier one left.
+	sameHome bool
+	execDir  string
 }
+
+// cursorLeaseLost delivered to a session makes the control plane answer its next inbox poll as the
+// lease's new owner would have it answered: 409.
+const cursorLeaseLost = "test-lease-lost"
 
 type cursorRun struct {
 	status        string
@@ -68,6 +81,8 @@ type cursorRun struct {
 	events        []cursorEvent
 	completions   []TurnCompleteRequest
 	namings       []SessionNamingRequest
+	keyChecks     []CursorKeyCheckReport
+	leaseLost     error // what onLeaseLost was told, after a cursorLeaseLost
 }
 
 // useCursorSlashRegistry gives the test a slash registry of its own: the package's is the runner
@@ -97,11 +112,17 @@ func cursorMessage(turnID, content string) RunInboxResponse {
 // launch the runner prepares for it and the replay as its executable.
 func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 	t.Helper()
-	useCursorRealHome(t)
+	if !opts.sameHome {
+		useCursorRealHome(t)
+	}
 	useCursorSlashRegistry(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	fake := newCursorReplay(t, opts.recording, opts.session)
+	script := fakeCursorACPScript{Recording: opts.recording, Session: opts.session}
+	if opts.script != nil {
+		opts.script(&script)
+	}
+	fake := newCursorReplayScript(t, script)
 	env := opts.env
 	if env == nil {
 		env = map[string]string{"CURSOR_API_KEY": cursorTestKey}
@@ -114,13 +135,17 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 	if opts.agent != nil {
 		opts.agent(&job.Agent)
 	}
-	execDir := t.TempDir()
+	execDir := opts.execDir
+	if execDir == "" {
+		execDir = t.TempDir()
+	}
 	spec, err := prepareCursorLaunch(job, execDir, fake.shim, filepath.Join(runDir(job.SessionID), "cursor"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	run := cursorRun{job: job, spec: spec, scratch: t.TempDir(), fake: fake}
 	var mu sync.Mutex
+	leaseMoved := false // a cursorLeaseLost was answered
 	inbox := make(chan RunInboxResponse, 16)
 	for _, item := range opts.first {
 		inbox <- item
@@ -131,9 +156,25 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 		case r.Method == http.MethodGet && r.URL.Path == prefix+"inbox":
 			select {
 			case item := <-inbox:
+				if item.Kind == cursorLeaseLost {
+					mu.Lock()
+					leaseMoved = true
+					mu.Unlock()
+					http.Error(w, `{"code":"LEASE_NOT_OWNED"}`, http.StatusConflict)
+					return
+				}
 				_ = json.NewEncoder(w).Encode(item)
 			case <-r.Context().Done():
 			}
+		case r.Method == http.MethodPost && r.URL.Path == prefix+"cursor-key-check":
+			var check CursorKeyCheckReport
+			if err := json.NewDecoder(r.Body).Decode(&check); err != nil {
+				t.Errorf("key check report: %v", err)
+			}
+			mu.Lock()
+			run.keyChecks = append(run.keyChecks, check)
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, prefix+"attachments/"):
 			_, _ = w.Write([]byte(opts.blobs[strings.TrimPrefix(r.URL.Path, prefix+"attachments/")]))
 		case r.Method == http.MethodPost && r.URL.Path == prefix+"naming":
@@ -165,14 +206,31 @@ func runCursorSession(t *testing.T, opts cursorRunOptions) cursorRun {
 		}
 		return nil
 	}
+	emitFor := func(turn, typ string, payload map[string]interface{}) {
+		events.emitFor(turn, typ, payload)
+		if opts.onEvent != nil {
+			for _, next := range opts.onEvent(cursorEvent{turn, typ, payload}) {
+				inbox <- next
+			}
+		}
+	}
 	status, ended, reload := providerRuntimeFor(runtimeProvider(job)).run(sessionProcessArgs{
 		ctx: ctx, shutdownCtx: context.Background(), t: NewTransport(server.URL, "synthetic-runner-token"),
 		job: job, execDir: execDir, scratchDir: run.scratch, cursorLaunchSpec: &spec,
-		emit:    func(typ string, payload map[string]interface{}) { events.emitFor("", typ, payload) },
-		emitFor: events.emitFor, setTurn: func(string) {}, completeTurn: complete,
+		emit:    func(typ string, payload map[string]interface{}) { emitFor("", typ, payload) },
+		emitFor: emitFor, setTurn: func(string) {}, completeTurn: complete,
 		waitTurnPermit: func(context.Context) bool { return true },
-		onLeaseLost:    func(err error) { t.Errorf("the session lost its lease: %v", err) },
+		onLeaseLost: func(err error) {
+			mu.Lock()
+			run.leaseLost = err
+			mu.Unlock()
+		},
 	})
+	mu.Lock()
+	if run.leaseLost != nil && !leaseMoved {
+		t.Errorf("the session lost its lease: %v", run.leaseLost)
+	}
+	mu.Unlock()
 	if ctx.Err() != nil {
 		t.Fatalf("the session did not finish on its own: %v", ctx.Err())
 	}
@@ -282,7 +340,9 @@ func TestCursorACPInitializeAndNewSession(t *testing.T) {
 		if init == nil || init["sessionId"] != "<UUID_1>" || init["provider"] != providerCursor || init["cliVersion"] != cursorSupportedVersion {
 			t.Fatalf("init event = %v, want the session id session/new returned", init)
 		}
-		if len(run.completions) != 1 || run.completions[0].Status != stSucceeded {
+		// The recording's one turn ran into the account's usage limit, which settles it failed
+		// (TestCursorACPErrorClassification): it settles once all the same.
+		if len(run.completions) != 1 || run.completions[0].TurnID != "turn-1" {
 			t.Fatalf("completions = %+v", run.completions)
 		}
 	})
@@ -870,15 +930,17 @@ func TestCursorACPRuntimeSessionIDPersisted(t *testing.T) {
 		}
 	})
 	t.Run("never-replaced-by-a-new-session", func(t *testing.T) {
-		run := runCursorSession(t, cursorRunOptions{recording: "subagent-and-todos/subagent", runtimeSessionID: "<UUID_7>"})
+		// A conversation the CLI cannot find (the recording's session/load of an id it never stored) ends the
+		// session's start; it is never replaced by session/new.
+		run := runCursorSession(t, cursorRunOptions{recording: "api-key-session-management/acp", runtimeSessionID: "<UUID_1>"})
 		errors := run.of("", evError)
-		if run.status != stFailed || !run.ended || len(errors) != 1 || errors[0]["message"] != cursorResumeUnsupported {
+		if run.status != stFailed || !run.ended || len(errors) != 1 || !strings.HasPrefix(asString(errors[0]["message"]), "Cursor CLI has no conversation <UUID_1>") {
 			t.Fatalf("run = (%s, ended=%v), errors %v", run.status, run.ended, errors)
 		}
-		if _, err := os.Stat(filepath.Join(run.fake.dir, "start.json")); err == nil {
-			t.Fatal("a Cursor CLI was started, and could only have opened a new conversation")
+		if opened := run.fake.requests(t, "session/new"); len(opened) != 0 {
+			t.Fatal("a new conversation was opened in place of the session's own")
 		}
-		if run.job.RuntimeSessionID != "<UUID_7>" {
+		if run.job.RuntimeSessionID != "<UUID_1>" {
 			t.Fatalf("the runtime session id became %q", run.job.RuntimeSessionID)
 		}
 	})
@@ -919,7 +981,7 @@ func TestCursorACPProviderRuntimeDeclaresNoSteer(t *testing.T) {
 				turn = &run.completions[i]
 			}
 		}
-		if steer == nil || steer.Status != stFailed || steer.Subtype != subtypeSteer || turn == nil || turn.Status != stSucceeded {
+		if steer == nil || steer.Status != stFailed || steer.Subtype != subtypeSteer || turn == nil {
 			t.Fatalf("completions = %+v, want the steer refused and the turn settled", run.completions)
 		}
 		if users := run.of("steer-1", evUser); len(users) != 1 || users[0]["delivery"] != string(deliveryFailed) {
