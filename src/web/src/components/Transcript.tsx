@@ -545,7 +545,8 @@ type TextNode = {
   turnHead?: { endTs?: string };
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
-type MarkerNode = { kind: 'interrupt'; seq: number };
+// `runnerRestart`: nobody pressed Stop — the runner cut the turn short while restarting.
+type MarkerNode = { kind: 'interrupt'; seq: number; runnerRestart?: boolean };
 // The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
 // the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
 type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
@@ -1335,7 +1336,10 @@ function buildTranscript(
       }
       case 'interrupt':
         turnAccountedFor = true;
-        into(parent).push({ kind: 'interrupt', seq: ev.seq });
+        // A Stop's interrupt carries its `requestId` (or nothing, from engines without one); the
+        // runner marks a turn it tore down on its way out with `reason: runner_restart`
+        // (runner-go's watchShutdownDrain).
+        into(parent).push({ kind: 'interrupt', seq: ev.seq, runnerRestart: p.reason === 'runner_restart' });
         break;
       case 'error': {
         // The runner reports a signed-out engine as an error event rather than assistant text
@@ -1957,7 +1961,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
     case 'interrupt':
       return (
         <div className="chat-note" data-seq={node.seq}>
-          ⊘ interrupted
+          {node.runnerRestart ? '⊘ interrupted — the runner restarted' : '⊘ interrupted'}
         </div>
       );
     case 'diagnostic': {
