@@ -9,7 +9,7 @@ import { makeSlot, cursorEnv, AGENT } from '/Users/long/.orbit/worktrees/5ec52a1
 
 const base = '/Users/long/.orbit/cursor-p0/probe/runs-store';
 rmSync(base, { recursive: true, force: true });
-const DUMMY = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSIsInRpbWUiOjE3NTAwMDAwMDAsInR5cGUiOiJhY2Nlc3NfdG9rZW4ifQ.dummy-signature';
+const DUMMY = 'dummy-token-not-a-credential';
 
 function keychainEntries() {
   const r = spawnSync('security', ['dump-keychain'], { encoding: 'utf8', timeout: 30000 });

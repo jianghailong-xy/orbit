@@ -10,7 +10,7 @@ import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import { AcpProcess, Recorder } from '../lib/acp.mjs';
 import { AGENT } from '../lib/env.mjs';
 
-const DUMMY = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSIsInRpbWUiOjE3NTAwMDAwMDAsInR5cGUiOiJhY2Nlc3NfdG9rZW4ifQ.dummy';
+const DUMMY = 'dummy-token-not-a-credential';
 const base = '/tmp/cursor-p0-env-order-probe';
 
 async function run(tag, env) {
