@@ -122,7 +122,7 @@ class SingleWriterLabTest(unittest.TestCase):
             for rule in item.get("rules", []):
                 for resource in rule["resources"]:
                     granted[resource] = sorted(rule["verbs"])
-        self.assertEqual(granted, {"pods": ["create", "delete", "get"], "persistentvolumeclaims": ["create", "get"],
+        self.assertEqual(granted, {"pods": ["create", "delete", "get", "patch"], "persistentvolumeclaims": ["create", "get"],
                                    "secrets": ["create", "delete", "get"], "configmaps": ["get"],
                                    "persistentvolumes": ["get"], "volumeattachments": ["list"]})
 

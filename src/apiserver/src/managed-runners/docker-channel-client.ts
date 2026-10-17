@@ -114,9 +114,16 @@ export class DockerChannelError extends Error {
   }
 }
 
-/** The channel could not be reached, or did not answer: whatever was asked may or may not have happened. */
+/**
+ * The channel could not be reached, or did not answer: whatever was asked may or may not have happened.
+ * `connected` false: no connection to the channel was made at all — its socket missing or refusing —
+ * so nothing was asked of it.
+ */
 export class DockerChannelUnreachable extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly connected = true,
+  ) {
     super(message);
     this.name = 'DockerChannelUnreachable';
   }
@@ -150,6 +157,7 @@ export class DockerChannelClient {
         return { host: url.hostname.replace(/^\[|\]$/g, ''), port: Number(url.port), path: url.pathname + url.search };
       })();
     return new Promise((resolve, reject) => {
+      let connected = false;
       const req = request({ ...where, method, headers, agent: false, timeout: this.timeoutMs }, (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -166,8 +174,9 @@ export class DockerChannelClient {
           resolve({ status: res.statusCode ?? 0, body: parsed as T | null });
         });
       });
+      req.on('socket', (socket) => socket.once('connect', () => (connected = true)));
       req.on('timeout', () => req.destroy(new Error(`no answer within ${this.timeoutMs} ms`)));
-      req.on('error', (error) => reject(new DockerChannelUnreachable(`the Docker channel could not be reached: ${error.message}`)));
+      req.on('error', (error) => reject(new DockerChannelUnreachable(`the Docker channel could not be reached: ${error.message}`, connected)));
       if (payload) req.write(payload);
       req.end();
     });

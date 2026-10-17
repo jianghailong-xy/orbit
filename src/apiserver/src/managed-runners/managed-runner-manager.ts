@@ -118,6 +118,10 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  *     A host at its cap on instances makes it wait for room the same way (CONTAINER_LIMIT).
  *   - A FAILED mapping whose recorded volume was missing is looked at again, and becomes retryable
  *     once that very volume is back (`volumeBack`).
+ *   - A backend that cannot be reached at all — no request got to it: the Kubernetes API server or
+ *     the Docker channel down, restarting or cut off — spends no attempt in any state (`unreachable`),
+ *     any more than a held volume does: the budget counts tries that failed, and an outage lasts as
+ *     long as it lasts. One that answers with a transient failure still spends one while provisioning.
  *
  * Left to the work that follows: deletion.
  */
@@ -486,7 +490,10 @@ export class ManagedRunnerManager {
         return this.fail(current, error.code, error.detail);
       }
       const failure = this.backend.failure(error);
-      if (failure?.retryable) return OBSERVING_STATES.has(current.managementState) ? this.unanswered(current, error) : this.backoff(current, error);
+      if (failure?.retryable) {
+        if (OBSERVING_STATES.has(current.managementState)) return this.unanswered(current, error);
+        return failure.unreachable ? this.unreachable(current, error) : this.backoff(current, error);
+      }
       if (failure) {
         this.log.warn(`managed runner ${mapping.id}: ${failure.log}`);
         return this.fail(current, failure.code, failure.detail);
@@ -1611,6 +1618,24 @@ export class ManagedRunnerManager {
   /** A transient failure while only looking (OBSERVING_STATES): said in the log, nothing spent or written. */
   private unanswered(mapping: ManagedRunner, error: unknown): Step {
     this.log.warn(`managed runner ${mapping.id}: ${mapping.managementState}, and the ${this.backend.name} backend did not answer: ${(error as Error).message}; looking again next pass`);
+    return { done: 'BACKOFF' };
+  }
+
+  /**
+   * The backend could not be reached at all while the mapping was being provisioned or started:
+   * nothing was tried, so nothing is spent. Said as the transient error it is, and tried again after
+   * the backoff of the attempt it is on — pass after pass, however long the outage lasts.
+   */
+  private async unreachable(mapping: ManagedRunner, error: unknown): Promise<Step> {
+    const delayMs = this.backoffDelay(Math.max(1, mapping.attempt));
+    this.log.warn(
+      `managed runner ${mapping.id}: ${mapping.managementState}, and the ${this.backend.name} backend cannot be reached: ${(error as Error).message}; `
+        + `nothing spent (attempt ${mapping.attempt} of ${this.profile.lifecycle.maxAttempts}), trying again in ${Math.ceil(delayMs / 1000)} s`,
+    );
+    await this.commit(mapping, {
+      nextAttemptAt: new Date(this.now().getTime() + delayMs),
+      lastError: { ...managedRunnerReason('TRANSIENT') },
+    });
     return { done: 'BACKOFF' };
   }
 

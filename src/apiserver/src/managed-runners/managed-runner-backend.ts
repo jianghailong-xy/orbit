@@ -134,7 +134,9 @@ export interface ManagedInstance {
   /** Terminated, and the host itself reported every process of it ended (Kubernetes: the kubelet's
    *  terminal container states, with no sign the control plane declared it on the node's behalf). */
   readonly stopConfirmed: boolean;
-  /** Its removal was asked and it is not gone yet. */
+  /** Its removal was asked and is under way: it goes without the manager doing more. (A Kubernetes
+   *  Pod that has ended and that the manager's stop-report finalizer holds is not being removed: it
+   *  waits for `removeInstance`.) */
   readonly removing: boolean;
   /** How it ended, by its host's report: its runner's exit code (null when the host gives none) and
    *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
@@ -150,8 +152,12 @@ export interface ManagedFencingReceipt {
 
 /** What a failed backend call means for the manager. */
 export type ManagedRunnerBackendFailure =
-  /** Worth another attempt later, once whatever it may have done has been read back. */
-  | { readonly retryable: true }
+  /**
+   * Worth another attempt later, once whatever it may have done has been read back. `unreachable`:
+   * no request reached the infrastructure at all — the connection could not be made (Kubernetes: no
+   * TLS session with the API server; Docker: no connection to the channel) — so nothing was tried.
+   */
+  | { readonly retryable: true; readonly unreachable?: true }
   /** A definite refusal: the mapping fails with `code` (a reason the manager's table words). */
   | { readonly retryable: false; readonly code: string; readonly detail: string; readonly log: string };
 
