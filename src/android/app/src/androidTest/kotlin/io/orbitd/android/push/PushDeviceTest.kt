@@ -28,6 +28,7 @@ import androidx.work.WorkManager
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.ObjectId
@@ -188,7 +189,7 @@ class PushDeviceTest {
         // Captured system PendingIntent models a tap already dispatched when authentication expires.
         pending.send()
         awaitCondition { resumedActivity?.intent?.action == Intent.ACTION_VIEW }
-        awaitText("Instance address")
+        awaitText("Welcome back")
         val previous = currentActivity!!
         instrument.runOnMainSync { previous.recreate() }
         awaitCondition { resumedActivity != null && resumedActivity !== previous && previous !in activities }
@@ -356,10 +357,10 @@ class PushDeviceTest {
 
     private fun login(email: String = "first@example.test") {
         compose.waitUntil(10_000) { app.session.state.value is AuthState.SignedOut }
-        compose.onNodeWithText("Instance address").performTextReplacement(fixture.server.url("/").toString())
+        compose.chooseServer(fixture.server.url("/").toString())
         compose.onNodeWithText("Email").performTextReplacement(email)
         compose.onNodeWithText("Password").performTextReplacement("controlled-password")
-        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        compose.onNodeWithText("Sign In").performScrollTo().performClick()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.push.registration.activeBinding() != null && app.realtime.state.value.directoryFresh }
     }
     private fun openSession() {

@@ -21,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.MainActivity
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.auth.chooseServer
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.ObjectId
@@ -123,7 +124,7 @@ class ColdPushDeviceTest {
         assertTrue("No Activity may exist before the notification route", activities.isEmpty())
         launch(Intent(Intent.ACTION_VIEW, Uri.parse(seed.getValue("link").jsonPrimitive.content), app, MainActivity::class.java))
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedOut }
-        compose.waitUntil(15_000) { compose.onAllNodesWithText("Instance address").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Welcome back").fetchSemanticsNodes().isNotEmpty() }
         assertNull(app.realtime.state.value.session)
         capture("cold-signed-out-login")
         resetAndLogin()
@@ -220,10 +221,10 @@ class ColdPushDeviceTest {
         runBlocking { app.push.beforeSignOut(); app.session.logout() }
         http("/__push_reset", "{}")
         compose.waitUntil(10_000) { app.session.state.value is AuthState.SignedOut }
-        compose.onNodeWithText("Instance address").performTextReplacement(server)
+        compose.chooseServer(server)
         compose.onNodeWithText("Email").performTextReplacement("a10@example.test")
         compose.onNodeWithText("Password").performTextReplacement("controlled-password")
-        compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
+        compose.onNodeWithText("Sign In").performScrollTo().performClick()
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh &&
             (!binding || app.push.registration.activeBinding() != null) }
     }
